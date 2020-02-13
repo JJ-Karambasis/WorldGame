@@ -28,6 +28,25 @@ struct string_stream
     char* Data;       
 };
 
+inline b32 StringEquals(char* A, ptr ALength, char* B, ptr BLength)
+{
+    if(ALength != BLength)
+        return false;
+    
+    for(u32 Index = 0; Index < ALength; Index++)
+    {
+        if(A[Index] != B[Index])
+            return false;
+    }    
+    return true;
+}
+
+inline b32 StringEquals(char* A, char* B)
+{
+    b32 Result = StringEquals(A, LiteralStringLength(A), B, LiteralStringLength(B));
+    return Result;
+}
+
 string LiteralString(char* Data, ptr StringLength);
 inline string operator+(string Left, int Right)
 {

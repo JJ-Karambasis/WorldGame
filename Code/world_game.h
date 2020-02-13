@@ -9,6 +9,7 @@
 
 #include "platform.h"
 #include "input.h"
+#include "graphics.h"
 
 struct game
 {

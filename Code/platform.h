@@ -17,7 +17,8 @@ typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 
 struct platform
 {   
-    arena* TempArena;    
+    arena* TempArena;
+    error_stream* ErrorStream;
     platform_log* Log;
     allocate_memory* AllocateMemory;
     free_memory* FreeMemory;        

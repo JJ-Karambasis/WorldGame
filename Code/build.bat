@@ -1,10 +1,7 @@
 @echo off
 
 set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533
-set Debug=-Od -DDEBUG_BUILD=1
-set Optimal=-Ox
-
-set Common=-DDEVELOPER_BUILD=1 -nologo -FC -Z7 -Oi -EHsc- %Debug% %Warnings% 
+set Common=-DDEVELOPER_BUILD=1 -Od -nologo -FC -Z7 -Oi -EHsc- %Debug% %Warnings% 
 
 IF NOT EXIST ..\Bin mkdir ..\Bin
 IF NOT EXIST ..\Data mkdir ..\Data
@@ -17,11 +14,11 @@ pushd ..\Bin
 del *.pdb > NUL 2> NUL
 
 IF %COMPILE_GAME% == 1 (
-    cl %Common% -LD -DOS_WINDOWS ..\code\world_game.cpp -link -opt:ref -incremental:no -pdb:ProjectWorld_%RANDOM%.pdb -out:World_Game.dll
+    cl %Common% -LD -DOS_WINDOWS ..\code\world_game.cpp -link -opt:ref -incremental:no -pdb:World_Game_%RANDOM%.pdb -out:World_Game.dll
 )
 
 IF %COMPILE_GRAPHICS% == 1 (
-    REM cl %Common% -LD -DOS_WINDOWS ..\code\vulkan_graphics.cpp -link -opt:ref -incremental:no -pdb:DXGraphics_%RANDOM%.pdb -out:DXGraphics.dll
+    cl %Common% -LD -DOS_WINDOWS ..\code\vulkan_graphics.cpp -link -opt:ref -incremental:no -pdb:Vulkan_Graphics_%RANDOM%.pdb -out:Vulkan_Graphics.dll
 )
 
 IF %COMPILE_PLATFORM% == 1 (

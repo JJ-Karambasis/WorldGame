@@ -233,11 +233,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     arena DefaultArena = CreateArena(MEGABYTE(1));    
     InitMemory(&DefaultArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);    
     Global_Platform->TempArena = &DefaultArena;
+    Global_Platform->ErrorStream = &ErrorStream;
     
     string EXEFilePathName = Win32_GetExePathWithName();
     string EXEFilePath = GetFilePath(EXEFilePathName);    
     string GameDLLPathName = Concat(EXEFilePath, "World_Game.dll");
     string TempDLLPathName = Concat(EXEFilePath, "World_Game_Temp.dll");    
+    string VulkanGraphicsDLLPathName = Concat(EXEFilePath, "Vulkan_Graphics.dll");
     
     u16 KeyboardUsage = 6;
     u16 MouseUsage = 2;
@@ -271,6 +273,18 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     input Input = {};
     game Game = {};
 #endif
+    
+    HMODULE GraphicsLib = LoadLibrary(VulkanGraphicsDLLPathName.Data);
+    if(!GraphicsLib)
+        WRITE_AND_HANDLE_ERROR("Failed to load the graphics dll %s.", VulkanGraphicsDLLPathName.Data);
+    
+    win32_graphics_init* GraphicsInit = (win32_graphics_init*)GetProcAddress(GraphicsLib, "GraphicsInit");
+    if(!GraphicsInit)
+        WRITE_AND_HANDLE_ERROR("Failed to load the graphics initialize routine.");
+    
+    temp_arena TempArena = BeginTemporaryMemory();
+    graphics* Graphics = GraphicsInit(&Window, Global_Platform);
+    EndTemporaryMemory(&TempArena);
     
     Game.Input = &Input;
         
@@ -425,7 +439,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         
         Input.MouseDelta = {};
         
-#if DEBUG_BUILD                
+#if DEVELOPER_BUILD                
         Input.Scroll = 0.0f;
         Input.Alt.WasDown = Input.Alt.IsDown;
         Input.LMB.WasDown = Input.LMB.IsDown;
