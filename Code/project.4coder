@@ -1,0 +1,11 @@
+version(1);
+
+project_name = "WorldGame";
+
+patterns = {"*.cpp", "*.h", "*.bat", "*.hlsl", "*.shader", "*.glsl", "*.vert", "*.frag", "*.sh", "*.4coder" };
+
+blacklist_patterns = { ".*" };
+
+load_paths_win = { {"."} };
+
+load_paths = { { load_paths_win, .os = "win"}, };
