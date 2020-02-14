@@ -137,7 +137,7 @@ FREE_MEMORY(Win32_FreeMemory)
         VirtualFree(Memory, 0, MEM_RELEASE);    
 }
 
-#if DEBUG_BUILD
+#if DEVELOPER_BUILD
 PLATFORM_LOG(Win32_Log)
 {   
     char String[1024];
@@ -283,7 +283,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         WRITE_AND_HANDLE_ERROR("Failed to load the graphics initialize routine.");
     
     temp_arena TempArena = BeginTemporaryMemory();
-    graphics* Graphics = GraphicsInit(&Window, Global_Platform);
+    graphics* Graphics = GraphicsInit(Window.Handle, Global_Platform);
     EndTemporaryMemory(&TempArena);
     
     Game.Input = &Input;

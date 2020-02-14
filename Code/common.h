@@ -3,7 +3,7 @@
 
 #if defined(_WIN32)
 #undef OS_WINDOWS
-#define OS_WINDOWS 1
+#define OS_WINDOWS 
 #define OS_PATH_DELIMITER '\\'
 #include <Windows.h>
 #endif
@@ -63,7 +63,7 @@
 #define INVALID_CASE(case_name) case case_name: { INVALID_CODE; } break
 #define INVALID_DEFAULT_CASE default: { INVALID_CODE; } break
 
-#if OS_WINDOWS
+#ifdef OS_WINDOWS
 #define DEBUG_IF_AVAILABLE_OR_TERM __debugbreak()
 #else
 #define DEBUG_IF_AVAILABLE_OR_TERM INVALID_CODE

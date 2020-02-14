@@ -7,7 +7,7 @@ struct graphics
 };
 
 #ifdef OS_WINDOWS
-#define WIN32_GRAPHICS_INIT(name) graphics* name(struct win32_window* Window, platform* Platform)
+#define WIN32_GRAPHICS_INIT(name) graphics* name(HWND Window, platform* Platform)
 typedef WIN32_GRAPHICS_INIT(win32_graphics_init);
 #endif
 

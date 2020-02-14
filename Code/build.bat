@@ -18,7 +18,7 @@ IF %COMPILE_GAME% == 1 (
 )
 
 IF %COMPILE_GRAPHICS% == 1 (
-    cl %Common% -LD -DOS_WINDOWS ..\code\vulkan_graphics.cpp -link -opt:ref -incremental:no -pdb:Vulkan_Graphics_%RANDOM%.pdb -out:Vulkan_Graphics.dll
+    cl %Common% -LD -DOS_WINDOWS ..\code\vulkan_graphics.cpp -link user32.lib -opt:ref -incremental:no -pdb:Vulkan_Graphics_%RANDOM%.pdb -out:Vulkan_Graphics.dll
 )
 
 IF %COMPILE_PLATFORM% == 1 (
