@@ -14,6 +14,10 @@ BOOL_CHECK_AND_HANDLE(function, "Failed to load the vulkan %.*s function", Liter
 function = (PFN_##function)vkGetInstanceProcAddr(GetVulkanGraphics()->Instance, #function); \
 BOOL_CHECK_AND_HANDLE(function, "Failed to load the vulkan %.*s function", LiteralStringLength(#function), #function)
 
+#define LOAD_DEVICE_FUNCTION(function) \
+function = (PFN_##function)vkGetDeviceProcAddr(GetVulkanGraphics()->Device, #function); \
+BOOL_CHECK_AND_HANDLE(function, "Failed to load the vulkan %.*s function", LiteralStringLength(#function), #function)
+
 #define VULKAN_CHECK_AND_HANDLE(check, message) \
 do \
 { \
@@ -38,6 +42,13 @@ VULKAN_FUNCTION(vkEnumeratePhysicalDevices);
 VULKAN_FUNCTION(vkGetPhysicalDeviceProperties);
 VULKAN_FUNCTION(vkGetPhysicalDeviceQueueFamilyProperties);
 VULKAN_FUNCTION(vkEnumerateDeviceExtensionProperties);
+VULKAN_FUNCTION(vkCreateDevice);
+VULKAN_FUNCTION(vkGetDeviceProcAddr);
+
+VULKAN_FUNCTION(vkGetDeviceQueue);
+VULKAN_FUNCTION(vkCreateCommandPool);
+VULKAN_FUNCTION(vkResetCommandPool);
+VULKAN_FUNCTION(vkAllocateCommandBuffers);
 
 struct physical_device
 {
@@ -57,7 +68,11 @@ struct vulkan_graphics : public graphics
     VkInstance Instance;
     physical_device_array GPUs;
     VkSurfaceKHR Surface;
-    VkPhysicalDevice GPU;
+    physical_device* SelectedGPU;
+    VkQueue GraphicsQueue;
+    VkQueue PresentQueue;
+    VkCommandPool CommandPool;
+    VkCommandBuffer CommandBuffer;    
     VkDevice Device;
 };
 

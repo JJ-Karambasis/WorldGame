@@ -1,5 +1,58 @@
 #include "vulkan_graphics.h"
 
+VkDevice CreateLogicalDevice(physical_device* GPU)
+{    
+    const local f32 QUEUE_PRIORITY = 1.0f;
+    
+    u32 DeviceQueueInfoCount = 1;
+    VkDeviceQueueCreateInfo DeviceQueueInfo[2] = {};
+    DeviceQueueInfo[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    DeviceQueueInfo[0].queueFamilyIndex = GPU->GraphicsFamilyIndex;
+    DeviceQueueInfo[0].queueCount = 1;
+    DeviceQueueInfo[0].pQueuePriorities = &QUEUE_PRIORITY;    
+    
+    if(GPU->GraphicsFamilyIndex != GPU->PresentFamilyIndex)
+    {        
+        DeviceQueueInfo[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        DeviceQueueInfo[1].queueFamilyIndex = GPU->PresentFamilyIndex;
+        DeviceQueueInfo[1].queueCount = 1;
+        DeviceQueueInfo[1].pQueuePriorities = &QUEUE_PRIORITY;
+        DeviceQueueInfoCount++;
+    }
+    
+    char* RequiredDeviceExtensions[] = 
+    {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+    
+    VkDeviceCreateInfo DeviceInfo = {};
+    DeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    DeviceInfo.queueCreateInfoCount = DeviceQueueInfoCount;
+    DeviceInfo.pQueueCreateInfos = DeviceQueueInfo;
+    DeviceInfo.enabledExtensionCount = ARRAYCOUNT(RequiredDeviceExtensions);
+    DeviceInfo.ppEnabledExtensionNames = RequiredDeviceExtensions;    
+    //DeviceInfo.pEnabledFeatures = ;
+    
+    VkDevice Result = VK_NULL_HANDLE;
+    if(vkCreateDevice(GPU->Handle, &DeviceInfo, VK_NULL_HANDLE, &Result) == VK_SUCCESS)
+        return Result;    
+    return VK_NULL_HANDLE;
+}
+
+physical_device* GetFirstCompatbileGPU(physical_device_array* GPUs)
+{
+    for(u32 GPUIndex = 0; GPUIndex < GPUs->Count; GPUIndex++)
+    {
+        physical_device* Device = GPUs->Ptr + GPUIndex;
+        if((Device->GraphicsFamilyIndex != -1) &&
+           (Device->PresentFamilyIndex != -1))
+        {
+            return Device;
+        }
+    }    
+    return NULL;
+}
+
 physical_device_array CreatePhysicalDevices()
 {
     vulkan_graphics* Graphics = GetVulkanGraphics();
@@ -48,7 +101,7 @@ physical_device_array CreatePhysicalDevices()
                 b32 FoundSwapchainExtension = false;
                 for(u32 ExtensionIndex = 0; ExtensionIndex < ExtensionCount; ExtensionIndex++)
                 {
-                    if(StringEquals(Extensions[ExtensionIndex].extensionName, "VK_KHR_swapchain"))
+                    if(StringEquals(Extensions[ExtensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
                         FoundSwapchainExtension = true;
                 }
                 
@@ -141,7 +194,7 @@ VkInstance CreateInstance()
     for(u32 InstancePropertyIndex = 0; InstancePropertyIndex < InstancePropertyCount; InstancePropertyIndex++)
     {
 #ifdef OS_WINDOWS
-        if(StringEquals(InstanceExtensions[InstancePropertyIndex].extensionName, "VK_KHR_win32_surface"))
+        if(StringEquals(InstanceExtensions[InstancePropertyIndex].extensionName, VK_KHR_WIN32_SURFACE_EXTENSION_NAME))
         {
             InstanceExtensionNames[InstanceExtensionCount++] = InstanceExtensions[InstancePropertyIndex].extensionName;
             FoundPlatformSurfaceExtension = true;
@@ -149,7 +202,7 @@ VkInstance CreateInstance()
 #endif
         
 #if DEVELOPER_BUILD
-        if(StringEquals(InstanceExtensions[InstancePropertyIndex].extensionName, "VK_EXT_debug_utils"))
+        if(StringEquals(InstanceExtensions[InstancePropertyIndex].extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
         {
             InstanceExtensionNames[InstanceExtensionCount++] = InstanceExtensions[InstancePropertyIndex].extensionName;
             FoundDebugExtensions = true;
@@ -200,24 +253,48 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceProperties);
     LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceQueueFamilyProperties);   
     LOAD_INSTANCE_FUNCTION(vkEnumerateDeviceExtensionProperties);
+    LOAD_INSTANCE_FUNCTION(vkCreateDevice);
+    LOAD_INSTANCE_FUNCTION(vkGetDeviceProcAddr);
     
     Graphics->Surface = CreateSurface(PlatformSurfaceInfo);
     BOOL_CHECK_AND_HANDLE(Graphics->Surface, "Failed to create the vulkan surface.");
     
     Graphics->GPUs = CreatePhysicalDevices();
+    BOOL_CHECK_AND_HANDLE(Graphics->GPUs.Ptr, "Failed to enumerate the vulkan gpus.");
     
-#if 0 
-    VkDeviceCreateInfo DeviceInfo = {};
-    DeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    DeviceInfo.queueCreateInfoCount = ;
-    DeviceInfo.pQueueCreateInfos = ;
-    DeviceInfo.enabledExtensionCount = ;
-    DeviceInfo.ppEnabledExtensionNames = ;
-    //DeviceInfo.pEnabledFeatures = ;
+    Graphics->SelectedGPU = GetFirstCompatbileGPU(&Graphics->GPUs);
+    BOOL_CHECK_AND_HANDLE(Graphics->SelectedGPU, "Failed to retrieve a compatible vulkan gpu.");
     
-    VULKAN_CHECK_AND_HANDLE(vkCreateDevice(Graphics->GPU, &DeviceInfo, VK_NULL_HANDLE, &Graphics->Device),
-                            "Failed to create the vulkan logical device.");
-#endif
+    Graphics->Device = CreateLogicalDevice(Graphics->SelectedGPU);
+    BOOL_CHECK_AND_HANDLE(Graphics->Device, "Failed to create the vulkan logical device.");
+    
+    LOAD_DEVICE_FUNCTION(vkGetDeviceQueue);
+    LOAD_DEVICE_FUNCTION(vkCreateCommandPool);
+    LOAD_DEVICE_FUNCTION(vkResetCommandPool);
+    LOAD_DEVICE_FUNCTION(vkAllocateCommandBuffers);
+    
+    vkGetDeviceQueue(Graphics->Device, Graphics->SelectedGPU->GraphicsFamilyIndex, 0, &Graphics->GraphicsQueue);
+    Graphics->PresentQueue = Graphics->GraphicsQueue;    
+    if(Graphics->SelectedGPU->GraphicsFamilyIndex != Graphics->SelectedGPU->PresentFamilyIndex)
+        vkGetDeviceQueue(Graphics->Device, Graphics->SelectedGPU->PresentFamilyIndex, 0, &Graphics->PresentQueue);    
+    
+    VkCommandPoolCreateInfo CommandPoolInfo = {};
+    CommandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    CommandPoolInfo.queueFamilyIndex = Graphics->SelectedGPU->GraphicsFamilyIndex; 
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateCommandPool(Graphics->Device, &CommandPoolInfo, VK_NULL_HANDLE, &Graphics->CommandPool),
+                            "Failed to create the command pool.");
+    
+    VkCommandBufferAllocateInfo CommandBufferInfo = {};
+    CommandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    CommandBufferInfo.commandPool = Graphics->CommandPool;
+    CommandBufferInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    CommandBufferInfo.commandBufferCount = 1;
+    
+    VULKAN_CHECK_AND_HANDLE(vkAllocateCommandBuffers(Graphics->Device, &CommandBufferInfo, &Graphics->CommandBuffer),
+                            "Failed to allocate the command buffers.");
+    
+    
     return true;
     
     handle_error:
