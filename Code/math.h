@@ -88,4 +88,10 @@ v2i V2i(i32 x, i32 y)
     return Result;
 }
 
+inline b32 operator!=(v2i Left, v2i Right)
+{
+    b32 Result = (Left.x == Right.x) && (Left.y == Right.y);
+    return Result;
+}
+
 #endif

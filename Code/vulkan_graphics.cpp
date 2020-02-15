@@ -1,5 +1,110 @@
 #include "vulkan_graphics.h"
 
+inline VkSemaphore 
+CreateSemaphore()
+{
+    VkSemaphore Result = VK_NULL_HANDLE;
+    VkSemaphoreCreateInfo SemaphoreInfo = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};    
+    if(vkCreateSemaphore(GetVulkanGraphics()->Device, &SemaphoreInfo, VK_NULL_HANDLE, &Result) != VK_SUCCESS)
+        return VK_NULL_HANDLE;
+    return Result;
+}
+
+render_buffer CreateRenderBuffer(v2i Dimensions, VkSwapchainKHR OldSwapchain)
+{
+    vulkan_graphics* Graphics = GetVulkanGraphics();    
+    physical_device* GPU = Graphics->SelectedGPU;
+    
+    VkSwapchainCreateInfoKHR SwapchainInfo = {};
+    SwapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    SwapchainInfo.surface = Graphics->Surface;
+    SwapchainInfo.minImageCount = GPU->ColorImageCount;
+    SwapchainInfo.imageFormat = GPU->SurfaceFormat.format;
+    SwapchainInfo.imageColorSpace = GPU->SurfaceFormat.colorSpace;
+    SwapchainInfo.imageExtent = {(u32)Dimensions.x, (u32)Dimensions.y};
+    SwapchainInfo.imageArrayLayers = 1;
+    SwapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;  
+    SwapchainInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    SwapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    SwapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    SwapchainInfo.oldSwapchain = OldSwapchain;
+    
+    u32 QueueFamilyIndices[2] = {(u32)GPU->PresentFamilyIndex, (u32)GPU->GraphicsFamilyIndex};
+    if(GPU->PresentFamilyIndex != GPU->GraphicsFamilyIndex)
+    {
+        SwapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        SwapchainInfo.queueFamilyIndexCount = 2;
+        SwapchainInfo.pQueueFamilyIndices = QueueFamilyIndices;
+    }
+    else    
+        SwapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;            
+    
+    VkSwapchainKHR Swapchain = VK_NULL_HANDLE;
+    VULKAN_CHECK_AND_HANDLE(vkCreateSwapchainKHR(Graphics->Device, &SwapchainInfo, VK_NULL_HANDLE, &Swapchain),
+                            "Failed to create the vulkan swapchain.");
+    
+    if(OldSwapchain)    
+        vkDestroySwapchainKHR(Graphics->Device, OldSwapchain, VK_NULL_HANDLE);    
+    
+    u32 ColorImageCount = 0;
+    VULKAN_CHECK_AND_HANDLE(vkGetSwapchainImagesKHR(Graphics->Device, Swapchain, &ColorImageCount, VK_NULL_HANDLE),
+                            "Failed to retrieve the amount of images from the swapchain.");
+    
+    VkImage ColorImages[3];
+    VULKAN_CHECK_AND_HANDLE(vkGetSwapchainImagesKHR(Graphics->Device, Swapchain, &ColorImageCount, ColorImages),
+                            "Failed to retrieve the images from the swapchain.");
+    
+    VkImageView ColorImageViews[3];
+    VkFramebuffer Framebuffers[3];
+    
+    for(u32 ImageIndex = 0; ImageIndex < ColorImageCount; ImageIndex++)
+    {
+        if(Graphics->RenderBuffer.ColorImageViews[ImageIndex])        
+            vkDestroyImageView(Graphics->Device, Graphics->RenderBuffer.ColorImageViews[ImageIndex], VK_NULL_HANDLE);        
+        
+        if(Graphics->RenderBuffer.Framebuffers[ImageIndex])
+            vkDestroyFramebuffer(Graphics->Device, Graphics->RenderBuffer.Framebuffers[ImageIndex], VK_NULL_HANDLE);
+        
+        VkImageViewCreateInfo ImageViewInfo = {};
+        ImageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        ImageViewInfo.image = ColorImages[ImageIndex];
+        ImageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        ImageViewInfo.format = GPU->SurfaceFormat.format;
+        ImageViewInfo.components = 
+        {
+            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, 
+            VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY
+        };
+        ImageViewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};        
+        VULKAN_CHECK_AND_HANDLE(vkCreateImageView(Graphics->Device, &ImageViewInfo, VK_NULL_HANDLE, &ColorImageViews[ImageIndex]),
+                                "Failed to create the color image view, index %d", ImageIndex);
+        
+        VkFramebufferCreateInfo FramebufferInfo = {};
+        FramebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        FramebufferInfo.renderPass = Graphics->RenderPass;
+        FramebufferInfo.attachmentCount = 1;
+        FramebufferInfo.pAttachments = &ColorImageViews[ImageIndex];
+        FramebufferInfo.width = Dimensions.width;
+        FramebufferInfo.height = Dimensions.height;
+        FramebufferInfo.layers = 1;
+        VULKAN_CHECK_AND_HANDLE(vkCreateFramebuffer(Graphics->Device, &FramebufferInfo, VK_NULL_HANDLE, &Framebuffers[ImageIndex]),
+                                "Failed to create the frame buffer, index %d", ImageIndex);
+    }
+    
+    render_buffer Result;
+    Result.Dimensions = Dimensions;
+    Result.Swapchain = Swapchain;
+    Result.ColorImageCount = ColorImageCount;
+    CopyArray(Result.ColorImages, ColorImages, 3, VkImage);
+    CopyArray(Result.ColorImageViews, ColorImageViews, 3, VkImageView);
+    CopyArray(Result.Framebuffers, Framebuffers, 3, VkFramebuffer);
+    
+    return Result;
+    
+    handle_error:
+    return {};
+}
+
 VkDevice CreateLogicalDevice(physical_device* GPU)
 {    
     const local f32 QUEUE_PRIORITY = 1.0f;
@@ -45,7 +150,9 @@ physical_device* GetFirstCompatbileGPU(physical_device_array* GPUs)
     {
         physical_device* Device = GPUs->Ptr + GPUIndex;
         if((Device->GraphicsFamilyIndex != -1) &&
-           (Device->PresentFamilyIndex != -1))
+           (Device->PresentFamilyIndex != -1) &&
+           (Device->SurfaceFormat.format != VK_FORMAT_UNDEFINED) &&
+           (Device->ColorImageCount > 1))
         {
             return Device;
         }
@@ -92,53 +199,124 @@ physical_device_array CreatePhysicalDevices()
         
         u32 ExtensionCount = 0;
         VkResult VKResult = vkEnumerateDeviceExtensionProperties(GPU, VK_NULL_HANDLE, &ExtensionCount, VK_NULL_HANDLE);
-        if(VKResult == VK_SUCCESS)
+        if(VKResult != VK_SUCCESS)
         {
-            VkExtensionProperties* Extensions = PushArray(ExtensionCount, VkExtensionProperties, Clear, 0);
-            VKResult = vkEnumerateDeviceExtensionProperties(GPU, VK_NULL_HANDLE, &ExtensionCount, Extensions);
-            if(VKResult == VK_SUCCESS)
-            {
-                b32 FoundSwapchainExtension = false;
-                for(u32 ExtensionIndex = 0; ExtensionIndex < ExtensionCount; ExtensionIndex++)
-                {
-                    if(StringEquals(Extensions[ExtensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
-                        FoundSwapchainExtension = true;
-                }
-                
-                if(FoundSwapchainExtension)
-                {                    
-                    for(u32 QueueFamilyIndex = 0; QueueFamilyIndex < QueueFamilyPropertyCount; QueueFamilyIndex++)
-                    {
-                        VkQueueFamilyProperties* QueueFamilyProperty = QueueFamilyProperties + QueueFamilyIndex;
-                        if(QueueFamilyProperty->queueFlags & VK_QUEUE_GRAPHICS_BIT)
-                        {                
-                            Result.Ptr[GPUIndex].GraphicsFamilyIndex = QueueFamilyIndex;
-                        }            
-                        
-                        VkBool32 PresentSupported = VK_FALSE;
-                        if((vkGetPhysicalDeviceSurfaceSupportKHR(GPU, QueueFamilyIndex, Graphics->Surface, &PresentSupported) == VK_SUCCESS) && (PresentSupported == VK_TRUE))
-                        {   
-                            Result.Ptr[GPUIndex].PresentFamilyIndex = QueueFamilyIndex;
-                            if(Result.Ptr[GPUIndex].GraphicsFamilyIndex == Result.Ptr[GPUIndex].PresentFamilyIndex)                          
-                                break;                            
-                        }
-                    }
-                    
-                    if((Result.Ptr[GPUIndex].GraphicsFamilyIndex != -1) &&
-                       (Result.Ptr[GPUIndex].PresentFamilyIndex != -1))
-                    {
-                        Passed = true;
-                    }
-                }                
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        VkExtensionProperties* Extensions = PushArray(ExtensionCount, VkExtensionProperties, Clear, 0);
+        VKResult = vkEnumerateDeviceExtensionProperties(GPU, VK_NULL_HANDLE, &ExtensionCount, Extensions);
+        if(VKResult != VK_SUCCESS)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        
+        b32 FoundSwapchainExtension = false;
+        for(u32 ExtensionIndex = 0; ExtensionIndex < ExtensionCount; ExtensionIndex++)
+        {
+            if(StringEquals(Extensions[ExtensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+                FoundSwapchainExtension = true;
+        }
+        
+        if(!FoundSwapchainExtension)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        for(u32 QueueFamilyIndex = 0; QueueFamilyIndex < QueueFamilyPropertyCount; QueueFamilyIndex++)
+        {
+            VkQueueFamilyProperties* QueueFamilyProperty = QueueFamilyProperties + QueueFamilyIndex;
+            if(QueueFamilyProperty->queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            {                
+                Result.Ptr[GPUIndex].GraphicsFamilyIndex = QueueFamilyIndex;
+            }            
+            
+            VkBool32 PresentSupported = VK_FALSE;
+            if((vkGetPhysicalDeviceSurfaceSupportKHR(GPU, QueueFamilyIndex, Graphics->Surface, &PresentSupported) == VK_SUCCESS) && (PresentSupported == VK_TRUE))
+            {   
+                Result.Ptr[GPUIndex].PresentFamilyIndex = QueueFamilyIndex;
+                if(Result.Ptr[GPUIndex].GraphicsFamilyIndex == Result.Ptr[GPUIndex].PresentFamilyIndex)                          
+                    break;                            
             }
         }
         
-        if(Passed)        
-            CONSOLE_LOG("Device PASSED!\n");        
-        else
-            CONSOLE_LOG("Device FAILED!\n");
         
-        CONSOLE_LOG("\n");
+        if((Result.Ptr[GPUIndex].GraphicsFamilyIndex == -1) || 
+           (Result.Ptr[GPUIndex].PresentFamilyIndex == -1))
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        u32 FormatCount = 0;
+        VKResult = vkGetPhysicalDeviceSurfaceFormatsKHR(GPU, Graphics->Surface, &FormatCount, VK_NULL_HANDLE);                        
+        if(VKResult != VK_SUCCESS)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        
+        VkSurfaceFormatKHR* SurfaceFormats = PushArray(FormatCount, VkSurfaceFormatKHR, Clear, 0);
+        VKResult = vkGetPhysicalDeviceSurfaceFormatsKHR(GPU, Graphics->Surface, &FormatCount, SurfaceFormats);
+        if(VKResult != VK_SUCCESS)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        b32 FoundSurfaceFormat = false;
+        
+        for(u32 SurfaceFormatIndex = 0; SurfaceFormatIndex < FormatCount; SurfaceFormatIndex++)
+        {
+            if(SurfaceFormats[SurfaceFormatIndex].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)                                    
+            {
+                if((SurfaceFormats[SurfaceFormatIndex].format == VK_FORMAT_R8G8B8A8_SRGB) ||
+                   (SurfaceFormats[SurfaceFormatIndex].format == VK_FORMAT_B8G8R8A8_SRGB))
+                {
+                    Result.Ptr[GPUIndex].SurfaceFormat = SurfaceFormats[SurfaceFormatIndex];
+                    FoundSurfaceFormat = true;
+                    break;
+                }
+            }
+        }
+        
+        if(!FoundSurfaceFormat)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        VkSurfaceCapabilitiesKHR SurfaceCaps = {};
+        VKResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(GPU, Graphics->Surface, &SurfaceCaps);
+        if(VKResult != VK_SUCCESS)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }               
+        
+        if(SurfaceCaps.maxImageCount < 2)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        if((SurfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) == 0)               
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        if(SurfaceCaps.maxImageCount >= 3)
+            Result.Ptr[GPUIndex].ColorImageCount = 3;
+        else
+            Result.Ptr[GPUIndex].ColorImageCount = 2;
+        
+        CONSOLE_LOG("Device PASSED!\n\n");                               
     }    
     
     return Result;
@@ -231,10 +409,45 @@ VkInstance CreateInstance()
     return VK_NULL_HANDLE;
 }
 
-b32 VulkanInit(void* PlatformSurfaceInfo)
+RENDER_GAME(RenderGame)
 {
     vulkan_graphics* Graphics = GetVulkanGraphics();
     
+    render_buffer* RenderBuffer = &Graphics->RenderBuffer;
+    if(!RenderBuffer->Swapchain)
+    {
+        *RenderBuffer = CreateRenderBuffer(WindowDim, VK_NULL_HANDLE);
+        BOOL_CHECK_AND_HANDLE(RenderBuffer->Swapchain, "Failed to create the render buffer.");
+    }
+    
+    u32 ImageIndex;
+    VkResult ImageStatus = vkAcquireNextImageKHR(Graphics->Device, RenderBuffer->Swapchain, UINT64_MAX, Graphics->RenderLock, VK_NULL_HANDLE, &ImageIndex);
+    if((ImageStatus == VK_ERROR_OUT_OF_DATE_KHR) || (ImageStatus == VK_SUBOPTIMAL_KHR) || (WindowDim != RenderBuffer->Dimensions))
+    {
+        vkDeviceWaitIdle(Graphics->Device);
+        vkDestroySemaphore(Graphics->Device, Graphics->RenderLock, VK_NULL_HANDLE);        
+        Graphics->RenderLock = CreateSemaphore();
+        BOOL_CHECK_AND_HANDLE(Graphics->RenderLock, "Failed to create the render lock.");
+        
+        VkSwapchainKHR OldSwapchain = (ImageStatus != VK_SUCCESS) ? RenderBuffer->Swapchain : VK_NULL_HANDLE; 
+        *RenderBuffer = CreateRenderBuffer(WindowDim, OldSwapchain);
+        BOOL_CHECK_AND_HANDLE(RenderBuffer->Swapchain, "Failed to create the render buffer.");
+    }
+    else
+    {
+        BOOL_CHECK_AND_HANDLE(ImageStatus == VK_SUCCESS, "Error acquiring image to present.");
+    }
+    
+    return true;
+    
+    handle_error:
+    return false;    
+}
+
+b32 VulkanInit(void* PlatformSurfaceInfo)
+{
+    vulkan_graphics* Graphics = GetVulkanGraphics();
+    Graphics->RenderGame = RenderGame;    
     Graphics->Storage = CreateArena(KILOBYTE(32));
     
     LOAD_GLOBAL_FUNCTION(vkCreateInstance);
@@ -249,6 +462,8 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
 #endif
     
     LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceSurfaceSupportKHR);
+    LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceSurfaceFormatsKHR);
+    LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
     LOAD_INSTANCE_FUNCTION(vkEnumeratePhysicalDevices);    
     LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceProperties);
     LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceQueueFamilyProperties);   
@@ -272,6 +487,19 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_DEVICE_FUNCTION(vkCreateCommandPool);
     LOAD_DEVICE_FUNCTION(vkResetCommandPool);
     LOAD_DEVICE_FUNCTION(vkAllocateCommandBuffers);
+    LOAD_DEVICE_FUNCTION(vkCreateRenderPass);
+    LOAD_DEVICE_FUNCTION(vkAcquireNextImageKHR);
+    LOAD_DEVICE_FUNCTION(vkQueueWaitIdle);
+    LOAD_DEVICE_FUNCTION(vkDeviceWaitIdle);
+    LOAD_DEVICE_FUNCTION(vkCreateSemaphore);
+    LOAD_DEVICE_FUNCTION(vkDestroySemaphore);
+    LOAD_DEVICE_FUNCTION(vkCreateSwapchainKHR);
+    LOAD_DEVICE_FUNCTION(vkDestroySwapchainKHR);
+    LOAD_DEVICE_FUNCTION(vkGetSwapchainImagesKHR);
+    LOAD_DEVICE_FUNCTION(vkDestroyImageView);
+    LOAD_DEVICE_FUNCTION(vkDestroyFramebuffer);
+    LOAD_DEVICE_FUNCTION(vkCreateImageView);
+    LOAD_DEVICE_FUNCTION(vkCreateFramebuffer);
     
     vkGetDeviceQueue(Graphics->Device, Graphics->SelectedGPU->GraphicsFamilyIndex, 0, &Graphics->GraphicsQueue);
     Graphics->PresentQueue = Graphics->GraphicsQueue;    
@@ -292,8 +520,34 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     CommandBufferInfo.commandBufferCount = 1;
     
     VULKAN_CHECK_AND_HANDLE(vkAllocateCommandBuffers(Graphics->Device, &CommandBufferInfo, &Graphics->CommandBuffer),
-                            "Failed to allocate the command buffers.");
+                            "Failed to allocate the command buffers.");        
     
+    VkAttachmentDescription AttachmentDescriptions[1] = {};    
+    AttachmentDescriptions[0].format = Graphics->SelectedGPU->SurfaceFormat.format;
+    AttachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    AttachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    AttachmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;        
+    AttachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    AttachmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;    
+    
+    VkAttachmentReference ColorAttachmentRef = {};
+    ColorAttachmentRef.attachment = 0;
+    ColorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    
+    VkSubpassDescription SubpassDescriptions[1] = {};
+    SubpassDescriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    SubpassDescriptions[0].colorAttachmentCount = 1;
+    SubpassDescriptions[0].pColorAttachments = &ColorAttachmentRef;
+    
+    VkRenderPassCreateInfo RenderPassInfo = {};
+    RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    RenderPassInfo.attachmentCount = ARRAYCOUNT(AttachmentDescriptions);
+    RenderPassInfo.pAttachments = AttachmentDescriptions;
+    RenderPassInfo.subpassCount = ARRAYCOUNT(SubpassDescriptions);
+    RenderPassInfo.pSubpasses = SubpassDescriptions;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateRenderPass(Graphics->Device, &RenderPassInfo, VK_NULL_HANDLE, &Graphics->RenderPass),
+                            "Failed to create the render pass.");
     
     return true;
     

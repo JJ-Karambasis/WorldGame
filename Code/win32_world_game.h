@@ -16,12 +16,6 @@ iunknown = NULL; \
 } \
 } while(0)
 
-struct win32_window
-{
-    HWND Handle;
-    v2i Dim;
-};
-
 struct win32_hot_loaded_library
 {
     HMODULE Library;

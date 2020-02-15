@@ -45,13 +45,13 @@ Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
     return Result;
 }
 
-win32_window Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,  
-                                v2i ClientDim)
+HWND Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,  
+                        v2i WindowDim)
 {    
     DWORD ExStyle = 0;
     DWORD Style = WS_OVERLAPPEDWINDOW|WS_VISIBLE;
     
-    RECT WindowRect = {0, 0, (LONG)ClientDim.width, (LONG)ClientDim.height};
+    RECT WindowRect = {0, 0, (LONG)WindowDim.width, (LONG)WindowDim.height};
     AdjustWindowRectEx(&WindowRect, Style, FALSE, ExStyle);
     
     HWND Window = CreateWindowEx(ExStyle, WindowClass->lpszClassName, "AKEngine", Style, 
@@ -61,9 +61,8 @@ win32_window Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,
                                  0, 0, WindowClass->hInstance, NULL);
     if(!Window)            
         return {};        
-    
-    win32_window Result = {Window, ClientDim};
-    return Result;
+        
+    return Window;
 }
 
 inline v2i 
@@ -262,8 +261,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!RegisterClassEx(&WindowClass))    
         WRITE_AND_HANDLE_ERROR("Failed to register window class.");                    
     
-    win32_window Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
-    if(!Window.Handle)    
+    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
+    if(!Window)    
         WRITE_AND_HANDLE_ERROR("Failed to create game window."); 
     
 #if DEVELOPER_BUILD
@@ -283,7 +282,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         WRITE_AND_HANDLE_ERROR("Failed to load the graphics initialize routine.");
     
     temp_arena TempArena = BeginTemporaryMemory();
-    graphics* Graphics = GraphicsInit(Window.Handle, Global_Platform);
+    graphics* Graphics = GraphicsInit(Window, Global_Platform);
     EndTemporaryMemory(&TempArena);
     
     Game.Input = &Input;
@@ -429,10 +428,15 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         if(Input.dt > 1.0f/20.0f)
             Input.dt = 1.0f/20.0f;
         
-        GameCode.Tick(&Game, Global_Platform);        
+        v2i WindowDim = Win32_GetWindowDim(Window);
         
-        if(GetGlobalErrorStream()->HasErrorOccured)        
-            WRITE_AND_HANDLE_ERROR("Error has occurred during rendering!");                    
+        GameCode.Tick(&Game, Global_Platform);        
+        if(!Graphics->RenderGame(&Game, WindowDim))
+        {
+            ASSERT(false); 
+            //TODO(JJ): Probably should fallback to Direct3D or OpenGL to try and recover so the game doesn't 
+            //just straight crash. At least we can warn the user
+        }
         
         Input.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
         StartTime = Win32_Clock();

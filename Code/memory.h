@@ -75,6 +75,8 @@ struct temp_arena
 #define PushWriteArray_5( Data, Count, Type, Clear, Alignment) (Type*)_PushWrite_(__Global_Default_Arena__, sizeof(Type)*Count, Data, __ClearFlag##Clear##__, Alignment)
 #define PushWriteArray_6( Arena, Data, Count, Type, Clear, Alignment) (Type*)_PushWrite_(Arena, sizeof(Type)*Count, Data, __ClearFlag##Clear##__, Alignment)
 
+#define CopyArray(dst, src, count, type) CopyMemory(dst, src, sizeof(type)*count)
+
 #ifndef DEFAULT_BLOCK_ARENA_SIZE
 #define DEFAULT_BLOCK_ARENA_SIZE MEGABYTE(1)
 #endif

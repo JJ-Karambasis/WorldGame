@@ -18,11 +18,11 @@ BOOL_CHECK_AND_HANDLE(function, "Failed to load the vulkan %.*s function", Liter
 function = (PFN_##function)vkGetDeviceProcAddr(GetVulkanGraphics()->Device, #function); \
 BOOL_CHECK_AND_HANDLE(function, "Failed to load the vulkan %.*s function", LiteralStringLength(#function), #function)
 
-#define VULKAN_CHECK_AND_HANDLE(check, message) \
+#define VULKAN_CHECK_AND_HANDLE(check, message, ...) \
 do \
 { \
 if((check) != VK_SUCCESS) \
-WRITE_AND_HANDLE_ERROR(message); \
+WRITE_AND_HANDLE_ERROR(message, __VA_ARGS__); \
 } \
 while(0)
 
@@ -38,6 +38,8 @@ VULKAN_FUNCTION(vkCreateWin32SurfaceKHR);
 #endif
 
 VULKAN_FUNCTION(vkGetPhysicalDeviceSurfaceSupportKHR);
+VULKAN_FUNCTION(vkGetPhysicalDeviceSurfaceFormatsKHR);
+VULKAN_FUNCTION(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
 VULKAN_FUNCTION(vkEnumeratePhysicalDevices);
 VULKAN_FUNCTION(vkGetPhysicalDeviceProperties);
 VULKAN_FUNCTION(vkGetPhysicalDeviceQueueFamilyProperties);
@@ -49,18 +51,43 @@ VULKAN_FUNCTION(vkGetDeviceQueue);
 VULKAN_FUNCTION(vkCreateCommandPool);
 VULKAN_FUNCTION(vkResetCommandPool);
 VULKAN_FUNCTION(vkAllocateCommandBuffers);
+VULKAN_FUNCTION(vkCreateRenderPass);
+VULKAN_FUNCTION(vkAcquireNextImageKHR);
+VULKAN_FUNCTION(vkQueueWaitIdle);
+VULKAN_FUNCTION(vkDeviceWaitIdle);
+VULKAN_FUNCTION(vkCreateSemaphore);
+VULKAN_FUNCTION(vkDestroySemaphore);
+VULKAN_FUNCTION(vkCreateSwapchainKHR);
+VULKAN_FUNCTION(vkDestroySwapchainKHR);
+VULKAN_FUNCTION(vkGetSwapchainImagesKHR);
+VULKAN_FUNCTION(vkDestroyImageView);
+VULKAN_FUNCTION(vkDestroyFramebuffer);
+VULKAN_FUNCTION(vkCreateImageView);
+VULKAN_FUNCTION(vkCreateFramebuffer);
 
 struct physical_device
-{
+{    
     i32 GraphicsFamilyIndex;    
     i32 PresentFamilyIndex;
+    VkSurfaceFormatKHR SurfaceFormat;
     VkPhysicalDevice Handle;    
+    u32 ColorImageCount;
 };
 
 struct physical_device_array
 {
     u32 Count;
     physical_device* Ptr;    
+};
+
+struct render_buffer
+{    
+    v2i Dimensions;
+    VkSwapchainKHR Swapchain;
+    u32 ColorImageCount;
+    VkImage ColorImages[3];
+    VkImageView ColorImageViews[3];
+    VkFramebuffer Framebuffers[3];
 };
 
 struct vulkan_graphics : public graphics
@@ -72,8 +99,11 @@ struct vulkan_graphics : public graphics
     VkQueue GraphicsQueue;
     VkQueue PresentQueue;
     VkCommandPool CommandPool;
-    VkCommandBuffer CommandBuffer;    
+    VkCommandBuffer CommandBuffer;
+    VkRenderPass RenderPass;    
     VkDevice Device;
+    VkSemaphore RenderLock;
+    render_buffer RenderBuffer;    
 };
 
 global vulkan_graphics __Vulkan_Graphics__;
