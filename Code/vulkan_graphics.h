@@ -64,6 +64,12 @@ VULKAN_FUNCTION(vkDestroyImageView);
 VULKAN_FUNCTION(vkDestroyFramebuffer);
 VULKAN_FUNCTION(vkCreateImageView);
 VULKAN_FUNCTION(vkCreateFramebuffer);
+VULKAN_FUNCTION(vkBeginCommandBuffer);
+VULKAN_FUNCTION(vkCmdBeginRenderPass);
+VULKAN_FUNCTION(vkCmdEndRenderPass);
+VULKAN_FUNCTION(vkEndCommandBuffer);
+VULKAN_FUNCTION(vkQueueSubmit);
+VULKAN_FUNCTION(vkQueuePresentKHR);
 
 struct physical_device
 {    
@@ -103,6 +109,7 @@ struct vulkan_graphics : public graphics
     VkRenderPass RenderPass;    
     VkDevice Device;
     VkSemaphore RenderLock;
+    VkSemaphore PresentLock;
     render_buffer RenderBuffer;    
 };
 

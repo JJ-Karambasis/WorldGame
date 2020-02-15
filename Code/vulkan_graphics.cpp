@@ -438,6 +438,63 @@ RENDER_GAME(RenderGame)
         BOOL_CHECK_AND_HANDLE(ImageStatus == VK_SUCCESS, "Error acquiring image to present.");
     }
     
+    VULKAN_CHECK_AND_HANDLE(vkQueueWaitIdle(Graphics->GraphicsQueue), "Failed to wait for the graphics queue.");
+    VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed to reset the command pool.");
+    
+    VkCommandBuffer CommandBuffer = Graphics->CommandBuffer;
+    
+    VkCommandBufferBeginInfo CommandBufferBeginInfo = {};
+    CommandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(CommandBuffer, &CommandBufferBeginInfo),
+                            "Failed to begin the command buffer recording.");
+    {
+        VkClearColorValue ClearColor = {1.0f, 0.0f, 0.0f, 1.0f};
+        
+        VkClearValue ClearValues[1] = {};                
+        ClearValues[0].color = ClearColor;
+        
+        VkRenderPassBeginInfo RenderPassBeginInfo = {};
+        RenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        RenderPassBeginInfo.renderPass = Graphics->RenderPass;
+        RenderPassBeginInfo.framebuffer = RenderBuffer->Framebuffers[ImageIndex];
+        RenderPassBeginInfo.renderArea = {{0, 0}, {(u32)WindowDim.width, (u32)WindowDim.height}};
+        RenderPassBeginInfo.clearValueCount = ARRAYCOUNT(ClearValues);
+        RenderPassBeginInfo.pClearValues = ClearValues;
+        
+        vkCmdBeginRenderPass(CommandBuffer, &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        
+        vkCmdEndRenderPass(CommandBuffer);
+        
+    }
+    VULKAN_CHECK_AND_HANDLE(vkEndCommandBuffer(CommandBuffer), "Failed to end the command buffer recording.");
+    
+    VkPipelineStageFlags WaitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    
+    VkSubmitInfo SubmitInfo[1] = {};
+    SubmitInfo[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    SubmitInfo[0].waitSemaphoreCount = 1;
+    SubmitInfo[0].pWaitSemaphores = &Graphics->RenderLock;
+    SubmitInfo[0].pWaitDstStageMask = &WaitStage;
+    SubmitInfo[0].commandBufferCount = 1;
+    SubmitInfo[0].pCommandBuffers = &CommandBuffer;
+    SubmitInfo[0].signalSemaphoreCount = 1;
+    SubmitInfo[0].pSignalSemaphores = &Graphics->PresentLock;    
+    
+    VULKAN_CHECK_AND_HANDLE(vkQueueSubmit(Graphics->GraphicsQueue, ARRAYCOUNT(SubmitInfo), SubmitInfo, VK_NULL_HANDLE),
+                            "Failed to submit the command buffer to the graphics queue.");
+    
+    VkPresentInfoKHR PresentInfo = {};
+    PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    PresentInfo.waitSemaphoreCount = 1;
+    PresentInfo.pWaitSemaphores = &Graphics->PresentLock;
+    PresentInfo.swapchainCount = 1;
+    PresentInfo.pSwapchains = &RenderBuffer->Swapchain;
+    PresentInfo.pImageIndices = &ImageIndex;
+    
+    VULKAN_CHECK_AND_HANDLE(vkQueuePresentKHR(Graphics->PresentQueue, &PresentInfo),
+                            "Failed to submit the vulkan image for presentation.");
+    
     return true;
     
     handle_error:
@@ -500,6 +557,12 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_DEVICE_FUNCTION(vkDestroyFramebuffer);
     LOAD_DEVICE_FUNCTION(vkCreateImageView);
     LOAD_DEVICE_FUNCTION(vkCreateFramebuffer);
+    LOAD_DEVICE_FUNCTION(vkBeginCommandBuffer);
+    LOAD_DEVICE_FUNCTION(vkCmdBeginRenderPass);
+    LOAD_DEVICE_FUNCTION(vkCmdEndRenderPass);
+    LOAD_DEVICE_FUNCTION(vkEndCommandBuffer);
+    LOAD_DEVICE_FUNCTION(vkQueueSubmit);
+    LOAD_DEVICE_FUNCTION(vkQueuePresentKHR);
     
     vkGetDeviceQueue(Graphics->Device, Graphics->SelectedGPU->GraphicsFamilyIndex, 0, &Graphics->GraphicsQueue);
     Graphics->PresentQueue = Graphics->GraphicsQueue;    
@@ -548,6 +611,12 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
     VULKAN_CHECK_AND_HANDLE(vkCreateRenderPass(Graphics->Device, &RenderPassInfo, VK_NULL_HANDLE, &Graphics->RenderPass),
                             "Failed to create the render pass.");
+    
+    Graphics->RenderLock = CreateSemaphore();
+    Graphics->PresentLock = CreateSemaphore();
+    
+    BOOL_CHECK_AND_HANDLE(Graphics->RenderLock, "Failed to create the render lock.");
+    BOOL_CHECK_AND_HANDLE(Graphics->PresentLock, "Failed to create the present lock.");
     
     return true;
     
