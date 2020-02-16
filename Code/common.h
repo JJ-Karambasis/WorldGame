@@ -32,7 +32,7 @@
 
 #define SQR(x) ((x)*(x))
 
-#define BIT(x) (x << 1)
+#define BIT_SET(x) (1 << x)
 
 #define SIGN(x) (((x) < 0) ? -1.0f : 1.0f)
 

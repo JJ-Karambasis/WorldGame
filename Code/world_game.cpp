@@ -9,7 +9,5 @@ EXPORT GAME_TICK(Tick)
     if(!Game->Initialized)
     {
         Game->Initialized = true;
-    }
-    
-    CONSOLE_LOG("Test\n");    
+    }        
 }

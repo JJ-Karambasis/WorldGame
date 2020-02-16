@@ -26,6 +26,19 @@ WRITE_AND_HANDLE_ERROR(message, __VA_ARGS__); \
 } \
 while(0)
 
+
+//IMPORTANT(EVERYONE): If we need to support stencil buffers remove the D32_SFLOAT only format
+//NOTE(EVERYONE): Since we don't care about stencil formats right now, lets just prioritize higher precision depth values for now 
+//(with less memory usage)
+global const VkFormat Global_DepthBufferFormats[] =
+{
+    VK_FORMAT_D32_SFLOAT, 
+    VK_FORMAT_D32_SFLOAT_S8_UINT, 
+    VK_FORMAT_D24_UNORM_S8_UINT,
+    VK_FORMAT_D16_UNORM, 
+    VK_FORMAT_D16_UNORM_S8_UINT
+};
+
 VULKAN_FUNCTION(vkGetInstanceProcAddr);
 
 VULKAN_FUNCTION(vkCreateInstance);
@@ -37,6 +50,7 @@ VULKAN_FUNCTION(vkEnumerateInstanceLayerProperties);
 VULKAN_FUNCTION(vkCreateWin32SurfaceKHR);
 #endif
 
+VULKAN_FUNCTION(vkCreateDebugUtilsMessengerEXT);
 VULKAN_FUNCTION(vkGetPhysicalDeviceSurfaceSupportKHR);
 VULKAN_FUNCTION(vkGetPhysicalDeviceSurfaceFormatsKHR);
 VULKAN_FUNCTION(vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
@@ -46,6 +60,8 @@ VULKAN_FUNCTION(vkGetPhysicalDeviceQueueFamilyProperties);
 VULKAN_FUNCTION(vkEnumerateDeviceExtensionProperties);
 VULKAN_FUNCTION(vkCreateDevice);
 VULKAN_FUNCTION(vkGetDeviceProcAddr);
+VULKAN_FUNCTION(vkGetPhysicalDeviceFormatProperties);
+VULKAN_FUNCTION(vkGetPhysicalDeviceMemoryProperties);
 
 VULKAN_FUNCTION(vkGetDeviceQueue);
 VULKAN_FUNCTION(vkCreateCommandPool);
@@ -70,14 +86,48 @@ VULKAN_FUNCTION(vkCmdEndRenderPass);
 VULKAN_FUNCTION(vkEndCommandBuffer);
 VULKAN_FUNCTION(vkQueueSubmit);
 VULKAN_FUNCTION(vkQueuePresentKHR);
+VULKAN_FUNCTION(vkCreateShaderModule);
+VULKAN_FUNCTION(vkDestroyShaderModule);
+VULKAN_FUNCTION(vkCreateGraphicsPipelines);
+VULKAN_FUNCTION(vkCreatePipelineLayout);
+VULKAN_FUNCTION(vkCmdSetViewport);
+VULKAN_FUNCTION(vkCmdSetScissor);
+VULKAN_FUNCTION(vkCmdBindPipeline);
+VULKAN_FUNCTION(vkCmdDraw);
+VULKAN_FUNCTION(vkCmdDrawIndexed);
+VULKAN_FUNCTION(vkCreateImage);
+VULKAN_FUNCTION(vkDestroyImage);
+VULKAN_FUNCTION(vkGetImageMemoryRequirements);
+VULKAN_FUNCTION(vkGetBufferMemoryRequirements);
+VULKAN_FUNCTION(vkGetImageMemoryRequirements2KHR);
+VULKAN_FUNCTION(vkGetBufferMemoryRequirements2KHR);
+VULKAN_FUNCTION(vkAllocateMemory);
+VULKAN_FUNCTION(vkFreeMemory);
+VULKAN_FUNCTION(vkBindImageMemory);
+VULKAN_FUNCTION(vkBindBufferMemory);
+
+struct extensions_array
+{
+    u32 Count;
+    char** Ptr;
+};
+
+struct memory_info
+{
+    VkMemoryRequirements Requirements;
+    b32 DedicatedAllocation;
+};
 
 struct physical_device
-{    
+{
+    b32 FoundDedicatedMemoryExtension;
     i32 GraphicsFamilyIndex;    
     i32 PresentFamilyIndex;
     VkSurfaceFormatKHR SurfaceFormat;
-    VkPhysicalDevice Handle;    
+    VkFormat DepthFormat;    
     u32 ColorImageCount;
+    VkPhysicalDeviceMemoryProperties MemoryProperties;
+    VkPhysicalDevice Handle;    
 };
 
 struct physical_device_array
@@ -93,6 +143,9 @@ struct render_buffer
     u32 ColorImageCount;
     VkImage ColorImages[3];
     VkImageView ColorImageViews[3];
+    VkDeviceMemory DepthMemory;
+    VkImage DepthImage;
+    VkImageView DepthImageView;        
     VkFramebuffer Framebuffers[3];
 };
 
@@ -110,6 +163,8 @@ struct vulkan_graphics : public graphics
     VkDevice Device;
     VkSemaphore RenderLock;
     VkSemaphore PresentLock;
+    VkPipelineLayout PipelineLayout;
+    VkPipeline Pipeline;
     render_buffer RenderBuffer;    
 };
 
@@ -118,6 +173,7 @@ global vulkan_graphics __Vulkan_Graphics__;
 #if DEVELOPER_BUILD
 struct developer_vulkan_graphics : public vulkan_graphics
 {
+    VkDebugUtilsMessengerEXT Messenger;
 };
 
 global developer_vulkan_graphics __Developer_Vulkan_Graphics__;

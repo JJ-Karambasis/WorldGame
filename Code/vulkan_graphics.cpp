@@ -1,5 +1,132 @@
 #include "vulkan_graphics.h"
 
+extensions_array GetDeviceExtensions(physical_device* GPU)
+{
+    extensions_array Result = {};    
+    const u32 MaxExtensionsCount = 3;
+    Result.Ptr = PushArray(MaxExtensionsCount, char*, Clear, 0);
+    
+    Result.Ptr[Result.Count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;    
+    if(GPU->FoundDedicatedMemoryExtension)    
+    {
+        Result.Ptr[Result.Count++] = VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME;
+        Result.Ptr[Result.Count++] = VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME;
+    }
+    
+    return Result;
+}
+
+memory_info GetImageMemoryInfo(VkImage Image)
+{
+    vulkan_graphics* Graphics = GetVulkanGraphics();
+    memory_info Result = {};    
+    
+    if(Graphics->SelectedGPU->FoundDedicatedMemoryExtension)
+    {        
+        VkMemoryDedicatedRequirements DedicatedRequirements = {};
+        DedicatedRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+        
+        VkMemoryRequirements2 MemoryRequirements2 = {};
+        MemoryRequirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;        
+        MemoryRequirements2.pNext = &DedicatedRequirements;
+                
+        VkImageMemoryRequirementsInfo2 MemoryRequirementsInfo2 = {};
+        MemoryRequirementsInfo2.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+        MemoryRequirementsInfo2.image = Image;
+        
+        vkGetImageMemoryRequirements2KHR(Graphics->Device, &MemoryRequirementsInfo2, &MemoryRequirements2);
+        Result.Requirements = MemoryRequirements2.memoryRequirements;
+        Result.DedicatedAllocation = (DedicatedRequirements.requiresDedicatedAllocation != VK_FALSE) || (DedicatedRequirements.prefersDedicatedAllocation != VK_FALSE);
+    }
+    else
+    {
+        vkGetImageMemoryRequirements(Graphics->Device, Image, &Result.Requirements);
+    }    
+    
+    return Result;
+}
+
+memory_info GetBufferMemoryInfo(VkBuffer Buffer)
+{
+    vulkan_graphics* Graphics = GetVulkanGraphics();
+    memory_info Result = {};    
+    
+    if(Graphics->SelectedGPU->FoundDedicatedMemoryExtension)
+    {        
+        VkMemoryDedicatedRequirements DedicatedRequirements = {};
+        DedicatedRequirements.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+        
+        VkMemoryRequirements2 MemoryRequirements2 = {};
+        MemoryRequirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;        
+        MemoryRequirements2.pNext = &DedicatedRequirements;
+        
+        
+        VkBufferMemoryRequirementsInfo2 MemoryRequirementsInfo2 = {};
+        MemoryRequirementsInfo2.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
+        MemoryRequirementsInfo2.buffer = Buffer;
+        
+        vkGetBufferMemoryRequirements2KHR(Graphics->Device, &MemoryRequirementsInfo2, &MemoryRequirements2);
+        Result.Requirements = MemoryRequirements2.memoryRequirements;
+        Result.DedicatedAllocation = (DedicatedRequirements.requiresDedicatedAllocation != VK_FALSE) || (DedicatedRequirements.prefersDedicatedAllocation != VK_FALSE);
+    }
+    else
+    {
+        vkGetBufferMemoryRequirements(Graphics->Device, Buffer, &Result.Requirements);
+    }    
+    
+    return Result;
+}
+
+i32 FindMemoryTypeIndex(VkPhysicalDeviceMemoryProperties* MemoryProperties, 
+                        VkMemoryRequirements* MemoryRequirements, 
+                        VkMemoryPropertyFlags TargetProperty)
+{
+    for(u32 MemoryIndex = 0; MemoryIndex < MemoryProperties->memoryTypeCount; MemoryIndex++)
+    {
+        u32 MemoryBitIndex = BIT_SET(MemoryIndex);
+        if(MemoryBitIndex & MemoryRequirements->memoryTypeBits)
+        {
+            b32 HasRequiredProperties = (TargetProperty & MemoryProperties->memoryTypes[MemoryIndex].propertyFlags);
+            if(HasRequiredProperties)
+            {
+                return (i32)MemoryIndex;
+            }            
+        }
+    }    
+    return -1;
+}
+
+VkShaderModule CreateShader(char* Path)
+{
+    file_results ShaderFile = Global_Platform->ReadEntireFile(Path);
+    BOOL_CHECK_AND_HANDLE(ShaderFile.Data, "Failed to load the shader file %s", Path);
+    
+    VkShaderModuleCreateInfo ShaderModuleInfo = {};
+    ShaderModuleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    ShaderModuleInfo.codeSize = ShaderFile.Size;
+    ShaderModuleInfo.pCode = (u32*)ShaderFile.Data;
+    
+    VkShaderModule Result;
+    VULKAN_CHECK_AND_HANDLE(vkCreateShaderModule(GetVulkanGraphics()->Device, &ShaderModuleInfo, VK_NULL_HANDLE, &Result),
+                            "Failed to create the vulkan shader module.");
+    
+    return Result;
+    
+    handle_error:
+    return VK_NULL_HANDLE;
+}
+
+#if DEVELOPER_BUILD
+VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT MessageSeverity, VkDebugUtilsMessageTypeFlagsEXT MessageTypes,
+                       const VkDebugUtilsMessengerCallbackDataEXT* CallbackData, void* UserData)
+{
+    CONSOLE_LOG("Debug event occurred: %s\n", CallbackData->pMessage);    
+    ASSERT(false);
+    //NOTE(EVERYONE): According to the specification this always needs to return VK_FALSE -_-
+    return VK_FALSE;
+}
+#endif
+
 inline VkSemaphore 
 CreateSemaphore()
 {
@@ -13,7 +140,73 @@ CreateSemaphore()
 render_buffer CreateRenderBuffer(v2i Dimensions, VkSwapchainKHR OldSwapchain)
 {
     vulkan_graphics* Graphics = GetVulkanGraphics();    
-    physical_device* GPU = Graphics->SelectedGPU;
+    physical_device* GPU = Graphics->SelectedGPU;        
+    
+    if(Graphics->RenderBuffer.DepthImage)
+        vkDestroyImage(Graphics->Device, Graphics->RenderBuffer.DepthImage, VK_NULL_HANDLE);
+    
+    if(Graphics->RenderBuffer.DepthImageView)
+        vkDestroyImageView(Graphics->Device, Graphics->RenderBuffer.DepthImageView, VK_NULL_HANDLE);
+    
+    if(Graphics->RenderBuffer.DepthMemory)
+        vkFreeMemory(Graphics->Device, Graphics->RenderBuffer.DepthMemory, VK_NULL_HANDLE);
+    
+    VkImageCreateInfo DepthImageInfo = {};
+    DepthImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    DepthImageInfo.imageType = VK_IMAGE_TYPE_2D;
+    DepthImageInfo.format = GPU->DepthFormat;
+    DepthImageInfo.extent = {(u32)Dimensions.width, (u32)Dimensions.height, 1};
+    DepthImageInfo.mipLevels = 1;
+    DepthImageInfo.arrayLayers = 1;
+    DepthImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    DepthImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    DepthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    DepthImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;    
+    
+    VkImage DepthImage;
+    VULKAN_CHECK_AND_HANDLE(vkCreateImage(Graphics->Device, &DepthImageInfo, VK_NULL_HANDLE, &DepthImage), 
+                            "Failed to create the depth image.");
+    
+    memory_info MemoryInfo = GetImageMemoryInfo(DepthImage);        
+    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GPU->MemoryProperties, &MemoryInfo.Requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if(MemoryTypeIndex == -1)
+        WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the depth image.");    
+    
+    VkMemoryAllocateInfo AllocateInfo = {};
+    AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    AllocateInfo.memoryTypeIndex = MemoryTypeIndex;
+    AllocateInfo.allocationSize = MemoryInfo.Requirements.size;
+    
+    VkMemoryDedicatedAllocateInfo DedicatedAllocateInfo = {};
+    if(MemoryInfo.DedicatedAllocation)
+    {        
+        DedicatedAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+        DedicatedAllocateInfo.image = DepthImage;
+        AllocateInfo.pNext = &DedicatedAllocateInfo;
+    }
+    
+    VkDeviceMemory DepthMemory;
+    VULKAN_CHECK_AND_HANDLE(vkAllocateMemory(Graphics->Device, &AllocateInfo, VK_NULL_HANDLE, &DepthMemory),
+                            "Failed to allocate the depth buffer memory.");
+    
+    VULKAN_CHECK_AND_HANDLE(vkBindImageMemory(Graphics->Device, DepthImage, DepthMemory, 0),
+                            "Failed to bind the depth image to the depth memory.");
+    
+    VkImageViewCreateInfo DepthImageViewInfo = {};
+    DepthImageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    DepthImageViewInfo.image = DepthImage;
+    DepthImageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    DepthImageViewInfo.format = GPU->DepthFormat;
+    DepthImageViewInfo.components = 
+    {
+        VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, 
+        VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY
+    };
+    DepthImageViewInfo.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};        
+    
+    VkImageView DepthImageView;
+    VULKAN_CHECK_AND_HANDLE(vkCreateImageView(Graphics->Device, &DepthImageViewInfo, VK_NULL_HANDLE, &DepthImageView),
+                            "Failed to create the depth image view.");
     
     VkSwapchainCreateInfoKHR SwapchainInfo = {};
     SwapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -79,11 +272,13 @@ render_buffer CreateRenderBuffer(v2i Dimensions, VkSwapchainKHR OldSwapchain)
         VULKAN_CHECK_AND_HANDLE(vkCreateImageView(Graphics->Device, &ImageViewInfo, VK_NULL_HANDLE, &ColorImageViews[ImageIndex]),
                                 "Failed to create the color image view, index %d", ImageIndex);
         
+        VkImageView AttachmentViews[] = {ColorImageViews[ImageIndex], DepthImageView};
+        
         VkFramebufferCreateInfo FramebufferInfo = {};
         FramebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         FramebufferInfo.renderPass = Graphics->RenderPass;
-        FramebufferInfo.attachmentCount = 1;
-        FramebufferInfo.pAttachments = &ColorImageViews[ImageIndex];
+        FramebufferInfo.attachmentCount = ARRAYCOUNT(AttachmentViews);
+        FramebufferInfo.pAttachments = AttachmentViews;
         FramebufferInfo.width = Dimensions.width;
         FramebufferInfo.height = Dimensions.height;
         FramebufferInfo.layers = 1;
@@ -95,6 +290,9 @@ render_buffer CreateRenderBuffer(v2i Dimensions, VkSwapchainKHR OldSwapchain)
     Result.Dimensions = Dimensions;
     Result.Swapchain = Swapchain;
     Result.ColorImageCount = ColorImageCount;
+    Result.DepthMemory = DepthMemory;
+    Result.DepthImage = DepthImage;
+    Result.DepthImageView = DepthImageView;
     CopyArray(Result.ColorImages, ColorImages, 3, VkImage);
     CopyArray(Result.ColorImageViews, ColorImageViews, 3, VkImageView);
     CopyArray(Result.Framebuffers, Framebuffers, 3, VkFramebuffer);
@@ -125,17 +323,14 @@ VkDevice CreateLogicalDevice(physical_device* GPU)
         DeviceQueueInfoCount++;
     }
     
-    char* RequiredDeviceExtensions[] = 
-    {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    };
+    extensions_array Extensions = GetDeviceExtensions(GPU);
     
     VkDeviceCreateInfo DeviceInfo = {};
     DeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     DeviceInfo.queueCreateInfoCount = DeviceQueueInfoCount;
     DeviceInfo.pQueueCreateInfos = DeviceQueueInfo;
-    DeviceInfo.enabledExtensionCount = ARRAYCOUNT(RequiredDeviceExtensions);
-    DeviceInfo.ppEnabledExtensionNames = RequiredDeviceExtensions;    
+    DeviceInfo.enabledExtensionCount = Extensions.Count;
+    DeviceInfo.ppEnabledExtensionNames = Extensions.Ptr;
     //DeviceInfo.pEnabledFeatures = ;
     
     VkDevice Result = VK_NULL_HANDLE;
@@ -219,6 +414,9 @@ physical_device_array CreatePhysicalDevices()
         {
             if(StringEquals(Extensions[ExtensionIndex].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
                 FoundSwapchainExtension = true;
+            
+            if(StringEquals(Extensions[ExtensionIndex].extensionName, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME))
+                Result.Ptr[GPUIndex].FoundDedicatedMemoryExtension = true;
         }
         
         if(!FoundSwapchainExtension)
@@ -316,6 +514,25 @@ physical_device_array CreatePhysicalDevices()
         else
             Result.Ptr[GPUIndex].ColorImageCount = 2;
         
+        for(u32 FormatIndex = 0; FormatIndex < ARRAYCOUNT(Global_DepthBufferFormats); FormatIndex++)
+        {
+            VkFormatProperties FormatProperties;
+            vkGetPhysicalDeviceFormatProperties(GPU, Global_DepthBufferFormats[FormatIndex], &FormatProperties); 
+            if(FormatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+            {
+                Result.Ptr[GPUIndex].DepthFormat = Global_DepthBufferFormats[FormatIndex];
+                break;
+            }
+        }
+        
+        if(Result.Ptr[GPUIndex].DepthFormat == VK_FORMAT_UNDEFINED)
+        {
+            CONSOLE_LOG("Device FAILED!\n\n");
+            continue;
+        }
+        
+        vkGetPhysicalDeviceMemoryProperties(GPU, &Result.Ptr[GPUIndex].MemoryProperties);        
+        
         CONSOLE_LOG("Device PASSED!\n\n");                               
     }    
     
@@ -365,7 +582,10 @@ VkInstance CreateInstance()
                             "Failed to retrieve the instance extensions.");
     
     b32 FoundPlatformSurfaceExtension = false;
+    
+#if DEVELOPER_BUILD
     b32 FoundDebugExtensions = false;
+#endif
     
     u32 InstanceExtensionCount = 0;
     char** InstanceExtensionNames = PushArray(InstancePropertyCount, char*, Clear, 0);
@@ -374,7 +594,8 @@ VkInstance CreateInstance()
 #ifdef OS_WINDOWS
         if(StringEquals(InstanceExtensions[InstancePropertyIndex].extensionName, VK_KHR_WIN32_SURFACE_EXTENSION_NAME))
         {
-            InstanceExtensionNames[InstanceExtensionCount++] = InstanceExtensions[InstancePropertyIndex].extensionName;
+            InstanceExtensionNames[InstanceExtensionCount++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+            InstanceExtensionNames[InstanceExtensionCount++] = VK_KHR_SURFACE_EXTENSION_NAME;
             FoundPlatformSurfaceExtension = true;
         }
 #endif
@@ -382,26 +603,67 @@ VkInstance CreateInstance()
 #if DEVELOPER_BUILD
         if(StringEquals(InstanceExtensions[InstancePropertyIndex].extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
         {
-            InstanceExtensionNames[InstanceExtensionCount++] = InstanceExtensions[InstancePropertyIndex].extensionName;
+            InstanceExtensionNames[InstanceExtensionCount++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;                        
             FoundDebugExtensions = true;
-        }        
+        }                
 #endif
     }
     
-    BOOL_CHECK_AND_HANDLE(FoundPlatformSurfaceExtension, "Failed to find the platform surface extension! Cannot initialize vulkan.");    
+    u32 InstanceLayerCount = 0;
+    char** InstanceLayerNames = NULL;
+#if DEVELOPER_BUILD    
     
-    //NOTE(EVERYONE): Automatically included if the platform dependent extension is found (e.g. windows is VK_KHR_win32_surface)
-    InstanceExtensionNames[InstanceExtensionCount++] = "VK_KHR_surface";
+    u32 LayerPropertyCount;
+    if(vkEnumerateInstanceLayerProperties(&LayerPropertyCount, VK_NULL_HANDLE) == VK_SUCCESS)
+    {
+        VkLayerProperties* LayerProperties = PushArray(LayerPropertyCount, VkLayerProperties, Clear, 0);
+        InstanceLayerNames = PushArray(LayerPropertyCount, char*, Clear, 0);
+        if(vkEnumerateInstanceLayerProperties(&LayerPropertyCount, LayerProperties) == VK_SUCCESS)
+        {
+            for(u32 LayerPropertyIndex = 0; LayerPropertyIndex < LayerPropertyCount; LayerPropertyIndex++)
+            {
+                if(StringEquals(LayerProperties[LayerPropertyIndex].layerName, "VK_LAYER_LUNARG_standard_validation"))                
+                    InstanceLayerNames[InstanceLayerCount++] = LayerProperties[LayerPropertyIndex].layerName;                
+                
+                if(StringEquals(LayerProperties[LayerPropertyIndex].layerName, "VK_LAYER_KHRONOS_validation"))
+                    InstanceLayerNames[InstanceLayerCount++] = LayerProperties[LayerPropertyIndex].layerName;
+            }
+        }
+    }
+    
+#endif
+    
+    BOOL_CHECK_AND_HANDLE(FoundPlatformSurfaceExtension, "Failed to find the platform surface extension! Cannot initialize vulkan.");    
     
     VkInstanceCreateInfo InstanceInfo = {};
     InstanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     InstanceInfo.pApplicationInfo = &ApplicationInfo;
     InstanceInfo.enabledExtensionCount = InstanceExtensionCount;
     InstanceInfo.ppEnabledExtensionNames = InstanceExtensionNames;
+    InstanceInfo.enabledLayerCount = InstanceLayerCount;
+    InstanceInfo.ppEnabledLayerNames = InstanceLayerCount ? InstanceLayerNames : VK_NULL_HANDLE;
     
     VkInstance Instance;
     VULKAN_CHECK_AND_HANDLE(vkCreateInstance(&InstanceInfo, VK_NULL_HANDLE, &Instance),
                             "Failed to create the vulkan instance.");    
+    
+#if DEVELOPER_BUILD
+    if(FoundDebugExtensions)
+    {
+        developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)GetVulkanGraphics();
+        vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(Instance, "vkCreateDebugUtilsMessengerEXT");
+        
+        if(vkCreateDebugUtilsMessengerEXT)
+        {
+            VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerInfo = {};
+            DebugUtilsMessengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            DebugUtilsMessengerInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT|VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            DebugUtilsMessengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT|VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT|VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            DebugUtilsMessengerInfo.pfnUserCallback = DebugCallback;
+            vkCreateDebugUtilsMessengerEXT(Instance, &DebugUtilsMessengerInfo, VK_NULL_HANDLE, &DevGraphics->Messenger);                    
+        }
+    }
+#endif
     
     return Instance;
     
@@ -449,10 +711,12 @@ RENDER_GAME(RenderGame)
     VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(CommandBuffer, &CommandBufferBeginInfo),
                             "Failed to begin the command buffer recording.");
     {
-        VkClearColorValue ClearColor = {1.0f, 0.0f, 0.0f, 1.0f};
+        VkClearColorValue ClearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+        VkClearDepthStencilValue ClearDepth = {1.0f, 0};
         
-        VkClearValue ClearValues[1] = {};                
+        VkClearValue ClearValues[2] = {};                
         ClearValues[0].color = ClearColor;
+        ClearValues[1].depthStencil = ClearDepth;
         
         VkRenderPassBeginInfo RenderPassBeginInfo = {};
         RenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -462,8 +726,17 @@ RENDER_GAME(RenderGame)
         RenderPassBeginInfo.clearValueCount = ARRAYCOUNT(ClearValues);
         RenderPassBeginInfo.pClearValues = ClearValues;
         
-        vkCmdBeginRenderPass(CommandBuffer, &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        VkViewport VKViewport = {0.0f, 0.0f, (f32)WindowDim.width, (f32)WindowDim.height, 0.0f, 1.0f};
         
+        vkCmdBeginRenderPass(CommandBuffer, &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        {
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);
+             
+            vkCmdSetViewport(CommandBuffer, 0, 1, &VKViewport);
+            vkCmdSetScissor(CommandBuffer, 0, 1, &RenderPassBeginInfo.renderArea);                    
+            
+            vkCmdDraw(CommandBuffer, 3, 1, 0, 0);
+        }
         vkCmdEndRenderPass(CommandBuffer);
         
     }
@@ -527,6 +800,8 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_INSTANCE_FUNCTION(vkEnumerateDeviceExtensionProperties);
     LOAD_INSTANCE_FUNCTION(vkCreateDevice);
     LOAD_INSTANCE_FUNCTION(vkGetDeviceProcAddr);
+    LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceFormatProperties);
+    LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceMemoryProperties);
     
     Graphics->Surface = CreateSurface(PlatformSurfaceInfo);
     BOOL_CHECK_AND_HANDLE(Graphics->Surface, "Failed to create the vulkan surface.");
@@ -563,6 +838,29 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_DEVICE_FUNCTION(vkEndCommandBuffer);
     LOAD_DEVICE_FUNCTION(vkQueueSubmit);
     LOAD_DEVICE_FUNCTION(vkQueuePresentKHR);
+    LOAD_DEVICE_FUNCTION(vkCreateShaderModule);
+    LOAD_DEVICE_FUNCTION(vkDestroyShaderModule);
+    LOAD_DEVICE_FUNCTION(vkCreateGraphicsPipelines);
+    LOAD_DEVICE_FUNCTION(vkCreatePipelineLayout);
+    LOAD_DEVICE_FUNCTION(vkCmdSetViewport);
+    LOAD_DEVICE_FUNCTION(vkCmdSetScissor);
+    LOAD_DEVICE_FUNCTION(vkCmdBindPipeline);
+    LOAD_DEVICE_FUNCTION(vkCmdDraw);
+    LOAD_DEVICE_FUNCTION(vkCmdDrawIndexed);
+    LOAD_DEVICE_FUNCTION(vkCreateImage);
+    LOAD_DEVICE_FUNCTION(vkDestroyImageView);
+    LOAD_DEVICE_FUNCTION(vkGetImageMemoryRequirements);
+    LOAD_DEVICE_FUNCTION(vkGetBufferMemoryRequirements);
+    LOAD_DEVICE_FUNCTION(vkAllocateMemory);
+    LOAD_DEVICE_FUNCTION(vkFreeMemory);
+    LOAD_DEVICE_FUNCTION(vkBindImageMemory);
+    LOAD_DEVICE_FUNCTION(vkBindBufferMemory);    
+    
+    if(Graphics->SelectedGPU->FoundDedicatedMemoryExtension)
+    {
+        LOAD_DEVICE_FUNCTION(vkGetImageMemoryRequirements2KHR);
+        LOAD_DEVICE_FUNCTION(vkGetBufferMemoryRequirements2KHR);
+    }
     
     vkGetDeviceQueue(Graphics->Device, Graphics->SelectedGPU->GraphicsFamilyIndex, 0, &Graphics->GraphicsQueue);
     Graphics->PresentQueue = Graphics->GraphicsQueue;    
@@ -585,22 +883,34 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VULKAN_CHECK_AND_HANDLE(vkAllocateCommandBuffers(Graphics->Device, &CommandBufferInfo, &Graphics->CommandBuffer),
                             "Failed to allocate the command buffers.");        
     
-    VkAttachmentDescription AttachmentDescriptions[1] = {};    
+    VkAttachmentDescription AttachmentDescriptions[2] = {};    
     AttachmentDescriptions[0].format = Graphics->SelectedGPU->SurfaceFormat.format;
     AttachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
     AttachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     AttachmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;        
-    AttachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    AttachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     AttachmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;    
+    
+    AttachmentDescriptions[1].format = Graphics->SelectedGPU->DepthFormat;
+    AttachmentDescriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    AttachmentDescriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    AttachmentDescriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    AttachmentDescriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    AttachmentDescriptions[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     
     VkAttachmentReference ColorAttachmentRef = {};
     ColorAttachmentRef.attachment = 0;
     ColorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     
+    VkAttachmentReference DepthAttachmentRef = {};
+    DepthAttachmentRef.attachment = 1;
+    DepthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    
     VkSubpassDescription SubpassDescriptions[1] = {};
     SubpassDescriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     SubpassDescriptions[0].colorAttachmentCount = 1;
     SubpassDescriptions[0].pColorAttachments = &ColorAttachmentRef;
+    SubpassDescriptions[0].pDepthStencilAttachment = &DepthAttachmentRef;
     
     VkRenderPassCreateInfo RenderPassInfo = {};
     RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -617,6 +927,96 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
     BOOL_CHECK_AND_HANDLE(Graphics->RenderLock, "Failed to create the render lock.");
     BOOL_CHECK_AND_HANDLE(Graphics->PresentLock, "Failed to create the present lock.");
+    
+    VkShaderModule TestBoxVertex   = CreateShader("shaders/vulkan/TestBoxVertex.spv");
+    VkShaderModule TestBoxFragment = CreateShader("shaders/vulkan/TestBoxFragment.spv");
+    
+    BOOL_CHECK_AND_HANDLE(TestBoxVertex, "Failed to create the test box vertex shader.");
+    BOOL_CHECK_AND_HANDLE(TestBoxFragment, "Failed to create the test box fragment shader.");
+    
+    VkPipelineLayoutCreateInfo PipelineLayoutInfo = {};
+    PipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;    
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(Graphics->Device, &PipelineLayoutInfo, VK_NULL_HANDLE, &Graphics->PipelineLayout),
+                            "Failed to create the pipeline layout.");
+    
+    VkPipelineShaderStageCreateInfo ShaderStages[2] = {};
+    ShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    ShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    ShaderStages[0].module = TestBoxVertex;
+    ShaderStages[0].pName = "main";
+    
+    ShaderStages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    ShaderStages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    ShaderStages[1].module = TestBoxFragment;
+    ShaderStages[1].pName  = "main";    
+    
+    VkPipelineVertexInputStateCreateInfo VertexInputState = {};
+    VertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    
+    VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = {};
+    InputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    InputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    
+    VkPipelineViewportStateCreateInfo ViewportState = {};
+    ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    ViewportState.viewportCount = 1;
+    ViewportState.scissorCount = 1;
+    
+    VkPipelineRasterizationStateCreateInfo RasterizationState = {};
+    RasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    RasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+    RasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+    RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    RasterizationState.lineWidth = 1.0f;
+    
+    VkPipelineMultisampleStateCreateInfo MultisampleState = {};
+    MultisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    MultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    
+    VkPipelineColorBlendAttachmentState ColorBlendAttachment = {};
+    ColorBlendAttachment.blendEnable = VK_FALSE;
+    ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT;
+    
+    VkPipelineColorBlendStateCreateInfo ColorBlendState = {};
+    ColorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    ColorBlendState.attachmentCount = 1;
+    ColorBlendState.pAttachments = &ColorBlendAttachment;    
+    
+    VkPipelineDepthStencilStateCreateInfo DepthStencilState = {};
+    DepthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    DepthStencilState.depthTestEnable = VK_TRUE;
+    DepthStencilState.depthWriteEnable = VK_TRUE;
+    DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;    
+    
+    VkDynamicState DynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};    
+    
+    VkPipelineDynamicStateCreateInfo DynamicState = {};
+    DynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    DynamicState.dynamicStateCount = ARRAYCOUNT(DynamicStates);
+    DynamicState.pDynamicStates = DynamicStates;
+    
+    VkGraphicsPipelineCreateInfo GraphicsPipelineInfo = {};
+    GraphicsPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    GraphicsPipelineInfo.stageCount = ARRAYCOUNT(ShaderStages);
+    GraphicsPipelineInfo.pStages = ShaderStages;
+    GraphicsPipelineInfo.pVertexInputState = &VertexInputState;
+    GraphicsPipelineInfo.pInputAssemblyState = &InputAssemblyState;
+    GraphicsPipelineInfo.pViewportState = &ViewportState;
+    GraphicsPipelineInfo.pRasterizationState = &RasterizationState;
+    GraphicsPipelineInfo.pMultisampleState = &MultisampleState;
+    GraphicsPipelineInfo.pColorBlendState = &ColorBlendState;
+    GraphicsPipelineInfo.pDepthStencilState = &DepthStencilState;
+    GraphicsPipelineInfo.pDynamicState = &DynamicState;
+    GraphicsPipelineInfo.layout = Graphics->PipelineLayout;
+    GraphicsPipelineInfo.renderPass = Graphics->RenderPass;
+    GraphicsPipelineInfo.subpass = 0;    
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &GraphicsPipelineInfo, VK_NULL_HANDLE, &Graphics->Pipeline),
+                            "Failed to create the graphics pipeline.");
+    
+    vkDestroyShaderModule(Graphics->Device, TestBoxVertex, VK_NULL_HANDLE);
+    vkDestroyShaderModule(Graphics->Device, TestBoxFragment, VK_NULL_HANDLE);
     
     return true;
     
@@ -639,7 +1039,7 @@ EXPORT WIN32_GRAPHICS_INIT(GraphicsInit)
     HMODULE VulkanLib = LoadLibrary("vulkan-1.dll");
     BOOL_CHECK_AND_HANDLE(VulkanLib, "Failed to load the vulkan library");    
     
-    vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)GetProcAddress(VulkanLib, "vkGetInstanceProcAddr");
+    vkGetInstanceProcAddr  = (PFN_vkGetInstanceProcAddr)GetProcAddress(VulkanLib, "vkGetInstanceProcAddr");
     BOOL_CHECK_AND_HANDLE(vkGetInstanceProcAddr, "Failed to load the vulkan vkGetInstanceProcAddr function");
     
     BOOL_CHECK_AND_HANDLE(VulkanInit(Window), "Failed to initialize the core vulkan graphics.");    
