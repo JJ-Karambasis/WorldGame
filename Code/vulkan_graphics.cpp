@@ -701,7 +701,7 @@ RENDER_GAME(RenderGame)
     }
     
     Graphics->CameraBufferData[0] = PerspectiveM4(PI*0.25f, SafeRatio(WindowDim.width, WindowDim.height), 0.01f, 1000.0f);
-    Graphics->CameraBufferData[1] = TranslationM4(0.0f, 0.0f, -2.0f);
+    Graphics->CameraBufferData[1] = TranslationM4(0.0f, 0.0f, -5.0f);
     
     VULKAN_CHECK_AND_HANDLE(vkQueueWaitIdle(Graphics->GraphicsQueue), "Failed to wait for the graphics queue.");
     VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed to reset the command pool.");
@@ -744,7 +744,7 @@ RENDER_GAME(RenderGame)
             c4 Color = RGBA(0.0f, 1.0f, 0.0f, 1.0f);
             vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Color);            
             
-            vkCmdDraw(CommandBuffer, 3, 1, 0, 0);
+            vkCmdDraw(CommandBuffer, 36, 1, 0, 0);
         }
         vkCmdEndRenderPass(CommandBuffer);
         
