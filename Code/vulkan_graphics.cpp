@@ -700,6 +700,9 @@ RENDER_GAME(RenderGame)
         BOOL_CHECK_AND_HANDLE(ImageStatus == VK_SUCCESS, "Error acquiring image to present.");
     }
     
+    Graphics->CameraBufferData[0] = PerspectiveM4(PI*0.25f, SafeRatio(WindowDim.width, WindowDim.height), 0.01f, 1000.0f);
+    Graphics->CameraBufferData[1] = TranslationM4(0.0f, 0.0f, -2.0f);
+    
     VULKAN_CHECK_AND_HANDLE(vkQueueWaitIdle(Graphics->GraphicsQueue), "Failed to wait for the graphics queue.");
     VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed to reset the command pool.");
     
@@ -728,12 +731,18 @@ RENDER_GAME(RenderGame)
         
         VkViewport VKViewport = {0.0f, 0.0f, (f32)WindowDim.width, (f32)WindowDim.height, 0.0f, 1.0f};
         
+        vkCmdSetViewport(CommandBuffer, 0, 1, &VKViewport);
+        vkCmdSetScissor(CommandBuffer, 0, 1, &RenderPassBeginInfo.renderArea);                    
+        
         vkCmdBeginRenderPass(CommandBuffer, &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-        {
-            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);
-             
-            vkCmdSetViewport(CommandBuffer, 0, 1, &VKViewport);
-            vkCmdSetScissor(CommandBuffer, 0, 1, &RenderPassBeginInfo.renderArea);                    
+        {            
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);             
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->PipelineLayout, 0, 1, &Graphics->DescriptorSet, 0, VK_NULL_HANDLE);
+            
+            m4 Model = TranslationM4(0.5f, 0.0f, 0.0f);
+            vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);
+            c4 Color = RGBA(0.0f, 1.0f, 0.0f, 1.0f);
+            vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Color);            
             
             vkCmdDraw(CommandBuffer, 3, 1, 0, 0);
         }
@@ -855,6 +864,14 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_DEVICE_FUNCTION(vkFreeMemory);
     LOAD_DEVICE_FUNCTION(vkBindImageMemory);
     LOAD_DEVICE_FUNCTION(vkBindBufferMemory);    
+    LOAD_DEVICE_FUNCTION(vkCreateDescriptorSetLayout);
+    LOAD_DEVICE_FUNCTION(vkCmdPushConstants);
+    LOAD_DEVICE_FUNCTION(vkCreateDescriptorPool);
+    LOAD_DEVICE_FUNCTION(vkAllocateDescriptorSets);
+    LOAD_DEVICE_FUNCTION(vkCmdBindDescriptorSets);
+    LOAD_DEVICE_FUNCTION(vkUpdateDescriptorSets);
+    LOAD_DEVICE_FUNCTION(vkCreateBuffer);
+    LOAD_DEVICE_FUNCTION(vkMapMemory);
     
     if(Graphics->SelectedGPU->FoundDedicatedMemoryExtension)
     {
@@ -928,17 +945,66 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     BOOL_CHECK_AND_HANDLE(Graphics->RenderLock, "Failed to create the render lock.");
     BOOL_CHECK_AND_HANDLE(Graphics->PresentLock, "Failed to create the present lock.");
     
-    VkShaderModule TestBoxVertex   = CreateShader("shaders/vulkan/TestBoxVertex.spv");
-    VkShaderModule TestBoxFragment = CreateShader("shaders/vulkan/TestBoxFragment.spv");
+    VkDescriptorPoolSize PoolSizes[1] = {};
+    PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    PoolSizes[0].descriptorCount = 1;
+    
+    VkDescriptorPoolCreateInfo DescriptorPoolInfo = {};
+    DescriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    DescriptorPoolInfo.maxSets = 1;
+    DescriptorPoolInfo.poolSizeCount = ARRAYCOUNT(PoolSizes);
+    DescriptorPoolInfo.pPoolSizes = PoolSizes;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorPool(Graphics->Device, &DescriptorPoolInfo, VK_NULL_HANDLE, &Graphics->DescriptorPool),
+                            "Failed to create the descriptor pool.");
+    
+    VkShaderModule TestBoxVertex   = CreateShader("shaders/vulkan/test_box_vertex.spv");
+    VkShaderModule TestBoxFragment = CreateShader("shaders/vulkan/test_box_fragment.spv");
     
     BOOL_CHECK_AND_HANDLE(TestBoxVertex, "Failed to create the test box vertex shader.");
     BOOL_CHECK_AND_HANDLE(TestBoxFragment, "Failed to create the test box fragment shader.");
     
+    VkDescriptorSetLayoutBinding DescriptorBinding = {};
+    DescriptorBinding.binding = 0;
+    DescriptorBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    DescriptorBinding.descriptorCount = 1;
+    DescriptorBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    
+    VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutInfo = {};
+    DescriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    DescriptorSetLayoutInfo.bindingCount = 1;
+    DescriptorSetLayoutInfo.pBindings = &DescriptorBinding;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(Graphics->Device, &DescriptorSetLayoutInfo, VK_NULL_HANDLE, &Graphics->DescriptorSetLayout),
+                            "Failed to create the descriptor set layout.");
+    
+    VkPushConstantRange PushConstantRanges[2] = {};
+    PushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    PushConstantRanges[0].offset = 0;
+    PushConstantRanges[0].size = sizeof(m4);
+    
+    PushConstantRanges[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    PushConstantRanges[1].offset = sizeof(m4);
+    PushConstantRanges[1].size = sizeof(c4);
+    
     VkPipelineLayoutCreateInfo PipelineLayoutInfo = {};
     PipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;    
+    PipelineLayoutInfo.setLayoutCount = 1;
+    PipelineLayoutInfo.pSetLayouts = &Graphics->DescriptorSetLayout;
+    PipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(PushConstantRanges);
+    PipelineLayoutInfo.pPushConstantRanges = PushConstantRanges;
     
     VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(Graphics->Device, &PipelineLayoutInfo, VK_NULL_HANDLE, &Graphics->PipelineLayout),
                             "Failed to create the pipeline layout.");
+    
+    VkDescriptorSetAllocateInfo DescriptorSetInfo = {};
+    DescriptorSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    DescriptorSetInfo.descriptorPool = Graphics->DescriptorPool;
+    DescriptorSetInfo.descriptorSetCount = 1;
+    DescriptorSetInfo.pSetLayouts = &Graphics->DescriptorSetLayout;
+    
+    VULKAN_CHECK_AND_HANDLE(vkAllocateDescriptorSets(Graphics->Device, &DescriptorSetInfo, &Graphics->DescriptorSet),
+                            "Failed to allocate the descriptor set.");
     
     VkPipelineShaderStageCreateInfo ShaderStages[2] = {};
     ShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1016,7 +1082,53 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
                             "Failed to create the graphics pipeline.");
     
     vkDestroyShaderModule(Graphics->Device, TestBoxVertex, VK_NULL_HANDLE);
-    vkDestroyShaderModule(Graphics->Device, TestBoxFragment, VK_NULL_HANDLE);
+    vkDestroyShaderModule(Graphics->Device, TestBoxFragment, VK_NULL_HANDLE);        
+    
+    VkBufferCreateInfo CameraBufferInfo = {};
+    CameraBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    CameraBufferInfo.size = sizeof(m4)*2;
+    CameraBufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    CameraBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &CameraBufferInfo, VK_NULL_HANDLE, &Graphics->CameraBuffer),
+                            "Failed to create the camera buffer.");
+    
+    VkMemoryRequirements MemoryRequirements;
+    vkGetBufferMemoryRequirements(Graphics->Device, Graphics->CameraBuffer, &MemoryRequirements);
+    i32 MemoryTypeIndex = FindMemoryTypeIndex(&Graphics->SelectedGPU->MemoryProperties, &MemoryRequirements, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    if(MemoryTypeIndex == -1)
+        WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the camera buffer.");
+    
+    VkMemoryAllocateInfo AllocateInfo = {};
+    AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    AllocateInfo.memoryTypeIndex = MemoryTypeIndex;
+    AllocateInfo.allocationSize = MemoryRequirements.size;
+    VULKAN_CHECK_AND_HANDLE(vkAllocateMemory(Graphics->Device, &AllocateInfo, VK_NULL_HANDLE, &Graphics->CameraBufferMemory),
+                            "Failed to allocate the camera buffer memory.");
+    
+    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(Graphics->Device, Graphics->CameraBuffer, Graphics->CameraBufferMemory, 0),
+                            "Failed to bind the camera buffer to the camera memory.");
+    
+    VULKAN_CHECK_AND_HANDLE(vkMapMemory(Graphics->Device, Graphics->CameraBufferMemory, 0, CameraBufferInfo.size, 0, (void**)&Graphics->CameraBufferData),
+                            "Failed to map the camera buffer memory.");
+    
+    Graphics->CameraBufferData[0] = IdentityM4();
+    Graphics->CameraBufferData[1] = IdentityM4();
+    
+    VkDescriptorBufferInfo DescriptorBufferInfo = {};
+    DescriptorBufferInfo.buffer = Graphics->CameraBuffer;
+    DescriptorBufferInfo.range = VK_WHOLE_SIZE;
+    
+    VkWriteDescriptorSet DescriptorWrites = {};
+    DescriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    DescriptorWrites.dstSet = Graphics->DescriptorSet;
+    DescriptorWrites.dstBinding = 0;
+    DescriptorWrites.dstArrayElement = 0;
+    DescriptorWrites.descriptorCount = 1;
+    DescriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    DescriptorWrites.pBufferInfo = &DescriptorBufferInfo;
+    
+    vkUpdateDescriptorSets(Graphics->Device, 1, &DescriptorWrites, 0, VK_NULL_HANDLE);
     
     return true;
     

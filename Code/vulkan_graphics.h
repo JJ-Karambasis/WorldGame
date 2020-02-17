@@ -105,6 +105,14 @@ VULKAN_FUNCTION(vkAllocateMemory);
 VULKAN_FUNCTION(vkFreeMemory);
 VULKAN_FUNCTION(vkBindImageMemory);
 VULKAN_FUNCTION(vkBindBufferMemory);
+VULKAN_FUNCTION(vkCreateDescriptorSetLayout);
+VULKAN_FUNCTION(vkCmdPushConstants);
+VULKAN_FUNCTION(vkCreateDescriptorPool);
+VULKAN_FUNCTION(vkAllocateDescriptorSets);
+VULKAN_FUNCTION(vkCmdBindDescriptorSets);
+VULKAN_FUNCTION(vkUpdateDescriptorSets);
+VULKAN_FUNCTION(vkCreateBuffer);
+VULKAN_FUNCTION(vkMapMemory);
 
 struct extensions_array
 {
@@ -163,9 +171,15 @@ struct vulkan_graphics : public graphics
     VkDevice Device;
     VkSemaphore RenderLock;
     VkSemaphore PresentLock;
+    VkDescriptorPool DescriptorPool;
+    VkDescriptorSetLayout DescriptorSetLayout;
+    VkDescriptorSet DescriptorSet;
     VkPipelineLayout PipelineLayout;
-    VkPipeline Pipeline;
-    render_buffer RenderBuffer;    
+    VkPipeline Pipeline;    
+    VkDeviceMemory CameraBufferMemory;
+    VkBuffer CameraBuffer;
+    m4* CameraBufferData;
+    render_buffer RenderBuffer;  
 };
 
 global vulkan_graphics __Vulkan_Graphics__;

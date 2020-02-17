@@ -1,5 +1,5 @@
 #version 450
-#include "../Common.h"
+#include "../glsl_common.h"
 
 #ifdef VERTEX
 
@@ -33,7 +33,7 @@ void main()
 
 layout(push_constant) uniform color_constant
 {
-    c4 Color;
+    layout(offset = 64) c4 Color;
 };
 
 layout (location = 0) out c4 FragColor;

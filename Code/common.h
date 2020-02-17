@@ -282,4 +282,11 @@ inline char ToLower(char Value)
     return Result;
 }
 
+inline f32 SafeRatio(i32 Numerator, i32 Denominator)
+{
+    ASSERT(Denominator != 0);
+    f32 Result = (f32)Numerator/(f32)Denominator;
+    return Result;
+}
+
 #endif
