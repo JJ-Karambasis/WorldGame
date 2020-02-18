@@ -4,6 +4,16 @@
 #define RENDER_GAME(name) b32 name(struct game* Game, v2i WindowDim)
 typedef RENDER_GAME(render_game);
 
+struct camera
+{
+    v3f Velocity;
+    v3f Position;    
+    v3f FocalPoint;
+    m3 Orientation;
+    v3f AngularVelocity;
+    f32 Distance;
+};
+
 struct graphics
 {
     arena Storage;    

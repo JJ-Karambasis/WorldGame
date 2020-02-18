@@ -1,5 +1,113 @@
 #include "vulkan_graphics.h"
 
+b32 IsCompatibleDevice(physical_device* GPU)
+{
+    b32 Result = ((GPU->GraphicsFamilyIndex != -1) &&
+                  (GPU->PresentFamilyIndex != -1) &&
+                  (GPU->SurfaceFormat.format != VK_FORMAT_UNDEFINED) &&
+                  (GPU->ColorImageCount > 1) &&
+                  (GPU->DepthFormat != VK_FORMAT_UNDEFINED));
+    
+#if DEVELOPER_BUILD
+    Result &= GPU->Features.geometryShader;
+#endif
+    
+    return Result;
+}
+
+VkPipelineDynamicStateCreateInfo* ViewportScissorDynamicState()
+{    
+    local VkDynamicState DynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};    
+    
+    local VkPipelineDynamicStateCreateInfo DynamicState;
+    DynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    DynamicState.dynamicStateCount = ARRAYCOUNT(DynamicStates);
+    DynamicState.pDynamicStates = DynamicStates;
+    return &DynamicState;
+}
+
+VkPipelineDepthStencilStateCreateInfo* DepthOffState()
+{
+    local VkPipelineDepthStencilStateCreateInfo DepthStencilState;
+    DepthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;    
+    return &DepthStencilState;
+}
+
+VkPipelineDepthStencilStateCreateInfo* DepthOnState()
+{
+    local VkPipelineDepthStencilStateCreateInfo DepthStencilState;
+    DepthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    DepthStencilState.depthTestEnable = VK_TRUE;
+    DepthStencilState.depthWriteEnable = VK_TRUE;
+    DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;    
+    return &DepthStencilState;
+}
+
+VkPipelineColorBlendStateCreateInfo* DefaultColorBlendState()
+{    
+    local VkPipelineColorBlendAttachmentState ColorBlendAttachment;
+    ColorBlendAttachment.blendEnable = VK_FALSE;
+    ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT;
+    
+    local VkPipelineColorBlendStateCreateInfo ColorBlendState;
+    ColorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    ColorBlendState.attachmentCount = 1;
+    ColorBlendState.pAttachments = &ColorBlendAttachment;    
+    
+    return &ColorBlendState;
+}
+
+VkPipelineMultisampleStateCreateInfo* DefaultMultisampleState()
+{    
+    local VkPipelineMultisampleStateCreateInfo MultisampleState;
+    MultisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    MultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;    
+    return &MultisampleState;
+}
+
+VkPipelineRasterizationStateCreateInfo* DefaultRasterizationState()
+{    
+    local VkPipelineRasterizationStateCreateInfo RasterizationState;
+    RasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    RasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+    RasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+    RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    RasterizationState.lineWidth = 1.0f;
+    return &RasterizationState;
+};
+
+VkPipelineViewportStateCreateInfo* SingleViewportState()
+{    
+    local VkPipelineViewportStateCreateInfo ViewportState;
+    ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    ViewportState.viewportCount = 1;
+    ViewportState.scissorCount = 1;    
+    return &ViewportState;
+}
+
+VkPipelineInputAssemblyStateCreateInfo* TriangleListInputAssemblyState()
+{    
+    local VkPipelineInputAssemblyStateCreateInfo InputAssemblyState;
+    InputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    InputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    return &InputAssemblyState;
+}
+
+VkPipelineInputAssemblyStateCreateInfo* PointListInputAssemblyState()
+{    
+    local VkPipelineInputAssemblyStateCreateInfo InputAssemblyState;
+    InputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    InputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    return &InputAssemblyState;
+}
+
+VkPipelineVertexInputStateCreateInfo* EmptyVertexInputState()
+{    
+    local VkPipelineVertexInputStateCreateInfo VertexInputState;
+    VertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;    
+    return &VertexInputState;
+}
+
 extensions_array GetDeviceExtensions(physical_device* GPU)
 {
     extensions_array Result = {};    
@@ -323,7 +431,10 @@ VkDevice CreateLogicalDevice(physical_device* GPU)
         DeviceQueueInfoCount++;
     }
     
-    extensions_array Extensions = GetDeviceExtensions(GPU);
+    extensions_array Extensions = GetDeviceExtensions(GPU);        
+    
+    VkPhysicalDeviceFeatures DeviceFeatures = {};
+    DeviceFeatures.geometryShader = GPU->Features.geometryShader;
     
     VkDeviceCreateInfo DeviceInfo = {};
     DeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -331,7 +442,7 @@ VkDevice CreateLogicalDevice(physical_device* GPU)
     DeviceInfo.pQueueCreateInfos = DeviceQueueInfo;
     DeviceInfo.enabledExtensionCount = Extensions.Count;
     DeviceInfo.ppEnabledExtensionNames = Extensions.Ptr;
-    //DeviceInfo.pEnabledFeatures = ;
+    DeviceInfo.pEnabledFeatures = &DeviceFeatures;
     
     VkDevice Result = VK_NULL_HANDLE;
     if(vkCreateDevice(GPU->Handle, &DeviceInfo, VK_NULL_HANDLE, &Result) == VK_SUCCESS)
@@ -344,13 +455,8 @@ physical_device* GetFirstCompatbileGPU(physical_device_array* GPUs)
     for(u32 GPUIndex = 0; GPUIndex < GPUs->Count; GPUIndex++)
     {
         physical_device* Device = GPUs->Ptr + GPUIndex;
-        if((Device->GraphicsFamilyIndex != -1) &&
-           (Device->PresentFamilyIndex != -1) &&
-           (Device->SurfaceFormat.format != VK_FORMAT_UNDEFINED) &&
-           (Device->ColorImageCount > 1))
-        {
-            return Device;
-        }
+        if(IsCompatibleDevice(Device))       
+            return Device;                    
     }    
     return NULL;
 }
@@ -531,7 +637,8 @@ physical_device_array CreatePhysicalDevices()
             continue;
         }
         
-        vkGetPhysicalDeviceMemoryProperties(GPU, &Result.Ptr[GPUIndex].MemoryProperties);        
+        vkGetPhysicalDeviceMemoryProperties(GPU, &Result.Ptr[GPUIndex].MemoryProperties);                        
+        vkGetPhysicalDeviceFeatures(GPU, &Result.Ptr[GPUIndex].Features);
         
         CONSOLE_LOG("Device PASSED!\n\n");                               
     }    
@@ -701,7 +808,18 @@ RENDER_GAME(RenderGame)
     }
     
     Graphics->CameraBufferData[0] = PerspectiveM4(PI*0.25f, SafeRatio(WindowDim.width, WindowDim.height), 0.01f, 1000.0f);
-    Graphics->CameraBufferData[1] = TranslationM4(0.0f, 0.0f, -5.0f);
+    
+    camera* TargetCamera = &Game->Camera;
+    
+#if DEVELOPER_BUILD
+    development_game* DevGame = (development_game*)Game;
+    if(DevGame->InDevelopmentMode)
+    {
+        TargetCamera = &DevGame->DevCamera;
+    }    
+#endif
+    
+    Graphics->CameraBufferData[1] = InverseTransformM4(TargetCamera->Position, TargetCamera->Orientation);    
     
     VULKAN_CHECK_AND_HANDLE(vkQueueWaitIdle(Graphics->GraphicsQueue), "Failed to wait for the graphics queue.");
     VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed to reset the command pool.");
@@ -745,6 +863,29 @@ RENDER_GAME(RenderGame)
             vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Color);            
             
             vkCmdDraw(CommandBuffer, 36, 1, 0, 0);
+            
+#if DEVELOPER_BUILD
+            developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->PointPipeline);
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->PointPipelineLayout, 0, 1, &DevGraphics->DebugDescriptorSet, 0, VK_NULL_HANDLE);
+            
+            v4f PointPosition = V4(0.0f, 0.0f, 0.0f, 0.1f);
+            c4 PointColor = RGBA(1.0f, 1.0f, 1.0f, 1.0f);
+            vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f), &PointPosition);
+            vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f), sizeof(c4), &PointColor);
+            vkCmdDraw(CommandBuffer, 1, 1, 0, 0);
+            
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->LinePipeline);
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->LinePipelineLayout, 0, 1, &DevGraphics->DebugDescriptorSet, 0, VK_NULL_HANDLE);
+            
+            v4f LinePositions[2];
+            LinePositions[0] = V4(-1.0f, -1.0f, 0.0f, 0.1f);
+            LinePositions[1] = V4( 1.0f, -1.0f, 0.0f, 0.1f);
+            c4 LineColor = RGBA(1.0f, 0.0f, 0.0f, 1.0f);
+            vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f)*2, LinePositions);
+            vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f)*2, sizeof(c4), &LineColor);
+            vkCmdDraw(CommandBuffer, 1, 1, 0, 0);            
+#endif            
         }
         vkCmdEndRenderPass(CommandBuffer);
         
@@ -811,6 +952,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_INSTANCE_FUNCTION(vkGetDeviceProcAddr);
     LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceFormatProperties);
     LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceMemoryProperties);
+    LOAD_INSTANCE_FUNCTION(vkGetPhysicalDeviceFeatures);
     
     Graphics->Surface = CreateSurface(PlatformSurfaceInfo);
     BOOL_CHECK_AND_HANDLE(Graphics->Surface, "Failed to create the vulkan surface.");
@@ -947,11 +1089,11 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
     VkDescriptorPoolSize PoolSizes[1] = {};
     PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    PoolSizes[0].descriptorCount = 1;
+    PoolSizes[0].descriptorCount = 2;
     
     VkDescriptorPoolCreateInfo DescriptorPoolInfo = {};
     DescriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    DescriptorPoolInfo.maxSets = 1;
+    DescriptorPoolInfo.maxSets = 2;
     DescriptorPoolInfo.poolSizeCount = ARRAYCOUNT(PoolSizes);
     DescriptorPoolInfo.pPoolSizes = PoolSizes;
     
@@ -1017,63 +1159,18 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     ShaderStages[1].module = TestBoxFragment;
     ShaderStages[1].pName  = "main";    
     
-    VkPipelineVertexInputStateCreateInfo VertexInputState = {};
-    VertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    
-    VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = {};
-    InputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    InputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    
-    VkPipelineViewportStateCreateInfo ViewportState = {};
-    ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    ViewportState.viewportCount = 1;
-    ViewportState.scissorCount = 1;
-    
-    VkPipelineRasterizationStateCreateInfo RasterizationState = {};
-    RasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    RasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
-    RasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-    RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    RasterizationState.lineWidth = 1.0f;
-    
-    VkPipelineMultisampleStateCreateInfo MultisampleState = {};
-    MultisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    MultisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    
-    VkPipelineColorBlendAttachmentState ColorBlendAttachment = {};
-    ColorBlendAttachment.blendEnable = VK_FALSE;
-    ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT;
-    
-    VkPipelineColorBlendStateCreateInfo ColorBlendState = {};
-    ColorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    ColorBlendState.attachmentCount = 1;
-    ColorBlendState.pAttachments = &ColorBlendAttachment;    
-    
-    VkPipelineDepthStencilStateCreateInfo DepthStencilState = {};
-    DepthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    DepthStencilState.depthTestEnable = VK_TRUE;
-    DepthStencilState.depthWriteEnable = VK_TRUE;
-    DepthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;    
-    
-    VkDynamicState DynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};    
-    
-    VkPipelineDynamicStateCreateInfo DynamicState = {};
-    DynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    DynamicState.dynamicStateCount = ARRAYCOUNT(DynamicStates);
-    DynamicState.pDynamicStates = DynamicStates;
-    
     VkGraphicsPipelineCreateInfo GraphicsPipelineInfo = {};
     GraphicsPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     GraphicsPipelineInfo.stageCount = ARRAYCOUNT(ShaderStages);
     GraphicsPipelineInfo.pStages = ShaderStages;
-    GraphicsPipelineInfo.pVertexInputState = &VertexInputState;
-    GraphicsPipelineInfo.pInputAssemblyState = &InputAssemblyState;
-    GraphicsPipelineInfo.pViewportState = &ViewportState;
-    GraphicsPipelineInfo.pRasterizationState = &RasterizationState;
-    GraphicsPipelineInfo.pMultisampleState = &MultisampleState;
-    GraphicsPipelineInfo.pColorBlendState = &ColorBlendState;
-    GraphicsPipelineInfo.pDepthStencilState = &DepthStencilState;
-    GraphicsPipelineInfo.pDynamicState = &DynamicState;
+    GraphicsPipelineInfo.pVertexInputState = EmptyVertexInputState();
+    GraphicsPipelineInfo.pInputAssemblyState = TriangleListInputAssemblyState();
+    GraphicsPipelineInfo.pViewportState = SingleViewportState();
+    GraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    GraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
+    GraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();
+    GraphicsPipelineInfo.pDepthStencilState = DepthOnState();
+    GraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
     GraphicsPipelineInfo.layout = Graphics->PipelineLayout;
     GraphicsPipelineInfo.renderPass = Graphics->RenderPass;
     GraphicsPipelineInfo.subpass = 0;    
@@ -1129,6 +1226,169 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     DescriptorWrites.pBufferInfo = &DescriptorBufferInfo;
     
     vkUpdateDescriptorSets(Graphics->Device, 1, &DescriptorWrites, 0, VK_NULL_HANDLE);
+    
+#if DEVELOPER_BUILD
+    developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
+    
+    VkDescriptorSetLayoutBinding DebugDescriptorBinding = {};
+    DebugDescriptorBinding.binding = 0;
+    DebugDescriptorBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    DebugDescriptorBinding.descriptorCount = 1;
+    DebugDescriptorBinding.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+    
+    VkDescriptorSetLayoutCreateInfo DebugDescriptorSetLayoutInfo = {};
+    DebugDescriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    DebugDescriptorSetLayoutInfo.bindingCount = 1;
+    DebugDescriptorSetLayoutInfo.pBindings = &DebugDescriptorBinding;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(DevGraphics->Device, &DebugDescriptorSetLayoutInfo, VK_NULL_HANDLE, &DevGraphics->DebugDescriptorSetLayout),
+                            "Failed to create the debug point descriptor set layout.");
+    
+    VkDescriptorSetAllocateInfo DebugDescriptorSetInfo = {};
+    DebugDescriptorSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    DebugDescriptorSetInfo.descriptorPool = DevGraphics->DescriptorPool;
+    DebugDescriptorSetInfo.descriptorSetCount = 1;
+    DebugDescriptorSetInfo.pSetLayouts = &DevGraphics->DebugDescriptorSetLayout;
+    
+    VULKAN_CHECK_AND_HANDLE(vkAllocateDescriptorSets(DevGraphics->Device, &DebugDescriptorSetInfo, &DevGraphics->DebugDescriptorSet),
+                            "Failed to allocate the debug point descriptor set.");
+    
+    VkShaderModule DebugPointVertex   = CreateShader("shaders/vulkan/debug_point_vertex.spv");
+    VkShaderModule DebugPointGeometry = CreateShader("shaders/vulkan/debug_point_geometry.spv");
+    VkShaderModule DebugPointFragment = CreateShader("shaders/vulkan/debug_point_fragment.spv");
+    
+    BOOL_CHECK_AND_HANDLE(DebugPointVertex,   "Failed to create the debug point vertex shader.");
+    BOOL_CHECK_AND_HANDLE(DebugPointGeometry, "Failed to create the debug point geometry shader.");
+    BOOL_CHECK_AND_HANDLE(DebugPointFragment, "Failed to create the debug point fragment shader.");
+    
+    VkPushConstantRange PointPushConstantRanges[2] = {};
+    PointPushConstantRanges[0].stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+    PointPushConstantRanges[0].offset = 0;
+    PointPushConstantRanges[0].size = sizeof(v4f);
+    
+    PointPushConstantRanges[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    PointPushConstantRanges[1].offset = sizeof(v4f);    
+    PointPushConstantRanges[1].size = sizeof(c4);
+    
+    VkPipelineLayoutCreateInfo PointPipelineLayoutInfo = {};
+    PointPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    PointPipelineLayoutInfo.setLayoutCount = 1;
+    PointPipelineLayoutInfo.pSetLayouts = &DevGraphics->DebugDescriptorSetLayout;
+    PointPipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(PointPushConstantRanges);
+    PointPipelineLayoutInfo.pPushConstantRanges = PointPushConstantRanges;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(DevGraphics->Device, &PointPipelineLayoutInfo, VK_NULL_HANDLE, &DevGraphics->PointPipelineLayout),
+                            "Failed to create the debug point pipeline layout.");
+    
+    VkPipelineShaderStageCreateInfo PointShaderStages[3] = {};
+    PointShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    PointShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    PointShaderStages[0].module = DebugPointVertex;
+    PointShaderStages[0].pName = "main";
+    
+    PointShaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    PointShaderStages[1].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+    PointShaderStages[1].module = DebugPointGeometry;
+    PointShaderStages[1].pName = "main";
+    
+    PointShaderStages[2].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    PointShaderStages[2].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    PointShaderStages[2].module = DebugPointFragment;
+    PointShaderStages[2].pName  = "main";    
+    
+    VkGraphicsPipelineCreateInfo PointGraphicsPipelineInfo = {};
+    PointGraphicsPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    PointGraphicsPipelineInfo.stageCount = ARRAYCOUNT(PointShaderStages);
+    PointGraphicsPipelineInfo.pStages = PointShaderStages;
+    PointGraphicsPipelineInfo.pVertexInputState = EmptyVertexInputState();
+    PointGraphicsPipelineInfo.pInputAssemblyState = PointListInputAssemblyState();
+    PointGraphicsPipelineInfo.pViewportState = SingleViewportState();
+    PointGraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    PointGraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
+    PointGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();    
+    PointGraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
+    PointGraphicsPipelineInfo.pDepthStencilState = DepthOffState();
+    PointGraphicsPipelineInfo.layout = DevGraphics->PointPipelineLayout;
+    PointGraphicsPipelineInfo.renderPass = Graphics->RenderPass;
+    PointGraphicsPipelineInfo.subpass = 0;    
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &PointGraphicsPipelineInfo, VK_NULL_HANDLE, &DevGraphics->PointPipeline),
+                            "Failed to create the debug point graphics pipeline.");
+    
+    vkDestroyShaderModule(DevGraphics->Device, DebugPointVertex, VK_NULL_HANDLE);
+    vkDestroyShaderModule(DevGraphics->Device, DebugPointGeometry, VK_NULL_HANDLE);        
+    vkDestroyShaderModule(DevGraphics->Device, DebugPointFragment, VK_NULL_HANDLE);
+    
+    VkShaderModule DebugLineVertex   = CreateShader("shaders/vulkan/debug_line_vertex.spv");
+    VkShaderModule DebugLineGeometry = CreateShader("shaders/vulkan/debug_line_geometry.spv");
+    VkShaderModule DebugLineFragment = CreateShader("shaders/vulkan/debug_line_fragment.spv");
+    
+    BOOL_CHECK_AND_HANDLE(DebugLineVertex,   "Failed to create the debug line vertex shader.");
+    BOOL_CHECK_AND_HANDLE(DebugLineGeometry, "Failed to create the debug line geometry shader.");
+    BOOL_CHECK_AND_HANDLE(DebugLineFragment, "Failed to create the debug line fragment shader.");
+    
+    VkPushConstantRange LinePushConstantRanges[2] = {};
+    LinePushConstantRanges[0].stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+    LinePushConstantRanges[0].offset = 0;
+    LinePushConstantRanges[0].size = sizeof(v4f)*2;
+    
+    LinePushConstantRanges[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    LinePushConstantRanges[1].offset = sizeof(v4f)*2;
+    LinePushConstantRanges[1].size = sizeof(c4);
+    
+    VkPipelineLayoutCreateInfo LinePipelineLayoutInfo = {};
+    LinePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    LinePipelineLayoutInfo.setLayoutCount = 1;
+    LinePipelineLayoutInfo.pSetLayouts = &DevGraphics->DebugDescriptorSetLayout;
+    LinePipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(LinePushConstantRanges);
+    LinePipelineLayoutInfo.pPushConstantRanges = LinePushConstantRanges;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(DevGraphics->Device, &LinePipelineLayoutInfo, VK_NULL_HANDLE, &DevGraphics->LinePipelineLayout),
+                            "Failed to create the debug line pipeline layout.");
+    
+    VkPipelineShaderStageCreateInfo LineShaderStages[3] = {};
+    LineShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    LineShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    LineShaderStages[0].module = DebugLineVertex;
+    LineShaderStages[0].pName = "main";
+    
+    LineShaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    LineShaderStages[1].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+    LineShaderStages[1].module = DebugLineGeometry;
+    LineShaderStages[1].pName = "main";
+    
+    LineShaderStages[2].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    LineShaderStages[2].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    LineShaderStages[2].module = DebugLineFragment;
+    LineShaderStages[2].pName  = "main";    
+    
+    VkGraphicsPipelineCreateInfo LineGraphicsPipelineInfo = {};
+    LineGraphicsPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    LineGraphicsPipelineInfo.stageCount = ARRAYCOUNT(LineShaderStages);
+    LineGraphicsPipelineInfo.pStages = LineShaderStages;
+    LineGraphicsPipelineInfo.pVertexInputState = EmptyVertexInputState();
+    LineGraphicsPipelineInfo.pInputAssemblyState = PointListInputAssemblyState();
+    LineGraphicsPipelineInfo.pViewportState = SingleViewportState();
+    LineGraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    LineGraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
+    LineGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();    
+    LineGraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
+    LineGraphicsPipelineInfo.pDepthStencilState = DepthOffState();
+    LineGraphicsPipelineInfo.layout = DevGraphics->LinePipelineLayout;
+    LineGraphicsPipelineInfo.renderPass = Graphics->RenderPass;
+    LineGraphicsPipelineInfo.subpass = 0;    
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &LineGraphicsPipelineInfo, VK_NULL_HANDLE, &DevGraphics->LinePipeline),
+                            "Failed to create the debug point graphics pipeline.");    
+    
+    vkDestroyShaderModule(DevGraphics->Device, DebugLineVertex, VK_NULL_HANDLE);
+    vkDestroyShaderModule(DevGraphics->Device, DebugLineGeometry, VK_NULL_HANDLE);
+    vkDestroyShaderModule(DevGraphics->Device, DebugLineFragment, VK_NULL_HANDLE);
+    
+    DescriptorWrites.dstSet = DevGraphics->DebugDescriptorSet;
+    vkUpdateDescriptorSets(DevGraphics->Device, 1, &DescriptorWrites, 0, VK_NULL_HANDLE);
+    
+#endif
     
     return true;
     

@@ -400,14 +400,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                                     case VK_F5:
                                     {
                                         Game.InDevelopmentMode = !Game.InDevelopmentMode;
+                                                                                
+                                        Game.DevCamera.Position = Game.Camera.Position;
+                                        Game.DevCamera.AngularVelocity = {};
+                                        Game.DevCamera.Orientation = IdentityM3();
+                                        Game.DevCamera.FocalPoint = Game.Camera.FocalPoint;
+                                        Game.DevCamera.Distance = Magnitude(Game.DevCamera.FocalPoint - Game.DevCamera.Position);
                                         
-#if 0 
-                                        Game.DebugCamera.Position = Graphics->Camera.Position;
-                                        Game.DebugCamera.AngularVelocity = {};
-                                        Game.DebugCamera.Orientation = Identity3();
-                                        Game.DebugCamera.FocalPoint = Graphics->Camera.FocalPoint;
-                                        Game.DebugCamera.Distance = Len(Game.DebugCamera.FocalPoint - Game.DebugCamera.Position);
-#endif
                                     } break;                                    
                                 }
                             }
@@ -430,7 +429,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         
         v2i WindowDim = Win32_GetWindowDim(Window);
         
-        GameCode.Tick(&Game, Global_Platform);        
+        GameCode.Tick(&Game, Graphics, Global_Platform);        
         if(!Graphics->RenderGame(&Game, WindowDim))
         {
             ASSERT(false); 

@@ -62,6 +62,7 @@ VULKAN_FUNCTION(vkCreateDevice);
 VULKAN_FUNCTION(vkGetDeviceProcAddr);
 VULKAN_FUNCTION(vkGetPhysicalDeviceFormatProperties);
 VULKAN_FUNCTION(vkGetPhysicalDeviceMemoryProperties);
+VULKAN_FUNCTION(vkGetPhysicalDeviceFeatures);
 
 VULKAN_FUNCTION(vkGetDeviceQueue);
 VULKAN_FUNCTION(vkCreateCommandPool);
@@ -134,6 +135,7 @@ struct physical_device
     VkSurfaceFormatKHR SurfaceFormat;
     VkFormat DepthFormat;    
     u32 ColorImageCount;
+    VkPhysicalDeviceFeatures Features;
     VkPhysicalDeviceMemoryProperties MemoryProperties;
     VkPhysicalDevice Handle;    
 };
@@ -188,6 +190,15 @@ global vulkan_graphics __Vulkan_Graphics__;
 struct developer_vulkan_graphics : public vulkan_graphics
 {
     VkDebugUtilsMessengerEXT Messenger;
+    VkDescriptorSetLayout DebugDescriptorSetLayout;
+    VkDescriptorSet DebugDescriptorSet;
+        
+    VkPipelineLayout PointPipelineLayout;
+    VkPipeline PointPipeline;
+    
+    VkPipelineLayout LinePipelineLayout;
+    VkPipeline LinePipeline;
+    
 };
 
 global developer_vulkan_graphics __Developer_Vulkan_Graphics__;

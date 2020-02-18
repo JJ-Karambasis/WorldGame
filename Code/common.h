@@ -30,7 +30,7 @@
 #define GIGABYTE(x) (MEGABYTE(x)*1024LL)
 #define TERABYTE(x) (GIGABYTE(x)*1024LL)
 
-#define SQR(x) ((x)*(x))
+#define Square(x) ((x)*(x))
 
 #define BIT_SET(x) (1 << x)
 

@@ -7,9 +7,9 @@ IF NOT EXIST ..\din mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data
 IF NOT EXIST ..\data\shaders\vulkan mkdir ..\data\shaders\vulkan
 
-set COMPILE_PLATFORM=0
+set COMPILE_PLATFORM=1
 set COMPILE_GRAPHICS=1
-set COMPILE_GAME=0
+set COMPILE_GAME=1
 set COMPILE_SHADERS=1
 
 pushd ..\Bin
@@ -31,7 +31,15 @@ popd
 
 pushd ..\data\shaders\vulkan
 IF %COMPILE_SHADERS% == 1 (
-    glslc -O0 -DVERTEX -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_vertex.spv
+    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_vertex.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_fragment.spv
+
+    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_vertex.spv
+    glslc -O0 -DGEOMETRY -fshader-stage=geometry ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_geometry.spv
+    glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_fragment.spv
+
+    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_line.glsl -o debug_line_vertex.spv
+    glslc -O0 -DGEOMETRY -fshader-stage=geometry ..\..\..\code\shaders\glsl\4.5\debug_line.glsl -o debug_line_geometry.spv
+    glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\debug_line.glsl -o debug_line_fragment.spv
 )
 popd

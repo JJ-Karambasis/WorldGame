@@ -2,7 +2,6 @@
 #include "../glsl_common.h"
 
 #ifdef VERTEX
-
 layout(set = 0, binding = 0) uniform camera_buffer
 {
     m4 Proj;
@@ -25,7 +24,7 @@ v4f Vertices[8] = v4f[8]
  v4f(-0.5f, -0.5f, 0.0f, 1.0f),
  v4f(-0.5f,  0.5f, 0.0f, 1.0f),
  v4f( 0.5f,  0.5f, 0.0f, 1.0f)
-);
+ );
 
 int Indices[36] = int[36]
 (
@@ -44,20 +43,18 @@ int Indices[36] = int[36]
  3, 2, 7,
  3, 7, 6, 
  
- 4, 5, 0, 
- 4, 0, 1  
+ 4, 1, 0, 
+ 4, 0, 5  
 );
 
 void main()
 {        
     gl_Position = Proj*View*Model*Vertices[Indices[VertexIndex]];        
-    gl_Position.y = -gl_Position.y;   
-    gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5f;
+    gl_Position = VulkanTransform(gl_Position);    
 }
 #endif
 
 #ifdef FRAGMENT
-
 layout(push_constant) uniform color_constant
 {
     layout(offset = 64) c4 Color;
