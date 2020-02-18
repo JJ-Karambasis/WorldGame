@@ -289,4 +289,50 @@ inline f32 SafeRatio(i32 Numerator, i32 Denominator)
     return Result;
 }
 
+template <typename list, typename entry>
+inline void AddToList(list* List, entry* Entry)
+{
+    if(List->Count == 0)
+    {
+        List->Last = List->First = Entry;
+    }
+    else if(List->Count == 1)
+    {
+        List->Last = Entity;
+        List->Last->Prev = List->First;
+        List->First->Next = List->Last;
+    }
+    else
+    {
+        Entry->Prev = List->Last;
+        List->Last = Entry;
+        Entry->Prev->Next = List->Last;
+    }
+    List->Count++;
+}
+
+template <typename list, typename result>
+result* RemoveEndOfList(list* List)
+{
+    ASSERT(List->Last && (List->Count > 0)); 
+    
+    result* Result = NULL;
+    if(List->Count == 1)
+    {
+        Result = List->Last;
+        List->Last = List->First = NULL;                
+    }
+    else
+    {        
+        result* Prev = List->Last->Prev;
+        Result = List->Last;
+        ASSERT(!Result->Next);
+        List->Last = Prev;
+        Result->Prev = NULL;            
+    }
+    
+    List->Count--;
+    return Result;
+}
+
 #endif
