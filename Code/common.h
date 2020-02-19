@@ -335,4 +335,42 @@ result* RemoveEndOfList(list* List)
     return Result;
 }
 
+template <typename list, typename entry>
+void RemoveFromList(list* List, entry* Entry)
+{
+    ASSERT(List->Count > 0);
+    if(List->Count == 1)
+    {
+        ASSERT(!Entry->Prev && !Entry->Next);
+        List->First = List->Last = NULL;        
+    }
+    else
+    {
+        entry* Prev = Entry->Prev;
+        entry* Next = Entry->Next;
+        
+        if(!Prev)
+        {
+            ASSERT(List->First == Entry);
+            List->First = Next;
+            List->First->Prev = NULL;
+        }        
+        else if(!Next)
+        {
+            ASSERT(List->Last == Entry);
+            List->Last = Prev;
+            List->Last->Next = NULL;
+        }
+        else
+        {
+            Prev->Next = Next;
+            Next->Prev = Prev;
+        }
+        
+        Entry->Prev = Entry->Next = NULL;
+    }
+    
+    List->Count--;
+}
+
 #endif
