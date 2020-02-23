@@ -4,6 +4,12 @@
 #define RENDER_GAME(name) b32 name(struct game* Game, v2i WindowDim)
 typedef RENDER_GAME(render_game);
 
+#define DEBUG_DRAW_POINT(name) void name(v3f Position, f32 Size, c4 Color)
+typedef DEBUG_DRAW_POINT(debug_draw_point);
+
+#define DEBUG_DRAW_LINE(name) void name(v3f Position0, v3f Position1, f32 Width, f32 Height, c4 Color)
+typedef DEBUG_DRAW_LINE(debug_draw_line);
+
 struct camera
 {
     v3f Velocity;
@@ -18,6 +24,9 @@ struct graphics
 {
     arena Storage;    
     render_game* RenderGame;
+    
+    debug_draw_point* DEBUGDrawPoint;
+    debug_draw_line*  DEBUGDrawLine;
 };
 
 #ifdef OS_WINDOWS

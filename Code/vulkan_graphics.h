@@ -187,6 +187,23 @@ struct vulkan_graphics : public graphics
 global vulkan_graphics __Vulkan_Graphics__;
 
 #if DEVELOPER_BUILD
+
+struct debug_point
+{
+    v3f Position;
+    f32 Size;
+    c4 Color;
+};
+
+struct debug_line
+{
+    v3f Position0;
+    v3f Position1;
+    f32 Width;
+    f32 Height;
+    c4 Color;
+};
+
 struct developer_vulkan_graphics : public vulkan_graphics
 {
     VkDebugUtilsMessengerEXT Messenger;
@@ -197,8 +214,13 @@ struct developer_vulkan_graphics : public vulkan_graphics
     VkPipeline PointPipeline;
     
     VkPipelineLayout LinePipelineLayout;
-    VkPipeline LinePipeline;
+    VkPipeline LinePipeline;        
     
+    u32 PointCount;
+    debug_point DebugPoints[8096];
+    
+    u32 LineCount;
+    debug_line DebugLines[2048];
 };
 
 global developer_vulkan_graphics __Developer_Vulkan_Graphics__;

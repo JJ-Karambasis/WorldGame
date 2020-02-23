@@ -91,6 +91,33 @@ v2i V2i(i32 x, i32 y)
     return Result;
 }
 
+inline v2i operator+(v2i Left, i32 Right)
+{
+    v2i Result = {Left.x+Right, Left.y+Right};
+    return Result;
+}
+
+inline v2i& 
+operator+=(v2i& Left, i32 Right)
+{
+    Left = Left + Right;
+    return Left;
+}
+
+inline v2i 
+operator-(v2i Left, i32 Right)
+{
+    v2i Result = {Left.x-Right, Left.y-Right};
+    return Result;
+}
+
+inline v2i& 
+operator-=(v2i& Left, i32 Right)
+{
+    Left = Left - Right;
+    return Left;
+}
+
 inline b32 operator!=(v2i Left, v2i Right)
 {
     b32 Result = (Left.x != Right.x) || (Left.y != Right.y);
@@ -99,7 +126,23 @@ inline b32 operator!=(v2i Left, v2i Right)
 
 inline b32 operator==(v2i Left, v2i Right)
 {
-    b32 Result = (Left.x == Right.x) || (Left.y == Right.y);
+    b32 Result = (Left.x == Right.x) && (Left.y == Right.y);
+    return Result;
+}
+
+inline v2i MinimumV2(v2i Left, v2i Right)
+{
+    v2i Result;
+    Result.x = MinimumI32(Left.x, Right.x);
+    Result.y = MinimumI32(Left.y, Right.y);
+    return Result;
+}
+
+inline v2i MaximumV2(v2i Left, v2i Right)
+{
+    v2i Result;
+    Result.x = MaximumI32(Left.x, Right.x);
+    Result.y = MaximumI32(Left.y, Right.y);
     return Result;
 }
 
@@ -121,9 +164,29 @@ struct v2f
     };
 };
 
+v2f V2(v2i V)
+{
+    v2f Result = {(f32)V.x, (f32)V.y};
+    return Result;
+}
+
 v2f V2(f32 x, f32 y)
 {
     v2f Result = {x, y};
+    return Result;
+}
+
+inline v2f
+operator+(v2f Left, v2f Right)
+{
+    v2f Result = {Left.x+Right.x, Left.y+Right.y};
+    return Result;
+}
+
+inline v2f
+operator-(v2f Left, v2f Right)
+{
+    v2f Result = {Left.x-Right.x, Left.y-Right.y};
     return Result;
 }
 
@@ -134,11 +197,109 @@ operator*(v2f Left, f32 Right)
     return Result;
 }
 
+inline v2f 
+operator*(f32 Left, v2f Right)
+{
+    v2f Result = Right*Left;
+    return Result;
+}
+
+inline v2f
+operator*(v2i Left, f32 Right)
+{
+    v2f Result = {Left.x*Right, Left.y*Right};
+    return Result;
+}
+
 inline v2f&
 operator*=(v2f& Left, f32 Right)
 {
     Left = Left * Right;
     return Left;
+}
+
+inline v2f 
+operator*(v2f Left, v2f Right)
+{
+    v2f Result = {Left.x*Right.x, Left.y*Right.y};
+    return Result;
+}
+
+inline v2f
+operator/(v2f V, f32 Right)
+{
+    v2f Result = {V.x/Right, V.y/Right};
+    return Result;
+}
+
+inline b32 operator!=(v2f Left, f32 Right)
+{
+    b32 Result = (Left.x != Right) || (Left.y != Right);
+    return Result;
+}
+
+inline b32 operator!=(v2f Left, v2f Right)
+{
+    b32 Result = (Left.x != Right.x) || (Left.y != Right.y);
+    return Result;
+}
+
+inline b32 operator==(v2f Left, v2f Right)
+{
+    b32 Result = (Left.x == Right.x) && (Left.y == Right.y);
+    return Result;
+}
+
+inline f32
+Dot(v2f Left, v2f Right)
+{
+    f32 Result = Left.x*Right.x + Left.y*Right.y;
+    return Result;
+}
+
+inline f32 
+SquareMagnitude(v2f V)
+{
+    f32 Result = Dot(V, V);
+    return Result;
+}
+
+inline f32
+Magnitude(v2f V)
+{
+    f32 Result = Sqrt(SquareMagnitude(V));
+    return Result;
+}
+
+inline f32
+InverseMagnitude(v2f V)
+{
+    f32 Result = RSqrt(SquareMagnitude(V));
+    return Result;
+}
+
+inline v2f
+Normalize(v2f V)
+{
+    f32 InvMag = InverseMagnitude(V);
+    v2f Result = InvMag*V;
+    return Result;
+}
+
+inline f32
+Cross2D(v2f Left, v2f Right)
+{
+    f32 Result = Left.y*Right.x - Left.x*Right.y;
+    return Result;
+}
+
+inline v2i 
+FloorV2(v2f Value)
+{
+    v2i Result;
+    Result.x = FloorI32(Value.x);
+    Result.y = FloorI32(Value.y);
+    return Result;
 }
 
 struct v3f
@@ -173,6 +334,34 @@ struct v3f
         };
     };
 };
+
+inline v3f
+V3()
+{
+    v3f Result = {};
+    return Result;
+}
+
+inline v3f
+V3(f32 Value)
+{
+    v3f Result = {Value, Value, Value};
+    return Result;
+}
+
+inline v3f 
+V3(v2f v)
+{
+    v3f Result = {v.x, v.y};
+    return Result;
+}
+
+inline v3f 
+V3(v2f v, f32 z)
+{
+    v3f Result = {v.x, v.y, z};
+    return Result;
+}
 
 inline v3f 
 V3(f32 x, f32 y, f32 z)
@@ -235,6 +424,23 @@ operator*=(v3f& Left, f32 Right)
     return Left;
 }
 
+inline v3f 
+operator*(v3f Left, v3f Right)
+{
+    v3f Result;
+    Result.x = Left.x * Right.x;
+    Result.y = Left.y * Right.y;
+    Result.z = Left.z * Right.z;
+    return Result;
+}
+
+inline v3f 
+operator-(v3f V)
+{
+    v3f Result = {-V.x, -V.y, -V.z};
+    return Result;
+}
+
 inline f32
 Dot(v3f Left, v3f Right)
 {
@@ -284,6 +490,12 @@ struct v4f
     {
         struct
         {
+            v3f xyz;
+            f32 __unused_0__;
+        };
+        
+        struct
+        {
             f32 x;
             f32 y;
             f32 z;
@@ -307,6 +519,15 @@ V4(f32 x, f32 y, f32 z, f32 w)
     Result.x = x;
     Result.y = y;
     Result.z = z;
+    Result.w = w;
+    return Result;
+}
+
+inline v4f 
+V4(v3f xyz, f32 w)
+{
+    v4f Result;
+    Result.xyz = xyz;    
     Result.w = w;
     return Result;
 }
@@ -460,6 +681,18 @@ inline m4 M4(f32 Diagonal)
     return Result;
 }
 
+inline m4 TransformM4(v3f Position, m3 Orient)
+{
+    m4 Result = 
+    {
+        Orient.m00, Orient.m01, Orient.m02, 0.0f, 
+        Orient.m10, Orient.m11, Orient.m12, 0.0f, 
+        Orient.m20, Orient.m21, Orient.m22, 0.0f,
+        Position.x, Position.y, Position.z, 1.0f
+    };
+    return Result;
+}
+
 inline m4 InverseTransformM4(v3f Pos, m3 Orient)
 {    
     m4 Result = 
@@ -537,11 +770,44 @@ quaternion Quaternion(v3f v, f32 s)
     return Result;
 }
 
-quaternion IdentityQuaternion()
+inline quaternion 
+Conjugate(quaternion Q)
+{
+    quaternion Result = Quaternion(-Q.v, Q.s);
+    return Result;
+}
+
+inline quaternion 
+IdentityQuaternion()
 {
     quaternion Result;
     Result.v = {};
     Result.s = 1.0f;
+    return Result;
+}
+
+inline quaternion 
+EulerQuaternion(f32 Pitch, f32 Yaw, f32 Roll)
+{
+    f32 cp = Cos(Yaw*0.5f);
+    f32 sp = Sin(Yaw*0.5f);
+    f32 cy = Cos(Roll*0.5f);
+    f32 sy = Sin(Roll*0.5f);  
+    f32 cr = Cos(Pitch*0.5f);
+    f32 sr = Sin(Pitch*0.5f);
+    
+    quaternion Result;
+    Result.x = (cy*cp*sr) - (sy*sp*cr);
+    Result.y = (sy*cp*sr) + (cy*sp*cr);
+    Result.z = (sy*cp*cr) - (cy*sp*sr);
+    Result.w = (cy*cp*cr) + (sy*sp*sr);
+    return Result;
+}
+
+inline quaternion 
+EulerQuaternion(v3f Euler)
+{
+    quaternion Result = EulerQuaternion(Euler.pitch, Euler.yaw, Euler.roll);
     return Result;
 }
 
@@ -630,11 +896,41 @@ inline m3 ToMatrix3(quaternion Q)
     return Result;
 }
 
+inline v3f 
+Rotate(v3f V, quaternion Q)
+{
+    v3f Result = ((2.0f * Dot(Q.v, V) * Q.v)   + 
+                  ((Square(Q.s) - SquareMagnitude(Q.v))*V) + 
+                  (2.0f * Q.s * Cross(Q.v, V)));
+    return Result;
+}
+
 struct sqt
 {
     quaternion Orientation;
     v3f Position;
     v3f Scale;
 };
+
+inline sqt 
+CreateSQT(v3f Position, v3f Scale, v3f Euler)
+{
+    sqt Result;
+    Result.Position = Position;
+    Result.Scale = Scale;
+    Result.Orientation = EulerQuaternion(Euler);
+    return Result;
+}
+
+inline m4
+TransformM4(sqt SQT)
+{
+    m3 Orientation = ToMatrix3(SQT.Orientation);
+    Orientation.XAxis *= SQT.Scale.x;
+    Orientation.YAxis *= SQT.Scale.y;
+    Orientation.ZAxis *= SQT.Scale.z;
+    m4 Result = TransformM4(SQT.Position, Orientation);
+    return Result;
+}
 
 #endif

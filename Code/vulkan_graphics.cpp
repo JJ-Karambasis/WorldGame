@@ -778,6 +778,26 @@ VkInstance CreateInstance()
     return VK_NULL_HANDLE;
 }
 
+
+DEBUG_DRAW_POINT(DEBUGDrawPoint)
+{
+#if DEVELOPER_BUILD
+    developer_vulkan_graphics* Graphics = (developer_vulkan_graphics*)GetVulkanGraphics();
+    ASSERT(Graphics->PointCount < ARRAYCOUNT(Graphics->DebugPoints));
+    Graphics->DebugPoints[Graphics->PointCount++] = {Position, Size, Color};
+#endif
+}
+
+DEBUG_DRAW_LINE(DEBUGDrawLine)
+{
+#if DEVELOPER_BUILD
+    developer_vulkan_graphics* Graphics = (developer_vulkan_graphics*)GetVulkanGraphics();
+    ASSERT(Graphics->LineCount < ARRAYCOUNT(Graphics->DebugLines));
+    Graphics->DebugLines[Graphics->LineCount++] = {Position0, Position1, Width, Height, Color};
+#endif
+}
+
+
 RENDER_GAME(RenderGame)
 {
     vulkan_graphics* Graphics = GetVulkanGraphics();
@@ -807,7 +827,7 @@ RENDER_GAME(RenderGame)
         BOOL_CHECK_AND_HANDLE(ImageStatus == VK_SUCCESS, "Error acquiring image to present.");
     }
     
-    Graphics->CameraBufferData[0] = PerspectiveM4(PI*0.25f, SafeRatio(WindowDim.width, WindowDim.height), 0.01f, 1000.0f);
+    Graphics->CameraBufferData[0] = PerspectiveM4(PI*0.35f, SafeRatio(WindowDim.width, WindowDim.height), 0.01f, 1000.0f);
     
     camera* TargetCamera = &Game->Camera;
     
@@ -857,34 +877,45 @@ RENDER_GAME(RenderGame)
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);             
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->PipelineLayout, 0, 1, &Graphics->DescriptorSet, 0, VK_NULL_HANDLE);
             
-            m4 Model = TranslationM4(0.5f, 0.0f, 0.0f);
-            vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);
-            c4 Color = RGBA(0.0f, 1.0f, 0.0f, 1.0f);
-            vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Color);            
-            
-            vkCmdDraw(CommandBuffer, 36, 1, 0, 0);
+            for(entity* Entity = Game->AllocatedEntities.First; Entity; Entity = Entity->Next)
+            {                
+                m4 Model = TransformM4(Entity->Transform);
+                vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
+                vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Entity->Color);                            
+                vkCmdDraw(CommandBuffer, 36, 1, 0, 0);                
+            }
             
 #if DEVELOPER_BUILD
             developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->PointPipeline);
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->PointPipelineLayout, 0, 1, &DevGraphics->DebugDescriptorSet, 0, VK_NULL_HANDLE);
             
-            v4f PointPosition = V4(0.0f, 0.0f, 0.0f, 0.1f);
-            c4 PointColor = RGBA(1.0f, 1.0f, 1.0f, 1.0f);
-            vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f), &PointPosition);
-            vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f), sizeof(c4), &PointColor);
-            vkCmdDraw(CommandBuffer, 1, 1, 0, 0);
+            for(u32 PointIndex = 0; PointIndex < DevGraphics->PointCount; PointIndex++)
+            {   
+                debug_point* DebugPoint = DevGraphics->DebugPoints + PointIndex;                
+                v4f PointPosition = V4(DebugPoint->Position, DebugPoint->Size); 
+               
+                vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f), &PointPosition);
+                vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f), sizeof(c4), &DebugPoint->Color);
+                vkCmdDraw(CommandBuffer, 1, 1, 0, 0);
+            }
+            DevGraphics->PointCount = 0;
             
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->LinePipeline);
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->LinePipelineLayout, 0, 1, &DevGraphics->DebugDescriptorSet, 0, VK_NULL_HANDLE);
             
-            v4f LinePositions[2];
-            LinePositions[0] = V4(-1.0f, -1.0f, 0.0f, 0.1f);
-            LinePositions[1] = V4( 1.0f, -1.0f, 0.0f, 0.1f);
-            c4 LineColor = RGBA(1.0f, 0.0f, 0.0f, 1.0f);
-            vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f)*2, LinePositions);
-            vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f)*2, sizeof(c4), &LineColor);
-            vkCmdDraw(CommandBuffer, 1, 1, 0, 0);            
+            for(u32 LineIndex = 0; LineIndex < DevGraphics->LineCount; LineIndex++)
+            {
+                debug_line* DebugLine = DevGraphics->DebugLines + LineIndex;
+                
+                v4f LinePositions[2];
+                LinePositions[0] = V4(DebugLine->Position0, DebugLine->Width);
+                LinePositions[1] = V4(DebugLine->Position1, DebugLine->Height);                
+                vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f)*2, LinePositions);
+                vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f)*2, sizeof(c4), &DebugLine->Color);
+                vkCmdDraw(CommandBuffer, 1, 1, 0, 0);            
+            }
+            DevGraphics->LineCount = 0;
 #endif            
         }
         vkCmdEndRenderPass(CommandBuffer);
@@ -928,6 +959,8 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
 {
     vulkan_graphics* Graphics = GetVulkanGraphics();
     Graphics->RenderGame = RenderGame;    
+    Graphics->DEBUGDrawLine = DEBUGDrawLine;
+    Graphics->DEBUGDrawPoint = DEBUGDrawPoint;
     Graphics->Storage = CreateArena(KILOBYTE(32));
     
     LOAD_GLOBAL_FUNCTION(vkCreateInstance);

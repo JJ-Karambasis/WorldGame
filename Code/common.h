@@ -289,6 +289,12 @@ inline f32 SafeRatio(i32 Numerator, i32 Denominator)
     return Result;
 }
 
+inline b32 SameSign(f32 a, f32 b)
+{
+    b32 Result = (a >= 0) ^ (b < 0);
+    return Result;
+}
+
 template <typename list, typename entry>
 inline void AddToList(list* List, entry* Entry)
 {
@@ -298,7 +304,7 @@ inline void AddToList(list* List, entry* Entry)
     }
     else if(List->Count == 1)
     {
-        List->Last = Entity;
+        List->Last = Entry;
         List->Last->Prev = List->First;
         List->First->Next = List->Last;
     }
