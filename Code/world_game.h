@@ -41,6 +41,39 @@ struct entity_list
     u32 Count;
 };
 
+struct walkable_pole
+{
+    union
+    {
+        v3f IntersectionPoint;
+        struct
+        {
+            v2f Position2D;
+            f32 ZIntersection;
+        };
+    };    
+    b32 HitWalkable;
+};
+
+struct walkable_grid
+{
+    v2f Min;
+    v2i CellCount;
+    v2i PoleCount;
+    walkable_pole* Poles;
+};
+
+struct walkable_triangle_ring
+{ 
+    v3f P[3];    
+    walkable_triangle_ring* Next;
+};
+
+struct walkable_triangle_ring_list
+{
+    walkable_triangle_ring* Head;
+};
+
 struct game
 {
     b32 Initialized;

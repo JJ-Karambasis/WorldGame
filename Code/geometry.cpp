@@ -151,24 +151,6 @@ b32 IsPointInTriangle2D(v2f p, v2f a, v2f b, v2f c)
 #endif
 }
 
-f32 PointAndLineSquareDistance2D(v2f p, v2f a, v2f b)
-{
-    ASSERT(a != b); 
-    f32 l2 = SquareMagnitude(b-a);    
-    
-    f32 t = MaximumF32(0.0f, MinimumF32(1.0f, Dot(p-a, b-a)/l2));
-    v2f Projection = a + t*(b-a);
-    f32 Result = SquareMagnitude(Projection-p);
-    return Result;
-}
-
-b32 IsPointOnLine2D(v2f p, v2f a, v2f b)
-{
-    f32 SqrDistance = PointAndLineSquareDistance2D(p, a, b);
-    b32 Result = Abs(SqrDistance) < 1e-6f;
-    return Result;
-}
-
 b32 IsDegenerateTriangle2D(v2f a, v2f b, v2f c, u32* LineIndices)
 {
     b32 ABEqual = (a == b);
@@ -218,4 +200,51 @@ FindTriangleZ(v3f P0, v3f P1, v3f P2, v2f P)
     
     f32 Result = P0.z + (A * (P.y-P0.y)) - (B * (P.x-P0.x));
     return Result;
+}
+
+v3f PointTriangleClosestPoint(v3f a, v3f b, v3f c, v3f p)
+{    
+    v3f ab = b-a;
+    v3f ac = c-a;
+    v3f ap = p-a;
+    
+    f32 d1 = Dot(ab, ap);
+    f32 d2 = Dot(ac, ap);
+    if(d1 <= 0.0f && d2 <= 0.0f) return a;
+    
+    v3f bp = p-b;
+    f32 d3 = Dot(ab, bp);
+    f32 d4 = Dot(ac, bp);
+    if(d3 >= 0.0f && d4 <= d3) return b;
+    
+    f32 vc = d1*d4 - d3*d2;
+    if(vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
+    {
+        f32 v = d1/(d1-d3);
+        return a + v*ab;
+    }
+    
+    v3f cp = p-c;
+    f32 d5 = Dot(ab, cp);
+    f32 d6 = Dot(ac, cp);
+    if(d6 >= 0.0f && d5 <= d6) return c;
+    
+    f32 vb = d5*d2 - d1*d6;
+    if(vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
+    {
+        f32 w = d2/(d2-d6);
+        return a + w*ac;
+    }
+    
+    f32 va = d3*d6 - d5*d4;
+    if(va <= 0.0f && (d4-d3) >= 0.0f && (d5-d6) >= 0.0f)
+    {
+        f32 w = (d4-d3)/((d4-d3)+(d5-d6));
+        return b + w*(c-b);
+    }
+    
+    f32 denom = 1.0f/(va+vb+vc);
+    f32 v = vb*denom;
+    f32 w = vc*denom;
+    return a + ab*v + ac*w;
 }

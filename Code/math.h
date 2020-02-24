@@ -164,13 +164,22 @@ struct v2f
     };
 };
 
-v2f V2(v2i V)
+inline v2f 
+V2(i32 x, i32 y)
 {
-    v2f Result = {(f32)V.x, (f32)V.y};
+    v2f Result = {(f32)x, (f32)y};
     return Result;
 }
 
-v2f V2(f32 x, f32 y)
+inline v2f 
+V2(v2i V)
+{
+    v2f Result = V2(V.x, V.y);
+    return Result;
+}
+
+inline v2f 
+V2(f32 x, f32 y)
 {
     v2f Result = {x, y};
     return Result;

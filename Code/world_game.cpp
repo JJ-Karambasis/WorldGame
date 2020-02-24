@@ -17,23 +17,70 @@ entity* CreateEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b
 }
 
 #define GRID_DENSITY 0.5f
+#define POLE_BOTTOM_LEFT 0
+#define POLE_BOTTOM_RIGHT 1
+#define POLE_TOP_LEFT 2
+#define POLE_TOP_RIGHT 3
 
-v2i GetCell(v2f Position)
+inline v2i 
+GetCell(v2f Position)
 {
     v2i Result = FloorV2(Position/GRID_DENSITY);
     return Result;
 }
 
-v2f GetPolePosition(v2i Index)
+inline walkable_pole* 
+GetPole(walkable_grid* Grid, i32 XIndex, i32 YIndex)
 {
-    v2f Result = Index * GRID_DENSITY;
+    ASSERT((XIndex < Grid->PoleCount.x) && (XIndex >= 0));
+    ASSERT((YIndex < Grid->PoleCount.y) && (YIndex >= 0));
+    walkable_pole* Result = Grid->Poles + ((YIndex*Grid->PoleCount.x)+XIndex);
     return Result;
 }
 
-v2f GetPolePosition(i32 XIndex, i32 YIndex)
+inline walkable_pole**
+GetCellPoles(walkable_grid* Grid, i32 CellX, i32 CellY)
 {
-    v2f Result = GetPolePosition(V2i(XIndex, YIndex));
+    ASSERT((CellX < Grid->CellCount.x) && (CellX >= 0));
+    ASSERT((CellY < Grid->CellCount.y) && (CellY >= 0));
+    walkable_pole** Result = PushArray(4, walkable_pole*, Clear, 0);
+    Result[0] = GetPole(Grid, CellX,   CellY);
+    Result[1] = GetPole(Grid, CellX+1, CellY);
+    Result[2] = GetPole(Grid, CellX,   CellY+1);
+    Result[3] = GetPole(Grid, CellX+1, CellY+1);
     return Result;
+}
+
+walkable_grid BuildWalkableGrid(v2i Min, v2i Max)
+{
+    walkable_grid Result = {};
+    Result.PoleCount = V2i(Max.x-Min.x, Max.y-Min.y)+2;
+    Result.CellCount = Result.PoleCount-1;
+    Result.Min = Min*GRID_DENSITY;
+    Result.Poles = PushArray(Result.PoleCount.x*Result.PoleCount.y, walkable_pole, Clear, 0);
+    for(i32 YIndex = 0; YIndex < Result.PoleCount.y; YIndex++)
+    {
+        for(i32 XIndex = 0; XIndex < Result.PoleCount.x; XIndex++)
+        {
+            walkable_pole* Pole = GetPole(&Result, XIndex, YIndex);
+            Pole->Position2D = Result.Min + V2(XIndex, YIndex)*GRID_DENSITY;
+        }
+    }
+    return Result;
+}
+
+void AddTriangleRing(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2)
+{
+    walkable_triangle_ring* Ring = PushStruct(walkable_triangle_ring, Clear, 0);
+    Ring->P[0] = p0; Ring->P[1] = p1; Ring->P[2] = p2;    
+    Ring->Next = List->Head;
+    List->Head = Ring;
+}
+
+void AddQuadRings(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2, v3f p3)
+{
+    AddTriangleRing(List, p0, p1, p2);
+    AddTriangleRing(List, p2, p3, p0);
 }
 
 extern "C"
@@ -86,30 +133,24 @@ EXPORT GAME_TICK(Tick)
     v2i StartCell = GetCell(Player->Position.xy);
     v2i EndCell   = GetCell(RequestedPosition.xy);
     
-    v2i MinimumCell = MinimumV2(StartCell, EndCell);
-    v2i MaximumCell = MaximumV2(StartCell, EndCell)+2;
+    v2i MinimumCell = MinimumV2(StartCell, EndCell)-1;
+    v2i MaximumCell = MaximumV2(StartCell, EndCell)+1;
     
-    MinimumCell -= 1;
-    MaximumCell += 1;
-    
-    u32 YCount = MaximumCell.y-MinimumCell.y;
-    u32 XCount = MaximumCell.x-MinimumCell.x;
-    
-    v3f* IntersectionPoles = PushArray(XCount*YCount, v3f, Clear, 0);   
-    u32 PoleIndex = 0;
-    for(i32 YIndex = MinimumCell.y; YIndex < MaximumCell.y; YIndex++)
+    walkable_grid Grid = BuildWalkableGrid(MinimumCell, MaximumCell);                
+    for(i32 YIndex = 0; YIndex < Grid.PoleCount.y; YIndex++)
     {
-        for(i32 XIndex = MinimumCell.x; XIndex < MaximumCell.x; XIndex++)
-        {                        
-            v2f PolePosition = GetPolePosition(XIndex, YIndex);            
+        for(i32 XIndex = 0; XIndex < Grid.PoleCount.x; XIndex++)
+        {   
+            walkable_pole* Pole = GetPole(&Grid, XIndex, YIndex);            
             
-            IntersectionPoles[PoleIndex].z = -FLT_MAX;
+            Pole->ZIntersection = -FLT_MAX;
             
             for(entity* Entity = Game->AllocatedEntities.First; Entity; Entity = Entity->Next)
             {
                 if(Entity != Player)
                 {
-                    v2f LocalPolePosition = Rotate(V3(PolePosition, 0.0f) - Entity->Position, Conjugate(Entity->Orientation)).xy;
+                    //TODO(JJ): Need to test using entities that are not positioned at 0,0,0 and have a variety of different orientations
+                    v2f LocalPolePosition = Rotate(V3(Pole->Position2D, 0.0f) - Entity->Position, Conjugate(Entity->Orientation)).xy;
                     
                     triangle_mesh* Mesh = Entity->Mesh;
                     for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
@@ -124,7 +165,6 @@ EXPORT GAME_TICK(Tick)
                         };
                         
                         f32 ZIntersection = INFINITY;
-                        
                         
                         u32 LineIndices[2];
                         if(IsDegenerateTriangle2D(P[0].xy, P[1].xy, P[2].xy, LineIndices))
@@ -141,29 +181,84 @@ EXPORT GAME_TICK(Tick)
                         else if(IsPointInTriangle2D(LocalPolePosition, P[0].xy, P[1].xy, P[2].xy))                            
                             ZIntersection = FindTriangleZ(P[0], P[1], P[2], LocalPolePosition);                                                                                        
                         
+                        
                         if(ZIntersection != INFINITY)
                         {
+                            ZIntersection = Rotate(V3(V2(0.0f, 0.0f), ZIntersection), Entity->Orientation).z + Entity->Position.z;
+                            
                             if((ZIntersection <= (Player->Position.z + Player->Scale.z)) &&
-                               (ZIntersection > IntersectionPoles[PoleIndex].z))
+                               (ZIntersection > Pole->ZIntersection))
                             {
-                                if(IntersectionPoles[PoleIndex].z != -FLT_MAX)
-                                    DRAW_POINT(V3(PolePosition, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));                                                                                                
+                                if(Pole->ZIntersection != -FLT_MAX)
+                                    DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));                                                                                                
                                 
-                                IntersectionPoles[PoleIndex] = V3(PolePosition, ZIntersection);
+                                Pole->ZIntersection = ZIntersection;                                
                             }
                             else
-                                DRAW_POINT(V3(PolePosition, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));
+                                DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));
                         }
                     }                                                            
                 }
             }
             
-            if(IntersectionPoles[PoleIndex].z != -FLT_MAX)
+            if(Pole->ZIntersection != -FLT_MAX)
             {
-                DRAW_POINT(IntersectionPoles[PoleIndex], 0.05f, RGBA(1.0f, 1.0f, 1.0f, 1.0f));
-            }
+                DRAW_POINT(Pole->IntersectionPoint, 0.05f, RGBA(1.0f, 1.0f, 1.0f, 1.0f));
+            }                        
+        }
+    }
+    
+    walkable_triangle_ring_list RingList = {};
+    for(i32 YIndex = 0; YIndex < Grid.CellCount.y; YIndex++)
+    {
+        for(i32 XIndex = 0; XIndex < Grid.CellCount.x; XIndex++)
+        {            
+            walkable_pole** CellPoles = GetCellPoles(&Grid, XIndex, YIndex);
+
+            u32 Method = 1;
+            if(CellPoles[POLE_BOTTOM_LEFT]->HitWalkable) Method *= 2;            
+            if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable) Method *= 2;
+            if(CellPoles[POLE_TOP_LEFT]->HitWalkable) Method *= 2;
+            if(CellPoles[POLE_TOP_RIGHT]->HitWalkable) Method *= 2;
             
-            PoleIndex++;
+            switch(Method)
+            {
+                case 2:
+                {
+                } break;
+                
+                case 4:
+                {
+                } break;
+                
+                case 8:
+                {
+                } break;
+                
+                case 16:
+                {
+                } break;
+            } 
+        }
+    }
+
+    f32 BestSqrDistance = FLT_MAX;
+    v3f FinalPosition = RequestedPosition;
+    for(walkable_triangle_ring* Ring = RingList.Head; Ring; Ring = Ring->Next)
+    {
+        if(IsPointInTriangle2D(Ring->P[0].xy, Ring->P[1].xy, Ring->P[2].xy, RequestedPosition.xy))
+        {
+            FinalPosition.xy = RequestedPosition.xy;
+            FinalPosition.z = FindTriangleZ(Ring->P[0], Ring->P[1], Ring->P[2], FinalPosition.xy);
+            break;
+        }
+        
+        v3f ClosestPoint = PointTriangleClosestPoint(Ring->P[0], Ring->P[1], Ring->P[2], RequestedPosition);
+        f32 SqrDistance = SquareMagnitude(ClosestPoint-FinalPosition);
+        if(SqrDistance < BestSqrDistance)
+        {
+            FinalPosition = ClosestPoint;
+            BestSqrDistance = SqrDistance;
         }
     }
     
