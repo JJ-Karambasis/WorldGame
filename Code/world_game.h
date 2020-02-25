@@ -53,6 +53,7 @@ struct walkable_pole
         };
     };    
     b32 HitWalkable;
+    entity* HitEntity;
 };
 
 struct walkable_grid
@@ -61,6 +62,12 @@ struct walkable_grid
     v2i CellCount;
     v2i PoleCount;
     walkable_pole* Poles;
+};
+
+struct triangle_array
+{
+    u32 Count;
+    v3f* Ptr;
 };
 
 struct walkable_triangle_ring

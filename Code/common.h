@@ -141,6 +141,12 @@ inline f32 MaximumF32(f32 A, f32 B)
     return Result;
 }
 
+inline f32 MaximumF32(f32 A, f32 B, f32 C)
+{
+    f32 Result = MaximumF32(MaximumF32(A, B), C);
+    return Result;
+}
+
 inline u64 MaximumU64(u64 A, u64 B)
 {
     u64 Result = (A >= B) ? A : B;

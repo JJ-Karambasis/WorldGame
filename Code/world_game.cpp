@@ -69,7 +69,8 @@ walkable_grid BuildWalkableGrid(v2i Min, v2i Max)
     return Result;
 }
 
-void AddTriangleRing(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2)
+inline void 
+AddTriangleRing(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2)
 {
     walkable_triangle_ring* Ring = PushStruct(walkable_triangle_ring, Clear, 0);
     Ring->P[0] = p0; Ring->P[1] = p1; Ring->P[2] = p2;    
@@ -77,10 +78,30 @@ void AddTriangleRing(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2)
     List->Head = Ring;
 }
 
-void AddQuadRings(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2, v3f p3)
+inline void 
+AddQuadRings(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2, v3f p3)
 {
     AddTriangleRing(List, p0, p1, p2);
     AddTriangleRing(List, p2, p3, p0);
+}
+
+struct surface_intersection_query
+{
+    v3f P;
+    b32 Hit;
+};
+
+surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walkable_pole* MissPole)
+{
+    ASSERT(!MissPole->HitEntity);
+    ASSERT(HitPole->HitEntity);
+
+    entity* Entity = HitPole->HitEntity;
+    
+    surface_intersection_query Result = {};
+    v2f D = Rotate(V3(MissPole->Position2D - HitPole->Position2D, 0.0f), Conjugate(Entity->Orientation)).xy;
+    
+    return Result;
 }
 
 extern "C"
@@ -145,6 +166,7 @@ EXPORT GAME_TICK(Tick)
             
             Pole->ZIntersection = -FLT_MAX;
             
+            entity* HitEntity = NULL;            
             for(entity* Entity = Game->AllocatedEntities.First; Entity; Entity = Entity->Next)
             {
                 if(Entity != Player)
@@ -193,6 +215,7 @@ EXPORT GAME_TICK(Tick)
                                     DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));                                                                                                
                                 
                                 Pole->ZIntersection = ZIntersection;                                
+                                HitEntity = Entity;
                             }
                             else
                                 DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));
@@ -204,6 +227,8 @@ EXPORT GAME_TICK(Tick)
             if(Pole->ZIntersection != -FLT_MAX)
             {
                 DRAW_POINT(Pole->IntersectionPoint, 0.05f, RGBA(1.0f, 1.0f, 1.0f, 1.0f));
+                Pole->HitWalkable = true;
+                Pole->HitEntity = HitEntity; 
             }                        
         }
     }
@@ -214,7 +239,7 @@ EXPORT GAME_TICK(Tick)
         for(i32 XIndex = 0; XIndex < Grid.CellCount.x; XIndex++)
         {            
             walkable_pole** CellPoles = GetCellPoles(&Grid, XIndex, YIndex);
-
+            
             u32 Method = 1;
             if(CellPoles[POLE_BOTTOM_LEFT]->HitWalkable) Method *= 2;            
             if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable) Method *= 2;
@@ -225,6 +250,46 @@ EXPORT GAME_TICK(Tick)
             {
                 case 2:
                 {
+                    walkable_pole* TargetPole = NULL;
+                    walkable_pole* HorizontalPole = NULL;
+                    walkable_pole* VerticalPole = NULL;
+                    walkable_pole* CornerPole = NULL;
+                    
+                    if(CellPoles[POLE_BOTTOM_LEFT]->HitWalkable)
+                    {
+                        TargetPole     = CellPoles[POLE_BOTTOM_LEFT];
+                        HorizontalPole = CellPoles[POLE_BOTTOM_RIGHT];
+                        VerticalPole   = CellPoles[POLE_TOP_LEFT];
+                        CornerPole     = CellPoles[POLE_TOP_RIGHT];
+                    }                    
+                    else if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
+                    {
+                        TargetPole     = CellPoles[POLE_BOTTOM_RIGHT];
+                        HorizontalPole = CellPoles[POLE_BOTTOM_LEFT];
+                        VerticalPole   = CellPoles[POLE_TOP_RIGHT];
+                        CornerPole     = CellPoles[POLE_TOP_LEFT];
+                    }
+                    else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                    {
+                        TargetPole     = CellPoles[POLE_TOP_LEFT];
+                        HorizontalPole = CellPoles[POLE_TOP_RIGHT];
+                        VerticalPole   = CellPoles[POLE_BOTTOM_LEFT];
+                        CornerPole     = CellPoles[POLE_BOTTOM_RIGHT];
+                    }
+                    else if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                    {
+                        TargetPole     = CellPoles[POLE_TOP_RIGHT];
+                        HorizontalPole = CellPoles[POLE_TOP_LEFT];
+                        VerticalPole   = CellPoles[POLE_BOTTOM_RIGHT];
+                        CornerPole     = CellPoles[POLE_BOTTOM_LEFT];
+                    }
+                    else
+                    {
+                        INVALID_CODE;
+                    }   
+                    
+                    surface_intersection_query QueryA0 = SurfaceIntersectionQuery(TargetPole, HorizontalPole);
+                    surface_intersection_query QueryB0 = SurfaceIntersectionQuery(TargetPole, VerticalPole);
                 } break;
                 
                 case 4:
@@ -237,6 +302,9 @@ EXPORT GAME_TICK(Tick)
                 
                 case 16:
                 {
+                    AddQuadRings(&RingList, 
+                                 CellPoles[POLE_BOTTOM_LEFT]->IntersectionPoint, CellPoles[POLE_BOTTOM_RIGHT]->IntersectionPoint, 
+                                 CellPoles[POLE_TOP_RIGHT]->IntersectionPoint,   CellPoles[POLE_TOP_LEFT]->IntersectionPoint);
                 } break;
             } 
         }

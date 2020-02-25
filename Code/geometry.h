@@ -13,5 +13,4 @@ struct triangle_mesh
     triangle* Triangles;
 };
 
-
 #endif
