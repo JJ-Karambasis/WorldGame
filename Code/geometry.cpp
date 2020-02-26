@@ -121,7 +121,7 @@ triangle_mesh CreateBoxMesh(arena* Storage)
 
 f32 GetTriangleArea2D(v2f p0, v2f p1, v2f p2)
 {
-    f32 Result = Abs((p0.x*(p1.y-p2.y) + p1.x*(p2.y-p0.y) + p2.x*(p0.y-p1.y))/2.0f);
+    f32 Result = Abs((p0.x*(p1.y-p2.y) + p1.x*(p2.y-p0.y) + p2.x*(p0.y-p1.y))*0.5f);
     return Result;
 }
 
@@ -146,7 +146,7 @@ b32 IsPointInTriangle2D(v2f p, v2f a, v2f b, v2f c)
     f32 SubArea1 = GetTriangleArea2D(p, b, c);
     f32 SubArea2 = GetTriangleArea2D(p, c, a);    
     f32 Diff = Abs(Area - (SubArea0+SubArea1+SubArea2));
-    b32 Result = Diff < 1e-6f;
+    b32 Result = Diff < 1e-5f;
     return Result;
 #endif
 }

@@ -92,7 +92,7 @@ struct surface_intersection_query
 };
 
 surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walkable_pole* MissPole)
-{
+{ 
     ASSERT(!MissPole->HitEntity);
     ASSERT(HitPole->HitEntity);
 
@@ -118,8 +118,8 @@ EXPORT GAME_TICK(Tick)
         Game->WorldStorage = CreateArena(KILOBYTE(32));
         Game->BoxMesh = CreateBoxMesh(&Game->WorldStorage);
         
-        Game->Player = CreateEntity(Game, V3(0.0f, 0.0f, 1.0f), V3(1.0f), V3(), RGBA(0.0f, 0.0f, 1.0f, 1.0f), false, &Game->BoxMesh);
-        CreateEntity(Game, V3(), V3(10.0f, 10.0f, 1.0f), V3(), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
+        Game->Player = CreateEntity(Game, V3(0.0f, 0.0f, 1.0f), V3(1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.0f, 0.0f, 1.0f, 1.0f), false, &Game->BoxMesh);
+        CreateEntity(Game, V3(1.0f, 1.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.1f, 0.1f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
     }        
     
     //TODO(JJ): Implement the Walking System
@@ -170,10 +170,7 @@ EXPORT GAME_TICK(Tick)
             for(entity* Entity = Game->AllocatedEntities.First; Entity; Entity = Entity->Next)
             {
                 if(Entity != Player)
-                {
-                    //TODO(JJ): Need to test using entities that are not positioned at 0,0,0 and have a variety of different orientations
-                    v2f LocalPolePosition = Rotate(V3(Pole->Position2D, 0.0f) - Entity->Position, Conjugate(Entity->Orientation)).xy;
-                    
+                {                    
                     triangle_mesh* Mesh = Entity->Mesh;
                     for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
                     {
@@ -181,9 +178,9 @@ EXPORT GAME_TICK(Tick)
                         
                         v3f P[3] = 
                         {
-                            Triangle->P[0]*Entity->Scale,
-                            Triangle->P[1]*Entity->Scale,
-                            Triangle->P[2]*Entity->Scale
+                            TransformV3(Triangle->P[0], Entity->Transform),
+                            TransformV3(Triangle->P[1], Entity->Transform),
+                            TransformV3(Triangle->P[2], Entity->Transform)
                         };
                         
                         f32 ZIntersection = INFINITY;
@@ -197,17 +194,14 @@ EXPORT GAME_TICK(Tick)
                             //just be exactly where the player z currently is
 #if 0                                                     
                             if(IsPointOnLine2D(LocalPolePosition, P[LineIndices[0]].xy, P[LineIndices[1]].xy))                                                        
-                                ZIntersection = FindTriangleZ(P[0], P[1], P[2], LocalPolePosition);                                                                                                                                                                        
+                                ZIntersection = FindTriangleZ(P[0], P[1], P[2], LocalPolePosition.xy);                                                                                                                                                                        
 #endif
                         }
-                        else if(IsPointInTriangle2D(LocalPolePosition, P[0].xy, P[1].xy, P[2].xy))                            
-                            ZIntersection = FindTriangleZ(P[0], P[1], P[2], LocalPolePosition);                                                                                        
-                        
+                        else if(IsPointInTriangle2D(Pole->Position2D, P[0].xy, P[1].xy, P[2].xy))                            
+                            ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                
                         
                         if(ZIntersection != INFINITY)
-                        {
-                            ZIntersection = Rotate(V3(V2(0.0f, 0.0f), ZIntersection), Entity->Orientation).z + Entity->Position.z;
-                            
+                        {                                                        
                             if((ZIntersection <= (Player->Position.z + Player->Scale.z)) &&
                                (ZIntersection > Pole->ZIntersection))
                             {
@@ -233,6 +227,7 @@ EXPORT GAME_TICK(Tick)
         }
     }
     
+#if 0 
     walkable_triangle_ring_list RingList = {};
     for(i32 YIndex = 0; YIndex < Grid.CellCount.y; YIndex++)
     {
@@ -309,7 +304,7 @@ EXPORT GAME_TICK(Tick)
             } 
         }
     }
-
+    
     f32 BestSqrDistance = FLT_MAX;
     v3f FinalPosition = RequestedPosition;
     for(walkable_triangle_ring* Ring = RingList.Head; Ring; Ring = Ring->Next)
@@ -329,7 +324,7 @@ EXPORT GAME_TICK(Tick)
             BestSqrDistance = SqrDistance;
         }
     }
-    
+#endif
     Player->Position = RequestedPosition;
     DRAW_POINT(Player->Position, 0.05f, RGBA(0.0f, 0.0f, 0.0f, 1.0f));
     

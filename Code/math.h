@@ -186,10 +186,24 @@ V2(f32 x, f32 y)
 }
 
 inline v2f
+operator+(v2f Left, f32 Right)
+{
+    v2f Result = {Left.x+Right, Left.y+Right};
+    return Result;
+}
+
+inline v2f
 operator+(v2f Left, v2f Right)
 {
     v2f Result = {Left.x+Right.x, Left.y+Right.y};
     return Result;
+}
+
+inline v2f& 
+operator+=(v2f& Left, f32 Right)
+{
+    Left = Left + Right;
+    return Left;
 }
 
 inline v2f
@@ -541,6 +555,13 @@ V4(v3f xyz, f32 w)
     return Result;
 }
 
+inline f32
+Dot(v4f Left, v4f Right)
+{
+    f32 Result = Left.x*Right.x + Left.y*Right.y + Left.z*Right.z + Left.w*Right.w;
+    return Result;
+}
+
 inline v4f 
 RGBA(f32 r, f32 g, f32 b, f32 a)
 {
@@ -690,8 +711,30 @@ inline m4 M4(f32 Diagonal)
     return Result;
 }
 
-inline m4 TransformM4(v3f Position, m3 Orient)
+inline m4 Transpose(m4 M)
 {
+    m4 Result;
+    Result.m00 = M.m00;
+    Result.m01 = M.m10;
+    Result.m02 = M.m20;
+    Result.m03 = M.m30;
+    Result.m10 = M.m01;
+    Result.m11 = M.m11;
+    Result.m12 = M.m21;
+    Result.m13 = M.m31;
+    Result.m20 = M.m02;
+    Result.m21 = M.m12;
+    Result.m22 = M.m22;
+    Result.m23 = M.m32;
+    Result.m30 = M.m03;
+    Result.m31 = M.m13;
+    Result.m32 = M.m23;
+    Result.m33 = M.m33;
+    return Result;
+}
+
+inline m4 TransformM4(v3f Position, m3 Orient)
+{    
     m4 Result = 
     {
         Orient.m00, Orient.m01, Orient.m02, 0.0f, 
@@ -724,6 +767,17 @@ inline m4 TranslationM4(f32 x, f32 y, f32 z)
 {
     m4 Result = IdentityM4();
     Result.Translation = V4(x, y, z, 1.0f);
+    return Result;
+}
+
+inline v4f operator*(m4 Left, v4f Right)
+{
+    Left = Transpose(Left);
+    v4f Result;
+    Result.x = Dot(Left.Column0, Right);
+    Result.y = Dot(Left.Column1, Right);
+    Result.z = Dot(Left.Column2, Right);
+    Result.w = Dot(Left.Column3, Right);
     return Result;
 }
 
@@ -813,32 +867,23 @@ EulerQuaternion(f32 Pitch, f32 Yaw, f32 Roll)
     return Result;
 }
 
+inline quaternion
+RollQuaternion(quaternion Q)
+{
+    f32 Mag = Sqrt(Q.w*Q.w + Q.z*Q.z);    
+    ASSERT(Abs(Mag) > 1e-6f); 
+    Mag = 1.0f/Mag;
+    
+    quaternion Result = {};    
+    Result.z = Q.z*Mag;
+    Result.w = Q.w*Mag;
+    return Result;
+}
+
 inline quaternion 
 EulerQuaternion(v3f Euler)
 {
     quaternion Result = EulerQuaternion(Euler.pitch, Euler.yaw, Euler.roll);
-    return Result;
-}
-
-quaternion RotQuat(v3f Axis, f32 Angle)
-{
-    quaternion Result;
-    Result.v = Axis*Sin(Angle*0.5f);
-    Result.s = Cos(Angle*0.5f);
-    return Result;
-}
-
-inline quaternion 
-operator*(f32 Left, quaternion Right)
-{
-    quaternion Result = Quaternion(Left*Right.v, Left*Right.s);
-    return Result;
-}
-
-inline quaternion 
-operator*(quaternion Left, f32 Right)
-{
-    quaternion Result = Quaternion(Left.v*Right, Left.s*Right);    
     return Result;
 }
 
@@ -863,6 +908,20 @@ InverseMagnitude(quaternion Q)
     return Result;
 }
 
+inline quaternion 
+operator*(quaternion Left, f32 Right)
+{
+    quaternion Result = Quaternion(Left.v*Right, Left.s*Right);    
+    return Result;
+}
+
+inline quaternion 
+operator*(f32 Left, quaternion Right)
+{
+    quaternion Result = Quaternion(Left*Right.v, Left*Right.s);
+    return Result;
+}
+
 inline quaternion
 Normalize(quaternion Q)
 {
@@ -876,6 +935,15 @@ operator*(quaternion Left, quaternion Right)
 {
     quaternion Result = Quaternion(Cross(Left.v, Right.v) + Right.s*Left.v + Right.v*Left.s, 
                                    Left.s*Right.s - Dot(Left.v, Right.v));
+    return Result;
+}
+
+quaternion RotQuat(v3f Axis, f32 Angle)
+{
+    quaternion Result;
+    Result.v = Axis*Sin(Angle*0.5f);
+    Result.s = Cos(Angle*0.5f);
+    Result = Normalize(Result);
     return Result;
 }
 
@@ -939,6 +1007,12 @@ TransformM4(sqt SQT)
     Orientation.YAxis *= SQT.Scale.y;
     Orientation.ZAxis *= SQT.Scale.z;
     m4 Result = TransformM4(SQT.Position, Orientation);
+    return Result;
+}
+
+inline v3f TransformV3(v3f Point, sqt Transform)
+{
+    v3f Result = (Rotate(Point*Transform.Scale, Transform.Orientation)) + Transform.Position;
     return Result;
 }
 
