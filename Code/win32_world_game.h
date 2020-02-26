@@ -28,4 +28,10 @@ struct win32_game_code
     game_tick* Tick;        
 };
 
+struct platform_file_handle
+{
+    HANDLE Handle;
+    platform_file_attributes Attributes;
+};
+
 #endif

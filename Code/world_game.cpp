@@ -1,21 +1,6 @@
 #include "world_game.h"
 #include "geometry.cpp"
 
-entity* CreateEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32 IsBlocker, triangle_mesh* Mesh)
-{
-    entity* Result = NULL;
-    if(Game->FreeEntities.Count > 0)    
-        Result = RemoveEndOfList<entity_list, entity>(&Game->FreeEntities);    
-    else
-        Result = PushStruct(&Game->WorldStorage, entity, Clear, 0);
-    
-    Result->Transform = CreateSQT(Position, Scale, Euler);
-    Result->Color = Color;
-    Result->Mesh = Mesh;
-    AddToList(&Game->AllocatedEntities, Result);
-    return Result;
-}
-
 #define GRID_DENSITY 0.5f
 #define POLE_BOTTOM_LEFT 0
 #define POLE_BOTTOM_RIGHT 1

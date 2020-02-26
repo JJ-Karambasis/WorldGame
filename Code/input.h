@@ -42,14 +42,4 @@ inline b32 IsReleased(button Button)
     return Result;
 }
 
-#if DEVELOPER_BUILD
-struct development_input : public input
-{
-    button Alt;
-    button LMB;
-    button MMB;
-    f32 Scroll;
-};
-#endif
-
 #endif

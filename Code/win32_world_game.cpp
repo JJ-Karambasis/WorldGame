@@ -1,5 +1,9 @@
 #include "win32_world_game.h"
 
+#if DEVELOPER_BUILD
+#include "dev_world_game.cpp"
+#endif
+
 global LARGE_INTEGER Global_Frequency;
 
 inline u64 
@@ -61,7 +65,7 @@ HWND Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,
                                  0, 0, WindowClass->hInstance, NULL);
     if(!Window)            
         return {};        
-        
+    
     return Window;
 }
 
@@ -190,11 +194,16 @@ PLATFORM_READ_ENTIRE_FILE(Win32_ReadEntireFile)
     return Result;
 }
 
+HANDLE Win32_OpenFile(char* Path)
+{
+    HANDLE Result = CreateFile(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                               FILE_ATTRIBUTE_NORMAL, NULL);
+    return Result;
+}
+
 PLATFORM_WRITE_ENTIRE_FILE(Win32_WriteEntireFile)
 {
-    HANDLE FileHandle = CreateFile(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                                   FILE_ATTRIBUTE_NORMAL, NULL);
-    
+    HANDLE FileHandle = Win32_OpenFile(Path);        
     if(FileHandle == INVALID_HANDLE_VALUE) 
     {        
         WRITE_ERROR("Failed to open the file for writing.");        
@@ -207,6 +216,94 @@ PLATFORM_WRITE_ENTIRE_FILE(Win32_WriteEntireFile)
         WRITE_ERROR("Was unable to write the entire file.");           
     
     CloseHandle(FileHandle);    
+}
+
+PLATFORM_OPEN_FILE(Win32_OpenFile)
+{
+    DWORD DesiredAttributes = 0;
+    DWORD CreationDisposition = 0;
+    if(Attributes == PLATFORM_FILE_ATTRIBUTES_READ)
+    {
+        DesiredAttributes = GENERIC_READ;
+        CreationDisposition = OPEN_EXISTING;
+    }
+    else if(Attributes == PLATFORM_FILE_ATTRIBUTES_WRITE)
+    {
+        DesiredAttributes = GENERIC_WRITE;
+        CreationDisposition = CREATE_ALWAYS;
+    }
+    else
+    {
+        WRITE_ERROR("Invalid platform file attribute (ID: %d).", (u32)Attributes);        
+        return NULL;
+    }    
+    
+    HANDLE Handle = CreateFile(Path, DesiredAttributes, 0, NULL, CreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
+    if(Handle == INVALID_HANDLE_VALUE)
+    {
+        WRITE_ERROR("Failed to open the file.");
+        return NULL;
+    }
+    
+    platform_file_handle* Result = (platform_file_handle*)Win32_AllocateMemory(sizeof(platform_file_handle));
+    Result->Handle = Handle;
+    return Result;
+}    
+
+PLATFORM_READ_FILE(Win32_ReadFile)
+{
+    if(File->Attributes != PLATFORM_FILE_ATTRIBUTES_READ)
+    {
+        WRITE_ERROR("Failed to read file because the file attributes are mapped to write.");
+        return false;
+    }
+
+    OVERLAPPED* OffsetPointer = NULL;
+    OVERLAPPED Offsets = {};
+    if(Offset != NO_OFFSET)
+    {
+        Offsets.Offset = (DWORD)(Offset & 0xFFFFFFFF);
+        Offsets.OffsetHigh = (DWORD)((Offset >> 32) & 0xFFFFFFFF);
+        OffsetPointer = &Offsets;
+    }
+    
+    DWORD BytesRead;
+    if(ReadFile(File->Handle, Data, ReadSize, &BytesRead, OffsetPointer) && (BytesRead == ReadSize))
+        return true;
+    
+    WRITE_ERROR("Failed to read file. Bytes read %d - Bytes requested %d", BytesRead, ReadSize);
+    return false;
+}
+
+PLATFORM_WRITE_FILE(Win32_WriteFile)
+{
+    if(File->Attributes != PLATFORM_FILE_ATTRIBUTES_WRITE)
+    {
+        WRITE_ERROR("Failed to write file because the file attributes are mapped to read.");
+        return false;
+    }
+
+    OVERLAPPED* OffsetPointer = NULL;
+    OVERLAPPED Offsets = {};
+    if(Offset != NO_OFFSET)
+    {
+        Offsets.Offset = (DWORD)(Offset & 0xFFFFFFFF);
+        Offsets.OffsetHigh = (DWORD)((Offset >> 32) & 0xFFFFFFFF);
+        OffsetPointer = &Offsets;
+    }
+        
+    DWORD BytesWritten;
+    if(WriteFile(File->Handle, Data, WriteSize, &BytesWritten, OffsetPointer) && (BytesWritten == WriteSize))
+        return true;
+    
+    WRITE_ERROR("Failed to write file. Bytes written %d - Bytes requested %d", BytesWritten, WriteSize);
+    return false;
+}
+
+PLATFORM_CLOSE_FILE(Win32_CloseFile)
+{
+    CloseHandle(File->Handle);
+    Win32_FreeMemory(File);    
 }
 
 platform* Win32_GetPlatformStruct()
@@ -265,9 +362,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!Window)    
         WRITE_AND_HANDLE_ERROR("Failed to create game window."); 
     
-#if DEVELOPER_BUILD
+#if DEVELOPER_BUILD    
     development_input Input = {};
     development_game Game = {};
+    
+    Game.DevArena = CreateArena(MEGABYTE(1));
+    frame_recording* FrameRecording = &Game.FrameRecordings;    
+    FrameRecording->MaxFrameCount = 300;    
+    FrameRecording->FrameOffsets.Ptr = PushArray(&Game.DevArena, FrameRecording->MaxFrameCount, ptr, Clear, 0);
 #else
     input Input = {};
     game Game = {};
@@ -286,12 +388,12 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     EndTemporaryMemory(&TempArena);
     
     Game.Input = &Input;
-        
+    
     win32_game_code GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);
     if(!GameCode.GameLibrary.Library)    
         WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
     
-    Input.dt = 1.0f/60.0f;
+    Input.dt = 1.0f/60.0f; 
     u64 StartTime = Win32_Clock();
     for(;;)
     {                
@@ -303,6 +405,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             Win32_UnloadGameCode(&GameCode, TempDLLPathName);                        
             GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);            
         }
+        
+        Input.MouseDelta = {};
+        
+#if DEVELOPER_BUILD                
+        Input.Scroll = 0.0f;
+        for(u32 DevButtonIndex = 0; DevButtonIndex < ARRAYCOUNT(Input.DevButtons); DevButtonIndex++)
+            Input.DevButtons[DevButtonIndex].WasDown = Input.DevButtons[DevButtonIndex].IsDown;        
+#endif
         
         for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
@@ -378,19 +488,29 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                             if(Quit)
                                 PostQuitMessage(0);
                             
-                            switch(RawKeyboard->VKey)
+#if DEVELOPER_BUILD
+                            if(FrameRecording->RecordingState == RECORDING_STATE_NONE || FrameRecording->RecordingState == RECORDING_STATE_PLAYBACK)                            
+#endif
                             {
-                                BIND_KEY('W', Input.MoveForward);
-                                BIND_KEY('S', Input.MoveBackward);
-                                BIND_KEY('A', Input.MoveLeft);
-                                BIND_KEY('D', Input.MoveRight);                            
-                                BIND_KEY('Q', Input.SwitchWorld);                                
-                            }             
+                                switch(RawKeyboard->VKey)
+                                {
+                                    BIND_KEY('W', Input.MoveForward);
+                                    BIND_KEY('S', Input.MoveBackward);
+                                    BIND_KEY('A', Input.MoveLeft);
+                                    BIND_KEY('D', Input.MoveRight);                            
+                                    BIND_KEY('Q', Input.SwitchWorld);                                
+                                }
+                            }
                             
 #if DEVELOPER_BUILD                            
                             switch(RawKeyboard->VKey)
                             {
                                 BIND_KEY(VK_MENU, Input.Alt);
+                                BIND_KEY('0', Input.RecordButton);
+                                BIND_KEY('1', Input.PlaybackButton);
+                                BIND_KEY('2', Input.CycleButton);
+                                BIND_KEY(VK_LEFT, Input.CycleLeft);
+                                BIND_KEY(VK_RIGHT, Input.CycleRight);
                             }   
                             
                             if(RawKeyboard->Flags == RI_KEY_MAKE)
@@ -409,7 +529,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                                             Game.DevCamera.FocalPoint = Game.Camera.FocalPoint;
                                             Game.DevCamera.Distance = Magnitude(Game.DevCamera.FocalPoint - Game.DevCamera.Position);
                                         }
-                                    } break;                                    
+                                    } break;          
                                 }
                             }
 #endif
@@ -429,9 +549,12 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         if(Input.dt > 1.0f/20.0f)
             Input.dt = 1.0f/20.0f;
         
-        v2i WindowDim = Win32_GetWindowDim(Window);
-        
+#if DEVELOPER_BUILD
+        DevelopmentTick(&Game);
+#endif
         GameCode.Tick(&Game, Graphics, Global_Platform);        
+        
+        v2i WindowDim = Win32_GetWindowDim(Window);
         if(!Graphics->RenderGame(&Game, WindowDim))
         {
             ASSERT(false); 
@@ -441,21 +564,12 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         
         Input.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
         StartTime = Win32_Clock();
-        
-        Input.MouseDelta = {};
-        
-#if DEVELOPER_BUILD                
-        Input.Scroll = 0.0f;
-        Input.Alt.WasDown = Input.Alt.IsDown;
-        Input.LMB.WasDown = Input.LMB.IsDown;
-        Input.MMB.WasDown = Input.MMB.IsDown;
-#endif
-        
+      
         EndTemporaryMemory(&FrameArena);        
         CHECK_ARENA(GetDefaultArena());
     }
     
-handle_error:
+    handle_error:
     string ErrorMessage = GetString(GetGlobalErrorStream());
     Global_Platform->WriteEntireFile("Errors.log", ErrorMessage.Data, SafeU32(ErrorMessage.Length));
     MessageBox(NULL, "Error has occurred, please see Errors.log file.", NULL, MB_OK);     

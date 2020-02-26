@@ -104,18 +104,53 @@ GAME_TICK(Game_TickStub)
 }
 
 #if DEVELOPER_BUILD
-struct development_game : public game
-{
-    b32 InDevelopmentMode;
-    camera DevCamera;
-};
+
+#include "dev_world_game.h"
 
 global graphics* __Internal_Developer_Graphics__;
 #define DEVELOPER_GRAPHICS(Graphics) __Internal_Developer_Graphics__ = Graphics
 #define DRAW_POINT(position, size, color) __Internal_Developer_Graphics__->DEBUGDrawPoint(position, size, color)
 #define DRAW_LINE(position0, position1, width, height, color) __Internal_Developer_Graphics__->DEBUGDrawLine(position0, position1, width, height, color)
+
 #else
 #define DEVELOPER_GRAPHICS(Graphics)
 #define DRAW_POINT(position, size, color)
 #define DRAW_LINE(position0, position1, width, height, color)
 #endif
+
+inline entity* 
+CreateEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32 IsBlocker, triangle_mesh* Mesh)
+{
+    entity* Result = NULL;
+    if(Game->FreeEntities.Count > 0)    
+        Result = RemoveEndOfList<entity_list, entity>(&Game->FreeEntities);    
+    else
+        Result = PushStruct(&Game->WorldStorage, entity, Clear, 0);
+    
+    Result->Transform = CreateSQT(Position, Scale, Euler);
+    Result->Color = Color;
+    Result->Mesh = Mesh;
+    AddToList(&Game->AllocatedEntities, Result);
+    return Result;
+}
+
+inline void
+FreeEntity(game* Game, entity* Entity)
+{
+    RemoveFromList(&Game->AllocatedEntities, Entity);
+    ClearStruct(Entity, entity);
+    AddToList(&Game->FreeEntities, Entity);
+}
+
+inline void
+FreeAllEntities(game* Game)
+{
+    entity* Entity = Game->AllocatedEntities.First;    
+    while(Entity)
+    {
+        entity* Remove = Entity;
+        Entity = Entity->Next;
+        FreeEntity(Game, Remove);        
+    }
+    ASSERT(!Game->AllocatedEntities.Count);
+}
