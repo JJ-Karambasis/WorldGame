@@ -876,8 +876,24 @@ RENDER_GAME(RenderGame)
         {            
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);             
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->PipelineLayout, 0, 1, &Graphics->DescriptorSet, 0, VK_NULL_HANDLE);
+
+            player* Player = &Game->Player;
+            {
+                v3f ZAxis = V3(0.0f, 0.0f, 1.0f);
+                v3f YAxis = V3(Player->FacingDirection, 0.0f);
+                v3f XAxis = Cross(YAxis, ZAxis);
+                
+                XAxis *= (Player->Radius * 2.0f);
+                YAxis *= (Player->Radius * 2.0f);
+                ZAxis *= Player->Height;
+                
+                m4 Model = TransformM4(Player->Position, M3(XAxis, YAxis, ZAxis));
+                vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
+                vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Player->Color);                            
+                vkCmdDraw(CommandBuffer, 36, 1, 0, 0);                
+            }
             
-            for(entity* Entity = Game->AllocatedEntities.First; Entity; Entity = Entity->Next)
+            for(static_entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
             {                
                 m4 Model = TransformM4(Entity->Transform);
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                

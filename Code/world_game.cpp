@@ -7,6 +7,19 @@
 #define POLE_TOP_LEFT 2
 #define POLE_TOP_RIGHT 3
 
+inline static_entity* 
+CreateStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32 IsBlocker, triangle_mesh* Mesh)
+{
+    static_entity* Result = PushStruct(&Game->WorldStorage, static_entity, Clear, 0);    
+    Result->Transform = CreateSQT(Position, Scale, Euler);
+    Result->Color = Color;
+    Result->Mesh = Mesh;
+    Result->IsBlocker = IsBlocker;
+    Result->Next = Game->StaticEntities.Head;
+    Game->StaticEntities.Head = Result->Next;
+    return Result;
+}
+
 inline v2i 
 GetCell(v2f Position)
 {
@@ -81,7 +94,7 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
     ASSERT(!MissPole->HitEntity);
     ASSERT(HitPole->HitEntity);
 
-    entity* Entity = HitPole->HitEntity;
+    static_entity* Entity = HitPole->HitEntity;
     
     surface_intersection_query Result = {};
     v2f D = Rotate(V3(MissPole->Position2D - HitPole->Position2D, 0.0f), Conjugate(Entity->Orientation)).xy;
@@ -96,6 +109,8 @@ EXPORT GAME_TICK(Tick)
     
     Global_Platform = Platform;        
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
+
+    player* Player = &Game->Player;
     
     if(!Game->Initialized)
     {
@@ -103,16 +118,20 @@ EXPORT GAME_TICK(Tick)
         Game->WorldStorage = CreateArena(KILOBYTE(32));
         Game->BoxMesh = CreateBoxMesh(&Game->WorldStorage);
         
-        Game->Player = CreateEntity(Game, V3(0.0f, 0.0f, 1.0f), V3(1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.0f, 0.0f, 1.0f, 1.0f), false, &Game->BoxMesh);
-        CreateEntity(Game, V3(1.0f, 1.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.1f, 0.1f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
+        Player->Color = RGBA(0.0f, 0.0f, 1.0f, 1.0f);
+        Player->Position = V3(0.0f, 0.0f, 1.0f);
+        Player->FacingDirection = V2(0.0f, 1.0f);
+                
+        CreateStaticEntity(Game, V3(1.0f, 1.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.1f, 0.1f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
     }        
+    
+    Player->Radius = 0.5f;
+    Player->Height = 1.0f;
     
     //TODO(JJ): Implement the Walking System
     input* Input = Game->Input;
     const f32 MOVE_ACCELERATION = 20.0f;
     const f32 MOVE_DAMPING = 5.0f;
-    
-    entity* Player = Game->Player;
     
     v2f MoveDirection = {};
     if(IsDown(Input->MoveForward))    
@@ -150,57 +169,54 @@ EXPORT GAME_TICK(Tick)
             walkable_pole* Pole = GetPole(&Grid, XIndex, YIndex);            
             
             Pole->ZIntersection = -FLT_MAX;
-            
-            entity* HitEntity = NULL;            
-            for(entity* Entity = Game->AllocatedEntities.First; Entity; Entity = Entity->Next)
-            {
-                if(Entity != Player)
-                {                    
-                    triangle_mesh* Mesh = Entity->Mesh;
-                    for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
+
+            static_entity* HitEntity = NULL;
+            for(static_entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
+            {                              
+                triangle_mesh* Mesh = Entity->Mesh;
+                for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
+                {
+                    triangle* Triangle = Mesh->Triangles + TriangleIndex;
+                    
+                    v3f P[3] = 
                     {
-                        triangle* Triangle = Mesh->Triangles + TriangleIndex;
-                        
-                        v3f P[3] = 
-                        {
-                            TransformV3(Triangle->P[0], Entity->Transform),
-                            TransformV3(Triangle->P[1], Entity->Transform),
-                            TransformV3(Triangle->P[2], Entity->Transform)
-                        };
-                        
-                        f32 ZIntersection = INFINITY;
-                        
-                        u32 LineIndices[2];
-                        if(IsDegenerateTriangle2D(P[0].xy, P[1].xy, P[2].xy, LineIndices))
-                        {                            
-                            //TODO(JJ): Do we even need to handle this degenerate case? I feel like the rest of the algorithm 
-                            // will provide a much more numerically stable result than to figure out the triangles z on the
-                            //degenerate cases. Maybe we handle this case just for blockers since we know the players z should
-                            //just be exactly where the player z currently is
+                        TransformV3(Triangle->P[0], Entity->Transform),
+                        TransformV3(Triangle->P[1], Entity->Transform),
+                        TransformV3(Triangle->P[2], Entity->Transform)
+                    };
+                    
+                    f32 ZIntersection = INFINITY;
+                    
+                    u32 LineIndices[2];
+                    if(IsDegenerateTriangle2D(P[0].xy, P[1].xy, P[2].xy, LineIndices))
+                    {                            
+                        //TODO(JJ): Do we even need to handle this degenerate case? I feel like the rest of the algorithm 
+                        // will provide a much more numerically stable result than to figure out the triangles z on the
+                        //degenerate cases. Maybe we handle this case just for blockers since we know the players z should
+                        //just be exactly where the player z currently is
 #if 0                                                     
-                            if(IsPointOnLine2D(LocalPolePosition, P[LineIndices[0]].xy, P[LineIndices[1]].xy))                                                        
-                                ZIntersection = FindTriangleZ(P[0], P[1], P[2], LocalPolePosition.xy);                                                                                                                                                                        
+                        if(IsPointOnLine2D(LocalPolePosition, P[LineIndices[0]].xy, P[LineIndices[1]].xy))                                                        
+                            ZIntersection = FindTriangleZ(P[0], P[1], P[2], LocalPolePosition.xy);                                                                                                                                                                        
 #endif
+                    }
+                    else if(IsPointInTriangle2D(Pole->Position2D, P[0].xy, P[1].xy, P[2].xy))                            
+                        ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                
+                    
+                    if(ZIntersection != INFINITY)
+                    {                                                        
+                        if((ZIntersection <= (Player->Position.z + Player->Height)) &&
+                           (ZIntersection > Pole->ZIntersection))
+                        {
+                            if(Pole->ZIntersection != -FLT_MAX)
+                                DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));                                                                                                
+                            
+                            Pole->ZIntersection = ZIntersection;                                
+                            HitEntity = Entity;
                         }
-                        else if(IsPointInTriangle2D(Pole->Position2D, P[0].xy, P[1].xy, P[2].xy))                            
-                            ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                
-                        
-                        if(ZIntersection != INFINITY)
-                        {                                                        
-                            if((ZIntersection <= (Player->Position.z + Player->Scale.z)) &&
-                               (ZIntersection > Pole->ZIntersection))
-                            {
-                                if(Pole->ZIntersection != -FLT_MAX)
-                                    DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));                                                                                                
-                                
-                                Pole->ZIntersection = ZIntersection;                                
-                                HitEntity = Entity;
-                            }
-                            else
-                                DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));
-                        }
-                    }                                                            
-                }
+                        else
+                            DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));
+                    }
+                }                                                                            
             }
             
             if(Pole->ZIntersection != -FLT_MAX)

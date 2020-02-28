@@ -458,6 +458,16 @@ operator*(v3f Left, v3f Right)
 }
 
 inline v3f 
+operator/(v3f Left, v3f Right)
+{
+    v3f Result;
+    Result.x = Left.x / Right.x;
+    Result.y = Left.y / Right.y;
+    Result.z = Left.z / Right.z;
+    return Result;
+}
+
+inline v3f 
 operator-(v3f V)
 {
     v3f Result = {-V.x, -V.y, -V.z};
@@ -576,33 +586,29 @@ struct m3
     union
     {
         f32 M[9];
+        v3f Rows[3];
         struct
         {
             f32 m00, m01, m02;
             f32 m10, m11, m12;
             f32 m20, m21, m22;
+            f32 m30, m31, m32;
         };
         
         struct
         {
-            v3f Column0;
-            v3f Column1;
-            v3f Column2;
+            v3f Row0;
+            v3f Row1;
+            v3f Row2;            
         };
         
-        struct 
+        struct
         {
             v3f XAxis;
             v3f YAxis;
-            v3f ZAxis;
+            v3f ZAxis;            
         };
     };
-    
-    inline f32& operator[](u32 Index)
-    {
-        ASSERT(Index < 9);
-        return M[Index];
-    }
 };
 
 inline m3
@@ -616,13 +622,23 @@ M3(f32 Diagonal)
 }
 
 inline m3
+M3(v3f XAxis, v3f YAxis, v3f ZAxis)
+{
+    m3 Result;
+    Result.XAxis = XAxis;
+    Result.YAxis = YAxis;
+    Result.ZAxis = ZAxis;    
+    return Result;
+}
+
+inline m3
 IdentityM3()
 {
     m3 Result = M3(1.0f);
     return Result;
 }
 
-inline m3 
+inline m3
 Transpose(m3 M)
 {
     m3 Result;
@@ -638,29 +654,28 @@ Transpose(m3 M)
     return Result;
 }
 
-inline m3 
+inline m3
 operator*(m3 Left, m3 Right)
 {
+    Right = Transpose(Right);
     m3 Result;
-    Right = Transpose(Right);   
     
-    Result.m00 = Dot(Left.Column0, Right.Column0);
-    Result.m01 = Dot(Left.Column0, Right.Column1);
-    Result.m02 = Dot(Left.Column0, Right.Column2);
-    Result.m10 = Dot(Left.Column1, Right.Column0);
-    Result.m11 = Dot(Left.Column1, Right.Column1);
-    Result.m12 = Dot(Left.Column1, Right.Column2);
-    Result.m20 = Dot(Left.Column2, Right.Column0);
-    Result.m21 = Dot(Left.Column2, Right.Column1);
-    Result.m22 = Dot(Left.Column2, Right.Column2);
-    
+    Result.m00 = Dot(Left.Rows[0], Right.Rows[0]);
+    Result.m01 = Dot(Left.Rows[0], Right.Rows[1]);
+    Result.m02 = Dot(Left.Rows[0], Right.Rows[2]);
+    Result.m10 = Dot(Left.Rows[1], Right.Rows[0]);
+    Result.m11 = Dot(Left.Rows[1], Right.Rows[1]);
+    Result.m12 = Dot(Left.Rows[1], Right.Rows[2]);
+    Result.m20 = Dot(Left.Rows[2], Right.Rows[0]);
+    Result.m21 = Dot(Left.Rows[2], Right.Rows[1]);
+    Result.m22 = Dot(Left.Rows[2], Right.Rows[2]);
     return Result;
 }
 
 inline m3& 
 operator*=(m3& Left, m3 Right)
 {
-    Left = Left * Right;
+    Left = Left*Right;
     return Left;
 }
 
@@ -669,6 +684,7 @@ struct m4
     union
     {
         f32 M[16];
+        v4f Rows[4];
         struct
         {
             f32 m00, m01, m02, m03;
@@ -679,10 +695,10 @@ struct m4
         
         struct
         {
-            v4f Column0;
-            v4f Column1;
-            v4f Column2;
-            v4f Column3;
+            v4f Row0;
+            v4f Row1;
+            v4f Row2;
+            v4f Row3;
         };
         
         struct
@@ -693,15 +709,10 @@ struct m4
             v4f Translation;
         };
     };
-    
-    inline f32& operator[](u32 Index)
-    {
-        ASSERT(Index < 16);
-        return M[Index];
-    }
 };
 
-inline m4 M4(f32 Diagonal)
+inline m4
+M4(f32 Diagonal)
 {
     m4 Result = {};
     Result.m00 = Diagonal;
@@ -711,7 +722,15 @@ inline m4 M4(f32 Diagonal)
     return Result;
 }
 
-inline m4 Transpose(m4 M)
+inline m4
+IdentityM4()
+{
+    m4 Result = M4(1.0f);
+    return Result;
+}
+
+inline m4
+Transpose(m4 M)
 {
     m4 Result;
     Result.m00 = M.m00;
@@ -733,55 +752,117 @@ inline m4 Transpose(m4 M)
     return Result;
 }
 
-inline m4 TransformM4(v3f Position, m3 Orient)
-{    
+inline m4
+TransformM4(v3f Position, m3 Orientation)
+{
+    m4 Result;
+    Result.XAxis       = V4(Orientation.XAxis, 0.0f);
+    Result.YAxis       = V4(Orientation.YAxis, 0.0f);
+    Result.ZAxis       = V4(Orientation.ZAxis, 0.0f);
+    Result.Translation = V4(Position, 1.0f);
+    return Result;
+}
+
+inline m4 
+InverseTransformM4(v3f Position, m3 Orientation)
+{
+    f32 tx = -Dot(Position, Orientation.XAxis);
+    f32 ty = -Dot(Position, Orientation.YAxis);
+    f32 tz = -Dot(Position, Orientation.ZAxis);
+    
     m4 Result = 
     {
-        Orient.m00, Orient.m01, Orient.m02, 0.0f, 
-        Orient.m10, Orient.m11, Orient.m12, 0.0f, 
-        Orient.m20, Orient.m21, Orient.m22, 0.0f,
-        Position.x, Position.y, Position.z, 1.0f
+        Orientation.m00, Orientation.m10, Orientation.m20, 0.0f,
+        Orientation.m01, Orientation.m11, Orientation.m21, 0.0f,
+        Orientation.m02, Orientation.m12, Orientation.m22, 0.0f,
+        tx,              ty,              tz,              1.0f 
     };
+    
     return Result;
 }
 
-inline m4 InverseTransformM4(v3f Pos, m3 Orient)
-{    
+inline m4
+InverseTransformM4(m4 M)
+{
+    f32 sx = InverseMagnitude(M.XAxis.xyz);
+    f32 sy = InverseMagnitude(M.YAxis.xyz);
+    f32 sz = InverseMagnitude(M.ZAxis.xyz);
+    
+    v3f x = sx*M.XAxis.xyz;
+    v3f y = sy*M.YAxis.xyz;
+    v3f z = sz*M.ZAxis.xyz;
+    
+    f32 tx = -Dot(M.Translation.xyz, x);
+    f32 ty = -Dot(M.Translation.xyz, y);
+    f32 tz = -Dot(M.Translation.xyz, z);
+    
     m4 Result = 
     {
-        Orient.m00               , Orient.m10               , Orient.m20                 , 0.0f,
-        Orient.m01               , Orient.m11               , Orient.m21                 , 0.0f,
-        Orient.m02               , Orient.m12               , Orient.m22                 , 0.0f,
-        -Dot(Pos, Orient.Column0), -Dot(Pos, Orient.Column1), -Dot(Pos, Orient.Column2)  , 1.0f
-    };    
+        x.x, y.x, z.x, 0,
+        x.y, y.y, z.y, 0,
+        x.z, y.z, z.z, 0,
+        tx,  ty,  tz,  1
+    };
+    
     return Result;
 }
 
-inline m4 IdentityM4()
+inline m4
+operator*(m4 Left, m4 Right)
 {
-    m4 Result = M4(1.0f);    
+    Right = Transpose(Right);
+    m4 Result;
+    
+    Result.m00 = Dot(Left.Rows[0], Right.Rows[0]);
+    Result.m01 = Dot(Left.Rows[0], Right.Rows[1]);
+    Result.m02 = Dot(Left.Rows[0], Right.Rows[2]);
+    Result.m03 = Dot(Left.Rows[0], Right.Rows[3]);
+    
+    Result.m10 = Dot(Left.Rows[1], Right.Rows[0]);
+    Result.m11 = Dot(Left.Rows[1], Right.Rows[1]);
+    Result.m12 = Dot(Left.Rows[1], Right.Rows[2]);
+    Result.m13 = Dot(Left.Rows[1], Right.Rows[3]);
+    
+    Result.m20 = Dot(Left.Rows[2], Right.Rows[0]);
+    Result.m21 = Dot(Left.Rows[2], Right.Rows[1]);
+    Result.m22 = Dot(Left.Rows[2], Right.Rows[2]);
+    Result.m23 = Dot(Left.Rows[2], Right.Rows[3]);
+    
+    Result.m30 = Dot(Left.Rows[3], Right.Rows[0]);
+    Result.m31 = Dot(Left.Rows[3], Right.Rows[1]);
+    Result.m32 = Dot(Left.Rows[3], Right.Rows[2]);
+    Result.m33 = Dot(Left.Rows[3], Right.Rows[3]);
     return Result;
 }
 
-inline m4 TranslationM4(f32 x, f32 y, f32 z)
+inline m4& 
+operator*=(m4& Left, m4 Right)
 {
-    m4 Result = IdentityM4();
-    Result.Translation = V4(x, y, z, 1.0f);
-    return Result;
+    Left = Left*Right;
+    return Left;
 }
 
-inline v4f operator*(m4 Left, v4f Right)
+inline v4f
+operator*(v4f Left, m4 Right)
 {
-    Left = Transpose(Left);
+    Right = Transpose(Right);
     v4f Result;
-    Result.x = Dot(Left.Column0, Right);
-    Result.y = Dot(Left.Column1, Right);
-    Result.z = Dot(Left.Column2, Right);
-    Result.w = Dot(Left.Column3, Right);
+    Result.x = Dot(Left, Right.Rows[0]);
+    Result.y = Dot(Left, Right.Rows[1]);
+    Result.z = Dot(Left, Right.Rows[2]);
+    Result.w = Dot(Left, Right.Rows[3]);
     return Result;
 }
 
-inline m4 PerspectiveM4(f32 FieldOfView, f32 AspectRatio, f32 Near, f32 Far)
+inline v4f&
+operator*=(v4f& Left, m4 Right)
+{    
+    Left = Left*Right;
+    return Left;
+}
+
+inline m4
+PerspectiveM4(f32 FieldOfView, f32 AspectRatio, f32 Near, f32 Far)
 {
     f32 c = 1.0f/Tan(FieldOfView*0.5f);
     f32 a = AspectRatio;
@@ -794,7 +875,7 @@ inline m4 PerspectiveM4(f32 FieldOfView, f32 AspectRatio, f32 Near, f32 Far)
         0.0f, 0.0f, -(2.0f*Far*Near)/(Far-Near),  0.0f
     };
     
-    return Result;    
+    return Result;
 }
 
 struct quaternion
@@ -947,32 +1028,6 @@ quaternion RotQuat(v3f Axis, f32 Angle)
     return Result;
 }
 
-inline m3 ToMatrix3(quaternion Q)
-{
-    f32 qxqy = Q.x*Q.y;
-    f32 qwqz = Q.w*Q.z;
-    f32 qxqz = Q.x*Q.z;
-    f32 qwqy = Q.w*Q.y;
-    f32 qyqz = Q.y*Q.z;
-    f32 qwqx = Q.w*Q.x;
-    
-    f32 xSqr = Q.x*Q.x;
-    f32 ySqr = Q.y*Q.y;
-    f32 zSqr = Q.z*Q.z;
-    
-    m3 Result;
-    Result[0] = 1.0f - 2.0f*(ySqr + zSqr);
-    Result[1] = 2.0f*(qxqy + qwqz);
-    Result[2] = 2.0f*(qxqz - qwqy);
-    Result[3] = 2.0f*(qxqy - qwqz);
-    Result[4] = 1.0f - 2.0f*(xSqr + zSqr);
-    Result[5] = 2.0f*(qyqz + qwqx);
-    Result[6] = 2.0f*(qxqz + qwqy);
-    Result[7] = 2.0f*(qyqz - qwqx);
-    Result[8] = 1.0f - 2.0f*(xSqr + ySqr);    
-    return Result;
-}
-
 inline v3f 
 Rotate(v3f V, quaternion Q)
 {
@@ -999,6 +1054,29 @@ CreateSQT(v3f Position, v3f Scale, v3f Euler)
     return Result;
 }
 
+inline m3 
+ToMatrix3(quaternion Q)
+{
+    f32 qxqy = Q.x*Q.y;
+    f32 qwqz = Q.w*Q.z;
+    f32 qxqz = Q.x*Q.z;
+    f32 qwqy = Q.w*Q.y;
+    f32 qyqz = Q.y*Q.z;
+    f32 qwqx = Q.w*Q.x;
+    
+    f32 qxqx = Square(Q.x);
+    f32 qyqy = Square(Q.y);
+    f32 qzqz = Square(Q.z);
+    
+    m3 Result = 
+    {
+        1 - 2*(qyqy+qzqz), 2*(qxqy+qwqz),     2*(qxqz-qwqy),   
+        2*(qxqy-qwqz),     1 - 2*(qxqx+qzqz), 2*(qyqz+qwqx),   
+        2*(qxqz+qwqy),     2*(qyqz-qwqx),     1 - 2*(qxqx+qyqy)
+    };
+    return Result;
+}
+
 inline m4
 TransformM4(sqt SQT)
 {
@@ -1012,8 +1090,18 @@ TransformM4(sqt SQT)
 
 inline v3f TransformV3(v3f Point, sqt Transform)
 {
-    v3f Result = (Rotate(Point*Transform.Scale, Transform.Orientation)) + Transform.Position;
+    v3f Result = Rotate(Point*Transform.Scale, Transform.Orientation) + Transform.Position;
     return Result;
+}
+
+inline v3f InverseTransformV3(v3f Point, sqt Transform)
+{
+    v3f Result = Rotate(Point-Transform.Position, Conjugate(Transform.Orientation)) / Transform.Scale;
+    return Result;
+}
+
+inline v3f TransformV3(v3f Point, m4 Transform)
+{
 }
 
 #endif

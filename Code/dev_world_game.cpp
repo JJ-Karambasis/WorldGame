@@ -32,56 +32,12 @@ GetFrameFileOffset(frame_offset_array* Array, u32 FrameIndex)
 }
 
 void WriteGameState(development_game* Game)
-{
-    frame_recording* Recording = &Game->FrameRecordings;
-    ASSERT(Recording->FrameOffsets.Count < Recording->MaxFrameCount);
-    Recording->FrameOffsets.Ptr[Recording->FrameOffsets.Count++] = Recording->NextFrameOffset;
-    
-    arena* Stream = &Recording->FrameStream;
-    PushWriteStruct(Stream, &Game->AllocatedEntities.Count, u32, 0);        
-    for(entity* Entity = Game->AllocatedEntities.First; Entity; Entity = Entity->Next)
-    {
-        PushWriteStruct(Stream, &Entity->IsBlocker, b32, 0);
-        PushWriteStruct(Stream, &Entity->Transform, sqt, 0);
-        PushWriteStruct(Stream, &Entity->Color,     c4, 0);
-        PushWriteStruct(Stream, &Entity->Velocity,  v3f, 0);                
-    }
-    
-    input* Input = Game->Input;
-    for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input->Buttons); ButtonIndex++)    
-        PushWriteStruct(Stream, Input->Buttons+ButtonIndex, button, 0);    
-    
-    PushWriteStruct(Stream, &Input->dt, f32, 0);
-    
-    ptr EntitySize = sizeof(entity_data)*Game->AllocatedEntities.Count;
-    ptr ButtonSize = sizeof(button)*ARRAYCOUNT(Input->Buttons);
-    ptr MiscSize = sizeof(u32)+sizeof(f32);
-    ptr EntrySize = EntitySize+ButtonSize+MiscSize;
-    
-    Recording->NextFrameOffset += EntrySize;
+{    
 }
 
 void ReadGameState(development_game* Game, u32 FrameIndex)
 {
-    frame_recording* Recording = &Game->FrameRecordings;
     
-    FreeAllEntities(Game);    
-    ptr Offset = GetFrameFileOffset(&Recording->FrameOffsets, FrameIndex);
-    
-    Global_Platform->ReadFile(Recording->File, &Game->AllocatedEntities.Count, sizeof(u32), (u64)Offset);
-    entity_data* EntityData = PushArray(Game->AllocatedEntities.Count, entity_data, Clear, 0);
-    Global_Platform->ReadFile(Recording->File, EntityData, sizeof(entity_data)*Game->AllocatedEntities.Count, NO_OFFSET);
-    
-    for(u32 EntityIndex = 0; EntityIndex < Game->AllocatedEntities.Count; EntityIndex++)
-    {
-        entity* Entity    = CreateEntity(Game, V3(), V3(), V3(), EntityData[EntityIndex].Color, EntityData[EntityIndex].IsBlocker, &Game->BoxMesh);
-        Entity->Transform = EntityData[EntityIndex].Transform;
-        Entity->Velocity  = EntityData[EntityIndex].Velocity;
-    }
-    
-    input* Input = Game->Input;
-    Global_Platform->ReadFile(Recording->File, Input->Buttons, ARRAYCOUNT(Input->Buttons)*sizeof(button), NO_OFFSET);
-    Global_Platform->ReadFile(Recording->File, &Input->dt, sizeof(f32), NO_OFFSET);
 }
 
 void DevelopmentTick(development_game* Game)
