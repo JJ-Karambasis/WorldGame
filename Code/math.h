@@ -784,9 +784,9 @@ InverseTransformM4(v3f Position, m3 Orientation)
 inline m4
 InverseTransformM4(m4 M)
 {
-    f32 sx = InverseMagnitude(M.XAxis.xyz);
-    f32 sy = InverseMagnitude(M.YAxis.xyz);
-    f32 sz = InverseMagnitude(M.ZAxis.xyz);
+    f32 sx = 1.0f/SquareMagnitude(M.XAxis.xyz);
+    f32 sy = 1.0f/SquareMagnitude(M.YAxis.xyz);
+    f32 sz = 1.0f/SquareMagnitude(M.ZAxis.xyz);
     
     v3f x = sx*M.XAxis.xyz;
     v3f y = sy*M.YAxis.xyz;
@@ -859,6 +859,17 @@ operator*=(v4f& Left, m4 Right)
 {    
     Left = Left*Right;
     return Left;
+}
+
+inline v4f
+operator*(m4 Left, v4f Right)
+{              
+    v4f Result;
+    Result.x = Dot(Left.Rows[0], Right);
+    Result.y = Dot(Left.Rows[1], Right);
+    Result.z = Dot(Left.Rows[2], Right);
+    Result.w = Dot(Left.Rows[3], Right);
+    return Result;
 }
 
 inline m4
@@ -1102,6 +1113,8 @@ inline v3f InverseTransformV3(v3f Point, sqt Transform)
 
 inline v3f TransformV3(v3f Point, m4 Transform)
 {
+    v4f Result = V4(Point, 1.0f)*Transform;
+    return Result.xyz;
 }
 
 #endif

@@ -247,6 +247,7 @@ PLATFORM_OPEN_FILE(Win32_OpenFile)
     
     platform_file_handle* Result = (platform_file_handle*)Win32_AllocateMemory(sizeof(platform_file_handle));
     Result->Handle = Handle;
+    Result->Attributes = Attributes;
     return Result;
 }    
 
@@ -309,11 +310,15 @@ PLATFORM_CLOSE_FILE(Win32_CloseFile)
 platform* Win32_GetPlatformStruct()
 {
     local platform Result;
-    Result.Log = Win32_Log;
-    Result.AllocateMemory = Win32_AllocateMemory;
-    Result.FreeMemory = Win32_FreeMemory;   
-    Result.ReadEntireFile = Win32_ReadEntireFile;
+    Result.Log             = Win32_Log;
+    Result.AllocateMemory  = Win32_AllocateMemory;
+    Result.FreeMemory      = Win32_FreeMemory;   
+    Result.ReadEntireFile  = Win32_ReadEntireFile;
     Result.WriteEntireFile = Win32_WriteEntireFile;    
+    Result.OpenFile        = Win32_OpenFile;
+    Result.ReadFile        = Win32_ReadFile;
+    Result.WriteFile       = Win32_WriteFile;
+    Result.CloseFile       = Win32_CloseFile;
     return &Result;
 }
 
@@ -366,10 +371,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     development_input Input = {};
     development_game Game = {};
     
-    Game.DevArena = CreateArena(MEGABYTE(1));
-    frame_recording* FrameRecording = &Game.FrameRecordings;    
-    FrameRecording->MaxFrameCount = 300;    
-    FrameRecording->FrameOffsets.Ptr = PushArray(&Game.DevArena, FrameRecording->MaxFrameCount, ptr, Clear, 0);
+    Game.DevArena = CreateArena(MEGABYTE(32));
+    frame_recording* FrameRecording = &Game.FrameRecordings;        
+    FrameRecording->MaxFrameCount = 1000000;    
+    FrameRecording->FrameOffsets = PushArray(&Game.DevArena, FrameRecording->MaxFrameCount, ptr, Clear, 0);
 #else
     input Input = {};
     game Game = {};
@@ -489,7 +494,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                                 PostQuitMessage(0);
                             
 #if DEVELOPER_BUILD
-                            if(FrameRecording->RecordingState == RECORDING_STATE_NONE || FrameRecording->RecordingState == RECORDING_STATE_PLAYBACK)                            
+                            if(FrameRecording->RecordingState == RECORDING_STATE_NONE || FrameRecording->RecordingState == RECORDING_STATE_RECORDING)                            
 #endif
                             {
                                 switch(RawKeyboard->VKey)
@@ -500,9 +505,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                                     BIND_KEY('D', Input.MoveRight);                            
                                     BIND_KEY('Q', Input.SwitchWorld);                                
                                 }
+                            }                            
+#if DEVELOPER_BUILD           
+                            else
+                            {
+                                ClearArray(Input.Buttons, ARRAYCOUNT(input::Buttons), button); 
                             }
                             
-#if DEVELOPER_BUILD                            
                             switch(RawKeyboard->VKey)
                             {
                                 BIND_KEY(VK_MENU, Input.Alt);

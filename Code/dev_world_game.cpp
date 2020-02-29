@@ -11,37 +11,77 @@ struct entity_data
 #pragma pack(pop)
 
 inline ptr 
-GetFrameOffsetSize(frame_offset_array* Array)
+GetFrameOffsetSize(u32 FrameCount)
 {
-    ptr Result = sizeof(ptr)*Array->Count;
+    ptr Result = sizeof(ptr)*FrameCount;
     return Result;
 }
 
 inline ptr 
-GetFrameOffsetArraySize(frame_offset_array* Array)
+GetFrameOffsetArraySize(u32 FrameCount)
 {
-    ptr Result = GetFrameOffsetSize(Array) + sizeof(u32);
+    ptr Result = GetFrameOffsetSize(FrameCount) + sizeof(u32);
     return Result;
 }
 
 inline ptr
-GetFrameFileOffset(frame_offset_array* Array, u32 FrameIndex)
+GetFrameFileOffset(ptr* Array, u32 FrameCount, u32 FrameIndex)
 {
-    ptr Result = GetFrameOffsetArraySize(Array) + Array->Ptr[FrameIndex];
+    ptr Result = GetFrameOffsetArraySize(FrameCount) + Array[FrameIndex];
     return Result;
 }
 
 void WriteGameState(development_game* Game)
-{    
+{
+    frame_recording* FrameRecording = &Game->FrameRecordings;
+    FrameRecording->FrameOffsets[FrameRecording->FrameCount++] = FrameRecording->NextFrameOffset;
+    
+    player* Player = &Game->Player;    
+    input* Input = Game->Input;
+    
+    ptr EntrySize = 0;
+    PushWriteStruct(&FrameRecording->FrameStream, &Player->Position, v3f, 0); EntrySize += sizeof(v3f);
+    PushWriteStruct(&FrameRecording->FrameStream, &Player->Velocity, v3f, 0); EntrySize += sizeof(v3f);
+    PushWriteStruct(&FrameRecording->FrameStream, &Input->dt, f32, 0); EntrySize += sizeof(f32);
+    PushWriteArray(&FrameRecording->FrameStream, Input->Buttons, ARRAYCOUNT(Input->Buttons), button, 0); EntrySize += sizeof(Input->Buttons);         
+    FrameRecording->NextFrameOffset += EntrySize;
 }
 
 void ReadGameState(development_game* Game, u32 FrameIndex)
 {
+    frame_recording* FrameRecording = &Game->FrameRecordings;    
+    ptr Offset = GetFrameFileOffset(FrameRecording->FrameOffsets, FrameRecording->FrameCount, FrameIndex);
     
+    player* Player = &Game->Player;
+    input* Input = Game->Input;
+    
+#pragma pack(push, 1)
+    struct
+    {
+        v3f Position;
+        v3f Velocity;
+        f32 dt;
+        button Buttons[ARRAYCOUNT(input::Buttons)];
+    } Context;
+    
+#pragma pack(pop)
+    platform_file_handle* File = FrameRecording->File;
+    ASSERT(Global_Platform->ReadFile(File, &Context, sizeof(Context), (u64)Offset));
+    
+    Player->Position = Context.Position;
+    Player->Velocity = Context.Velocity;
+    Input->dt = Context.dt;
+    CopyArray(Input->Buttons, Context.Buttons, ARRAYCOUNT(input::Buttons), button);
 }
 
 void DevelopmentTick(development_game* Game)
 {
+    if(!Game->DevInitialized)
+    {
+        Game->FrameRecordings.FrameStream = CreateArena(MEGABYTE(1));
+        Game->DevInitialized = true;
+    }
+    
     development_input* Input = (development_input*)Game->Input;
     
     frame_recording* Recording = &Game->FrameRecordings;
@@ -56,8 +96,8 @@ void DevelopmentTick(development_game* Game)
             platform_file_handle* File = Global_Platform->OpenFile("frame_recording.data", PLATFORM_FILE_ATTRIBUTES_WRITE);
             ASSERT(File);
             
-            Global_Platform->WriteFile(File, &Recording->FrameOffsets.Count, sizeof(u32), NO_OFFSET);
-            Global_Platform->WriteFile(File, Recording->FrameOffsets.Ptr, (u32)GetFrameOffsetSize(&Recording->FrameOffsets), NO_OFFSET);
+            Global_Platform->WriteFile(File, &Recording->FrameCount, sizeof(u32), NO_OFFSET);
+            Global_Platform->WriteFile(File, Recording->FrameOffsets, (u32)GetFrameOffsetSize(Recording->FrameCount), NO_OFFSET);
             
             for(arena_block* Block = Recording->FrameStream.First; Block; Block = Block->Next)
             {
@@ -66,7 +106,7 @@ void DevelopmentTick(development_game* Game)
             }
             
             Recording->CurrentFrameIndex = 0;                        
-            Recording->FrameOffsets.Count = 0;
+            Recording->FrameCount = 0;
             Recording->NextFrameOffset = 0;                        
             ResetArena(&Recording->FrameStream);
             Global_Platform->CloseFile(File);
@@ -81,17 +121,20 @@ void DevelopmentTick(development_game* Game)
             Recording->File = Global_Platform->OpenFile("frame_recording.data", PLATFORM_FILE_ATTRIBUTES_READ);
             ASSERT(Recording->File);
             
-            Global_Platform->ReadFile(Recording->File, &Recording->FrameOffsets.Count, sizeof(u32), NO_OFFSET);
-            ASSERT(Recording->FrameOffsets.Count < Recording->MaxFrameCount);
-            Global_Platform->ReadFile(Recording->File, Recording->FrameOffsets.Ptr, sizeof(u32)*Recording->FrameOffsets.Count, NO_OFFSET);                        
+            Global_Platform->ReadFile(Recording->File, &Recording->FrameCount, sizeof(u32), NO_OFFSET);
+            ASSERT(Recording->FrameCount < Recording->MaxFrameCount);
+            Global_Platform->ReadFile(Recording->File, Recording->FrameOffsets, sizeof(ptr)*Recording->FrameCount, NO_OFFSET);                        
             
             Recording->RecordingState = RECORDING_STATE_PLAYBACK;
         }
         else if((Recording->RecordingState == RECORDING_STATE_PLAYBACK) ||
                 (Recording->RecordingState == RECORDING_STATE_CYCLE))
         {
+            ReadGameState(Game, 0);
             Recording->RecordingState = RECORDING_STATE_NONE;            
             Recording->CurrentFrameIndex = 0; 
+            Recording->FrameCount = 0;            
+            Global_Platform->CloseFile(Recording->File);
         }
     }
     
@@ -116,7 +159,7 @@ void DevelopmentTick(development_game* Game)
     
     if(IsPressed(Input->CycleRight) && (Recording->RecordingState == RECORDING_STATE_CYCLE))
     {
-        if(Recording->CurrentFrameIndex < Recording->FrameOffsets.Count)
+        if(Recording->CurrentFrameIndex < Recording->FrameCount)
             Recording->CurrentFrameIndex++;
     }
     
@@ -129,7 +172,7 @@ void DevelopmentTick(development_game* Game)
         
         case RECORDING_STATE_PLAYBACK:
         {
-            if(Recording->CurrentFrameIndex >= Recording->FrameOffsets.Count)
+            if(Recording->CurrentFrameIndex >= Recording->FrameCount)
                 Recording->CurrentFrameIndex = 0;
             ReadGameState(Game, Recording->CurrentFrameIndex++);
         } break;

@@ -32,18 +32,13 @@ struct development_input : public input
     f32 Scroll;
 };
 
-struct frame_offset_array
-{
-    u32 Count;
-    ptr* Ptr;
-};
-
 struct frame_recording
 {
     platform_file_handle* File;
     arena FrameStream;
     u32 MaxFrameCount;
-    frame_offset_array FrameOffsets;
+    u32 FrameCount;
+    ptr* FrameOffsets;    
     ptr NextFrameOffset;
     u32 CurrentFrameIndex;
     recording_state RecordingState;
@@ -55,6 +50,7 @@ struct development_game : public game
     b32 InDevelopmentMode;
     camera DevCamera;      
     frame_recording FrameRecordings;
+    b32 DevInitialized;
 };
 
 #endif

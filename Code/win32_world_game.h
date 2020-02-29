@@ -4,7 +4,7 @@
 #include <Windows.h>
 #include "world_game.h"
 
-#define BIND_KEY(key, action) case key: { if(RawKeyboard->Flags == RI_KEY_MAKE) { action.IsDown = true; } else { action.IsDown = false; action.WasDown = true; } } break
+#define BIND_KEY(key, action) case key: { if((RawKeyboard->Flags == RI_KEY_MAKE) || (RawKeyboard->Message == WM_KEYDOWN) || (RawKeyboard->Message == WM_SYSKEYDOWN)) { action.IsDown = true; } else if((RawKeyboard->Flags == RI_KEY_BREAK) || (RawKeyboard->Message == WM_KEYUP) || (RawKeyboard->Message == WM_SYSKEYUP)) { action.IsDown = false; action.WasDown = true; } } break
 
 #define RELEASE(iunknown) \
 do \

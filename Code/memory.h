@@ -72,11 +72,12 @@ struct temp_arena
 #define PushWriteStruct_4( Arena, Data, Type, Alignment) (Type*)_PushWrite_(Arena, sizeof(Type), Data, Alignment)
 
 #define PushWriteArray( ... ) VA_SELECT(PushWriteArray, __VA_ARGS__)
-#define PushWriteArray_5( Data, Count, Type, Clear, Alignment) (Type*)_PushWrite_(__Global_Default_Arena__, sizeof(Type)*Count, Data, __ClearFlag##Clear##__, Alignment)
-#define PushWriteArray_6( Arena, Data, Count, Type, Clear, Alignment) (Type*)_PushWrite_(Arena, sizeof(Type)*Count, Data, __ClearFlag##Clear##__, Alignment)
+#define PushWriteArray_4( Data, Count, Type, Alignment) (Type*)_PushWrite_(__Global_Default_Arena__, sizeof(Type)*Count, Data, Alignment)
+#define PushWriteArray_5( Arena, Data, Count, Type, Alignment) (Type*)_PushWrite_(Arena, sizeof(Type)*Count, Data, Alignment)
 
 #define CopyArray(dst, src, count, type) CopyMemory(dst, src, sizeof(type)*count)
-#define ClearStruct(data, type) ClearMemory(data, sizeof(type));
+#define ClearStruct(data, type) ClearMemory(data, sizeof(type))
+#define ClearArray(data, count, type) ClearMemory(data, sizeof(type)*count)
 
 #ifndef DEFAULT_BLOCK_ARENA_SIZE
 #define DEFAULT_BLOCK_ARENA_SIZE MEGABYTE(1)

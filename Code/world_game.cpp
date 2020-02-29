@@ -16,7 +16,7 @@ CreateStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32
     Result->Mesh = Mesh;
     Result->IsBlocker = IsBlocker;
     Result->Next = Game->StaticEntities.Head;
-    Game->StaticEntities.Head = Result->Next;
+    Game->StaticEntities.Head = Result;
     return Result;
 }
 
@@ -122,7 +122,7 @@ EXPORT GAME_TICK(Tick)
         Player->Position = V3(0.0f, 0.0f, 1.0f);
         Player->FacingDirection = V2(0.0f, 1.0f);
                 
-        CreateStaticEntity(Game, V3(1.0f, 1.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.1f, 0.1f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
+        CreateStaticEntity(Game, V3(1.0f, 1.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
     }        
     
     Player->Radius = 0.5f;
@@ -159,7 +159,7 @@ EXPORT GAME_TICK(Tick)
     v2i EndCell   = GetCell(RequestedPosition.xy);
     
     v2i MinimumCell = MinimumV2(StartCell, EndCell)-1;
-    v2i MaximumCell = MaximumV2(StartCell, EndCell)+1;
+    v2i MaximumCell = MaximumV2(StartCell, EndCell)+1;    
     
     walkable_grid Grid = BuildWalkableGrid(MinimumCell, MaximumCell);                
     for(i32 YIndex = 0; YIndex < Grid.PoleCount.y; YIndex++)
@@ -169,41 +169,42 @@ EXPORT GAME_TICK(Tick)
             walkable_pole* Pole = GetPole(&Grid, XIndex, YIndex);            
             
             Pole->ZIntersection = -FLT_MAX;
-
+            
             static_entity* HitEntity = NULL;
             for(static_entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
-            {                              
+            {                   
                 triangle_mesh* Mesh = Entity->Mesh;
                 for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
                 {
                     triangle* Triangle = Mesh->Triangles + TriangleIndex;
-                    
+                                        
                     v3f P[3] = 
                     {
                         TransformV3(Triangle->P[0], Entity->Transform),
                         TransformV3(Triangle->P[1], Entity->Transform),
                         TransformV3(Triangle->P[2], Entity->Transform)
-                    };
+                    };                    
                     
                     f32 ZIntersection = INFINITY;
                     
                     u32 LineIndices[2];
                     if(IsDegenerateTriangle2D(P[0].xy, P[1].xy, P[2].xy, LineIndices))
                     {                            
+#if 0
                         //TODO(JJ): Do we even need to handle this degenerate case? I feel like the rest of the algorithm 
                         // will provide a much more numerically stable result than to figure out the triangles z on the
                         //degenerate cases. Maybe we handle this case just for blockers since we know the players z should
-                        //just be exactly where the player z currently is
-#if 0                                                     
-                        if(IsPointOnLine2D(LocalPolePosition, P[LineIndices[0]].xy, P[LineIndices[1]].xy))                                                        
-                            ZIntersection = FindTriangleZ(P[0], P[1], P[2], LocalPolePosition.xy);                                                                                                                                                                        
+                        //just be exactly where the player z currently is                        
+                        if(IsPointOnLine2D(Pole->Position2D, P[LineIndices[0]].xy, P[LineIndices[1]].xy))                                                        
+                            ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                                                                        
 #endif
+                        
                     }
                     else if(IsPointInTriangle2D(Pole->Position2D, P[0].xy, P[1].xy, P[2].xy))                            
                         ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                
                     
                     if(ZIntersection != INFINITY)
-                    {                                                        
+                    {                           ;
                         if((ZIntersection <= (Player->Position.z + Player->Height)) &&
                            (ZIntersection > Pole->ZIntersection))
                         {
