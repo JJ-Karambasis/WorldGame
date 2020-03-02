@@ -6,8 +6,7 @@
 
 global LARGE_INTEGER Global_Frequency;
 
-inline u64 
-Win32_Clock()
+PLATFORM_CLOCK(Win32_Clock)
 {
     LARGE_INTEGER Result;
     QueryPerformanceCounter(&Result);
@@ -21,10 +20,9 @@ Win32_ToSeconds(u64 Time)
     return Result;
 }
 
-inline f64
-Win32_Elapsed(u64 End, u64 Begin)
+PLATFORM_ELAPSED_TIME(Win32_Elapsed)
 {
-    f64 Result = Win32_ToSeconds(End-Begin);
+    f64 Result = Win32_ToSeconds(End-Start);
     return Result;
 }
 
@@ -319,6 +317,8 @@ platform* Win32_GetPlatformStruct()
     Result.ReadFile        = Win32_ReadFile;
     Result.WriteFile       = Win32_WriteFile;
     Result.CloseFile       = Win32_CloseFile;
+    Result.Clock           = Win32_Clock;
+    Result.ElapsedTime     = Win32_Elapsed;
     return &Result;
 }
 

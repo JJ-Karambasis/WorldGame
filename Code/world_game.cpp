@@ -394,5 +394,5 @@ EXPORT GAME_TICK(Tick)
         Camera->FocalPoint = Player->Position;
         Camera->Position.z += 6.0f;
         Camera->Orientation = IdentityM3();
-    }
+    }        
 }
