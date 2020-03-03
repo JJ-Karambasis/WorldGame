@@ -404,6 +404,13 @@ V3(f32 x, f32 y, f32 z)
 }
 
 inline v3f
+InvalidV3()
+{
+    v3f Result = {INFINITY, INFINITY, INFINITY};
+    return Result;
+}
+
+inline v3f
 operator+(v3f Left, v3f Right)
 {
     v3f Result;

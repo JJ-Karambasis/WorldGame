@@ -199,7 +199,7 @@ EXPORT GAME_TICK(Tick)
     DEVELOPER_GRAPHICS(Graphics);
     
     Global_Platform = Platform;        
-    InitMemory(Global_Platform->T empArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
+    InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     
     player* Player = &Game->Player;
     
@@ -322,8 +322,7 @@ EXPORT GAME_TICK(Tick)
             }                        
         }
     }
-    
-#if 1  
+        
     walkable_triangle_ring_list RingList = {};
     for(i32 YIndex = 0; YIndex < Grid.CellCount.y; YIndex++)
     {
@@ -379,9 +378,6 @@ EXPORT GAME_TICK(Tick)
                         INVALID_CODE;
                     }   
                     
-                    ASSERT(false);
-                    
-#if 0 
                     surface_intersection_query AQuery = SurfaceIntersectionQuery(TargetPole, HorizontalPole);
                     surface_intersection_query BQuery = SurfaceIntersectionQuery(TargetPole, VerticalPole);
                     
@@ -394,16 +390,16 @@ EXPORT GAME_TICK(Tick)
                     ASSERT((Abs(SignDistA0) > 1e-8f) && (Abs(SignDistB0) > 1e-8f));
                     
                     {
-                        v2f P0 = V2(TargetPole->Position.x, TargetPole->Position.y - (SignDistB0*0.5f));
-                        v2f P1 = V2(HorizontalPole->Position.x, HorizontalPole->Position.y - (SignDistB0*0.5f));
+                        v2f P0 = V2(TargetPole->Position2D.x, TargetPole->Position2D.y - (SignDistB0*0.5f));
+                        v2f P1 = V2(HorizontalPole->Position2D.x, HorizontalPole->Position2D.y - (SignDistB0*0.5f));
                         
                         b32 Check = EdgeToEdgeIntersection2D(&A.P[1], CreateEdge2D(P0, P1), AQuery.Edge);
                         ASSERT(Check);
                     }
                     
                     {
-                        v2f P0 = V2(TargetPole->Position.x - (SignDistA0*0.5f),   TargetPole->Position.y);
-                        v2f P1 = V2(VerticalPole->Position.x - (SignDistA0*0.5f), TargetPole->Position.y);
+                        v2f P0 = V2(TargetPole->Position2D.x - (SignDistA0*0.5f),   TargetPole->Position2D.y);
+                        v2f P1 = V2(VerticalPole->Position2D.x - (SignDistA0*0.5f), TargetPole->Position2D.y);
                         
                         b32 Check = EdgeToEdgeIntersection2D(&B.P[1], CreateEdge2D(P0, P1), BQuery.Edge);
                         ASSERT(Check);
@@ -412,12 +408,37 @@ EXPORT GAME_TICK(Tick)
                     ray2D RayA = CreateRay2D(A);
                     ray2D RayB = CreateRay2D(B);
                     
-                    v3f CommonPoint = {};
-                    if(RayIntersection2D(&CommonPoint.xy, RayA, RayB))
-                    {
-                        CommonPoint.z = FindTriangleZ(
+                    v3f CommonPoint = InvalidV3();                    
+                    if(RayToRayIntersection2D(&CommonPoint.xy, RayA, RayB))
+                    {                                                
+                        static_entity* HitEntity = TargetPole->HitEntity;
+                        triangle_mesh* Mesh = HitEntity->Mesh;
+                        for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
+                        {
+                            triangle* Triangle = Mesh->Triangles + TriangleIndex;
+                            v3f P[3] = 
+                            {
+                                TransformV3(Triangle->P[0], HitEntity->Transform),
+                                TransformV3(Triangle->P[1], HitEntity->Transform),
+                                TransformV3(Triangle->P[2], HitEntity->Transform)
+                            };
+                            
+                            if(IsPointInTriangle2D(P[0], P[1], P[2], CommonPoint.xy))
+                            {
+                                CommonPoint.z = FindTriangleZ(P[0], P[1], P[2], CommonPoint.xy);
+                                break;
+                            }
+                        }                            
+                        ASSERT(CommonPoint.z != INFINITY);
+                        
+                        AddQuadRings(&RingList, TargetPole->IntersectionPoint, AQuery.P, BQuery.P, CommonPoint);
                     }
-                    #endif
+                    else
+                    {
+                        NOT_IMPLEMENTED;
+                        AddTriangleRing(&RingList, TargetPole->IntersectionPoint, AQuery.P, BQuery.P);
+                    }
+                    
                 } break;
                 
                 case 4:
@@ -463,6 +484,50 @@ EXPORT GAME_TICK(Tick)
                 
                 case 8:
                 {
+                    walkable_pole* OutPole = NULL;
+                    walkable_pole* CornerInPole = NULL;
+                    walkable_pole* HorizontalInPole = NULL;
+                    walkable_pole* VerticalInPole = NULL;
+                    
+                    if(!CellPoles[POLE_BOTTOM_LEFT]->HitWalkable)
+                    {
+                        OutPole          = CellPoles[POLE_BOTTOM_LEFT];
+                        CornerInPole     = CellPoles[POLE_TOP_RIGHT];
+                        HorizontalInPole = CellPoles[POLE_TOP_LEFT];
+                        VerticalInPole   = CellPoles[POLE_BOTTOM_RIGHT];
+                    }
+                    else if(!CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
+                    {
+                        OutPole          = CellPoles[POLE_BOTTOM_RIGHT];
+                        CornerInPole     = CellPoles[POLE_TOP_LEFT];
+                        HorizontalInPole = CellPoles[POLE_TOP_RIGHT];
+                        VerticalInPole   = CellPoles[POLE_BOTTOM_LEFT];
+                    }
+                    else if(!CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                    {
+                        OutPole          = CellPoles[POLE_TOP_LEFT];
+                        CornerInPole     = CellPoles[POLE_BOTTOM_RIGHT];
+                        HorizontalInPole = CellPoles[POLE_BOTTOM_LEFT];
+                        VerticalInPole   = CellPoles[POLE_TOP_RIGHT];
+                    }
+                    else if(!CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                    {
+                        OutPole          = CellPoles[POLE_TOP_RIGHT];
+                        CornerInPole     = CellPoles[POLE_BOTTOM_LEFT];
+                        HorizontalInPole = CellPoles[POLE_TOP_LEFT];
+                        VerticalInPole   = CellPoles[POLE_BOTTOM_RIGHT];
+                    }
+                    else
+                    {
+                        INVALID_CODE;
+                    }
+                    
+                    surface_intersection_query AQuery = SurfaceIntersectionQuery(HorizontalInPole, OutPole);
+                    surface_intersection_query BQuery = SurfaceIntersectionQuery(VerticalInPole, OutPole);
+                    
+                    AddTriangleRing(&RingList, AQuery.P, HorizontalInPole->IntersectionPoint, CornerInPole->IntersectionPoint);
+                    AddTriangleRing(&RingList, AQuery.P, CornerInPole->IntersectionPoint, BQuery.P);
+                    AddTriangleRing(&RingList, BQuery.P, VerticalInPole->IntersectionPoint, CornerInPole->IntersectionPoint);
                 } break;
                 
                 case 16:
@@ -495,7 +560,7 @@ EXPORT GAME_TICK(Tick)
             BestSqrDistance = SqrDistance;
         }
     }
-#endif
+    
     Player->Position = FinalPosition;
     DRAW_POINT(Player->Position, 0.05f, RGBA(0.0f, 0.0f, 0.0f, 1.0f));
     

@@ -11,6 +11,12 @@ struct edge3D
     v3f P[2];
 };
 
+struct ray2D
+{
+    v2f Origin;
+    v2f Direction;
+};
+
 struct triangle
 {
     v3f P[3];    

@@ -22,6 +22,12 @@ edge3D CreateEdge3D(v3f P0, v3f P1)
     return Result;
 }
 
+ray2D CreateRay2D(edge2D Edge)
+{
+    ray2D Result = {Edge.P[0], Normalize(Edge.P[1]-Edge.P[0])};
+    return Result;
+}
+
 triangle_mesh CreateBoxMesh(arena* Storage)
 {
     triangle_mesh Result = {};
@@ -175,6 +181,12 @@ b32 IsPointInTriangle2D(v2f a, v2f b, v2f c, v2f p)
 #endif
 }
 
+b32 IsPointInTriangle2D(v3f a, v3f b, v3f c, v2f p)
+{
+    b32 Result = IsPointInTriangle2D(a.xy, b.xy, c.xy, p);
+    return Result;    
+}
+
 b32 IsDegenerateTriangle2D(v2f a, v2f b, v2f c, u32* LineIndices)
 {
     b32 ABEqual = (a == b);
@@ -308,4 +320,26 @@ b32 EdgeToEdgeIntersection2D(v2f* Result, edge3D Edge0, edge3D Edge1)
 b32 EdgeToEdgeIntersection2D(v2f* Result, edge2D Edge0, edge3D Edge1)
 {
     return EdgeToEdgeIntersection2D(Result, Edge0.P[0], Edge0.P[1], Edge1.P[0].xy, Edge1.P[1].xy);
+}
+
+b32 RayToRayIntersection2D(v2f* Result, ray2D A, ray2D B)
+{
+    f32 Determinant = B.Direction.x*A.Direction.y - B.Direction.y*A.Direction.x;
+    if(Abs(Determinant) < 1e-6f)
+        return false;
+    f32 InvDeterminant = 1.0f/Determinant;
+    
+    f32 dx = B.Origin.x - A.Origin.x;
+    f32 dy = B.Origin.y - A.Origin.y;
+    
+    f32 u = (dy*B.Direction.x - dx*B.Direction.y) * InvDeterminant;
+    f32 v = (dy*A.Direction.x - dx*A.Direction.y) * InvDeterminant;
+    
+    if(u >= 0 && v >= 0)
+    {
+        *Result = A.Origin + A.Direction*u;
+        return true;
+    }    
+    
+    return false;
 }
