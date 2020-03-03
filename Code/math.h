@@ -164,6 +164,13 @@ struct v2f
     };
 };
 
+inline v2f
+InvalidV2()
+{
+    v2f Result = {INFINITY, INFINITY};
+    return Result;
+}
+
 inline v2f 
 V2(i32 x, i32 y)
 {

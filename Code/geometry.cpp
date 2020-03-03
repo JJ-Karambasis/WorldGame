@@ -1,3 +1,27 @@
+edge2D CreateEdge2D(v2f P0, v2f P1)
+{
+    edge2D Result;
+    Result.P[0] = P0;
+    Result.P[1] = P1;
+    return Result;
+}
+
+edge2D CreateEdge2D(v3f P0, v3f P1)
+{
+    edge2D Result;
+    Result.P[0] = P0.xy;
+    Result.P[1] = P1.xy;
+    return Result;
+}
+
+edge3D CreateEdge3D(v3f P0, v3f P1)
+{
+    edge3D Result;
+    Result.P[0] = P0;
+    Result.P[1] = P1;
+    return Result;
+}
+
 triangle_mesh CreateBoxMesh(arena* Storage)
 {
     triangle_mesh Result = {};
@@ -125,7 +149,7 @@ f32 GetTriangleArea2D(v2f p0, v2f p1, v2f p2)
     return Result;
 }
 
-b32 IsPointInTriangle2D(v2f p, v2f a, v2f b, v2f c)
+b32 IsPointInTriangle2D(v2f a, v2f b, v2f c, v2f p)
 {
     //NOTE(EVERYONE): Need to make sure that the input triangle is actually not a line
     ASSERT((a != b) && (a != c));
@@ -247,4 +271,41 @@ v3f PointTriangleClosestPoint(v3f a, v3f b, v3f c, v3f p)
     f32 v = vb*denom;
     f32 w = vc*denom;
     return a + ab*v + ac*w;
+}
+
+b32 EdgeToEdgeIntersection2D(v2f* Result, v2f P0, v2f P1, v2f P2, v2f P3)
+{
+    v2f E1 = P1 - P0;
+    v2f E2 = P3 - P2;    
+    f32 Determinant = -E2.x*E1.y + E1.x*E2.y;    
+    
+    if(Abs(Determinant) < 1e-6f) return false;
+    
+    f32 InvDeterminant = 1.0f/Determinant;
+    
+    f32 s = (-E1.y * (P0.x-P2.x) + E1.x * (P0.y-P2.y))*InvDeterminant;
+    f32 t = ( E2.x * (P0.y-P2.y) - E2.y * (P0.x-P2.x))*InvDeterminant;
+    
+    if(s >= 0 && s <= 1.0f && t >= 0.0f && t <= 1.0f)
+    {
+        *Result = P0 + t*E1;
+        return true;
+    }
+    
+    return false;    
+}
+
+b32 EdgeToEdgeIntersection2D(v2f* Result, edge2D Edge0, edge2D Edge1)
+{
+    return EdgeToEdgeIntersection2D(Result, Edge0.P[0], Edge0.P[1], Edge1.P[0], Edge1.P[1]);
+}
+
+b32 EdgeToEdgeIntersection2D(v2f* Result, edge3D Edge0, edge3D Edge1)
+{
+    return EdgeToEdgeIntersection2D(Result, Edge0.P[0].xy, Edge0.P[1].xy, Edge1.P[0].xy, Edge1.P[1].xy);
+}
+
+b32 EdgeToEdgeIntersection2D(v2f* Result, edge2D Edge0, edge3D Edge1)
+{
+    return EdgeToEdgeIntersection2D(Result, Edge0.P[0], Edge0.P[1], Edge1.P[0].xy, Edge1.P[1].xy);
 }

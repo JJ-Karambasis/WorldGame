@@ -67,13 +67,23 @@ walkable_grid BuildWalkableGrid(v2i Min, v2i Max)
     return Result;
 }
 
+#define DEBUG_DRAW_RING(ring) \
+DRAW_POINT(ring->P[0], 0.00f, RGBA(0.0f, 1.0f, 0.0f, 1.0f)); \
+DRAW_POINT(ring->P[1], 0.00f, RGBA(0.0f, 1.0f, 0.0f, 1.0f)); \
+DRAW_POINT(ring->P[2], 0.00f, RGBA(0.0f, 1.0f, 0.0f, 1.0f)); \
+DRAW_LINE(ring->P[0], ring->P[1], 0.01f, 0.01f, RGBA(1.0f, 1.0f, 1.0f, 1.0f)); \
+DRAW_LINE(ring->P[1], ring->P[2], 0.01f, 0.01f, RGBA(1.0f, 1.0f, 1.0f, 1.0f)); \
+DRAW_LINE(ring->P[2], ring->P[0], 0.01f, 0.01f, RGBA(1.0f, 1.0f, 1.0f, 1.0f))
+
 inline void 
 AddTriangleRing(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2)
 {
     walkable_triangle_ring* Ring = PushStruct(walkable_triangle_ring, Clear, 0);
     Ring->P[0] = p0; Ring->P[1] = p1; Ring->P[2] = p2;    
     Ring->Next = List->Head;
-    List->Head = Ring;
+    List->Head = Ring;        
+    
+    DEBUG_DRAW_RING(Ring);
 }
 
 inline void 
@@ -83,23 +93,104 @@ AddQuadRings(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2, v3f p3)
     AddTriangleRing(List, p2, p3, p0);
 }
 
-struct surface_intersection_query
+struct surface_intersection_query 
 {
     v3f P;
-    b32 Hit;
+    v3f TriangleP[3];
+    edge2D Edge;    
 };
 
 surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walkable_pole* MissPole)
 { 
     ASSERT(!MissPole->HitEntity);
     ASSERT(HitPole->HitEntity);
-
-    static_entity* Entity = HitPole->HitEntity;
+    
+    static_entity* Entity = HitPole->HitEntity;    
+    triangle_mesh* Triangles = Entity->Mesh;
+    
+    edge2D D = CreateEdge2D(MissPole->Position2D, HitPole->Position2D);
+    
+    f32 MaxDistance = -FLT_MAX;
+    v2f BestPoint = InvalidV2();
+    v3f BestP[3] = {};
+    edge2D BestEdge = {};
+    
+    triangle* Triangle = HitPole->HitTriangle;        
     
     surface_intersection_query Result = {};
-    v2f D = Rotate(V3(MissPole->Position2D - HitPole->Position2D, 0.0f), Conjugate(Entity->Orientation)).xy;
-    
-    return Result;
+    for(;;)
+    {                
+        v3f P[3] = 
+        {
+            TransformV3(Triangle->P[0], Entity->Transform),
+            TransformV3(Triangle->P[1], Entity->Transform),
+            TransformV3(Triangle->P[2], Entity->Transform)
+        };
+        
+        edge2D Edge[3];
+        Edge[0] = CreateEdge2D(P[0], P[1]);
+        Edge[1] = CreateEdge2D(P[1], P[2]);
+        Edge[2] = CreateEdge2D(P[2], P[0]);        
+        
+        f32 BestDistance = -FLT_MAX;    
+        v2f Points[3];
+        u32 BestIndex = (u32)-1;
+        if(EdgeToEdgeIntersection2D(&Points[0], D, Edge[0]))
+        {   
+            f32 Dist = SquareMagnitude(Points[0]-MissPole->Position2D);
+            if(Dist > BestDistance)
+            {
+                BestDistance = Dist;            
+                BestIndex = 0;
+            }        
+        }
+        
+        if(EdgeToEdgeIntersection2D(&Points[1], D, Edge[1]))
+        {
+            f32 Dist = SquareMagnitude(Points[1]-MissPole->Position2D);
+            if(Dist > BestDistance)
+            {
+                BestDistance = Dist;
+                BestIndex = 1;
+            }
+        }
+        
+        if(EdgeToEdgeIntersection2D(&Points[2], D, Edge[2]))
+        {        
+            f32 Dist = SquareMagnitude(Points[2]-MissPole->Position2D);
+            if(Dist > BestDistance)
+            {
+                BestDistance = Dist;
+                BestIndex = 2;
+            }
+        }    
+        
+        if(BestIndex == -1 || (BestDistance <= MaxDistance))
+        {
+            ASSERT(HitPole->HitTriangle != Triangle);            
+            Result.P = V3(BestPoint, FindTriangleZ(BestP[0], BestP[1], BestP[2], BestPoint));          
+            CopyArray(Result.TriangleP, BestP, 3, v3f);
+            Result.Edge = BestEdge;            
+            return Result;            
+        }        
+        
+        Triangle = Triangle->AdjTriangles[BestIndex];
+        BestPoint = Points[BestIndex];
+        BestEdge = Edge[BestIndex];
+        MaxDistance = BestDistance;
+        CopyArray(BestP, P, 3, v3f);
+    }        
+}
+
+void HandleWall(walkable_triangle_ring_list* Rings, 
+                walkable_pole* InPoleA, walkable_pole* OutPoleA, 
+                walkable_pole* InPoleB, walkable_pole* OutPoleB)
+{
+    surface_intersection_query AQuery = SurfaceIntersectionQuery(InPoleA, OutPoleA);
+    surface_intersection_query BQuery = SurfaceIntersectionQuery(InPoleB, OutPoleB);       
+    b32 AddRings = SquareMagnitude(AQuery.P - InPoleA->IntersectionPoint) > 1e-6f && SquareMagnitude(BQuery.P - InPoleB->IntersectionPoint) > 1e-6f;
+    if(AddRings)
+        AddQuadRings(Rings, InPoleA->IntersectionPoint, InPoleB->IntersectionPoint, AQuery.P, BQuery.P);
 }
 
 extern "C"
@@ -108,8 +199,8 @@ EXPORT GAME_TICK(Tick)
     DEVELOPER_GRAPHICS(Graphics);
     
     Global_Platform = Platform;        
-    InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
-
+    InitMemory(Global_Platform->T empArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
+    
     player* Player = &Game->Player;
     
     if(!Game->Initialized)
@@ -121,7 +212,7 @@ EXPORT GAME_TICK(Tick)
         Player->Color = RGBA(0.0f, 0.0f, 1.0f, 1.0f);
         Player->Position = V3(0.0f, 0.0f, 1.0f);
         Player->FacingDirection = V2(0.0f, 1.0f);
-                
+        
         CreateStaticEntity(Game, V3(1.0f, 1.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
     }        
     
@@ -171,13 +262,14 @@ EXPORT GAME_TICK(Tick)
             Pole->ZIntersection = -FLT_MAX;
             
             static_entity* HitEntity = NULL;
+            triangle* HitTriangle = NULL;
             for(static_entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
             {                   
                 triangle_mesh* Mesh = Entity->Mesh;
                 for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
                 {
                     triangle* Triangle = Mesh->Triangles + TriangleIndex;
-                                        
+                    
                     v3f P[3] = 
                     {
                         TransformV3(Triangle->P[0], Entity->Transform),
@@ -200,7 +292,7 @@ EXPORT GAME_TICK(Tick)
 #endif
                         
                     }
-                    else if(IsPointInTriangle2D(Pole->Position2D, P[0].xy, P[1].xy, P[2].xy))                            
+                    else if(IsPointInTriangle2D(P[0].xy, P[1].xy, P[2].xy, Pole->Position2D))                            
                         ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                
                     
                     if(ZIntersection != INFINITY)
@@ -211,7 +303,8 @@ EXPORT GAME_TICK(Tick)
                             if(Pole->ZIntersection != -FLT_MAX)
                                 DRAW_POINT(V3(Pole->Position2D, ZIntersection), 0.05f, RGBA(1.0f, 0.0f, 0.0f, 1.0f));                                                                                                
                             
-                            Pole->ZIntersection = ZIntersection;                                
+                            Pole->ZIntersection = ZIntersection;
+                            HitTriangle = Triangle;
                             HitEntity = Entity;
                         }
                         else
@@ -222,14 +315,15 @@ EXPORT GAME_TICK(Tick)
             
             if(Pole->ZIntersection != -FLT_MAX)
             {
-                DRAW_POINT(Pole->IntersectionPoint, 0.05f, RGBA(1.0f, 1.0f, 1.0f, 1.0f));
-                Pole->HitWalkable = true;
+                //DRAW_POINT(Pole->IntersectionPoint, 0.05f, RGBA(1.0f, 1.0f, 1.0f, 1.0f));                
                 Pole->HitEntity = HitEntity; 
+                Pole->HitTriangle = HitTriangle;
+                Pole->HitWalkable = true;
             }                        
         }
     }
     
-#if 0 
+#if 1  
     walkable_triangle_ring_list RingList = {};
     for(i32 YIndex = 0; YIndex < Grid.CellCount.y; YIndex++)
     {
@@ -285,12 +379,86 @@ EXPORT GAME_TICK(Tick)
                         INVALID_CODE;
                     }   
                     
-                    surface_intersection_query QueryA0 = SurfaceIntersectionQuery(TargetPole, HorizontalPole);
-                    surface_intersection_query QueryB0 = SurfaceIntersectionQuery(TargetPole, VerticalPole);
+                    ASSERT(false);
+                    
+#if 0 
+                    surface_intersection_query AQuery = SurfaceIntersectionQuery(TargetPole, HorizontalPole);
+                    surface_intersection_query BQuery = SurfaceIntersectionQuery(TargetPole, VerticalPole);
+                    
+                    edge2D A, B;
+                    A.P[0] = AQuery.P.xy;                    
+                    B.P[0] = BQuery.P.xy;
+                    
+                    f32 SignDistA0 = TargetPole->IntersectionPoint.x - A.P[0].x;
+                    f32 SignDistB0 = TargetPole->IntersectionPoint.y - B.P[0].y;
+                    ASSERT((Abs(SignDistA0) > 1e-8f) && (Abs(SignDistB0) > 1e-8f));
+                    
+                    {
+                        v2f P0 = V2(TargetPole->Position.x, TargetPole->Position.y - (SignDistB0*0.5f));
+                        v2f P1 = V2(HorizontalPole->Position.x, HorizontalPole->Position.y - (SignDistB0*0.5f));
+                        
+                        b32 Check = EdgeToEdgeIntersection2D(&A.P[1], CreateEdge2D(P0, P1), AQuery.Edge);
+                        ASSERT(Check);
+                    }
+                    
+                    {
+                        v2f P0 = V2(TargetPole->Position.x - (SignDistA0*0.5f),   TargetPole->Position.y);
+                        v2f P1 = V2(VerticalPole->Position.x - (SignDistA0*0.5f), TargetPole->Position.y);
+                        
+                        b32 Check = EdgeToEdgeIntersection2D(&B.P[1], CreateEdge2D(P0, P1), BQuery.Edge);
+                        ASSERT(Check);
+                    }
+                    
+                    ray2D RayA = CreateRay2D(A);
+                    ray2D RayB = CreateRay2D(B);
+                    
+                    v3f CommonPoint = {};
+                    if(RayIntersection2D(&CommonPoint.xy, RayA, RayB))
+                    {
+                        CommonPoint.z = FindTriangleZ(
+                    }
+                    #endif
                 } break;
                 
                 case 4:
                 {
+                    if(CellPoles[POLE_BOTTOM_LEFT]->HitWalkable)
+                    {
+                        if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
+                        {                                                           
+                            HandleWall(&RingList, CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_TOP_LEFT], CellPoles[POLE_BOTTOM_RIGHT], CellPoles[POLE_TOP_RIGHT]);
+                        }
+                        else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                        {
+                            HandleWall(&RingList, CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_BOTTOM_RIGHT], CellPoles[POLE_TOP_LEFT], CellPoles[POLE_TOP_RIGHT]);
+                        }
+                        else if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                        {
+                            NOT_IMPLEMENTED;
+                        }                        
+                    }
+                    else if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
+                    {
+                        if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                        {
+                            HandleWall(&RingList, CellPoles[POLE_BOTTOM_RIGHT], CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_TOP_RIGHT], CellPoles[POLE_TOP_LEFT]);
+                        }
+                        else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                        {
+                            NOT_IMPLEMENTED;
+                        }
+                    }
+                    else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                    {
+                        if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                        {
+                            HandleWall(&RingList, CellPoles[POLE_TOP_LEFT], CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_TOP_RIGHT], CellPoles[POLE_BOTTOM_RIGHT]);                            
+                        }
+                    }
+                    else
+                    {
+                        INVALID_CODE; //I think
+                    }   
                 } break;
                 
                 case 8:
@@ -319,7 +487,8 @@ EXPORT GAME_TICK(Tick)
         }
         
         v3f ClosestPoint = PointTriangleClosestPoint(Ring->P[0], Ring->P[1], Ring->P[2], RequestedPosition);
-        f32 SqrDistance = SquareMagnitude(ClosestPoint-FinalPosition);
+        DRAW_POINT(ClosestPoint, 0.05f, RGBA(0.99f, 0.99f, 0.0f, 1.0f));
+        f32 SqrDistance = SquareMagnitude(ClosestPoint-RequestedPosition);
         if(SqrDistance < BestSqrDistance)
         {
             FinalPosition = ClosestPoint;
@@ -327,7 +496,7 @@ EXPORT GAME_TICK(Tick)
         }
     }
 #endif
-    Player->Position = RequestedPosition;
+    Player->Position = FinalPosition;
     DRAW_POINT(Player->Position, 0.05f, RGBA(0.0f, 0.0f, 0.0f, 1.0f));
     
 #if DEVELOPER_BUILD
