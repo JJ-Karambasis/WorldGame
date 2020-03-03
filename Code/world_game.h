@@ -93,7 +93,7 @@ struct game
     arena WorldStorage;
 
     player Player;
-    static_entity_list StaticEntities;
+    static_entity_list  StaticEntities;        
 };
 
 #define GAME_TICK(name) void name(game* Game, graphics* Graphics, platform* Platform)
@@ -111,9 +111,10 @@ global graphics* __Internal_Developer_Graphics__;
 #define DEVELOPER_GRAPHICS(Graphics) __Internal_Developer_Graphics__ = Graphics
 #define DRAW_POINT(position, size, color) __Internal_Developer_Graphics__->DEBUGDrawPoint(position, size, color)
 #define DRAW_LINE(position0, position1, width, height, color) __Internal_Developer_Graphics__->DEBUGDrawLine(position0, position1, width, height, color)
-
 #else
 #define DEVELOPER_GRAPHICS(Graphics)
 #define DRAW_POINT(position, size, color)
 #define DRAW_LINE(position0, position1, width, height, color)
+#define DEBUG_START_TIMER(name)
+#define DEBUG_END_TIMER(name)
 #endif

@@ -21,6 +21,8 @@
 
 
 #define CURRENT_FILENAME (FindLastChar(__FILE__, OS_PATH_DELIMITER) ? FindLastChar(__FILE__, OS_PATH_DELIMITER)+1 : __FILE__)
+#define CURRENT_LINE __LINE__
+#define CURRENT_FUNCTION __FUNCSIG__
 
 #define ARRAYCOUNT(x) (sizeof(x) / sizeof(x[0]))
 
@@ -163,6 +165,13 @@ inline f32 Saturate(f32 Value)
 {
     f32 Result = Clamp(Value, 0.0f, 1.0f);
     return Result;
+}
+
+inline u64 GetCycles()
+{    
+#if MSVC_COMPILER
+    return __rdtsc();    
+#endif
 }
 
 inline i32 CeilI32(f32 Value)

@@ -28,7 +28,7 @@ inline error_stream CreateErrorStream()
 #define WRITE_ERROR(format, ...) \
 do \
 { \
-Write(GetGlobalErrorStream(), "ERROR(file: %s, line: %d): ", CURRENT_FILENAME, __LINE__); \
+Write(GetGlobalErrorStream(), "ERROR(file: %s, function: %s, line: %d): ", CURRENT_FILENAME, CURRENT_FUNCTION, CURRENT_LINE); \
 Write(GetGlobalErrorStream(), format, __VA_ARGS__); \
 EndLine(GetGlobalErrorStream()); \
 GetGlobalErrorStream()->HasErrorOccured = true; \
@@ -37,7 +37,7 @@ GetGlobalErrorStream()->HasErrorOccured = true; \
 #define WRITE_AND_HANDLE_ERROR(format, ...) \
 do \
 { \
-Write(GetGlobalErrorStream(), "ERROR(file: %s, line: %d): ", CURRENT_FILENAME, __LINE__); \
+Write(GetGlobalErrorStream(), "ERROR(file: %s, function: %s, line: %d): ", CURRENT_FILENAME, CURRENT_FUNCTION, CURRENT_LINE); \
 Write(GetGlobalErrorStream(), format, __VA_ARGS__); \
 EndLine(GetGlobalErrorStream()); \
 GetGlobalErrorStream()->HasErrorOccured = true; \
