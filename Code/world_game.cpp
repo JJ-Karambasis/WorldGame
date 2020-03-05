@@ -1,7 +1,7 @@
 #include "world_game.h"
 #include "geometry.cpp"
 
-#define GRID_DENSITY 0.5f
+#define GRID_DENSITY 0.2f
 #define POLE_BOTTOM_LEFT 0
 #define POLE_BOTTOM_RIGHT 1
 #define POLE_TOP_LEFT 2
@@ -110,16 +110,14 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
     
     edge2D D = CreateEdge2D(MissPole->Position2D, HitPole->Position2D);
     
-    f32 MaxDistance = -FLT_MAX;
-    v2f BestPoint = InvalidV2();
-    v3f BestP[3] = {};
-    edge2D BestEdge = {};
     
-    triangle* Triangle = HitPole->HitTriangle;        
+    f32 BestDistance = FLT_MAX;    
     
     surface_intersection_query Result = {};
-    for(;;)
-    {                
+    for(u32 TriangleIndex = 0; TriangleIndex < Triangles->TriangleCount; TriangleIndex++)
+    {           
+        triangle* Triangle = Triangles->Triangles + TriangleIndex;
+        
         v3f P[3] = 
         {
             TransformV3(Triangle->P[0], Entity->Transform),
@@ -132,15 +130,15 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
         Edge[1] = CreateEdge2D(P[1], P[2]);
         Edge[2] = CreateEdge2D(P[2], P[0]);        
         
-        f32 BestDistance = -FLT_MAX;    
+        f32 Distance = FLT_MAX;    
         v2f Points[3];
         u32 BestIndex = (u32)-1;
         if(EdgeToEdgeIntersection2D(&Points[0], D, Edge[0]))
         {   
             f32 Dist = SquareMagnitude(Points[0]-MissPole->Position2D);
-            if(Dist > BestDistance)
+            if(Dist < Distance)
             {
-                BestDistance = Dist;            
+                Distance = Dist;            
                 BestIndex = 0;
             }        
         }
@@ -148,9 +146,9 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
         if(EdgeToEdgeIntersection2D(&Points[1], D, Edge[1]))
         {
             f32 Dist = SquareMagnitude(Points[1]-MissPole->Position2D);
-            if(Dist > BestDistance)
+            if(Dist < Distance)
             {
-                BestDistance = Dist;
+                Distance = Dist;
                 BestIndex = 1;
             }
         }
@@ -158,28 +156,26 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
         if(EdgeToEdgeIntersection2D(&Points[2], D, Edge[2]))
         {        
             f32 Dist = SquareMagnitude(Points[2]-MissPole->Position2D);
-            if(Dist > BestDistance)
+            if(Dist < Distance)
             {
-                BestDistance = Dist;
+                Distance = Dist;
                 BestIndex = 2;
             }
         }    
         
-        if(BestIndex == -1 || (BestDistance <= MaxDistance))
+        if(Distance < BestDistance)
         {
-            ASSERT(HitPole->HitTriangle != Triangle);            
-            Result.P = V3(BestPoint, FindTriangleZ(BestP[0], BestP[1], BestP[2], BestPoint));          
-            CopyArray(Result.TriangleP, BestP, 3, v3f);
-            Result.Edge = BestEdge;            
-            return Result;            
+            Result.P.xy = Points[BestIndex];
+            CopyArray(Result.TriangleP, P, 3, v3f);            
+            Result.Edge = Edge[BestIndex];            
+            BestDistance = Distance;
         }        
-        
-        Triangle = Triangle->AdjTriangles[BestIndex];
-        BestPoint = Points[BestIndex];
-        BestEdge = Edge[BestIndex];
-        MaxDistance = BestDistance;
-        CopyArray(BestP, P, 3, v3f);
     }        
+    
+    ASSERT(BestDistance != FLT_MAX);
+    
+    Result.P.z = FindTriangleZ(Result.TriangleP[0], Result.TriangleP[1], Result.TriangleP[2], Result.P.xy);
+    return Result;
 }
 
 void HandleWall(walkable_triangle_ring_list* Rings, 
@@ -190,7 +186,7 @@ void HandleWall(walkable_triangle_ring_list* Rings,
     surface_intersection_query BQuery = SurfaceIntersectionQuery(InPoleB, OutPoleB);       
     b32 AddRings = SquareMagnitude(AQuery.P - InPoleA->IntersectionPoint) > 1e-6f && SquareMagnitude(BQuery.P - InPoleB->IntersectionPoint) > 1e-6f;
     if(AddRings)
-        AddQuadRings(Rings, InPoleA->IntersectionPoint, InPoleB->IntersectionPoint, AQuery.P, BQuery.P);
+        AddQuadRings(Rings, InPoleA->IntersectionPoint, AQuery.P, BQuery.P, InPoleB->IntersectionPoint);
 }
 
 extern "C"
@@ -213,7 +209,7 @@ EXPORT GAME_TICK(Tick)
         Player->Position = V3(0.0f, 0.0f, 1.0f);
         Player->FacingDirection = V2(0.0f, 1.0f);
         
-        CreateStaticEntity(Game, V3(1.0f, 1.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
+        CreateStaticEntity(Game, V3(1.1f, 1.1f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
     }        
     
     Player->Radius = 0.5f;
@@ -315,7 +311,7 @@ EXPORT GAME_TICK(Tick)
             
             if(Pole->ZIntersection != -FLT_MAX)
             {
-                //DRAW_POINT(Pole->IntersectionPoint, 0.05f, RGBA(1.0f, 1.0f, 1.0f, 1.0f));                
+                DRAW_POINT(Pole->IntersectionPoint, 0.05f, RGBA(1.0f, 1.0f, 1.0f, 1.0f));                
                 Pole->HitEntity = HitEntity; 
                 Pole->HitTriangle = HitTriangle;
                 Pole->HitWalkable = true;
@@ -387,56 +383,57 @@ EXPORT GAME_TICK(Tick)
                     
                     f32 SignDistA0 = TargetPole->IntersectionPoint.x - A.P[0].x;
                     f32 SignDistB0 = TargetPole->IntersectionPoint.y - B.P[0].y;
-                    ASSERT((Abs(SignDistA0) > 1e-8f) && (Abs(SignDistB0) > 1e-8f));
-                    
-                    {
-                        v2f P0 = V2(TargetPole->Position2D.x, TargetPole->Position2D.y - (SignDistB0*0.5f));
-                        v2f P1 = V2(HorizontalPole->Position2D.x, HorizontalPole->Position2D.y - (SignDistB0*0.5f));
-                        
-                        b32 Check = EdgeToEdgeIntersection2D(&A.P[1], CreateEdge2D(P0, P1), AQuery.Edge);
-                        ASSERT(Check);
-                    }
-                    
-                    {
-                        v2f P0 = V2(TargetPole->Position2D.x - (SignDistA0*0.5f),   TargetPole->Position2D.y);
-                        v2f P1 = V2(VerticalPole->Position2D.x - (SignDistA0*0.5f), TargetPole->Position2D.y);
-                        
-                        b32 Check = EdgeToEdgeIntersection2D(&B.P[1], CreateEdge2D(P0, P1), BQuery.Edge);
-                        ASSERT(Check);
-                    }
-                    
-                    ray2D RayA = CreateRay2D(A);
-                    ray2D RayB = CreateRay2D(B);
-                    
-                    v3f CommonPoint = InvalidV3();                    
-                    if(RayToRayIntersection2D(&CommonPoint.xy, RayA, RayB))
-                    {                                                
-                        static_entity* HitEntity = TargetPole->HitEntity;
-                        triangle_mesh* Mesh = HitEntity->Mesh;
-                        for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
+                    if(Abs(SignDistA0) > 1e-8f && Abs(SignDistB0) > 1e-8f)
+                    {                        
                         {
-                            triangle* Triangle = Mesh->Triangles + TriangleIndex;
-                            v3f P[3] = 
-                            {
-                                TransformV3(Triangle->P[0], HitEntity->Transform),
-                                TransformV3(Triangle->P[1], HitEntity->Transform),
-                                TransformV3(Triangle->P[2], HitEntity->Transform)
-                            };
+                            v2f P0 = V2(TargetPole->Position2D.x, TargetPole->Position2D.y - (SignDistB0*0.5f));
+                            v2f P1 = V2(HorizontalPole->Position2D.x, HorizontalPole->Position2D.y - (SignDistB0*0.5f));
                             
-                            if(IsPointInTriangle2D(P[0], P[1], P[2], CommonPoint.xy))
-                            {
-                                CommonPoint.z = FindTriangleZ(P[0], P[1], P[2], CommonPoint.xy);
-                                break;
-                            }
-                        }                            
-                        ASSERT(CommonPoint.z != INFINITY);
+                            b32 Check = EdgeToEdgeIntersection2D(&A.P[1], CreateEdge2D(P0, P1), AQuery.Edge);
+                            ASSERT(Check);
+                        }
                         
-                        AddQuadRings(&RingList, TargetPole->IntersectionPoint, AQuery.P, BQuery.P, CommonPoint);
-                    }
-                    else
-                    {
-                        NOT_IMPLEMENTED;
-                        AddTriangleRing(&RingList, TargetPole->IntersectionPoint, AQuery.P, BQuery.P);
+                        {
+                            v2f P0 = V2(TargetPole->Position2D.x - (SignDistA0*0.5f),   TargetPole->Position2D.y);
+                            v2f P1 = V2(VerticalPole->Position2D.x - (SignDistA0*0.5f), VerticalPole->Position2D.y);
+                            
+                            b32 Check = EdgeToEdgeIntersection2D(&B.P[1], CreateEdge2D(P0, P1), BQuery.Edge);
+                            ASSERT(Check);
+                        }
+                        
+                        ray2D RayA = CreateRay2D(A);
+                        ray2D RayB = CreateRay2D(B);
+                        
+                        v3f CommonPoint = InvalidV3();                    
+                        if(RayToRayIntersection2D(&CommonPoint.xy, RayA, RayB))
+                        {                                                
+                            static_entity* HitEntity = TargetPole->HitEntity;
+                            triangle_mesh* Mesh = HitEntity->Mesh;
+                            for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
+                            {
+                                triangle* Triangle = Mesh->Triangles + TriangleIndex;
+                                v3f P[3] = 
+                                {
+                                    TransformV3(Triangle->P[0], HitEntity->Transform),
+                                    TransformV3(Triangle->P[1], HitEntity->Transform),
+                                    TransformV3(Triangle->P[2], HitEntity->Transform)
+                                };
+                                
+                                if(IsPointInTriangle2D(P[0], P[1], P[2], CommonPoint.xy))
+                                {
+                                    CommonPoint.z = FindTriangleZ(P[0], P[1], P[2], CommonPoint.xy);
+                                    break;
+                                }
+                            }                            
+                            ASSERT(CommonPoint.z != INFINITY);
+                            
+                            AddQuadRings(&RingList, TargetPole->IntersectionPoint, AQuery.P, CommonPoint, BQuery.P);
+                        }
+                        else
+                        {
+                            NOT_IMPLEMENTED;
+                            AddTriangleRing(&RingList, TargetPole->IntersectionPoint, AQuery.P, BQuery.P);
+                        }
                     }
                     
                 } break;
