@@ -2,10 +2,6 @@
 #include "geometry.cpp"
 
 #define GRID_DENSITY 0.2f
-#define POLE_BOTTOM_LEFT 0
-#define POLE_BOTTOM_RIGHT 1
-#define POLE_TOP_LEFT 2
-#define POLE_TOP_RIGHT 3
 
 inline static_entity* 
 CreateStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32 IsBlocker, triangle_mesh* Mesh)
@@ -61,11 +57,55 @@ walkable_grid BuildWalkableGrid(v2i Min, v2i Max)
         for(i32 XIndex = 0; XIndex < Result.PoleCount.x; XIndex++)
         {
             walkable_pole* Pole = GetPole(&Result, XIndex, YIndex);
-            Pole->Position2D = Result.Min + V2(XIndex, YIndex)*GRID_DENSITY;
+            Pole->Position2D = Result.Min + V2(XIndex, YIndex)*GRID_DENSITY;            
         }
     }
     return Result;
 }
+
+walkable_pole** GetSurroundingPoles(walkable_grid* Grid, i32 XIndex, i32 YIndex)
+{
+    walkable_pole** Result = PushArray(8, walkable_pole*, Clear, 0);    
+    Result[POLE_INDEX_BOTTOM_LEFT]  = GetPole(Grid, XIndex-1, YIndex-1);
+    Result[POLE_INDEX_BOTTOM]       = GetPole(Grid, XIndex,   YIndex-1);
+    Result[POLE_INDEX_BOTTOM_RIGHT] = GetPole(Grid, XIndex+1, YIndex-1);
+    Result[POLE_INDEX_LEFT]         = GetPole(Grid, XIndex-1, YIndex);
+    Result[POLE_INDEX_RIGHT]        = GetPole(Grid, XIndex+1, YIndex);
+    Result[POLE_INDEX_TOP_LEFT]     = GetPole(Grid, XIndex-1, YIndex+1);
+    Result[POLE_INDEX_TOP]          = GetPole(Grid, XIndex,   YIndex+1);
+    Result[POLE_INDEX_TOP_RIGHT]    = GetPole(Grid, XIndex+1, YIndex+1);       
+    
+    return Result;
+}
+
+method_type GetMethodType(walkable_pole* TargetPole, walkable_pole* VerticalPole, walkable_pole* HorizontalPole, walkable_pole* CornerPole)
+{
+    ASSERT(TargetPole->HitWalkable);
+    u32 Method = 2;
+    if(VerticalPole->HitWalkable) Method *= 2;
+    if(HorizontalPole->HitWalkable) Method *= 2;
+    if(CornerPole->HitWalkable) Method *= 2;
+    
+    switch(Method)
+    {
+        case 2:
+        return METHOD_TYPE_CORNER;
+        
+        case 4:
+        return METHOD_TYPE_WALL;
+        
+        case 8:
+        return METHOD_TYPE_TRIANGLE;
+        
+        case 16:
+        return METHOD_TYPE_SURFACE;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return METHOD_TYPE_UNKNOWN;
+}
+
 
 #define DEBUG_DRAW_RING(ring) \
 DRAW_POINT(ring->P[0], 0.00f, RGBA(0.0f, 1.0f, 0.0f, 1.0f)); \
@@ -93,12 +133,17 @@ AddQuadRings(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2, v3f p3)
     AddTriangleRing(List, p2, p3, p0);
 }
 
-struct surface_intersection_query 
+inline void AddSurfaceIntersection(walkable_pole* Pole, pole_index Index, surface_intersection_query Query)
 {
-    v3f P;
-    v3f TriangleP[3];
-    edge2D Edge;    
-};
+    Pole->SurfaceIntersections[Index].HasIntersected = true;
+    Pole->SurfaceIntersections[Index].Query = Query;    
+}
+
+inline void AddSurfaceIntersection(walkable_pole* Pole, pole_index Index, v2f P)
+{
+    surface_intersection_query Result = {P};
+    AddSurfaceIntersection(Pole, Index, Result);
+}
 
 surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walkable_pole* MissPole)
 { 
@@ -165,7 +210,7 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
         
         if(Distance < BestDistance)
         {
-            Result.P.xy = Points[BestIndex];
+            Result.P = Points[BestIndex];
             CopyArray(Result.TriangleP, P, 3, v3f);            
             Result.Edge = Edge[BestIndex];            
             BestDistance = Distance;
@@ -173,20 +218,123 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
     }        
     
     ASSERT(BestDistance != FLT_MAX);
-    
-    Result.P.z = FindTriangleZ(Result.TriangleP[0], Result.TriangleP[1], Result.TriangleP[2], Result.P.xy);
+        
     return Result;
 }
 
-void HandleWall(walkable_triangle_ring_list* Rings, 
-                walkable_pole* InPoleA, walkable_pole* OutPoleA, 
-                walkable_pole* InPoleB, walkable_pole* OutPoleB)
+surface_intersection_query SurfaceIntersectionQuery(walkable_pole* TargetPole, walkable_pole** SurroundingPoles, pole_index Index)
+{    
+    surface_intersection_query Result;                        
+    if(TargetPole->SurfaceIntersections[Index].HasIntersected)                        
+        Result = TargetPole->SurfaceIntersections[Index].Query;                        
+    else                        
+        Result = SurfaceIntersectionQuery(TargetPole, SurroundingPoles[Index]);                        
+    return Result;
+}
+
+inline v3f Get3DPoint(surface_intersection_query Query)
 {
-    surface_intersection_query AQuery = SurfaceIntersectionQuery(InPoleA, OutPoleA);
-    surface_intersection_query BQuery = SurfaceIntersectionQuery(InPoleB, OutPoleB);       
-    b32 AddRings = SquareMagnitude(AQuery.P - InPoleA->IntersectionPoint) > 1e-6f && SquareMagnitude(BQuery.P - InPoleB->IntersectionPoint) > 1e-6f;
-    if(AddRings)
-        AddQuadRings(Rings, InPoleA->IntersectionPoint, AQuery.P, BQuery.P, InPoleB->IntersectionPoint);
+    v3f Result = V3(Query.P, FindTriangleZ(Query.TriangleP[0], Query.TriangleP[1], Query.TriangleP[2], Query.P));
+    return Result;
+}
+
+inline void PoleSectionTest(walkable_pole* TargetPole, walkable_pole** SurroundingPoles, 
+                            pole_index VerticalIndex, pole_index HorizontalIndex, pole_index CornerIndex)
+{    
+    method_type Type = GetMethodType(TargetPole, SurroundingPoles[VerticalIndex], SurroundingPoles[HorizontalIndex], SurroundingPoles[CornerIndex]);
+    switch(Type)
+    {
+        case METHOD_TYPE_CORNER:
+        {            
+            walkable_pole* HorizontalPole = SurroundingPoles[HorizontalIndex];
+            walkable_pole* VerticalPole = SurroundingPoles[VerticalIndex];
+            walkable_pole* CornerPole = SurroundingPoles[CornerIndex];
+            
+            surface_intersection_query AQuery = SurfaceIntersectionQuery(TargetPole, SurroundingPoles, HorizontalIndex);
+            surface_intersection_query BQuery = SurfaceIntersectionQuery(TargetPole, SurroundingPoles, VerticalIndex);                        
+            
+            edge2D A, B;
+            A.P[0] = AQuery.P;                    
+            B.P[0] = BQuery.P;
+            
+            f32 SignDistA0 = TargetPole->IntersectionPoint.x - A.P[0].x;
+            f32 SignDistB0 = TargetPole->IntersectionPoint.y - B.P[0].y;
+            if(Abs(SignDistA0) > 1e-8f && Abs(SignDistB0) > 1e-8f)
+            {                        
+                {
+                    v2f P0 = V2(TargetPole->Position2D.x, TargetPole->Position2D.y - (SignDistB0*0.5f));
+                    v2f P1 = V2(HorizontalPole->Position2D.x, HorizontalPole->Position2D.y - (SignDistB0*0.5f));
+                    
+                    b32 Check = EdgeToEdgeIntersection2D(&A.P[1], CreateEdge2D(P0, P1), AQuery.Edge);
+                    ASSERT(Check);
+                }
+                
+                {
+                    v2f P0 = V2(TargetPole->Position2D.x - (SignDistA0*0.5f),   TargetPole->Position2D.y);
+                    v2f P1 = V2(VerticalPole->Position2D.x - (SignDistA0*0.5f), VerticalPole->Position2D.y);                                                        
+                    b32 Check = EdgeToEdgeIntersection2D(&B.P[1], CreateEdge2D(P0, P1), BQuery.Edge);
+                    ASSERT(Check);
+                }
+                
+                ray2D RayA = CreateRay2D(A);
+                ray2D RayB = CreateRay2D(B);
+                
+                v2f CommonPoint = InvalidV2();                    
+                if(RayToRayIntersection2D(&CommonPoint, RayA, RayB))
+                {   
+                    AddSurfaceIntersection(TargetPole, HorizontalIndex, AQuery);
+                    AddSurfaceIntersection(TargetPole, VerticalIndex, BQuery);
+                    AddSurfaceIntersection(TargetPole, CornerIndex, CommonPoint);                                
+                }
+                else
+                {
+                    NOT_IMPLEMENTED;                                
+                }
+            }     
+            else
+            {
+                NOT_IMPLEMENTED;
+            }                        
+        } break;
+        
+        case METHOD_TYPE_WALL:
+        {            
+            if(SurroundingPoles[VerticalIndex]->HitWalkable)
+            {   
+                surface_intersection_query Query = SurfaceIntersectionQuery(TargetPole, SurroundingPoles, HorizontalIndex);
+                AddSurfaceIntersection(TargetPole, HorizontalIndex, Query);
+            }
+            else if(SurroundingPoles[HorizontalIndex]->HitWalkable)
+            {
+                surface_intersection_query Query = SurfaceIntersectionQuery(TargetPole, SurroundingPoles, VerticalIndex);
+                AddSurfaceIntersection(TargetPole, VerticalIndex, Query);
+            }
+            else if(SurroundingPoles[CornerIndex]->HitWalkable)
+            {
+                //TODO(JJ): Do we need to implement this?
+                NOT_IMPLEMENTED;
+            }
+            else
+            {
+                INVALID_CODE;
+            }
+        } break;                                        
+                
+        case METHOD_TYPE_TRIANGLE:
+        {                                                
+            if(!SurroundingPoles[HorizontalIndex]->HitWalkable)                        
+            {
+                surface_intersection_query Query = SurfaceIntersectionQuery(TargetPole, SurroundingPoles, HorizontalIndex);                                                                                
+                AddSurfaceIntersection(TargetPole, HorizontalIndex, Query);
+            }
+            
+            if(!SurroundingPoles[VerticalIndex]->HitWalkable)
+            {
+                surface_intersection_query Query = SurfaceIntersectionQuery(TargetPole, SurroundingPoles, VerticalIndex);
+                AddSurfaceIntersection(TargetPole, VerticalIndex, Query);
+            }
+        } break;        
+    }    
 }
 
 extern "C"
@@ -242,8 +390,10 @@ EXPORT GAME_TICK(Tick)
     
     v3f RequestedPosition = Player->Position + Player->Velocity*Input->dt;
     
-    v2i StartCell = GetCell(Player->Position.xy);
-    v2i EndCell   = GetCell(RequestedPosition.xy);
+    u32 CellPadding = CeilU32(Player->Radius/GRID_DENSITY);
+    
+    v2i StartCell = GetCell(Player->Position.xy)  - CellPadding;
+    v2i EndCell   = GetCell(RequestedPosition.xy) + CellPadding;
     
     v2i MinimumCell = MinimumV2(StartCell, EndCell)-1;
     v2i MaximumCell = MaximumV2(StartCell, EndCell)+1;    
@@ -318,165 +468,187 @@ EXPORT GAME_TICK(Tick)
             }                        
         }
     }
-        
-    walkable_triangle_ring_list RingList = {};
-    for(i32 YIndex = 0; YIndex < Grid.CellCount.y; YIndex++)
+    
+    for(i32 YIndex = 1; YIndex < Grid.PoleCount.y-1; YIndex++)
     {
-        for(i32 XIndex = 0; XIndex < Grid.CellCount.x; XIndex++)
+        for(i32 XIndex = 1; XIndex < Grid.PoleCount.x-1; XIndex++)
+        {
+            walkable_pole* Pole = GetPole(&Grid, XIndex, YIndex);
+            if(Pole->HitWalkable)
+            {
+                walkable_pole** SurroundingPoles = GetSurroundingPoles(&Grid, XIndex, YIndex);                
+                PoleSectionTest(Pole, SurroundingPoles, POLE_INDEX_BOTTOM, POLE_INDEX_LEFT,  POLE_INDEX_BOTTOM_LEFT);
+                PoleSectionTest(Pole, SurroundingPoles, POLE_INDEX_TOP,    POLE_INDEX_LEFT,  POLE_INDEX_TOP_LEFT);
+                PoleSectionTest(Pole, SurroundingPoles, POLE_INDEX_TOP,    POLE_INDEX_RIGHT, POLE_INDEX_TOP_RIGHT);
+                PoleSectionTest(Pole, SurroundingPoles, POLE_INDEX_BOTTOM, POLE_INDEX_RIGHT, POLE_INDEX_BOTTOM_RIGHT);                
+            }            
+        }
+    }
+    
+    walkable_triangle_ring_list RingList = {};
+    
+#if 1
+    for(i32 YIndex = 1; YIndex < Grid.CellCount.y-1; YIndex++)
+    {
+        for(i32 XIndex = 1; XIndex < Grid.CellCount.x-1; XIndex++)
         {            
             walkable_pole** CellPoles = GetCellPoles(&Grid, XIndex, YIndex);
             
+            u32 BottomLeft = 0;
+            u32 BottomRight = 1;
+            u32 TopLeft = 2;
+            u32 TopRight = 3;
+            
             u32 Method = 1;
-            if(CellPoles[POLE_BOTTOM_LEFT]->HitWalkable) Method *= 2;            
-            if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable) Method *= 2;
-            if(CellPoles[POLE_TOP_LEFT]->HitWalkable) Method *= 2;
-            if(CellPoles[POLE_TOP_RIGHT]->HitWalkable) Method *= 2;
+            if(CellPoles[BottomLeft]->HitWalkable) Method *= 2;            
+            if(CellPoles[BottomRight]->HitWalkable) Method *= 2;
+            if(CellPoles[TopLeft]->HitWalkable) Method *= 2;
+            if(CellPoles[TopRight]->HitWalkable) Method *= 2;
             
             switch(Method)
             {
                 case 2:
                 {
                     walkable_pole* TargetPole = NULL;
-                    walkable_pole* HorizontalPole = NULL;
-                    walkable_pole* VerticalPole = NULL;
-                    walkable_pole* CornerPole = NULL;
                     
-                    if(CellPoles[POLE_BOTTOM_LEFT]->HitWalkable)
+                    surface_intersection_query Queries[3];
+                    if(CellPoles[BottomLeft]->HitWalkable)
                     {
-                        TargetPole     = CellPoles[POLE_BOTTOM_LEFT];
-                        HorizontalPole = CellPoles[POLE_BOTTOM_RIGHT];
-                        VerticalPole   = CellPoles[POLE_TOP_LEFT];
-                        CornerPole     = CellPoles[POLE_TOP_RIGHT];
+                        TargetPole = CellPoles[BottomLeft];
+                        Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_RIGHT].Query;
+                        Queries[1] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP].Query;
+                        Queries[2] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP_RIGHT].Query;                        
                     }                    
-                    else if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
+                    else if(CellPoles[BottomRight]->HitWalkable)
                     {
-                        TargetPole     = CellPoles[POLE_BOTTOM_RIGHT];
-                        HorizontalPole = CellPoles[POLE_BOTTOM_LEFT];
-                        VerticalPole   = CellPoles[POLE_TOP_RIGHT];
-                        CornerPole     = CellPoles[POLE_TOP_LEFT];
+                        TargetPole = CellPoles[BottomRight];
+                        Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_LEFT].Query;
+                        Queries[1] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP].Query;
+                        Queries[2] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP_LEFT].Query;                        
                     }
-                    else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                    else if(CellPoles[TopLeft]->HitWalkable)
                     {
-                        TargetPole     = CellPoles[POLE_TOP_LEFT];
-                        HorizontalPole = CellPoles[POLE_TOP_RIGHT];
-                        VerticalPole   = CellPoles[POLE_BOTTOM_LEFT];
-                        CornerPole     = CellPoles[POLE_BOTTOM_RIGHT];
+                        TargetPole = CellPoles[TopLeft];
+                        Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_RIGHT].Query;
+                        Queries[1] = TargetPole->SurfaceIntersections[POLE_INDEX_BOTTOM].Query;
+                        Queries[2] = TargetPole->SurfaceIntersections[POLE_INDEX_BOTTOM_RIGHT].Query;                        
                     }
-                    else if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                    else if(CellPoles[TopRight]->HitWalkable)
                     {
-                        TargetPole     = CellPoles[POLE_TOP_RIGHT];
-                        HorizontalPole = CellPoles[POLE_TOP_LEFT];
-                        VerticalPole   = CellPoles[POLE_BOTTOM_RIGHT];
-                        CornerPole     = CellPoles[POLE_BOTTOM_LEFT];
+                        TargetPole = CellPoles[TopRight];
+                        Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_LEFT].Query;
+                        Queries[1] = TargetPole->SurfaceIntersections[POLE_INDEX_BOTTOM].Query;
+                        Queries[2] = TargetPole->SurfaceIntersections[POLE_INDEX_BOTTOM_LEFT].Query;                        
                     }
                     else
                     {
                         INVALID_CODE;
                     }   
                     
-                    surface_intersection_query AQuery = SurfaceIntersectionQuery(TargetPole, HorizontalPole);
-                    surface_intersection_query BQuery = SurfaceIntersectionQuery(TargetPole, VerticalPole);
+                    v3f RingPoints[3]
+                    {
+                        Get3DPoint(Queries[0]),
+                        Get3DPoint(Queries[1]),                                                        
+                        V3(Queries[2].P, INFINITY)
+                    };
                     
-                    edge2D A, B;
-                    A.P[0] = AQuery.P.xy;                    
-                    B.P[0] = BQuery.P.xy;
-                    
-                    f32 SignDistA0 = TargetPole->IntersectionPoint.x - A.P[0].x;
-                    f32 SignDistB0 = TargetPole->IntersectionPoint.y - B.P[0].y;
-                    if(Abs(SignDistA0) > 1e-8f && Abs(SignDistB0) > 1e-8f)
-                    {                        
+                    static_entity* HitEntity = TargetPole->HitEntity;
+                    triangle_mesh* Mesh = HitEntity->Mesh;
+                    for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
+                    {
+                        triangle* Triangle = Mesh->Triangles + TriangleIndex;
+                        v3f P[3] = 
                         {
-                            v2f P0 = V2(TargetPole->Position2D.x, TargetPole->Position2D.y - (SignDistB0*0.5f));
-                            v2f P1 = V2(HorizontalPole->Position2D.x, HorizontalPole->Position2D.y - (SignDistB0*0.5f));
-                            
-                            b32 Check = EdgeToEdgeIntersection2D(&A.P[1], CreateEdge2D(P0, P1), AQuery.Edge);
-                            ASSERT(Check);
-                        }
+                            TransformV3(Triangle->P[0], HitEntity->Transform),
+                            TransformV3(Triangle->P[1], HitEntity->Transform),
+                            TransformV3(Triangle->P[2], HitEntity->Transform)
+                        };
                         
+                        if(IsPointInTriangle2D(P[0], P[1], P[2], RingPoints[2].xy))
                         {
-                            v2f P0 = V2(TargetPole->Position2D.x - (SignDistA0*0.5f),   TargetPole->Position2D.y);
-                            v2f P1 = V2(VerticalPole->Position2D.x - (SignDistA0*0.5f), VerticalPole->Position2D.y);
-                            
-                            b32 Check = EdgeToEdgeIntersection2D(&B.P[1], CreateEdge2D(P0, P1), BQuery.Edge);
-                            ASSERT(Check);
+                            RingPoints[2].z = FindTriangleZ(P[0], P[1], P[2], RingPoints[2].xy);
+                            break;
                         }
-                        
-                        ray2D RayA = CreateRay2D(A);
-                        ray2D RayB = CreateRay2D(B);
-                        
-                        v3f CommonPoint = InvalidV3();                    
-                        if(RayToRayIntersection2D(&CommonPoint.xy, RayA, RayB))
-                        {                                                
-                            static_entity* HitEntity = TargetPole->HitEntity;
-                            triangle_mesh* Mesh = HitEntity->Mesh;
-                            for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
-                            {
-                                triangle* Triangle = Mesh->Triangles + TriangleIndex;
-                                v3f P[3] = 
-                                {
-                                    TransformV3(Triangle->P[0], HitEntity->Transform),
-                                    TransformV3(Triangle->P[1], HitEntity->Transform),
-                                    TransformV3(Triangle->P[2], HitEntity->Transform)
-                                };
-                                
-                                if(IsPointInTriangle2D(P[0], P[1], P[2], CommonPoint.xy))
-                                {
-                                    CommonPoint.z = FindTriangleZ(P[0], P[1], P[2], CommonPoint.xy);
-                                    break;
-                                }
-                            }                            
-                            ASSERT(CommonPoint.z != INFINITY);
-                            
-                            AddQuadRings(&RingList, TargetPole->IntersectionPoint, AQuery.P, CommonPoint, BQuery.P);
-                        }
-                        else
-                        {
-                            NOT_IMPLEMENTED;
-                            AddTriangleRing(&RingList, TargetPole->IntersectionPoint, AQuery.P, BQuery.P);
-                        }
-                    }
-                    
+                    }                            
+                    ASSERT(RingPoints[2].z != INFINITY);                    
+                    AddQuadRings(&RingList, TargetPole->IntersectionPoint, RingPoints[0], RingPoints[2], RingPoints[1]);                                        
                 } break;
                 
                 case 4:
                 {
-                    if(CellPoles[POLE_BOTTOM_LEFT]->HitWalkable)
+                    b32 WallCase = false;
+                    walkable_pole* InPoleA = NULL;
+                    walkable_pole* OutPoleA = NULL;                    
+                    walkable_pole* InPoleB = NULL;
+                    walkable_pole* OutPoleB = NULL;
+                    
+                    v3f P[4] = {};                    
+                    
+                    if(CellPoles[BottomLeft]->HitWalkable)
                     {
-                        if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
-                        {                                                           
-                            HandleWall(&RingList, CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_TOP_LEFT], CellPoles[POLE_BOTTOM_RIGHT], CellPoles[POLE_TOP_RIGHT]);
+                        if(CellPoles[BottomRight]->HitWalkable)
+                        {   
+                            P[0] = CellPoles[BottomLeft]->IntersectionPoint;                                                                                    
+                            P[1] = Get3DPoint(CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_TOP].Query);
+                            P[2] = CellPoles[BottomRight]->IntersectionPoint;
+                            P[3] = Get3DPoint(CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_TOP].Query);                            
+                            WallCase = true;                                                        
                         }
-                        else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                        else if(CellPoles[TopLeft]->HitWalkable)
                         {
-                            HandleWall(&RingList, CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_BOTTOM_RIGHT], CellPoles[POLE_TOP_LEFT], CellPoles[POLE_TOP_RIGHT]);
+                            P[0] = CellPoles[BottomLeft]->IntersectionPoint;
+                            P[1] = Get3DPoint(CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query);
+                            P[2] = CellPoles[TopLeft]->IntersectionPoint;
+                            P[3] = Get3DPoint(CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query);                            
+                            WallCase = true;
                         }
-                        else if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                        else if(CellPoles[TopRight]->HitWalkable)
                         {
-                            NOT_IMPLEMENTED;
+                            WallCase = false;
                         }                        
                     }
-                    else if(CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
+                    else if(CellPoles[BottomRight]->HitWalkable)
                     {
-                        if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                        if(CellPoles[TopRight]->HitWalkable)
                         {
-                            HandleWall(&RingList, CellPoles[POLE_BOTTOM_RIGHT], CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_TOP_RIGHT], CellPoles[POLE_TOP_LEFT]);
+                            P[0] = CellPoles[BottomRight]->IntersectionPoint;
+                            P[1] = Get3DPoint(CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query);
+                            P[2] = CellPoles[TopRight]->IntersectionPoint;
+                            P[3] = Get3DPoint(CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query);                            
+                            WallCase = true;
                         }
-                        else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                        else if(CellPoles[TopLeft]->HitWalkable)
                         {
-                            NOT_IMPLEMENTED;
+                            WallCase = false;                            
                         }
                     }
-                    else if(CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                    else if(CellPoles[TopLeft]->HitWalkable)
                     {
-                        if(CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                        if(CellPoles[TopRight]->HitWalkable)
                         {
-                            HandleWall(&RingList, CellPoles[POLE_TOP_LEFT], CellPoles[POLE_BOTTOM_LEFT], CellPoles[POLE_TOP_RIGHT], CellPoles[POLE_BOTTOM_RIGHT]);                            
+                            P[0] = CellPoles[TopLeft]->IntersectionPoint;
+                            P[1] = Get3DPoint(CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query);                            
+                            P[2] = CellPoles[TopRight]->IntersectionPoint;                            
+                            P[3] = Get3DPoint(CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query);                           
+                            WallCase = true;
                         }
                     }
                     else
                     {
                         INVALID_CODE; //I think
-                    }   
+                    }
+                    
+                    if(WallCase)
+                    {                        
+                        b32 AddRings = SquareMagnitude(P[1] - P[0]) > 1e-6f && SquareMagnitude(P[3] - P[2]) > 1e-6f;
+                        if(AddRings)
+                            AddQuadRings(&RingList, P[0], P[1], P[3], P[2]);
+                    }
+                    else
+                    {
+                        //TODO(JJ): Do we need to implement this?
+                        NOT_IMPLEMENTED;
+                    }
                 } break;
                 
                 case 8:
@@ -486,56 +658,60 @@ EXPORT GAME_TICK(Tick)
                     walkable_pole* HorizontalInPole = NULL;
                     walkable_pole* VerticalInPole = NULL;
                     
-                    if(!CellPoles[POLE_BOTTOM_LEFT]->HitWalkable)
-                    {
-                        OutPole          = CellPoles[POLE_BOTTOM_LEFT];
-                        CornerInPole     = CellPoles[POLE_TOP_RIGHT];
-                        HorizontalInPole = CellPoles[POLE_TOP_LEFT];
-                        VerticalInPole   = CellPoles[POLE_BOTTOM_RIGHT];
+                    v3f P[5];
+                    
+                    if(!CellPoles[BottomLeft]->HitWalkable)
+                    {   
+                        P[0] = Get3DPoint(CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query);
+                        P[1] = CellPoles[BottomRight]->IntersectionPoint;
+                        P[2] = CellPoles[TopRight]->IntersectionPoint;
+                        P[3] = Get3DPoint(CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query);
+                        P[4] = CellPoles[TopLeft]->IntersectionPoint;                        
                     }
-                    else if(!CellPoles[POLE_BOTTOM_RIGHT]->HitWalkable)
+                    else if(!CellPoles[BottomRight]->HitWalkable)
                     {
-                        OutPole          = CellPoles[POLE_BOTTOM_RIGHT];
-                        CornerInPole     = CellPoles[POLE_TOP_LEFT];
-                        HorizontalInPole = CellPoles[POLE_TOP_RIGHT];
-                        VerticalInPole   = CellPoles[POLE_BOTTOM_LEFT];
+                        P[0] = Get3DPoint(CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query);
+                        P[1] = CellPoles[BottomLeft]->IntersectionPoint;
+                        P[2] = CellPoles[TopLeft]->IntersectionPoint;
+                        P[3] = Get3DPoint(CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query);
+                        P[4] = CellPoles[TopRight]->IntersectionPoint;                        
                     }
-                    else if(!CellPoles[POLE_TOP_LEFT]->HitWalkable)
+                    else if(!CellPoles[TopLeft]->HitWalkable)
                     {
-                        OutPole          = CellPoles[POLE_TOP_LEFT];
-                        CornerInPole     = CellPoles[POLE_BOTTOM_RIGHT];
-                        HorizontalInPole = CellPoles[POLE_BOTTOM_LEFT];
-                        VerticalInPole   = CellPoles[POLE_TOP_RIGHT];
+                        P[0] = Get3DPoint(CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query);
+                        P[1] = CellPoles[TopRight]->IntersectionPoint;
+                        P[2] = CellPoles[BottomRight]->IntersectionPoint;
+                        P[3] = Get3DPoint(CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_TOP].Query);
+                        P[4] = CellPoles[BottomLeft]->IntersectionPoint;                        
                     }
-                    else if(!CellPoles[POLE_TOP_RIGHT]->HitWalkable)
+                    else if(!CellPoles[TopRight]->HitWalkable)
                     {
-                        OutPole          = CellPoles[POLE_TOP_RIGHT];
-                        CornerInPole     = CellPoles[POLE_BOTTOM_LEFT];
-                        HorizontalInPole = CellPoles[POLE_TOP_LEFT];
-                        VerticalInPole   = CellPoles[POLE_BOTTOM_RIGHT];
+                        P[0] = Get3DPoint(CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query);
+                        P[1] = CellPoles[TopLeft]->IntersectionPoint;
+                        P[2] = CellPoles[BottomLeft]->IntersectionPoint;
+                        P[3] = Get3DPoint(CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_TOP].Query);
+                        P[4] = CellPoles[BottomRight]->IntersectionPoint;                       
                     }
                     else
                     {
                         INVALID_CODE;
                     }
                     
-                    surface_intersection_query AQuery = SurfaceIntersectionQuery(HorizontalInPole, OutPole);
-                    surface_intersection_query BQuery = SurfaceIntersectionQuery(VerticalInPole, OutPole);
-                    
-                    AddTriangleRing(&RingList, AQuery.P, HorizontalInPole->IntersectionPoint, CornerInPole->IntersectionPoint);
-                    AddTriangleRing(&RingList, AQuery.P, CornerInPole->IntersectionPoint, BQuery.P);
-                    AddTriangleRing(&RingList, BQuery.P, VerticalInPole->IntersectionPoint, CornerInPole->IntersectionPoint);
+                    AddTriangleRing(&RingList, P[0], P[1], P[2]);
+                    AddTriangleRing(&RingList, P[0], P[2], P[3]);
+                    AddTriangleRing(&RingList, P[3], P[4], P[2]);
                 } break;
                 
                 case 16:
                 {
                     AddQuadRings(&RingList, 
-                                 CellPoles[POLE_BOTTOM_LEFT]->IntersectionPoint, CellPoles[POLE_BOTTOM_RIGHT]->IntersectionPoint, 
-                                 CellPoles[POLE_TOP_RIGHT]->IntersectionPoint,   CellPoles[POLE_TOP_LEFT]->IntersectionPoint);
+                                 CellPoles[BottomLeft]->IntersectionPoint, CellPoles[BottomRight]->IntersectionPoint, 
+                                 CellPoles[TopRight]->IntersectionPoint,   CellPoles[TopLeft]->IntersectionPoint);
                 } break;
             } 
         }
     }
+#endif
     
     f32 BestSqrDistance = FLT_MAX;
     v3f FinalPosition = RequestedPosition;
@@ -549,7 +725,7 @@ EXPORT GAME_TICK(Tick)
         }
         
         v3f ClosestPoint = PointTriangleClosestPoint(Ring->P[0], Ring->P[1], Ring->P[2], RequestedPosition);
-        DRAW_POINT(ClosestPoint, 0.05f, RGBA(0.99f, 0.99f, 0.0f, 1.0f));
+        //DRAW_POINT(ClosestPoint, 0.05f, RGBA(0.99f, 0.99f, 0.0f, 1.0f));
         f32 SqrDistance = SquareMagnitude(ClosestPoint-RequestedPosition);
         if(SqrDistance < BestSqrDistance)
         {

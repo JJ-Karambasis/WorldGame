@@ -572,6 +572,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         }
         
         Input.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
+        CONSOLE_LOG("dt: %f\n", Input.dt*1000.0f);
         StartTime = Win32_Clock();
       
         EndTemporaryMemory(&FrameArena);        

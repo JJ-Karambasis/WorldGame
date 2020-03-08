@@ -22,6 +22,27 @@ struct player
     v3f Velocity;
 };
 
+enum pole_index
+{    
+    POLE_INDEX_BOTTOM_LEFT,
+    POLE_INDEX_BOTTOM,
+    POLE_INDEX_BOTTOM_RIGHT,
+    POLE_INDEX_LEFT, 
+    POLE_INDEX_RIGHT,
+    POLE_INDEX_TOP_LEFT,
+    POLE_INDEX_TOP,
+    POLE_INDEX_TOP_RIGHT,
+};
+
+enum method_type
+{
+    METHOD_TYPE_UNKNOWN,
+    METHOD_TYPE_CORNER,
+    METHOD_TYPE_WALL,
+    METHOD_TYPE_TRIANGLE,
+    METHOD_TYPE_SURFACE
+};
+
 struct static_entity
 {
     b32 IsBlocker;
@@ -47,6 +68,19 @@ struct static_entity_list
     static_entity* Head;
 };
 
+struct surface_intersection_query 
+{
+    v2f P;
+    v3f TriangleP[3];
+    edge2D Edge;    
+};
+
+struct walkable_surface_intersection
+{
+    b32 HasIntersected;
+    surface_intersection_query Query;
+};
+
 struct walkable_pole
 {
     union
@@ -61,6 +95,8 @@ struct walkable_pole
     static_entity* HitEntity;
     triangle* HitTriangle;
     b32 HitWalkable;
+    
+    walkable_surface_intersection SurfaceIntersections[8];    
 };
 
 struct walkable_grid
