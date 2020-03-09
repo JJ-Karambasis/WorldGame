@@ -1,4 +1,5 @@
 #include "vulkan_graphics.h"
+#include "graphics.cpp"
 
 b32 IsCompatibleDevice(physical_device* GPU)
 {
@@ -13,6 +14,14 @@ b32 IsCompatibleDevice(physical_device* GPU)
 #endif
     
     return Result;
+}
+
+VkCommandBufferBeginInfo* OneTimeCommandBufferBeginInfo()
+{
+    local VkCommandBufferBeginInfo CommandBufferBeginInfo;
+    CommandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    return &CommandBufferBeginInfo;
 }
 
 VkPipelineDynamicStateCreateInfo* ViewportScissorDynamicState()
@@ -90,6 +99,14 @@ VkPipelineInputAssemblyStateCreateInfo* TriangleListInputAssemblyState()
     local VkPipelineInputAssemblyStateCreateInfo InputAssemblyState;
     InputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     InputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    return &InputAssemblyState;
+}
+
+VkPipelineInputAssemblyStateCreateInfo* LineListInputAssemblyState()
+{    
+    local VkPipelineInputAssemblyStateCreateInfo InputAssemblyState;
+    InputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    InputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
     return &InputAssemblyState;
 }
 
@@ -782,18 +799,18 @@ VkInstance CreateInstance()
 DEBUG_DRAW_POINT(DEBUGDrawPoint)
 {
 #if DEVELOPER_BUILD
-    developer_vulkan_graphics* Graphics = (developer_vulkan_graphics*)GetVulkanGraphics();
-    ASSERT(Graphics->PointCount < ARRAYCOUNT(Graphics->DebugPoints));
-    Graphics->DebugPoints[Graphics->PointCount++] = {Position, Size, Color};
+    debug_primitive_context* Context = &((developer_vulkan_graphics*)GetVulkanGraphics())->PrimitiveContext;    
+    ASSERT(Context->PointCount < ARRAYCOUNT(Context->DebugPoints));
+    Context->DebugPoints[Context->PointCount++] = {Position, Size, Color};
 #endif
 }
 
 DEBUG_DRAW_LINE(DEBUGDrawLine)
 {
 #if DEVELOPER_BUILD
-    developer_vulkan_graphics* Graphics = (developer_vulkan_graphics*)GetVulkanGraphics();
-    ASSERT(Graphics->LineCount < ARRAYCOUNT(Graphics->DebugLines));
-    Graphics->DebugLines[Graphics->LineCount++] = {Position0, Position1, Width, Height, Color};
+    debug_primitive_context* Context = &((developer_vulkan_graphics*)GetVulkanGraphics())->PrimitiveContext;        
+    ASSERT(Context->LineCount < ARRAYCOUNT(Context->DebugLines));
+    Context->DebugLines[Context->LineCount++] = {Position0, Position1, Width, Height, Color};
 #endif
 }
 
@@ -849,7 +866,7 @@ RENDER_GAME(RenderGame)
     VkCommandBufferBeginInfo CommandBufferBeginInfo = {};
     CommandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(CommandBuffer, &CommandBufferBeginInfo),
+    VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(CommandBuffer, OneTimeCommandBufferBeginInfo()),
                             "Failed to begin the command buffer recording.");
     {
         VkClearColorValue ClearColor = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -903,35 +920,37 @@ RENDER_GAME(RenderGame)
             
 #if DEVELOPER_BUILD
             developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
-            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->PointPipeline);
-            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->PointPipelineLayout, 0, 1, &DevGraphics->DebugDescriptorSet, 0, VK_NULL_HANDLE);
             
-            for(u32 PointIndex = 0; PointIndex < DevGraphics->PointCount; PointIndex++)
+            debug_primitive_context* PrimitiveContext = &DevGraphics->PrimitiveContext;
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->PointPipeline);
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->PointPipelineLayout, 0, 1, &PrimitiveContext->DescriptorSet, 0, VK_NULL_HANDLE);
+            
+            for(u32 PointIndex = 0; PointIndex < PrimitiveContext->PointCount; PointIndex++)
             {   
-                debug_point* DebugPoint = DevGraphics->DebugPoints + PointIndex;                
+                debug_point* DebugPoint = PrimitiveContext->DebugPoints + PointIndex;                
                 v4f PointPosition = V4(DebugPoint->Position, DebugPoint->Size); 
                
-                vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f), &PointPosition);
-                vkCmdPushConstants(CommandBuffer, DevGraphics->PointPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f), sizeof(c4), &DebugPoint->Color);
+                vkCmdPushConstants(CommandBuffer, PrimitiveContext->PointPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f), &PointPosition);
+                vkCmdPushConstants(CommandBuffer, PrimitiveContext->PointPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f), sizeof(c4), &DebugPoint->Color);
                 vkCmdDraw(CommandBuffer, 1, 1, 0, 0);
             }
-            DevGraphics->PointCount = 0;
+            PrimitiveContext->PointCount = 0;
             
-            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->LinePipeline);
-            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, DevGraphics->LinePipelineLayout, 0, 1, &DevGraphics->DebugDescriptorSet, 0, VK_NULL_HANDLE);
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipeline);
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipelineLayout, 0, 1, &PrimitiveContext->DescriptorSet, 0, VK_NULL_HANDLE);
             
-            for(u32 LineIndex = 0; LineIndex < DevGraphics->LineCount; LineIndex++)
+            for(u32 LineIndex = 0; LineIndex < PrimitiveContext->LineCount; LineIndex++)
             {
-                debug_line* DebugLine = DevGraphics->DebugLines + LineIndex;
+                debug_line* DebugLine = PrimitiveContext->DebugLines + LineIndex;
                 
                 v4f LinePositions[2];
                 LinePositions[0] = V4(DebugLine->Position0, DebugLine->Width);
                 LinePositions[1] = V4(DebugLine->Position1, DebugLine->Height);                
-                vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f)*2, LinePositions);
-                vkCmdPushConstants(CommandBuffer, DevGraphics->LinePipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f)*2, sizeof(c4), &DebugLine->Color);
+                vkCmdPushConstants(CommandBuffer, PrimitiveContext->LinePipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f)*2, LinePositions);
+                vkCmdPushConstants(CommandBuffer, PrimitiveContext->LinePipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f)*2, sizeof(c4), &DebugLine->Color);
                 vkCmdDraw(CommandBuffer, 1, 1, 0, 0);            
             }
-            DevGraphics->LineCount = 0;
+            PrimitiveContext->LineCount = 0;
 #endif            
         }
         vkCmdEndRenderPass(CommandBuffer);
@@ -1063,6 +1082,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_DEVICE_FUNCTION(vkUpdateDescriptorSets);
     LOAD_DEVICE_FUNCTION(vkCreateBuffer);
     LOAD_DEVICE_FUNCTION(vkMapMemory);
+    LOAD_DEVICE_FUNCTION(vkCmdUpdateBuffer);
     
     if(Graphics->SelectedGPU->FoundDedicatedMemoryExtension)
     {
@@ -1138,11 +1158,11 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
     VkDescriptorPoolSize PoolSizes[1] = {};
     PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    PoolSizes[0].descriptorCount = 2;
+    PoolSizes[0].descriptorCount = 3;
     
     VkDescriptorPoolCreateInfo DescriptorPoolInfo = {};
     DescriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    DescriptorPoolInfo.maxSets = 2;
+    DescriptorPoolInfo.maxSets = 3;
     DescriptorPoolInfo.poolSizeCount = ARRAYCOUNT(PoolSizes);
     DescriptorPoolInfo.pPoolSizes = PoolSizes;
     
@@ -1278,6 +1298,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
 #if DEVELOPER_BUILD
     developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
+    debug_primitive_context* PrimitiveContext = &DevGraphics->PrimitiveContext;
     
     VkDescriptorSetLayoutBinding DebugDescriptorBinding = {};
     DebugDescriptorBinding.binding = 0;
@@ -1290,16 +1311,16 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     DebugDescriptorSetLayoutInfo.bindingCount = 1;
     DebugDescriptorSetLayoutInfo.pBindings = &DebugDescriptorBinding;
     
-    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(DevGraphics->Device, &DebugDescriptorSetLayoutInfo, VK_NULL_HANDLE, &DevGraphics->DebugDescriptorSetLayout),
+    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(DevGraphics->Device, &DebugDescriptorSetLayoutInfo, VK_NULL_HANDLE, &PrimitiveContext->DescriptorSetLayout),
                             "Failed to create the debug point descriptor set layout.");
     
     VkDescriptorSetAllocateInfo DebugDescriptorSetInfo = {};
     DebugDescriptorSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     DebugDescriptorSetInfo.descriptorPool = DevGraphics->DescriptorPool;
     DebugDescriptorSetInfo.descriptorSetCount = 1;
-    DebugDescriptorSetInfo.pSetLayouts = &DevGraphics->DebugDescriptorSetLayout;
+    DebugDescriptorSetInfo.pSetLayouts = &PrimitiveContext->DescriptorSetLayout;
     
-    VULKAN_CHECK_AND_HANDLE(vkAllocateDescriptorSets(DevGraphics->Device, &DebugDescriptorSetInfo, &DevGraphics->DebugDescriptorSet),
+    VULKAN_CHECK_AND_HANDLE(vkAllocateDescriptorSets(DevGraphics->Device, &DebugDescriptorSetInfo, &PrimitiveContext->DescriptorSet),
                             "Failed to allocate the debug point descriptor set.");
     
     VkShaderModule DebugPointVertex   = CreateShader("shaders/vulkan/debug_point_vertex.spv");
@@ -1322,11 +1343,11 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VkPipelineLayoutCreateInfo PointPipelineLayoutInfo = {};
     PointPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     PointPipelineLayoutInfo.setLayoutCount = 1;
-    PointPipelineLayoutInfo.pSetLayouts = &DevGraphics->DebugDescriptorSetLayout;
+    PointPipelineLayoutInfo.pSetLayouts = &PrimitiveContext->DescriptorSetLayout;
     PointPipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(PointPushConstantRanges);
     PointPipelineLayoutInfo.pPushConstantRanges = PointPushConstantRanges;
     
-    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(DevGraphics->Device, &PointPipelineLayoutInfo, VK_NULL_HANDLE, &DevGraphics->PointPipelineLayout),
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(DevGraphics->Device, &PointPipelineLayoutInfo, VK_NULL_HANDLE, &PrimitiveContext->PointPipelineLayout),
                             "Failed to create the debug point pipeline layout.");
     
     VkPipelineShaderStageCreateInfo PointShaderStages[3] = {};
@@ -1357,11 +1378,11 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     PointGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();    
     PointGraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
     PointGraphicsPipelineInfo.pDepthStencilState = DepthOffState();
-    PointGraphicsPipelineInfo.layout = DevGraphics->PointPipelineLayout;
+    PointGraphicsPipelineInfo.layout = PrimitiveContext->PointPipelineLayout;
     PointGraphicsPipelineInfo.renderPass = Graphics->RenderPass;
     PointGraphicsPipelineInfo.subpass = 0;    
     
-    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &PointGraphicsPipelineInfo, VK_NULL_HANDLE, &DevGraphics->PointPipeline),
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &PointGraphicsPipelineInfo, VK_NULL_HANDLE, &PrimitiveContext->PointPipeline),
                             "Failed to create the debug point graphics pipeline.");
     
     vkDestroyShaderModule(DevGraphics->Device, DebugPointVertex, VK_NULL_HANDLE);
@@ -1388,11 +1409,11 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VkPipelineLayoutCreateInfo LinePipelineLayoutInfo = {};
     LinePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     LinePipelineLayoutInfo.setLayoutCount = 1;
-    LinePipelineLayoutInfo.pSetLayouts = &DevGraphics->DebugDescriptorSetLayout;
+    LinePipelineLayoutInfo.pSetLayouts = &PrimitiveContext->DescriptorSetLayout;
     LinePipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(LinePushConstantRanges);
     LinePipelineLayoutInfo.pPushConstantRanges = LinePushConstantRanges;
     
-    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(DevGraphics->Device, &LinePipelineLayoutInfo, VK_NULL_HANDLE, &DevGraphics->LinePipelineLayout),
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(DevGraphics->Device, &LinePipelineLayoutInfo, VK_NULL_HANDLE, &PrimitiveContext->LinePipelineLayout),
                             "Failed to create the debug line pipeline layout.");
     
     VkPipelineShaderStageCreateInfo LineShaderStages[3] = {};
@@ -1423,19 +1444,205 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LineGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();    
     LineGraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
     LineGraphicsPipelineInfo.pDepthStencilState = DepthOffState();
-    LineGraphicsPipelineInfo.layout = DevGraphics->LinePipelineLayout;
+    LineGraphicsPipelineInfo.layout = PrimitiveContext->LinePipelineLayout;
     LineGraphicsPipelineInfo.renderPass = Graphics->RenderPass;
     LineGraphicsPipelineInfo.subpass = 0;    
     
-    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &LineGraphicsPipelineInfo, VK_NULL_HANDLE, &DevGraphics->LinePipeline),
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &LineGraphicsPipelineInfo, VK_NULL_HANDLE, &PrimitiveContext->LinePipeline),
                             "Failed to create the debug point graphics pipeline.");    
     
     vkDestroyShaderModule(DevGraphics->Device, DebugLineVertex, VK_NULL_HANDLE);
     vkDestroyShaderModule(DevGraphics->Device, DebugLineGeometry, VK_NULL_HANDLE);
     vkDestroyShaderModule(DevGraphics->Device, DebugLineFragment, VK_NULL_HANDLE);
     
-    DescriptorWrites.dstSet = DevGraphics->DebugDescriptorSet;
-    vkUpdateDescriptorSets(DevGraphics->Device, 1, &DescriptorWrites, 0, VK_NULL_HANDLE);
+    debug_volume_context* VolumeContext = &DevGraphics->VolumeContext;    
+    VkDescriptorSetLayoutBinding DebugVolumeDescriptorBinding = {};
+    DebugVolumeDescriptorBinding.binding = 0;
+    DebugVolumeDescriptorBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    DebugVolumeDescriptorBinding.descriptorCount = 1;
+    DebugVolumeDescriptorBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    
+    VkDescriptorSetLayoutCreateInfo DebugVolumeDescriptorSetLayoutInfo = {};
+    DebugVolumeDescriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    DebugVolumeDescriptorSetLayoutInfo.bindingCount = 1;
+    DebugVolumeDescriptorSetLayoutInfo.pBindings = &DebugVolumeDescriptorBinding;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(Graphics->Device, &DebugVolumeDescriptorSetLayoutInfo, VK_NULL_HANDLE, &VolumeContext->DescriptorSetLayout),
+                            "Failed to create the debug volumes descriptor set layout.");    
+    
+    VkPushConstantRange DebugVolumesPushConstantRanges[2] = {};
+    DebugVolumesPushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    DebugVolumesPushConstantRanges[0].offset = 0;
+    DebugVolumesPushConstantRanges[0].size = sizeof(m4);
+    
+    DebugVolumesPushConstantRanges[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    DebugVolumesPushConstantRanges[1].offset = sizeof(m4);
+    DebugVolumesPushConstantRanges[1].size = sizeof(c4);
+    
+    VkPipelineLayoutCreateInfo DebugVolumePipelineLayoutInfo = {};
+    DebugVolumePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    DebugVolumePipelineLayoutInfo.setLayoutCount = 1;
+    DebugVolumePipelineLayoutInfo.pSetLayouts = &VolumeContext->DescriptorSetLayout;
+    DebugVolumePipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(DebugVolumesPushConstantRanges);
+    DebugVolumePipelineLayoutInfo.pPushConstantRanges = DebugVolumesPushConstantRanges;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(Graphics->Device, &DebugVolumePipelineLayoutInfo, VK_NULL_HANDLE, &VolumeContext->PipelineLayout),
+                            "Failed to create the debug volume pipeline layout.");
+    
+    VkDescriptorSetAllocateInfo DebugVolumeDescriptorSetInfo = {};
+    DebugVolumeDescriptorSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    DebugVolumeDescriptorSetInfo.descriptorPool = Graphics->DescriptorPool;
+    DebugVolumeDescriptorSetInfo.descriptorSetCount = 1;
+    DebugVolumeDescriptorSetInfo.pSetLayouts = &VolumeContext->DescriptorSetLayout;
+    VULKAN_CHECK_AND_HANDLE(vkAllocateDescriptorSets(Graphics->Device, &DebugVolumeDescriptorSetInfo, &VolumeContext->DescriptorSet),
+                            "Failed to allocate the debug volume descriptor set.");
+    
+    VkShaderModule DebugVolumesVertex   = CreateShader("shaders/vulkan/debug_volumes_vertex.spv");
+    VkShaderModule DebugVolumesFragment = CreateShader("shaders/vulkan/debug_volumes_fragment.spv");
+    
+    BOOL_CHECK_AND_HANDLE(DebugVolumesVertex, "Failed to create the debug volume vertex buffer.");
+    BOOL_CHECK_AND_HANDLE(DebugVolumesFragment, "Failed to create the debug fragment vertex buffer.");
+    
+    VkPipelineShaderStageCreateInfo VolumeShaderStages[2] = {};
+    VolumeShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    VolumeShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    VolumeShaderStages[0].module = DebugVolumesVertex;
+    VolumeShaderStages[0].pName = "main";
+    
+    VolumeShaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    VolumeShaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    VolumeShaderStages[1].module = DebugVolumesFragment;
+    VolumeShaderStages[1].pName = "main";
+    
+    VkVertexInputBindingDescription DebugVolumesInputBindingDescription = {};
+    DebugVolumesInputBindingDescription.binding = 0;
+    DebugVolumesInputBindingDescription.stride = sizeof(v3f);
+    DebugVolumesInputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    
+    VkVertexInputAttributeDescription DebugVolumesVertexAttributeDescription = {};
+    DebugVolumesVertexAttributeDescription.location = 0;
+    DebugVolumesVertexAttributeDescription.binding = 0;
+    DebugVolumesVertexAttributeDescription.format = VK_FORMAT_R32G32B32_SFLOAT;
+    DebugVolumesVertexAttributeDescription.offset = 0;
+    
+    VkPipelineVertexInputStateCreateInfo DebugVolumesVertexInputState = {};
+    DebugVolumesVertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;    
+    DebugVolumesVertexInputState.vertexBindingDescriptionCount = 1;
+    DebugVolumesVertexInputState.pVertexBindingDescriptions = &DebugVolumesInputBindingDescription;
+    DebugVolumesVertexInputState.vertexAttributeDescriptionCount = 1;
+    DebugVolumesVertexInputState.pVertexAttributeDescriptions = &DebugVolumesVertexAttributeDescription;
+    
+    VkGraphicsPipelineCreateInfo DebugVolumesGraphicsPipelineInfo = {};
+    DebugVolumesGraphicsPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    DebugVolumesGraphicsPipelineInfo.stageCount = ARRAYCOUNT(VolumeShaderStages);
+    DebugVolumesGraphicsPipelineInfo.pStages = VolumeShaderStages;
+    DebugVolumesGraphicsPipelineInfo.pVertexInputState = &DebugVolumesVertexInputState;
+    DebugVolumesGraphicsPipelineInfo.pInputAssemblyState = LineListInputAssemblyState();
+    DebugVolumesGraphicsPipelineInfo.pViewportState = SingleViewportState();
+    DebugVolumesGraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    DebugVolumesGraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
+    DebugVolumesGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();
+    DebugVolumesGraphicsPipelineInfo.pDepthStencilState = DepthOffState();
+    DebugVolumesGraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
+    DebugVolumesGraphicsPipelineInfo.layout = VolumeContext->PipelineLayout;
+    DebugVolumesGraphicsPipelineInfo.renderPass = Graphics->RenderPass;
+    DebugVolumesGraphicsPipelineInfo.subpass = 0;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &DebugVolumesGraphicsPipelineInfo, VK_NULL_HANDLE, &VolumeContext->Pipeline),
+                            "Failed to create the debug volume pipeline.");
+    
+    vkDestroyShaderModule(DevGraphics->Device, DebugVolumesVertex, VK_NULL_HANDLE);
+    vkDestroyShaderModule(DevGraphics->Device, DebugVolumesFragment, VK_NULL_HANDLE);
+    
+    VolumeContext->CapsuleMesh = DEBUGCreateCapsuleMesh(60);
+    debug_capsule_mesh* CapsuleMesh = &VolumeContext->CapsuleMesh;
+    
+    VkDeviceSize DEBUGCapsuleCapVertexSize = CapsuleMesh->Cap.VertexCount*sizeof(v3f);
+    VkDeviceSize DEBUGCapsuleBodyVertexSize = CapsuleMesh->Body.VertexCount*sizeof(v3f);
+    VkDeviceSize DEBUGCapsuleCapIndicesSize = CapsuleMesh->Cap.IndexCount*sizeof(u16);
+    VkDeviceSize DEBUGCapsuleBodyIndicesSize = CapsuleMesh->Body.IndexCount*sizeof(u16);
+    
+    VkDeviceSize DEBUGVertexBufferSize = DEBUGCapsuleCapVertexSize+DEBUGCapsuleBodyVertexSize;
+    VkDeviceSize DEBUGIndexBufferSize = DEBUGCapsuleCapIndicesSize+DEBUGCapsuleBodyIndicesSize;
+    
+    VkBufferCreateInfo DEBUGVertexBufferCreateInfo = {};
+    DEBUGVertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    DEBUGVertexBufferCreateInfo.size = DEBUGVertexBufferSize;
+    DEBUGVertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;    
+    DEBUGVertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;    
+    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &DEBUGVertexBufferCreateInfo, VK_NULL_HANDLE, &VolumeContext->VertexBuffer),
+                            "Failed to create the debug vertex buffer.");
+    
+    VkBufferCreateInfo DEBUGIndexBufferCreateInfo = {};
+    DEBUGIndexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    DEBUGIndexBufferCreateInfo.size = DEBUGIndexBufferSize;
+    DEBUGIndexBufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    DEBUGIndexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &DEBUGIndexBufferCreateInfo, VK_NULL_HANDLE, &VolumeContext->IndexBuffer),
+                            "Failed to create the debug index buffer.");
+    
+    VkMemoryRequirements DEBUGVertexBufferMemoryRequirements = {};
+    VkMemoryRequirements DEBUGIndexBufferMemoryRequirements = {};
+    
+    vkGetBufferMemoryRequirements(Graphics->Device, VolumeContext->VertexBuffer, &DEBUGVertexBufferMemoryRequirements);
+    vkGetBufferMemoryRequirements(Graphics->Device, VolumeContext->IndexBuffer, &DEBUGIndexBufferMemoryRequirements);    
+    
+    i32 DEBUGMemoryTypeIndex = FindMemoryTypeIndex(&Graphics->SelectedGPU->MemoryProperties, &DEBUGVertexBufferMemoryRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if(DEBUGMemoryTypeIndex == -1)
+        WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the debug vertex buffer.");
+    
+    if(FindMemoryTypeIndex(&Graphics->SelectedGPU->MemoryProperties, &DEBUGIndexBufferMemoryRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != DEBUGMemoryTypeIndex)    
+        WRITE_AND_HANDLE_ERROR("Memory type index for the debugindex buffer does not equal the debug vertex buffer memory index.");    
+    
+    VkDeviceSize DEBUGIndexMemoryOffset = ALIGN(DEBUGVertexBufferMemoryRequirements.size, (i32)DEBUGIndexBufferMemoryRequirements.alignment);    
+    VkDeviceSize DEBUGMemorySize = DEBUGIndexMemoryOffset+DEBUGIndexBufferMemoryRequirements.size;
+    VkMemoryAllocateInfo DEBUGAllocateInfo = {};
+    DEBUGAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    DEBUGAllocateInfo.memoryTypeIndex = DEBUGMemoryTypeIndex;
+    DEBUGAllocateInfo.allocationSize = DEBUGMemorySize;
+    VULKAN_CHECK_AND_HANDLE(vkAllocateMemory(Graphics->Device, &DEBUGAllocateInfo, VK_NULL_HANDLE, &VolumeContext->Memory),
+                            "Failed to allocate the debug memory.");
+    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(Graphics->Device, VolumeContext->VertexBuffer, VolumeContext->Memory, 0),
+                            "Failed to bind the debug vertex buffer to the debug memory.");
+    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(Graphics->Device, VolumeContext->IndexBuffer, VolumeContext->Memory, DEBUGIndexMemoryOffset),
+                            "Failed to bind the debug index buffer to the debug memory.");
+    
+    VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed ot reset the command buffer.");
+    VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(Graphics->CommandBuffer, OneTimeCommandBufferBeginInfo()), "Failed to begin recording the command buffer.");
+    {
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, 0, DEBUGCapsuleCapVertexSize, CapsuleMesh->Cap.Vertices);
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, DEBUGCapsuleCapVertexSize, DEBUGCapsuleBodyVertexSize, CapsuleMesh->Body.Vertices);
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, 0, DEBUGCapsuleCapIndicesSize, CapsuleMesh->Cap.Indices);
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, DEBUGCapsuleCapIndicesSize, DEBUGCapsuleBodyIndicesSize, CapsuleMesh->Body.Indices);
+    }    
+    VULKAN_CHECK_AND_HANDLE(vkEndCommandBuffer(Graphics->CommandBuffer), "Failed to end the command buffer recording.");
+    
+    VkSubmitInfo SubmitInfo = {};
+    SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    SubmitInfo.commandBufferCount = 1;
+    SubmitInfo.pCommandBuffers = &Graphics->CommandBuffer;
+    
+    VULKAN_CHECK_AND_HANDLE(vkQueueSubmit(Graphics->GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE), 
+                            "Failed to submit the command buffer to the graphics queue.");
+    
+    VkWriteDescriptorSet DebugDescriptorWrites[2] = {};    
+    DebugDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    DebugDescriptorWrites[0].dstSet = PrimitiveContext->DescriptorSet;
+    DebugDescriptorWrites[0].dstBinding = 0;
+    DebugDescriptorWrites[0].dstArrayElement = 0;
+    DebugDescriptorWrites[0].descriptorCount = 1;
+    DebugDescriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    DebugDescriptorWrites[0].pBufferInfo = &DescriptorBufferInfo;
+    
+    DebugDescriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    DebugDescriptorWrites[1].dstSet = VolumeContext->DescriptorSet;
+    DebugDescriptorWrites[1].dstBinding = 0;
+    DebugDescriptorWrites[1].dstArrayElement = 0;
+    DebugDescriptorWrites[1].descriptorCount = 1;
+    DebugDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    DebugDescriptorWrites[1].pBufferInfo = &DescriptorBufferInfo;
+    
+    vkUpdateDescriptorSets(DevGraphics->Device, ARRAYCOUNT(DebugDescriptorWrites), DebugDescriptorWrites, 0, VK_NULL_HANDLE);    
     
 #endif
     

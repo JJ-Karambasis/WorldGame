@@ -34,6 +34,9 @@ IF %COMPILE_SHADERS% == 1 (
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_vertex.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_fragment.spv
 
+    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_volumes.glsl -o debug_volumes_vertex.spv
+    glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\debug_volumes.glsl -o debug_volumes_fragment.spv
+
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_vertex.spv
     glslc -O0 -DGEOMETRY -fshader-stage=geometry ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_geometry.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_fragment.spv

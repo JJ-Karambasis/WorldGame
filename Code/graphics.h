@@ -10,6 +10,21 @@ typedef DEBUG_DRAW_POINT(debug_draw_point);
 #define DEBUG_DRAW_LINE(name) void name(v3f Position0, v3f Position1, f32 Width, f32 Height, c4 Color)
 typedef DEBUG_DRAW_LINE(debug_draw_line);
 
+struct mesh
+{
+    v3f* Vertices;
+    u32 VertexCount;
+    u16* Indices;
+    u32 IndexCount;
+};
+
+
+struct debug_capsule_mesh
+{
+    mesh Cap;
+    mesh Body;
+};
+
 struct camera
 {
     v3f Velocity;

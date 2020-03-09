@@ -114,6 +114,7 @@ VULKAN_FUNCTION(vkCmdBindDescriptorSets);
 VULKAN_FUNCTION(vkUpdateDescriptorSets);
 VULKAN_FUNCTION(vkCreateBuffer);
 VULKAN_FUNCTION(vkMapMemory);
+VULKAN_FUNCTION(vkCmdUpdateBuffer);
 
 struct extensions_array
 {
@@ -204,12 +205,11 @@ struct debug_line
     c4 Color;
 };
 
-struct developer_vulkan_graphics : public vulkan_graphics
+struct debug_primitive_context
 {
-    VkDebugUtilsMessengerEXT Messenger;
-    VkDescriptorSetLayout DebugDescriptorSetLayout;
-    VkDescriptorSet DebugDescriptorSet;
-        
+    VkDescriptorSetLayout DescriptorSetLayout;
+    VkDescriptorSet DescriptorSet;
+    
     VkPipelineLayout PointPipelineLayout;
     VkPipeline PointPipeline;
     
@@ -220,7 +220,29 @@ struct developer_vulkan_graphics : public vulkan_graphics
     debug_point DebugPoints[8096];
     
     u32 LineCount;
-    debug_line DebugLines[2048];
+    debug_line DebugLines[2048];    
+};
+
+struct debug_volume_context
+{    
+    VkDescriptorSet DescriptorSet;
+    VkDescriptorSetLayout DescriptorSetLayout;    
+    
+    VkPipelineLayout PipelineLayout;
+    VkPipeline Pipeline;
+    
+    debug_capsule_mesh CapsuleMesh;    
+    VkDeviceMemory Memory;
+    VkBuffer VertexBuffer;
+    VkBuffer IndexBuffer;    
+};
+
+struct developer_vulkan_graphics : public vulkan_graphics
+{
+    VkDebugUtilsMessengerEXT Messenger;
+    
+    debug_primitive_context PrimitiveContext;
+    debug_volume_context VolumeContext;
 };
 
 global developer_vulkan_graphics __Developer_Vulkan_Graphics__;
