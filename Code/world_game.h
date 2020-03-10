@@ -95,6 +95,7 @@ struct walkable_pole
     static_entity* HitEntity;
     triangle* HitTriangle;
     b32 HitWalkable;
+    b32 IsCulled;
     
     walkable_surface_intersection SurfaceIntersections[8];    
 };

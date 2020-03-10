@@ -106,6 +106,33 @@ method_type GetMethodType(walkable_pole* TargetPole, walkable_pole* VerticalPole
     return METHOD_TYPE_UNKNOWN;
 }
 
+method_type GetMethodType(walkable_surface_intersection* SurfaceIntersections, pole_index VerticalIndex, pole_index HorizontalIndex, pole_index CornerIndex)
+{        
+    u32 Method = 1;
+    if(SurfaceIntersections[VerticalIndex].HasIntersected) Method *= 2;
+    if(SurfaceIntersections[HorizontalIndex].HasIntersected) Method *= 2;
+    if(SurfaceIntersections[CornerIndex].HasIntersected) Method *= 2;
+    
+    switch(Method)
+    {
+        case 8:
+        return METHOD_TYPE_CORNER;
+        
+        case 4:
+        return METHOD_TYPE_TRIANGLE;
+        
+        case 2:
+        return METHOD_TYPE_WALL;
+        
+        case 1:
+        return METHOD_TYPE_SURFACE;
+                        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return METHOD_TYPE_UNKNOWN;
+}
+
 
 #define DEBUG_DRAW_RING(ring) \
 DRAW_POINT(ring->P[0], 0.00f, RGBA(0.0f, 1.0f, 0.0f, 1.0f)); \
@@ -485,9 +512,69 @@ EXPORT GAME_TICK(Tick)
         }
     }
     
+    f32 Radius = Player->Radius;         
+    for(i32 YIndex = 1; YIndex < Grid.PoleCount.y-1; YIndex++)
+    {
+        for(i32 XIndex = 1; XIndex < Grid.PoleCount.x-1; XIndex++)
+        {
+            walkable_pole* Pole = GetPole(&Grid, XIndex, YIndex);
+            if(Pole->HitWalkable)
+            {
+                method_type Type = GetMethodType(Pole->SurfaceIntersections, POLE_INDEX_BOTTOM, POLE_INDEX_LEFT, POLE_INDEX_BOTTOM_LEFT);
+                switch(Type)
+                {
+                    case METHOD_TYPE_CORNER:
+                    {   
+                        v2f P[3] = 
+                        {
+                            Pole->SurfaceIntersections[POLE_INDEX_BOTTOM].P,
+                            Pole->SurfaceIntersections[POLE_INDEX_LEFT].P,
+                            Pole->SurfaceIntersections[POLE_INDEX_BOTTOM_LEFT].P
+                        }; 
+                        
+                        v2i Min = V2i(XIndex, YIndex);                        
+                        v2i Max = MaximumV2(Min+(Padding-1), Grid.PoleCount);                                                
+                        
+                        for(u32 Y = Min.y; Y < Max.y; Y++)
+                        {
+                            for (u32 X = Min.x; X < Max.x; X++)
+                            {
+                                walkable_pole* TestPole = GetPole(&Grid, X, Y);
+                                if(TestPole->HitWalkable)
+                                    TestPole->IsCulled = true;                                
+                            }
+                        }
+                        
+                        walkable_pole* TestPole = GetPole(&Grid, Min+Padding);
+                        if(TestPole->HitWalkable)
+                        {
+                            v2f Corner = P[2] + Radius;
+                            v2f Vertical = V2(TestPole->Position2D.x, P[0].y + Radius);
+                            v2f Horizontal = V2(P[1].x + Radius, TestPole->Position2D.y);
+                            
+                            TestPole->SurfaceIntersections[POLE_INDEX_BOTTOM_LEFT].P = Corner;
+                            TestPole->SurfaceIntersections[POLE_INDEX_BOTTOM].P = Vertical;
+                            TestPole->SurfaceIntersections[POLE_INDEX_LEFT].P = Horizontal;
+                        }                                
+                    } break;
+                    
+                    case METHOD_TYPE_WALL:
+                    {
+                        Pole->IsCulled = true;
+                    } break;
+                    
+                    case METHOD_TYPE_TRIANGLE:
+                    {
+                        Pole->IsCulled = true;
+                    } break;                    
+                } 
+            }
+        }
+    }
+    
     walkable_triangle_ring_list RingList = {};
     
-#if 1
+#if 0
     for(i32 YIndex = 1; YIndex < Grid.CellCount.y-1; YIndex++)
     {
         for(i32 XIndex = 1; XIndex < Grid.CellCount.x-1; XIndex++)
