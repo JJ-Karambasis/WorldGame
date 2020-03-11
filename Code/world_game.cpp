@@ -26,9 +26,15 @@ GetCell(v2f Position)
 inline walkable_pole* 
 GetPole(walkable_grid* Grid, i32 XIndex, i32 YIndex)
 {
-    ASSERT((XIndex < Grid->PoleCount.x) && (XIndex >= 0));
-    ASSERT((YIndex < Grid->PoleCount.y) && (YIndex >= 0));
-    walkable_pole* Result = Grid->Poles + ((YIndex*Grid->PoleCount.x)+XIndex);
+    if((XIndex < Grid->PoleCount.x) && (XIndex >= 0) && (YIndex < Grid->PoleCount.y) && (YIndex >= 0))        
+        return Grid->Poles + ((YIndex*Grid->PoleCount.x)+XIndex);
+    return NULL;
+}
+
+inline walkable_pole* 
+GetPole(walkable_grid* Grid, v2i Index)
+{
+    walkable_pole* Result = GetPole(Grid, Index.x, Index.y);
     return Result;
 }
 
@@ -42,6 +48,13 @@ GetCellPoles(walkable_grid* Grid, i32 CellX, i32 CellY)
     Result[1] = GetPole(Grid, CellX+1, CellY);
     Result[2] = GetPole(Grid, CellX,   CellY+1);
     Result[3] = GetPole(Grid, CellX+1, CellY+1);
+    return Result;
+}
+
+inline walkable_pole**
+GetCellPoles(walkable_grid* Grid, v2i Cell)
+{
+    walkable_pole** Result = GetCellPoles(Grid, Cell.x, Cell.y);
     return Result;
 }
 
@@ -133,6 +146,21 @@ method_type GetMethodType(walkable_surface_intersection* SurfaceIntersections, p
     return METHOD_TYPE_UNKNOWN;
 }
 
+inline b32
+IsValidWalkablePole(walkable_pole* Pole)
+{
+    b32 Result = (Pole && Pole->HitWalkable && !Pole->IsCulled);
+    return Result;
+}
+
+inline void CullPole(walkable_pole* Pole)
+{
+    if(Pole->HitWalkable)
+    {
+        Pole->IsCulled = true;
+        DRAW_POINT(Pole->IntersectionPoint, 0.05f, RGBA(1.0f, 1.0f, 0.0f, 1.0f));
+    }
+}
 
 #define DEBUG_DRAW_RING(ring) \
 DRAW_POINT(ring->P[0], 0.00f, RGBA(0.0f, 1.0f, 0.0f, 1.0f)); \
@@ -161,16 +189,18 @@ AddQuadRings(walkable_triangle_ring_list* List, v3f p0, v3f p1, v3f p2, v3f p3)
 }
 
 inline void AddSurfaceIntersection(walkable_pole* Pole, pole_index Index, surface_intersection_query Query)
-{
+{    
     Pole->SurfaceIntersections[Index].HasIntersected = true;
     Pole->SurfaceIntersections[Index].Query = Query;    
 }
 
 inline void AddSurfaceIntersection(walkable_pole* Pole, pole_index Index, v2f P)
 {
-    surface_intersection_query Result = {P};
-    AddSurfaceIntersection(Pole, Index, Result);
+    ASSERT(!Pole->SurfaceIntersections[Index].HasIntersected);
+    Pole->SurfaceIntersections[Index].HasIntersected = true;
+    Pole->SurfaceIntersections[Index].Query.P = P;    
 }
+
 
 surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walkable_pole* MissPole)
 { 
@@ -245,7 +275,7 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* HitPole, walk
     }        
     
     ASSERT(BestDistance != FLT_MAX);
-        
+    
     return Result;
 }
 
@@ -262,6 +292,31 @@ surface_intersection_query SurfaceIntersectionQuery(walkable_pole* TargetPole, w
 inline v3f Get3DPoint(surface_intersection_query Query)
 {
     v3f Result = V3(Query.P, FindTriangleZ(Query.TriangleP[0], Query.TriangleP[1], Query.TriangleP[2], Query.P));
+    return Result;
+}
+
+inline v3f Get3DPoint(walkable_pole* TargetPole, v2f Point)
+{
+    v3f Result = V3(Point, INFINITY);    
+    static_entity* HitEntity = TargetPole->HitEntity;
+    triangle_mesh* Mesh = HitEntity->Mesh;
+    for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
+    {
+        triangle* Triangle = Mesh->Triangles + TriangleIndex;
+        v3f P[3] = 
+        {
+            TransformV3(Triangle->P[0], HitEntity->Transform),
+            TransformV3(Triangle->P[1], HitEntity->Transform),
+            TransformV3(Triangle->P[2], HitEntity->Transform)
+        };
+        
+        if(IsPointInTriangle2D(P[0], P[1], P[2], Point))
+        {
+            Result.z = FindTriangleZ(P[0], P[1], P[2], Point);
+            break;
+        }
+    }                            
+    ASSERT(Result.z != INFINITY);  
     return Result;
 }
 
@@ -346,7 +401,7 @@ inline void PoleSectionTest(walkable_pole* TargetPole, walkable_pole** Surroundi
                 INVALID_CODE;
             }
         } break;                                        
-                
+        
         case METHOD_TYPE_TRIANGLE:
         {                                                
             if(!SurroundingPoles[HorizontalIndex]->HitWalkable)                        
@@ -527,44 +582,85 @@ EXPORT GAME_TICK(Tick)
                     {   
                         v2f P[3] = 
                         {
-                            Pole->SurfaceIntersections[POLE_INDEX_BOTTOM].P,
-                            Pole->SurfaceIntersections[POLE_INDEX_LEFT].P,
-                            Pole->SurfaceIntersections[POLE_INDEX_BOTTOM_LEFT].P
+                            Pole->SurfaceIntersections[POLE_INDEX_BOTTOM].Query.P,
+                            Pole->SurfaceIntersections[POLE_INDEX_LEFT].Query.P,
+                            Pole->SurfaceIntersections[POLE_INDEX_BOTTOM_LEFT].Query.P
                         }; 
                         
                         v2i Min = V2i(XIndex, YIndex);                        
-                        v2i Max = MaximumV2(Min+(Padding-1), Grid.PoleCount);                                                
+                        v2i Max = MinimumV2(Min+(CellPadding-1), Grid.PoleCount-1);                                                
                         
-                        for(u32 Y = Min.y; Y < Max.y; Y++)
+                        for(i32 Y = Min.y; Y <= Max.y; Y++)
                         {
-                            for (u32 X = Min.x; X < Max.x; X++)
+                            for (i32 X = Min.x; X <= Max.x; X++)
                             {
                                 walkable_pole* TestPole = GetPole(&Grid, X, Y);
-                                if(TestPole->HitWalkable)
-                                    TestPole->IsCulled = true;                                
+                                CullPole(TestPole);                                
                             }
                         }
                         
-                        walkable_pole* TestPole = GetPole(&Grid, Min+Padding);
-                        if(TestPole->HitWalkable)
+                        walkable_pole* TestPole = GetPole(&Grid, Min+CellPadding);
+                        if(IsValidWalkablePole(TestPole))
                         {
                             v2f Corner = P[2] + Radius;
                             v2f Vertical = V2(TestPole->Position2D.x, P[0].y + Radius);
                             v2f Horizontal = V2(P[1].x + Radius, TestPole->Position2D.y);
                             
-                            TestPole->SurfaceIntersections[POLE_INDEX_BOTTOM_LEFT].P = Corner;
-                            TestPole->SurfaceIntersections[POLE_INDEX_BOTTOM].P = Vertical;
-                            TestPole->SurfaceIntersections[POLE_INDEX_LEFT].P = Horizontal;
+                            AddSurfaceIntersection(TestPole, POLE_INDEX_BOTTOM_LEFT, Corner);
+                            AddSurfaceIntersection(TestPole, POLE_INDEX_BOTTOM, Vertical);
+                            AddSurfaceIntersection(TestPole, POLE_INDEX_LEFT, Horizontal);                            
                         }                                
                     } break;
                     
                     case METHOD_TYPE_WALL:
-                    {
-                        Pole->IsCulled = true;
+                    {                        
+                        if(Pole->SurfaceIntersections[POLE_INDEX_BOTTOM].HasIntersected)
+                        {
+                            i32 X = XIndex;
+                            i32 MaxY = MinimumI32(YIndex+(CellPadding-1), Grid.PoleCount.y-1);
+                            for(i32 Y = YIndex; Y <= MaxY; Y++)
+                            {
+                                walkable_pole* TestPole = GetPole(&Grid, X, Y);
+                                CullPole(TestPole);                                
+                            }
+                            
+                            walkable_pole* TestPole = GetPole(&Grid, X, YIndex+CellPadding-1);
+                            if(IsValidWalkablePole(TestPole))
+                            {   
+                                v2f P = V2(Pole->SurfaceIntersections[POLE_INDEX_BOTTOM].Query.P.x, Pole->SurfaceIntersections[POLE_INDEX_BOTTOM].Query.P.y + Radius);                                
+                                AddSurfaceIntersection(TestPole, POLE_INDEX_BOTTOM, P);                                
+                            }
+                        }
+                        else if(Pole->SurfaceIntersections[POLE_INDEX_LEFT].HasIntersected)
+                        {
+                            i32 Y = YIndex;
+                            i32 MaxX = MinimumI32(XIndex+(CellPadding-1), Grid.PoleCount.x-1);
+                            for(i32 X = XIndex; X < MaxX; X++)
+                            {
+                                walkable_pole* TestPole = GetPole(&Grid, X, Y);
+                                CullPole(TestPole);                                
+                            }
+                            
+                            walkable_pole* TestPole = GetPole(&Grid, XIndex+CellPadding, Y);
+                            if(IsValidWalkablePole(TestPole))
+                            {
+                                v2f P = V2(Pole->SurfaceIntersections[POLE_INDEX_LEFT].Query.P.x + Radius, Pole->SurfaceIntersections[POLE_INDEX_LEFT].Query.P.y);
+                                AddSurfaceIntersection(TestPole, POLE_INDEX_LEFT, P);                                
+                            }
+                        }
+                        else if(Pole->SurfaceIntersections[POLE_INDEX_BOTTOM_LEFT].HasIntersected)
+                        {
+                            NOT_IMPLEMENTED;
+                        }
+                        else
+                        {
+                            INVALID_CODE;
+                        }                                                
                     } break;
                     
                     case METHOD_TYPE_TRIANGLE:
                     {
+                        NOT_IMPLEMENTED;
                         Pole->IsCulled = true;
                     } break;                    
                 } 
@@ -574,7 +670,7 @@ EXPORT GAME_TICK(Tick)
     
     walkable_triangle_ring_list RingList = {};
     
-#if 0
+#if 1
     for(i32 YIndex = 1; YIndex < Grid.CellCount.y-1; YIndex++)
     {
         for(i32 XIndex = 1; XIndex < Grid.CellCount.x-1; XIndex++)
@@ -587,10 +683,10 @@ EXPORT GAME_TICK(Tick)
             u32 TopRight = 3;
             
             u32 Method = 1;
-            if(CellPoles[BottomLeft]->HitWalkable) Method *= 2;            
-            if(CellPoles[BottomRight]->HitWalkable) Method *= 2;
-            if(CellPoles[TopLeft]->HitWalkable) Method *= 2;
-            if(CellPoles[TopRight]->HitWalkable) Method *= 2;
+            if(IsValidWalkablePole(CellPoles[BottomLeft])) Method *= 2;            
+            if(IsValidWalkablePole(CellPoles[BottomRight])) Method *= 2;
+            if(IsValidWalkablePole(CellPoles[TopLeft])) Method *= 2;
+            if(IsValidWalkablePole(CellPoles[TopRight])) Method *= 2;
             
             switch(Method)
             {
@@ -599,28 +695,28 @@ EXPORT GAME_TICK(Tick)
                     walkable_pole* TargetPole = NULL;
                     
                     surface_intersection_query Queries[3];
-                    if(CellPoles[BottomLeft]->HitWalkable)
+                    if(IsValidWalkablePole(CellPoles[BottomLeft]))
                     {
                         TargetPole = CellPoles[BottomLeft];
                         Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_RIGHT].Query;
                         Queries[1] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP].Query;
                         Queries[2] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP_RIGHT].Query;                        
                     }                    
-                    else if(CellPoles[BottomRight]->HitWalkable)
+                    else if(IsValidWalkablePole(CellPoles[BottomRight]))
                     {
                         TargetPole = CellPoles[BottomRight];
                         Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_LEFT].Query;
                         Queries[1] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP].Query;
                         Queries[2] = TargetPole->SurfaceIntersections[POLE_INDEX_TOP_LEFT].Query;                        
                     }
-                    else if(CellPoles[TopLeft]->HitWalkable)
+                    else if(IsValidWalkablePole(CellPoles[TopLeft]))
                     {
                         TargetPole = CellPoles[TopLeft];
                         Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_RIGHT].Query;
                         Queries[1] = TargetPole->SurfaceIntersections[POLE_INDEX_BOTTOM].Query;
                         Queries[2] = TargetPole->SurfaceIntersections[POLE_INDEX_BOTTOM_RIGHT].Query;                        
                     }
-                    else if(CellPoles[TopRight]->HitWalkable)
+                    else if(IsValidWalkablePole(CellPoles[TopRight]))
                     {
                         TargetPole = CellPoles[TopRight];
                         Queries[0] = TargetPole->SurfaceIntersections[POLE_INDEX_LEFT].Query;
@@ -639,24 +735,7 @@ EXPORT GAME_TICK(Tick)
                         V3(Queries[2].P, INFINITY)
                     };
                     
-                    static_entity* HitEntity = TargetPole->HitEntity;
-                    triangle_mesh* Mesh = HitEntity->Mesh;
-                    for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
-                    {
-                        triangle* Triangle = Mesh->Triangles + TriangleIndex;
-                        v3f P[3] = 
-                        {
-                            TransformV3(Triangle->P[0], HitEntity->Transform),
-                            TransformV3(Triangle->P[1], HitEntity->Transform),
-                            TransformV3(Triangle->P[2], HitEntity->Transform)
-                        };
-                        
-                        if(IsPointInTriangle2D(P[0], P[1], P[2], RingPoints[2].xy))
-                        {
-                            RingPoints[2].z = FindTriangleZ(P[0], P[1], P[2], RingPoints[2].xy);
-                            break;
-                        }
-                    }                            
+                    RingPoints[2] = Get3DPoint(TargetPole, RingPoints[2].xy);
                     ASSERT(RingPoints[2].z != INFINITY);                    
                     AddQuadRings(&RingList, TargetPole->IntersectionPoint, RingPoints[0], RingPoints[2], RingPoints[1]);                                        
                 } break;
@@ -671,52 +750,52 @@ EXPORT GAME_TICK(Tick)
                     
                     v3f P[4] = {};                    
                     
-                    if(CellPoles[BottomLeft]->HitWalkable)
+                    if(IsValidWalkablePole(CellPoles[BottomLeft]))
                     {
-                        if(CellPoles[BottomRight]->HitWalkable)
+                        if(IsValidWalkablePole(CellPoles[BottomRight]))
                         {   
                             P[0] = CellPoles[BottomLeft]->IntersectionPoint;                                                                                    
-                            P[1] = Get3DPoint(CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_TOP].Query);
+                            P[1] = Get3DPoint(CellPoles[BottomLeft], CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_TOP].Query.P);
                             P[2] = CellPoles[BottomRight]->IntersectionPoint;
-                            P[3] = Get3DPoint(CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_TOP].Query);                            
+                            P[3] = Get3DPoint(CellPoles[BottomRight], CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_TOP].Query.P);                            
                             WallCase = true;                                                        
                         }
-                        else if(CellPoles[TopLeft]->HitWalkable)
+                        else if(IsValidWalkablePole(CellPoles[TopLeft]))
                         {
                             P[0] = CellPoles[BottomLeft]->IntersectionPoint;
-                            P[1] = Get3DPoint(CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query);
+                            P[1] = Get3DPoint(CellPoles[BottomLeft], CellPoles[BottomLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query.P);
                             P[2] = CellPoles[TopLeft]->IntersectionPoint;
-                            P[3] = Get3DPoint(CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query);                            
+                            P[3] = Get3DPoint(CellPoles[TopLeft], CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_RIGHT].Query.P);                            
                             WallCase = true;
                         }
-                        else if(CellPoles[TopRight]->HitWalkable)
+                        else if(IsValidWalkablePole(CellPoles[TopRight]))
                         {
                             WallCase = false;
                         }                        
                     }
-                    else if(CellPoles[BottomRight]->HitWalkable)
+                    else if(IsValidWalkablePole(CellPoles[BottomRight]))
                     {
-                        if(CellPoles[TopRight]->HitWalkable)
+                        if(IsValidWalkablePole(CellPoles[TopRight]))
                         {
                             P[0] = CellPoles[BottomRight]->IntersectionPoint;
-                            P[1] = Get3DPoint(CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query);
+                            P[1] = Get3DPoint(CellPoles[BottomRight], CellPoles[BottomRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query.P);
                             P[2] = CellPoles[TopRight]->IntersectionPoint;
-                            P[3] = Get3DPoint(CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query);                            
+                            P[3] = Get3DPoint(CellPoles[TopRight], CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_LEFT].Query.P);                            
                             WallCase = true;
-                        }
-                        else if(CellPoles[TopLeft]->HitWalkable)
+                         }
+                        else if(IsValidWalkablePole(CellPoles[TopLeft]))
                         {
                             WallCase = false;                            
                         }
                     }
-                    else if(CellPoles[TopLeft]->HitWalkable)
+                    else if(IsValidWalkablePole(CellPoles[TopLeft]))
                     {
-                        if(CellPoles[TopRight]->HitWalkable)
+                        if(IsValidWalkablePole(CellPoles[TopRight]))
                         {
                             P[0] = CellPoles[TopLeft]->IntersectionPoint;
-                            P[1] = Get3DPoint(CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query);                            
+                            P[1] = Get3DPoint(CellPoles[TopLeft], CellPoles[TopLeft]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query.P);                            
                             P[2] = CellPoles[TopRight]->IntersectionPoint;                            
-                            P[3] = Get3DPoint(CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query);                           
+                            P[3] = Get3DPoint(CellPoles[TopRight], CellPoles[TopRight]->SurfaceIntersections[POLE_INDEX_BOTTOM].Query.P);                           
                             WallCase = true;
                         }
                     }
