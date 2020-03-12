@@ -34,9 +34,18 @@ enum pole_index
     POLE_INDEX_TOP_RIGHT,
 };
 
+enum pole_cell_index
+{
+    POLE_CELL_INDEX_BOTTOM_LEFT,
+    POLE_CELL_INDEX_BOTTOM_RIGHT,
+    POLE_CELL_INDEX_TOP_LEFT,
+    POLE_CELL_INDEX_TOP_RIGHT
+};
+
 enum method_type
 {
     METHOD_TYPE_UNKNOWN,
+    METHOD_TYPE_NONE,
     METHOD_TYPE_CORNER,
     METHOD_TYPE_WALL,
     METHOD_TYPE_TRIANGLE,
@@ -96,6 +105,7 @@ struct walkable_pole
     triangle* HitTriangle;
     b32 HitWalkable;
     b32 IsCulled;
+    b32 HasRadiusProcessed;
     
     walkable_surface_intersection SurfaceIntersections[8];    
 };
