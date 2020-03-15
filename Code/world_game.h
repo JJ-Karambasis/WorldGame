@@ -42,14 +42,14 @@ enum pole_cell_index
     POLE_CELL_INDEX_TOP_RIGHT
 };
 
-enum method_type
+enum grid_method_type
 {
-    METHOD_TYPE_UNKNOWN,
-    METHOD_TYPE_NONE,
-    METHOD_TYPE_CORNER,
-    METHOD_TYPE_WALL,
-    METHOD_TYPE_TRIANGLE,
-    METHOD_TYPE_SURFACE
+    GRID_METHOD_TYPE_UNKNOWN,
+    GRID_METHOD_TYPE_NONE,
+    GRID_METHOD_TYPE_CORNER,
+    GRID_METHOD_TYPE_WALL,
+    GRID_METHOD_TYPE_TRIANGLE,
+    GRID_METHOD_TYPE_SURFACE
 };
 
 struct static_entity
@@ -77,17 +77,11 @@ struct static_entity_list
     static_entity* Head;
 };
 
-struct surface_intersection_query 
-{
-    v2f P;
-    v3f TriangleP[3];
-    edge2D Edge;    
-};
-
-struct walkable_surface_intersection
+struct surface_edge_intersection_query
 {
     b32 HasIntersected;
-    surface_intersection_query Query;
+    v2f P;    
+    edge2D Edge;
 };
 
 struct walkable_pole
@@ -101,13 +95,10 @@ struct walkable_pole
             f32 ZIntersection;
         };
     };        
-    static_entity* HitEntity;
-    triangle* HitTriangle;
-    b32 HitWalkable;
+    static_entity* HitEntity;        
     b32 IsCulled;
-    b32 HasRadiusProcessed;
-    
-    walkable_surface_intersection SurfaceIntersections[8];    
+    b32 HasRadiusProcessed;    
+    surface_edge_intersection_query SurfaceQueries[8];    
 };
 
 struct walkable_grid
@@ -115,6 +106,8 @@ struct walkable_grid
     v2f Min;
     v2i CellCount;
     v2i PoleCount;
+    
+    
     walkable_pole* Poles;
 };
 

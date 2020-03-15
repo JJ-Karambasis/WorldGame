@@ -97,6 +97,12 @@ inline v2i operator+(v2i Left, i32 Right)
     return Result;
 }
 
+inline v2i operator+(v2i Left, v2i Right)
+{
+    v2i Result = {Left.x+Right.x, Left.y+Right.y};
+    return Result;
+}
+
 inline v2i& 
 operator+=(v2i& Left, i32 Right)
 {

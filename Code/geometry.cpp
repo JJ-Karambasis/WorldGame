@@ -344,7 +344,7 @@ b32 RayToRayIntersection2D(v2f* Result, ray2D A, ray2D B)
     return false;
 }
 
-b32 PointInCircle(v2f Point, v2f CenterP, f32 CircleR)
+b32 PointInCircle(v2f CenterP, f32 CircleR, v2f Point)
 {
     f32 XComp = Square(Point.x - CenterP.x);
     f32 YComp = Square(Point.y - CenterP.y);
@@ -352,7 +352,7 @@ b32 PointInCircle(v2f Point, v2f CenterP, f32 CircleR)
     return Result;
 }
 
-b32 PointInSphere(v3f Point, v3f CenterP, f32 CircleR)
+b32 PointInSphere(v3f CenterP, f32 CircleR, v3f Point)
 {
     f32 XComp = Square(Point.x - CenterP.x);
     f32 YComp = Square(Point.y - CenterP.y);
