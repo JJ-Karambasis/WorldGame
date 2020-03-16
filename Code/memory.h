@@ -51,6 +51,12 @@ struct temp_arena
     ptr BlockUsedMarker;
 };
 
+struct buffer
+{
+    u8* Data;
+    ptr Size;
+};
+
 #define PushSize( ... ) VA_SELECT( PushSize, __VA_ARGS__)
 #define PushSize_3( Size, Clear, Alignment ) _Push_(__Global_Default_Arena__, Size, __ClearFlag##Clear##__, Alignment)
 #define PushSize_4( Arena, Size, Clear, Alignment ) _Push_(Arena, Size, __ClearFlag##Clear##__, Alignment)

@@ -223,7 +223,7 @@ i32 FindMemoryTypeIndex(VkPhysicalDeviceMemoryProperties* MemoryProperties,
 
 VkShaderModule CreateShader(char* Path)
 {
-    file_results ShaderFile = Global_Platform->ReadEntireFile(Path);
+    buffer ShaderFile = Global_Platform->ReadEntireFile(Path);
     BOOL_CHECK_AND_HANDLE(ShaderFile.Data, "Failed to load the shader file %s", Path);
     
     VkShaderModuleCreateInfo ShaderModuleInfo = {};

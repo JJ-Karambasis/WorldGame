@@ -5,11 +5,13 @@
 #include "memory.h"
 #include "string.h"
 #include "error.h"
+#include "riff.h"
 #include "math.h"
 
 #include "platform.h"
 #include "input.h"
 #include "geometry.h"
+#include "audio.h"
 #include "graphics.h"
 
 struct player

@@ -1,4 +1,5 @@
 #include "win32_world_game.h"
+#include "audio.cpp"
 
 #if DEVELOPER_BUILD
 #include "dev_world_game.cpp"
@@ -158,7 +159,7 @@ inline PLATFORM_LOG(Win32_Log)
 
 PLATFORM_READ_ENTIRE_FILE(Win32_ReadEntireFile)
 {
-    file_results Result = {};
+    buffer Result = {};
     HANDLE FileHandle = CreateFile(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING,
                                    FILE_ATTRIBUTE_NORMAL, NULL);
     if(FileHandle == INVALID_HANDLE_VALUE) 
@@ -305,6 +306,55 @@ PLATFORM_CLOSE_FILE(Win32_CloseFile)
     Win32_FreeMemory(File);    
 }
 
+win32_audio Win32_InitDSound(HWND Window, ptr BufferLength, audio_format AudioFormat)
+{    
+    HMODULE DSoundLibrary = LoadLibrary("dsound.dll");
+    BOOL_CHECK_AND_HANDLE(DSoundLibrary, "Failed to load the dsound.dll library.");
+    
+    direct_sound_create* DirectSoundCreate = (direct_sound_create*)GetProcAddress(DSoundLibrary, "DirectSoundCreate");
+    BOOL_CHECK_AND_HANDLE(DirectSoundCreate, "Failed to load the DirectSoundCreate function");
+    
+    IDirectSound* DirectSound;
+    HRESULT_CHECK_AND_HANDLE(DirectSoundCreate(0, &DirectSound, 0), "Failed to create the DirectSound object.");    
+    HRESULT_CHECK_AND_HANDLE(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY), "Failed to set the cooperation level for direct sound.");    
+        
+    WAVEFORMATEX WaveFormat = {};
+    WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
+    WaveFormat.nChannels = AudioFormat.ChannelCount;    
+    WaveFormat.nSamplesPerSec = AudioFormat.SamplesPerSecond;
+    WaveFormat.wBitsPerSample = AudioFormat.BytesPerSample*8;
+    WaveFormat.nBlockAlign = (WaveFormat.nChannels*WaveFormat.wBitsPerSample) / 8;
+    WaveFormat.nAvgBytesPerSec = WaveFormat.nSamplesPerSec*WaveFormat.nBlockAlign;
+    
+    DSBUFFERDESC BufferDescription = {};
+    BufferDescription.dwSize = sizeof(BufferDescription);
+    BufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
+    
+    IDirectSoundBuffer* PrimaryBuffer;
+    HRESULT_CHECK_AND_HANDLE(DirectSound->CreateSoundBuffer(&BufferDescription, &PrimaryBuffer, 0), "Failed to create the direct sound primary buffer.");    
+    HRESULT_CHECK_AND_HANDLE(PrimaryBuffer->SetFormat(&WaveFormat), "Failed to set the direct sound wave format.");
+    
+    BufferDescription = {};
+    BufferDescription.dwSize = sizeof(BufferDescription);
+    BufferDescription.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
+    BufferDescription.dwBufferBytes = (u32)GetAudioBufferSizeFromSeconds(&AudioFormat, BufferLength);
+    BufferDescription.lpwfxFormat = &WaveFormat;
+    
+    IDirectSoundBuffer* SoundBuffer;
+    HRESULT_CHECK_AND_HANDLE(DirectSound->CreateSoundBuffer(&BufferDescription, &SoundBuffer, 0), "Failed to create the direct sound buffer.");
+    
+    win32_audio Result;
+    Result.Format = AudioFormat;
+    Result.SoundBuffer = SoundBuffer;
+    Result.SampleCount = BufferLength*AudioFormat.SamplesPerSecond;
+    Result.Samples = Win32_AllocateMemory(BufferDescription.dwBufferBytes);
+    
+    return Result;
+    
+    handle_error:
+    return {};
+}
+
 platform* Win32_GetPlatformStruct()
 {
     local platform Result;
@@ -322,6 +372,34 @@ platform* Win32_GetPlatformStruct()
     return &Result;
 }
 
+DWORD WINAPI 
+AudioThread(void* Paramter)
+{
+    win32_audio* Audio = (win32_audio*)Paramter;        
+    audio TestAudio = LoadWAVFile("Test.wav");    
+    
+#define TARGET_AUDIO_HZ 20
+    
+    
+    IDirectSoundBuffer* SoundBuffer = Audio->SoundBuffer;
+    u32 SafetyBytes = (((f32)Audio->Format.SamplesPerSecond*(f32)Audio->Format.BytesPerSample / TARGET_AUDIO_HZ)/3.0f);
+    
+    SoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
+    
+    for(;;)
+    {
+        platform_time AudioClock = Global_Frequency->Clock();
+        f64 FromBeginToAudioSeconds = Global_Frequency->ElapsedTime(FlipClock, AudioClock);
+        
+        DWORD PlayCursor;
+        DWORD WriteCursor;
+        if(SoundBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
+        {
+        }
+    }
+    
+}
+
 int CALLBACK 
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
 { 
@@ -331,7 +409,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     error_stream ErrorStream = CreateErrorStream();
     SetGlobalErrorStream(&ErrorStream);
     
-    arena DefaultArena = CreateArena(MEGABYTE(1));    
+    arena DefaultArena = CreateArena(MEGABYTE(256));    
     InitMemory(&DefaultArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);    
     Global_Platform->TempArena = &DefaultArena;
     Global_Platform->ErrorStream = &ErrorStream;
@@ -366,6 +444,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
     if(!Window)    
         WRITE_AND_HANDLE_ERROR("Failed to create game window."); 
+    
+    u32 SoundBufferSeconds = 2;
+    win32_audio Audio = Win32_InitDSound(Window, SoundBufferSeconds, CreateAudioFormat(2, 2, 48000)); 
+    if(!Audio.SoundBuffer)
+        WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");
+        
+    CloseHandle(CreateThread(NULL, 0, AudioThread, &Audio, 0, NULL));
     
 #if DEVELOPER_BUILD    
     development_input Input = {};

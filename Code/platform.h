@@ -1,12 +1,6 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
-struct file_results
-{
-    u8* Data;
-    u32 Size;
-};
-
 struct platform_file_handle;
 enum platform_file_attributes
 {
@@ -21,7 +15,7 @@ typedef u64 platform_time;
 #endif
 
 #define PLATFORM_LOG(name) void name(char* Format, ...)
-#define PLATFORM_READ_ENTIRE_FILE(name) file_results name(char* Path)
+#define PLATFORM_READ_ENTIRE_FILE(name) buffer name(char* Path)
 #define PLATFORM_WRITE_ENTIRE_FILE(name) void name(char* Path, void* Data, u32 Length)
 #define PLATFORM_OPEN_FILE(name) platform_file_handle* name(char* Path, platform_file_attributes Attributes)
 #define PLATFORM_READ_FILE(name) b32 name(platform_file_handle* File, void* Data, u32 ReadSize, u64 Offset)
