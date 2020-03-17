@@ -599,6 +599,30 @@ RGBA(f32 r, f32 g, f32 b, f32 a)
     return Result;
 }
 
+inline v4f White()
+{
+    v4f Result = RGBA(1.0f, 1.0f, 1.0f, 1.0f);
+    return Result;
+}
+
+inline v4f Red()
+{
+    v4f Result = RGBA(1.0f, 0.0f, 0.0f, 1.0f);
+    return Result;
+}
+
+inline v4f Green()
+{
+    v4f Result = RGBA(0.0f, 1.0f, 0.0f, 1.0f);
+    return Result;
+}
+
+inline v4f Yellow()
+{
+    v4f Result = RGBA(1.0f, 1.0f, 0.0f, 1.0f);
+    return Result;
+}
+
 typedef v4f c4;
 
 struct m3

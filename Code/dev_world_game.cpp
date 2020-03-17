@@ -74,8 +74,40 @@ void ReadGameState(development_game* Game, u32 FrameIndex)
     CopyArray(Input->Buttons, Context.Buttons, ARRAYCOUNT(input::Buttons), button);
 }
 
-void DevelopmentTick(development_game* Game)
+void DrawWalkables(walking_system_recording* WalkingSystem)
 {
+    const f32 PointSize = 0.05f;
+    const f32 LineSize = 0.025f;
+    
+    WalkingSystem->EventRecordings[0].ShouldRender = true;
+    WalkingSystem->EventRecordings[1].ShouldRender = true;
+    for(u32 Recording = 0; Recording < ARRAYCOUNT(WalkingSystem->EventRecordings); Recording++)
+    {
+        walking_event_recording* EventRecording = WalkingSystem->EventRecordings + Recording;
+        if(EventRecording->ShouldRender)
+        {
+            for(u32 EventIndex = 0; EventIndex < EventRecording->EventCount; EventIndex++)
+            {
+                walking_event* Event = &EventRecording->Events[EventIndex];
+                switch(Event->Type)
+                {
+                    case WALKING_EVENT_TYPE_DRAW_POINT:
+                    {
+                        DRAW_POINT(Event->DebugPoint.Point, PointSize, Event->DebugPoint.Color);
+                    } break;
+                    
+                    case WALKING_EVENT_TYPE_DRAW_EDGE:
+                    {
+                        DRAW_LINE(Event->DebugEdge.Point0, Event->DebugEdge.Point1, LineSize, LineSize, Event->DebugEdge.Color);
+                    } break;
+                }
+            }                        
+        }        
+    }    
+}
+
+void DevelopmentTick(development_game* Game)
+{            
     if(!Game->DevInitialized)
     {
         Game->FrameRecordings.FrameStream = CreateArena(MEGABYTE(1));
@@ -179,7 +211,10 @@ void DevelopmentTick(development_game* Game)
         
         case RECORDING_STATE_CYCLE:
         {
-            ReadGameState(Game, Recording->CurrentFrameIndex);
+            ReadGameState(Game, Recording->CurrentFrameIndex);                        
+            DrawWalkables(&Recording->WalkingSystemRecording);
         } break;
-    }
+    }                
+    
+    DrawWalkables(&Recording->WalkingSystemRecording);
 }

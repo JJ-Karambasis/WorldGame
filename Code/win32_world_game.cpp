@@ -375,11 +375,13 @@ platform* Win32_GetPlatformStruct()
 DWORD WINAPI 
 AudioThread(void* Paramter)
 {
+    
+#if 0 
+    
     win32_audio* Audio = (win32_audio*)Paramter;        
     audio TestAudio = LoadWAVFile("Test.wav");    
     
 #define TARGET_AUDIO_HZ 20
-    
     
     IDirectSoundBuffer* SoundBuffer = Audio->SoundBuffer;
     u32 SafetyBytes = (((f32)Audio->Format.SamplesPerSecond*(f32)Audio->Format.BytesPerSample / TARGET_AUDIO_HZ)/3.0f);
@@ -397,7 +399,9 @@ AudioThread(void* Paramter)
         {
         }
     }
+#endif
     
+    return 0;
 }
 
 int CALLBACK 
@@ -460,6 +464,12 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     frame_recording* FrameRecording = &Game.FrameRecordings;        
     FrameRecording->MaxFrameCount = 1000000;    
     FrameRecording->FrameOffsets = PushArray(&Game.DevArena, FrameRecording->MaxFrameCount, ptr, Clear, 0);
+    
+    for(u32 RecordingIndex = 0; RecordingIndex < ARRAYCOUNT(FrameRecording->WalkingSystemRecording.EventRecordings); RecordingIndex++)
+    {
+        walking_event_recording* Recordings = FrameRecording->WalkingSystemRecording.EventRecordings + RecordingIndex;
+        Recordings->Events = PushArray(&Game.DevArena, MAX_EVENTS, walking_event, Clear, 0);
+    }
 #else
     input Input = {};
     game Game = {};
@@ -486,7 +496,9 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     Input.dt = 1.0f/60.0f; 
     u64 StartTime = Win32_Clock();
     for(;;)
-    {                
+    {   
+        DEVELOPER_GRAPHICS(Graphics);
+        
         temp_arena FrameArena = BeginTemporaryMemory();
         
         FILETIME GameDLLWriteTime = Win32_GetFileCreationTime(GameDLLPathName);

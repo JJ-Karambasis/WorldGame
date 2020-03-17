@@ -1,3 +1,13 @@
+#ifdef OS_WINDOWS
+#define DEBUG_ARIAL_FONT_PATH "C:\Windows\Fonts\arial.ttf"
+#endif
+
+#if DEVELOPER_BUILD
+#include "imgui/imgui.cpp"
+#include "imgui/imgui_draw.cpp"
+#include "imgui/imgui_widgets.cpp"
+#endif
+
 void DEBUGPopulateCircleIndices(u16** Indices, u16 StartSampleIndex, u16 CircleSampleCount)
 {
     u16* IndicesAt = *Indices;    

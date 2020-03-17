@@ -16,6 +16,16 @@ b32 IsCompatibleDevice(physical_device* GPU)
     return Result;
 }
 
+VkBufferCreateInfo GetBufferInfo(VkDeviceSize Size, VkImageUsageFlags Usage)
+{
+    VkBufferCreateInfo Result = {};
+    Result.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    Result.size = Size;
+    Result.usage = Usage;
+    Result.sharingMode = VK_SHARING_MODE_EXCLUSIVE;    
+    return Result;
+}
+
 VkCommandBufferBeginInfo* OneTimeCommandBufferBeginInfo()
 {
     local VkCommandBufferBeginInfo CommandBufferBeginInfo;
@@ -154,7 +164,7 @@ memory_info GetImageMemoryInfo(VkImage Image)
         VkMemoryRequirements2 MemoryRequirements2 = {};
         MemoryRequirements2.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;        
         MemoryRequirements2.pNext = &DedicatedRequirements;
-                
+        
         VkImageMemoryRequirementsInfo2 MemoryRequirementsInfo2 = {};
         MemoryRequirementsInfo2.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
         MemoryRequirementsInfo2.image = Image;
@@ -219,6 +229,68 @@ i32 FindMemoryTypeIndex(VkPhysicalDeviceMemoryProperties* MemoryProperties,
         }
     }    
     return -1;
+}
+
+VkDeviceMemory AllocateBufferMemory(physical_device* GPU, VkBuffer Buffer, VkMemoryPropertyFlags Flags)
+{
+    memory_info MemoryInfo = GetBufferMemoryInfo(Buffer);
+    
+    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GPU->MemoryProperties, &MemoryInfo.Requirements, Flags);
+    if(MemoryTypeIndex == -1)
+        WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the imgui vertex buffer.");    
+    
+    VkMemoryAllocateInfo AllocateInfo = {};
+    AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    AllocateInfo.memoryTypeIndex = MemoryTypeIndex;    
+    AllocateInfo.allocationSize = MemoryInfo.Requirements.size;
+    
+    VkMemoryDedicatedAllocateInfo DedicatedAllocateInfo = {};
+    if(MemoryInfo.DedicatedAllocation)
+    {        
+        DedicatedAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+        DedicatedAllocateInfo.buffer = Buffer;
+        AllocateInfo.pNext = &DedicatedAllocateInfo;
+    }
+    
+    VkDeviceMemory Memory;
+    VULKAN_CHECK_AND_HANDLE(vkAllocateMemory(GetVulkanGraphics()->Device, &AllocateInfo, VK_NULL_HANDLE, &Memory),
+                            "Failed to allocate the depth buffer memory.");
+    
+    return Memory;
+    
+    handle_error:
+    return VK_NULL_HANDLE;
+}
+
+VkDeviceMemory AllocateImageMemory(physical_device* GPU, VkImage Image, VkMemoryPropertyFlags Flags)
+{
+    memory_info MemoryInfo = GetImageMemoryInfo(Image);
+    
+    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GPU->MemoryProperties, &MemoryInfo.Requirements, Flags);
+    if(MemoryTypeIndex == -1)
+        WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the imgui vertex buffer.");    
+    
+    VkMemoryAllocateInfo AllocateInfo = {};
+    AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    AllocateInfo.memoryTypeIndex = MemoryTypeIndex;    
+    AllocateInfo.allocationSize = MemoryInfo.Requirements.size;
+    
+    VkMemoryDedicatedAllocateInfo DedicatedAllocateInfo = {};
+    if(MemoryInfo.DedicatedAllocation)
+    {        
+        DedicatedAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
+        DedicatedAllocateInfo.image = Image;
+        AllocateInfo.pNext = &DedicatedAllocateInfo;
+    }
+    
+    VkDeviceMemory Memory;
+    VULKAN_CHECK_AND_HANDLE(vkAllocateMemory(GetVulkanGraphics()->Device, &AllocateInfo, VK_NULL_HANDLE, &Memory),
+                            "Failed to allocate the depth buffer memory.");
+    
+    return Memory;
+    
+    handle_error:
+    return VK_NULL_HANDLE;
 }
 
 VkShaderModule CreateShader(char* Path)
@@ -292,27 +364,8 @@ render_buffer CreateRenderBuffer(v2i Dimensions, VkSwapchainKHR OldSwapchain)
     VULKAN_CHECK_AND_HANDLE(vkCreateImage(Graphics->Device, &DepthImageInfo, VK_NULL_HANDLE, &DepthImage), 
                             "Failed to create the depth image.");
     
-    memory_info MemoryInfo = GetImageMemoryInfo(DepthImage);        
-    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GPU->MemoryProperties, &MemoryInfo.Requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if(MemoryTypeIndex == -1)
-        WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the depth image.");    
-    
-    VkMemoryAllocateInfo AllocateInfo = {};
-    AllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    AllocateInfo.memoryTypeIndex = MemoryTypeIndex;
-    AllocateInfo.allocationSize = MemoryInfo.Requirements.size;
-    
-    VkMemoryDedicatedAllocateInfo DedicatedAllocateInfo = {};
-    if(MemoryInfo.DedicatedAllocation)
-    {        
-        DedicatedAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
-        DedicatedAllocateInfo.image = DepthImage;
-        AllocateInfo.pNext = &DedicatedAllocateInfo;
-    }
-    
-    VkDeviceMemory DepthMemory;
-    VULKAN_CHECK_AND_HANDLE(vkAllocateMemory(Graphics->Device, &AllocateInfo, VK_NULL_HANDLE, &DepthMemory),
-                            "Failed to allocate the depth buffer memory.");
+    VkDeviceMemory DepthMemory = AllocateImageMemory(Graphics->SelectedGPU, DepthImage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    BOOL_CHECK_AND_HANDLE(DepthMemory, "Failed to allocate the depth buffer memory.");
     
     VULKAN_CHECK_AND_HANDLE(vkBindImageMemory(Graphics->Device, DepthImage, DepthMemory, 0),
                             "Failed to bind the depth image to the depth memory.");
@@ -893,7 +946,7 @@ RENDER_GAME(RenderGame)
         {            
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);             
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->PipelineLayout, 0, 1, &Graphics->DescriptorSet, 0, VK_NULL_HANDLE);
-
+            
             player* Player = &Game->Player;
             {
                 v3f ZAxis = V3(0.0f, 0.0f, 1.0f);
@@ -922,19 +975,6 @@ RENDER_GAME(RenderGame)
             developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
             
             debug_primitive_context* PrimitiveContext = &DevGraphics->PrimitiveContext;
-            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->PointPipeline);
-            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->PointPipelineLayout, 0, 1, &PrimitiveContext->DescriptorSet, 0, VK_NULL_HANDLE);
-            
-            for(u32 PointIndex = 0; PointIndex < PrimitiveContext->PointCount; PointIndex++)
-            {   
-                debug_point* DebugPoint = PrimitiveContext->DebugPoints + PointIndex;                
-                v4f PointPosition = V4(DebugPoint->Position, DebugPoint->Size); 
-               
-                vkCmdPushConstants(CommandBuffer, PrimitiveContext->PointPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f), &PointPosition);
-                vkCmdPushConstants(CommandBuffer, PrimitiveContext->PointPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f), sizeof(c4), &DebugPoint->Color);
-                vkCmdDraw(CommandBuffer, 1, 1, 0, 0);
-            }
-            PrimitiveContext->PointCount = 0;
             
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipeline);
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipelineLayout, 0, 1, &PrimitiveContext->DescriptorSet, 0, VK_NULL_HANDLE);
@@ -951,6 +991,89 @@ RENDER_GAME(RenderGame)
                 vkCmdDraw(CommandBuffer, 1, 1, 0, 0);            
             }
             PrimitiveContext->LineCount = 0;
+            
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->PointPipeline);
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->PointPipelineLayout, 0, 1, &PrimitiveContext->DescriptorSet, 0, VK_NULL_HANDLE);
+            
+            for(u32 PointIndex = 0; PointIndex < PrimitiveContext->PointCount; PointIndex++)
+            {   
+                debug_point* DebugPoint = PrimitiveContext->DebugPoints + PointIndex;                
+                v4f PointPosition = V4(DebugPoint->Position, DebugPoint->Size); 
+               
+                vkCmdPushConstants(CommandBuffer, PrimitiveContext->PointPipelineLayout, VK_SHADER_STAGE_GEOMETRY_BIT, 0, sizeof(v4f), &PointPosition);
+                vkCmdPushConstants(CommandBuffer, PrimitiveContext->PointPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f), sizeof(c4), &DebugPoint->Color);
+                vkCmdDraw(CommandBuffer, 1, 1, 0, 0);
+            }
+            PrimitiveContext->PointCount = 0;            
+            
+            debug_imgui_context* ImGuiContext = &DevGraphics->ImGuiContext;            
+            ImDrawData* ImGuiData = ImGui::GetDrawData();
+            
+            ptr VertexSize = ImGuiData->TotalVtxCount * sizeof(ImDrawVert);
+            ptr IndexSize = ImGuiData->TotalIdxCount * sizeof(ImDrawIdx);
+            
+            if(Ve rtexSize && IndexSize)
+            {                
+                if(ImGuiContext->VertexBufferSize < VertexSize)
+                {
+                    if(ImGuiContext->VertexBuffer)
+                        vkDestroyBuffer(DevGraphics->Device, ImGuiContext->VertexBuffer, VK_NULL_HANDLE);
+                    
+                    if(ImGuiContext->VertexBufferMemory)
+                        vkFreeMemory(DevGraphics->Device, ImGuiContext->VertexBufferMemory, VK_NULL_HANDLE);
+                    
+                    VkBufferCreateInfo BufferInfo = GetBufferInfo(VertexSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(DevGraphics->Device, &BufferInfo, VK_NULL_HANDLE, &ImGuiContext->VertexBuffer), 
+                                            "Failed to create the imgui vertex buffer.");
+                    
+                    ImGuiContext->VertexBufferMemory = AllocateBufferMemory(Graphics->SelectedGPU, ImGuiContext->VertexBuffer, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                    BOOL_CHECK_AND_HANDLE(ImGuiContext->VertexBufferMemory, "Failed to allocate the ImGui vertex buffer memory.");
+                    
+                    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(DevGraphics->Device, ImGuiContext->VertexBuffer, ImGuiContext->VertexBufferMemory, 0), 
+                                            "Failed to bind the ImGui Vertex buffer to the memory.");                                                                                                                                                                                                                                                                                            
+                    ImGuiContext->VertexBufferSize = VertexSize;
+                }
+                
+                if(ImGuiContext->IndexBufferSize < IndexSize)
+                {
+                    if(ImGuiContext->IndexBuffer)
+                        vkDestroyBuffer(DevGraphics->Device, ImGuiContext->IndexBuffer, VK_NULL_HANDLE);
+                    
+                    if(ImGuiContext->IndexBufferMemory)
+                        vkFreeMemory(DevGraphics->Device, ImGuiContext->IndexBufferMemory, VK_NULL_HANDLE);
+                    
+                    VkBufferCreateInfo BufferInfo = GetBufferInfo(IndexSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(DevGraphics->Device, &BufferInfo, VK_NULL_HANDLE, &ImGuiContext->IndexBuffer),
+                                            "Failed to create the imgui index buffer.");
+                    
+                    ImGuiContext->IndexBufferMemory = AllocateBufferMemory(Graphics->SelectedGPU, ImGuiContext->IndexBuffer, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                    BOOL_CHECK_AND_HANDLE(ImGuiContext->IndexBufferMemory, "Failed to allocate the ImGui index buffer memory.");
+                    
+                    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(DevGraphics->Device, ImGuiContext->IndexBuffer, ImGuiContext->IndexBufferMemory, 0),
+                                            "Failed to bind the ImGui Index bufffer to the memory.");
+                    ImGuiContext->IndexBufferSize = IndexSize;
+                }
+                
+                
+                VkDeviceSize VertexOffset = 0;
+                VkDeviceSize IndexOffset = 0;
+                for(i32 CmdListIndex = 0; CmdListIndex < ImGuiData->CmdListsCount; CmdListIndex++)
+                {
+                    ImDrawList* CmdList = ImGuiData->CmdLists[CmdListIndex];
+                    
+                    ptr CmdVertexSize = CmdList->VtxBuffer.Size * sizeof(ImDrawVert);
+                    ptr CmdIndexSize = CmdList->IdxBuffer.Size * sizeof(ImDrawIdx);
+                    
+                    vkCmdUpdateBuffer(CommandBuffer, ImGuiContext->VertexBuffer, VertexOffset, CmdVertexSize, CmdList->VtxBuffer.Data);
+                    vkCmdUpdateBuffer(CommandBuffer, ImGuiContext->IndexBuffer, IndexOffset, CmdIndexSize, CmdList->IdxBuffer.Data);
+                    
+                    VertexOffset += CmdVertexSize;
+                    IndexOffset += CmdIndexSize;
+                }
+                
+                ASSERT(VertexOffset == VertexSize);
+                ASSERT(IndexOffset == IndexOffset);
+            }            
 #endif            
         }
         vkCmdEndRenderPass(CommandBuffer);
@@ -1083,6 +1206,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_DEVICE_FUNCTION(vkCreateBuffer);
     LOAD_DEVICE_FUNCTION(vkMapMemory);
     LOAD_DEVICE_FUNCTION(vkCmdUpdateBuffer);
+    LOAD_DEVICE_FUNCTION(vkDestroyBuffer);
     
     if(Graphics->SelectedGPU->FoundDedicatedMemoryExtension)
     {
@@ -1250,12 +1374,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     vkDestroyShaderModule(Graphics->Device, TestBoxVertex, VK_NULL_HANDLE);
     vkDestroyShaderModule(Graphics->Device, TestBoxFragment, VK_NULL_HANDLE);        
     
-    VkBufferCreateInfo CameraBufferInfo = {};
-    CameraBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    CameraBufferInfo.size = sizeof(m4)*2;
-    CameraBufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    CameraBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    
+    VkBufferCreateInfo CameraBufferInfo = GetBufferInfo(sizeof(m4)*2, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &CameraBufferInfo, VK_NULL_HANDLE, &Graphics->CameraBuffer),
                             "Failed to create the camera buffer.");
     
@@ -1565,19 +1684,11 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VkDeviceSize DEBUGVertexBufferSize = DEBUGCapsuleCapVertexSize+DEBUGCapsuleBodyVertexSize;
     VkDeviceSize DEBUGIndexBufferSize = DEBUGCapsuleCapIndicesSize+DEBUGCapsuleBodyIndicesSize;
     
-    VkBufferCreateInfo DEBUGVertexBufferCreateInfo = {};
-    DEBUGVertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    DEBUGVertexBufferCreateInfo.size = DEBUGVertexBufferSize;
-    DEBUGVertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;    
-    DEBUGVertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;    
+    VkBufferCreateInfo DEBUGVertexBufferCreateInfo = GetBufferInfo(DEBUGVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);    
     VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &DEBUGVertexBufferCreateInfo, VK_NULL_HANDLE, &VolumeContext->VertexBuffer),
                             "Failed to create the debug vertex buffer.");
     
-    VkBufferCreateInfo DEBUGIndexBufferCreateInfo = {};
-    DEBUGIndexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    DEBUGIndexBufferCreateInfo.size = DEBUGIndexBufferSize;
-    DEBUGIndexBufferCreateInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    DEBUGIndexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkBufferCreateInfo DEBUGIndexBufferCreateInfo = GetBufferInfo(DEBUGIndexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &DEBUGIndexBufferCreateInfo, VK_NULL_HANDLE, &VolumeContext->IndexBuffer),
                             "Failed to create the debug index buffer.");
     

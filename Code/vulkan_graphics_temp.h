@@ -7,38 +7,6 @@
 #include "vulkan/vulkan.h"
 #define VULKAN_FUNCTION(function) global PFN_##function function
 
-#define VULKAN_CHECK_AND_HANDLE(check, message, ...) \
-do \
-{ \
-    if((check) != VK_SUCCESS) \
-        WRITE_AND_HANDLE_ERROR(message, __VA_ARGS__); \
-} \
-while(0)
-
-#define LOAD_GLOBAL_FUNCTION(function) \
-do \
-{ \
-    function = (PFN_##function)vkGetInstanceProcAddr(NULL, #function); \
-                BOOL_CHECK_AND_HANDLE(function, "Failed to load the %.*s function", LiteralStringLength(#function), #function); \
-} \
-while(0)
-
-#define LOAD_INSTANCE_FUNCTION(function) \
-do \
-{ \
-    function = (PFN_##function)vkGetInstanceProcAddr(GetVulkanGraphics()->Instance, #function); \
-                BOOL_CHECK_AND_HANDLE(function, "Failed to load the %.*s function", LiteralStringLength(#function), #function); \
-} \
-while(0)
-
-#define LOAD_DEVICE_FUNCTION(function) \
-do \
-{ \
-    function = (PFN_##function)vkGetDeviceProcAddr(GetVulkanGraphics()->Device, #function); \
-                BOOL_CHECK_AND_HANDLE(function, "Failed to load the %.*s function", LiteralStringLength(#function), #function); \
-} \
-while(0)
-
 global const VkFormat Global_DepthBufferFormats[] =
 {
     VK_FORMAT_D32_SFLOAT, 
@@ -47,8 +15,12 @@ global const VkFormat Global_DepthBufferFormats[] =
     VK_FORMAT_D16_UNORM, 
     VK_FORMAT_D16_UNORM_S8_UINT
 };
-
+//IMPORTANT(EVERYONE): If we need to support stencil buffers remove the D32_SFLOAT only format
+//NOTE(EVERYONE): Since we don't care about stencil formats right now, lets just prioritize higher precision depth values for now
+//(with less memory usage)                                                                                                                                                                                                                                                                                                                                 
 VULKAN_FUNCTION(vkGetInstanceProcAddr);
+
+            
 VULKAN_FUNCTION(vkCreateInstance);
 VULKAN_FUNCTION(vkEnumerateInstanceExtensionProperties);
 VULKAN_FUNCTION(vkEnumerateInstanceLayerProperties);
@@ -123,7 +95,6 @@ VULKAN_FUNCTION(vkUpdateDescriptorSets);
 VULKAN_FUNCTION(vkCreateBuffer);
 VULKAN_FUNCTION(vkMapMemory);
 VULKAN_FUNCTION(vkCmdUpdateBuffer);
-VULKAN_FUNCTION(vkDestroyBuffer);
 
 struct extensions_array
 {
@@ -248,13 +219,6 @@ struct debug_volume_context
 
 struct debug_imgui_context
 {
-    VkDeviceSize VertexBufferSize;
-    VkBuffer VertexBuffer;
-    VkDeviceMemory VertexBufferMemory;
-    
-    VkDeviceSize IndexBufferSize;
-    VkBuffer IndexBuffer;
-    VkDeviceMemory IndexBufferMemory;
 };
 
 struct developer_vulkan_graphics : public vulkan_graphics

@@ -28,27 +28,27 @@ inline error_stream CreateErrorStream()
 #define WRITE_ERROR(format, ...) \
 do \
 { \
-Write(GetGlobalErrorStream(), "ERROR(file: %s, function: %s, line: %d): ", CURRENT_FILENAME, CURRENT_FUNCTION, CURRENT_LINE); \
-Write(GetGlobalErrorStream(), format, __VA_ARGS__); \
-EndLine(GetGlobalErrorStream()); \
-GetGlobalErrorStream()->HasErrorOccured = true; \
+    Write(GetGlobalErrorStream(), "ERROR(file: %s, function: %s, line: %d): ", CURRENT_FILENAME, CURRENT_FUNCTION, CURRENT_LINE); \
+    Write(GetGlobalErrorStream(), format, __VA_ARGS__); \
+    EndLine(GetGlobalErrorStream()); \
+    GetGlobalErrorStream()->HasErrorOccured = true; \
 } while(0)
 
 #define WRITE_AND_HANDLE_ERROR(format, ...) \
 do \
 { \
-Write(GetGlobalErrorStream(), "ERROR(file: %s, function: %s, line: %d): ", CURRENT_FILENAME, CURRENT_FUNCTION, CURRENT_LINE); \
-Write(GetGlobalErrorStream(), format, __VA_ARGS__); \
-EndLine(GetGlobalErrorStream()); \
-GetGlobalErrorStream()->HasErrorOccured = true; \
-goto handle_error; \
+    Write(GetGlobalErrorStream(), "ERROR(file: %s, function: %s, line: %d): ", CURRENT_FILENAME, CURRENT_FUNCTION, CURRENT_LINE); \
+    Write(GetGlobalErrorStream(), format, __VA_ARGS__); \
+    EndLine(GetGlobalErrorStream()); \
+    GetGlobalErrorStream()->HasErrorOccured = true; \
+    goto handle_error; \
 } while(0)
 
 #define BOOL_CHECK_AND_HANDLE(null_check, format, ...) \
 do \
 { \
-if(!(null_check)) \
-WRITE_AND_HANDLE_ERROR(format, __VA_ARGS__); \
+    if(!(null_check)) \
+        WRITE_AND_HANDLE_ERROR(format, __VA_ARGS__); \
 } while(0)
 
 #endif
