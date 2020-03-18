@@ -31,6 +31,8 @@ struct development_input : public input
             button CycleRight;
         };
     };
+    v2i MouseDelta;
+    v2i MouseCoordinates;
     f32 Scroll;
 };
 
@@ -66,7 +68,7 @@ struct walking_event
 
 struct walking_event_recording
 {
-    b32 ShouldRender;
+    bool ShouldRender;
     walking_event* Events;
     u32 EventCount;
 };
@@ -106,7 +108,7 @@ struct development_game : public game
     b32 InDevelopmentMode;
     camera DevCamera;      
     frame_recording FrameRecordings;
-    b32 DevInitialized;
+    b32 DevInitialized;        
 };
 
 local walking_system_recording* __Internal_Recording__;

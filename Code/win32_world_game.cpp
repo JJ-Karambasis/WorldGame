@@ -257,7 +257,7 @@ PLATFORM_READ_FILE(Win32_ReadFile)
         WRITE_ERROR("Failed to read file because the file attributes are mapped to write.");
         return false;
     }
-
+    
     OVERLAPPED* OffsetPointer = NULL;
     OVERLAPPED Offsets = {};
     if(Offset != NO_OFFSET)
@@ -282,7 +282,7 @@ PLATFORM_WRITE_FILE(Win32_WriteFile)
         WRITE_ERROR("Failed to write file because the file attributes are mapped to read.");
         return false;
     }
-
+    
     OVERLAPPED* OffsetPointer = NULL;
     OVERLAPPED Offsets = {};
     if(Offset != NO_OFFSET)
@@ -291,7 +291,7 @@ PLATFORM_WRITE_FILE(Win32_WriteFile)
         Offsets.OffsetHigh = (DWORD)((Offset >> 32) & 0xFFFFFFFF);
         OffsetPointer = &Offsets;
     }
-        
+    
     DWORD BytesWritten;
     if(WriteFile(File->Handle, Data, WriteSize, &BytesWritten, OffsetPointer) && (BytesWritten == WriteSize))
         return true;
@@ -317,7 +317,7 @@ win32_audio Win32_InitDSound(HWND Window, ptr BufferLength, audio_format AudioFo
     IDirectSound* DirectSound;
     HRESULT_CHECK_AND_HANDLE(DirectSoundCreate(0, &DirectSound, 0), "Failed to create the DirectSound object.");    
     HRESULT_CHECK_AND_HANDLE(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY), "Failed to set the cooperation level for direct sound.");    
-        
+    
     WAVEFORMATEX WaveFormat = {};
     WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
     WaveFormat.nChannels = AudioFormat.ChannelCount;    
@@ -453,7 +453,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     win32_audio Audio = Win32_InitDSound(Window, SoundBufferSeconds, CreateAudioFormat(2, 2, 48000)); 
     if(!Audio.SoundBuffer)
         WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");
-        
+    
     CloseHandle(CreateThread(NULL, 0, AudioThread, &Audio, 0, NULL));
     
 #if DEVELOPER_BUILD    
@@ -470,6 +470,38 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         walking_event_recording* Recordings = FrameRecording->WalkingSystemRecording.EventRecordings + RecordingIndex;
         Recordings->Events = PushArray(&Game.DevArena, MAX_EVENTS, walking_event, Clear, 0);
     }
+    
+    IMGUI_CHECKVERSION();
+    ImGuiContext* Context = ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    
+    ImGuiIO& IO = ImGui::GetIO();
+    IO.BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
+    IO.BackendPlatformName = "world_game_win32_platform";
+    IO.ImeWindowHandle = Window;
+    IO.KeyMap[ImGuiKey_Tab] = VK_TAB;
+    IO.KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
+    IO.KeyMap[ImGuiKey_RightArrow] = VK_RIGHT;
+    IO.KeyMap[ImGuiKey_UpArrow] = VK_UP;
+    IO.KeyMap[ImGuiKey_DownArrow] = VK_DOWN;
+    IO.KeyMap[ImGuiKey_PageUp] = VK_PRIOR;
+    IO.KeyMap[ImGuiKey_PageDown] = VK_NEXT;
+    IO.KeyMap[ImGuiKey_Home] = VK_HOME;
+    IO.KeyMap[ImGuiKey_End] = VK_END;
+    IO.KeyMap[ImGuiKey_Insert] = VK_INSERT;
+    IO.KeyMap[ImGuiKey_Delete] = VK_DELETE;
+    IO.KeyMap[ImGuiKey_Backspace] = VK_BACK;
+    IO.KeyMap[ImGuiKey_Space] = VK_SPACE;
+    IO.KeyMap[ImGuiKey_Enter] = VK_RETURN;
+    IO.KeyMap[ImGuiKey_Escape] = VK_ESCAPE;
+    IO.KeyMap[ImGuiKey_KeyPadEnter] = VK_RETURN;
+    IO.KeyMap[ImGuiKey_A] = 'A';
+    IO.KeyMap[ImGuiKey_C] = 'C';
+    IO.KeyMap[ImGuiKey_V] = 'V';
+    IO.KeyMap[ImGuiKey_X] = 'X';
+    IO.KeyMap[ImGuiKey_Y] = 'Y';
+    IO.KeyMap[ImGuiKey_Z] = 'Z';
+    
 #else
     input Input = {};
     game Game = {};
@@ -484,7 +516,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         WRITE_AND_HANDLE_ERROR("Failed to load the graphics initialize routine.");
     
     temp_arena TempArena = BeginTemporaryMemory();
-    graphics* Graphics = GraphicsInit(Window, Global_Platform);
+    graphics* Graphics = GraphicsInit(Window, Global_Platform, Context);
+    BOOL_CHECK_AND_HANDLE(Graphics, "Failed to initialize the graphics.");
     EndTemporaryMemory(&TempArena);
     
     Game.Input = &Input;
@@ -528,14 +561,75 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                     return 0;
                 } break;
                 
-                case WM_INPUT:
+#if DEVELOPER_BUILD
+                
+                
+                case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+                case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
+                case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
+                case WM_XBUTTONDOWN: case WM_XBUTTONDBLCLK:
                 {
-                    UINT Size;
-                    UINT Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
-                    
-                    void* InputData = PushSize(Size, NoClear, 8);                    
-                    Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, InputData, &Size, sizeof(RAWINPUTHEADER));                    
-                    
+                    int button = 0;
+                    if (Message.message == WM_LBUTTONDOWN || Message.message == WM_LBUTTONDBLCLK) { button = 0; }
+                    if (Message.message == WM_RBUTTONDOWN || Message.message == WM_RBUTTONDBLCLK) { button = 1; }
+                    if (Message.message == WM_MBUTTONDOWN || Message.message == WM_MBUTTONDBLCLK) { button = 2; }
+                    if (Message.message == WM_XBUTTONDOWN || Message.message == WM_XBUTTONDBLCLK) { button = (GET_XBUTTON_WPARAM(Message.wParam) == XBUTTON1) ? 3 : 4; }
+                    if (!ImGui::IsAnyMouseDown() && GetCapture() == NULL)
+                        SetCapture(Window);
+                    IO.MouseDown[button] = true;                    
+                } break;
+                
+                case WM_LBUTTONUP:
+                case WM_RBUTTONUP:
+                case WM_MBUTTONUP:
+                case WM_XBUTTONUP:
+                {
+                    i32 Button = 0;
+                    if (Message.message == WM_LBUTTONUP) { Button = 0; }
+                    if (Message.message == WM_RBUTTONUP) { Button = 1; }
+                    if (Message.message == WM_MBUTTONUP) { Button = 2; }
+                    if (Message.message == WM_XBUTTONUP) { Button = (GET_XBUTTON_WPARAM(Message.wParam) == XBUTTON1) ? 3 : 4; }
+                    IO.MouseDown[Button] = false;
+                    if (!ImGui::IsAnyMouseDown() && GetCapture() == Window)
+                        ReleaseCapture();                                        
+                } break;
+                
+                case WM_MOUSEWHEEL:
+                {
+                    IO.MouseWheel += (f32)GET_WHEEL_DELTA_WPARAM(Message.wParam) / (f32)WHEEL_DELTA;                    
+                } break;
+                
+                case WM_KEYDOWN:
+                case WM_SYSKEYDOWN:
+                if (Message.wParam < 256)
+                {
+                    IO.KeysDown[Message.wParam] = 1;
+                } break;
+                
+                case WM_KEYUP:
+                case WM_SYSKEYUP:
+                {
+                    if (Message.wParam < 256)
+                        IO.KeysDown[Message.wParam] = 0;                    
+                } break;                
+                
+                case WM_CHAR:
+                {
+                    // You can also use ToAscii()+GetKeyboardState() to retrieve characters.
+                    if (Message.wParam > 0 && Message.wParam < 0x10000)
+                        IO.AddInputCharacterUTF16((unsigned short)Message.wParam);
+                } break;                
+                
+#endif
+            
+            case WM_INPUT:
+            {
+                UINT Size;
+                UINT Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
+                
+                void* InputData = PushSize(Size, NoClear, 8);                    
+                Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, InputData, &Size, sizeof(RAWINPUTHEADER));                    
+                
                     RAWINPUT* RawInput = (RAWINPUT*)InputData;
                     RAWINPUTHEADER* RawInputHeader = &RawInput->header;
                     
@@ -544,7 +638,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                         case RIM_TYPEMOUSE:
                         {
                             RAWMOUSE* RawMouse = &RawInput->data.mouse;                            
-                            Input.MouseDelta = V2i(RawMouse->lLastX, RawMouse->lLastY);   
+                            Input.MouseDelta = V2i(RawMouse->lLastX, RawMouse->lLastY);                                                           
                             
 #if DEVELOPER_BUILD                            
                             switch(RawMouse->usButtonFlags)
@@ -651,21 +745,48 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             }
         }
         
+        v2i WindowDim = Win32_GetWindowDim(Window);
+        
         //TODO(JJ): Probably don't want this
         if(Input.dt > 1.0f/20.0f)
             Input.dt = 1.0f/20.0f;
         
 #if DEVELOPER_BUILD
-        DevelopmentTick(&Game);
-#endif
-        GameCode.Tick(&Game, Graphics, Global_Platform);        
-        
-        v2i WindowDim = Win32_GetWindowDim(Window);
-        if(!Graphics->RenderGame(&Game, WindowDim))
+        IO.DisplaySize = ImVec2((f32)WindowDim.width, (f32)WindowDim.height);
+        IO.DeltaTime = Input.dt;
+        IO.KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        IO.KeyShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+        IO.KeyAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+        if(IO.WantSetMousePos)
         {
-            ASSERT(false); 
-            //TODO(JJ): Probably should fallback to Direct3D or OpenGL to try and recover so the game doesn't 
-            //just straight crash. At least we can warn the user
+            v2i Position = V2i(IO.MousePos.x, IO.MousePos.y);
+            ClientToScreen(Window, (POINT*)&Position);
+            SetCursorPos(Position.x, Position.y);
+        }
+        
+        IO.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+        POINT MousePosition;
+        if(HWND ActiveWindow = GetForegroundWindow())
+        {
+            if(ActiveWindow == Window || IsChild(ActiveWindow, Window))
+            {
+                if(GetCursorPos(&MousePosition) && ScreenToClient(Window, &MousePosition))                
+                    IO.MousePos = ImVec2((f32)MousePosition.x, (f32)MousePosition.y);                
+            }
+        }                
+        
+        DevelopmentTick(&Game);        
+#endif        
+        
+        GameCode.Tick(&Game, Graphics, Global_Platform);                        
+        if(WindowDim != 0)
+        {
+            if(!Graphics->RenderGame(&Game, WindowDim))
+            {
+                ASSERT(false); 
+                //TODO(JJ): Probably should fallback to Direct3D or OpenGL to try and recover so the game doesn't 
+                //just straight crash. At least we can warn the user
+            }
         }
         
         Input.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);

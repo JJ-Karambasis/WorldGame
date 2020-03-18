@@ -44,5 +44,8 @@ IF %COMPILE_SHADERS% == 1 (
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_line.glsl -o debug_line_vertex.spv
     glslc -O0 -DGEOMETRY -fshader-stage=geometry ..\..\..\code\shaders\glsl\4.5\debug_line.glsl -o debug_line_geometry.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\debug_line.glsl -o debug_line_fragment.spv
+
+    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\imgui.glsl -o imgui_vertex.spv
+    glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\imgui.glsl -o imgui_fragment.spv
 )
 popd

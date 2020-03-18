@@ -19,8 +19,7 @@ struct input
             button MoveRight;    
             button SwitchWorld;
         };
-    };        
-    v2i MouseDelta;
+    };            
     f32 dt;
 };
 

@@ -85,9 +85,15 @@ struct v2i
     };
 };
 
-v2i V2i(i32 x, i32 y)
+inline v2i V2i(i32 x, i32 y)
 {
     v2i Result = {x, y};
+    return Result;
+}
+
+inline v2i V2i(f32 x, f32 y)
+{
+    v2i Result = {(i32)x, (i32)y};
     return Result;
 }
 
@@ -127,6 +133,12 @@ operator-=(v2i& Left, i32 Right)
 inline b32 operator!=(v2i Left, v2i Right)
 {
     b32 Result = (Left.x != Right.x) || (Left.y != Right.y);
+    return Result;
+}
+
+inline b32 operator!=(v2i Left, i32 Right)
+{
+    b32 Result = (Left.x != Right) || (Left.y != Right);
     return Result;
 }
 
@@ -220,6 +232,13 @@ operator+=(v2f& Left, f32 Right)
 }
 
 inline v2f
+operator-(f32 Left, v2f Right)
+{
+    v2f Result = {Left-Right.x, Left-Right.y};
+    return Result;
+}
+
+inline v2f
 operator-(v2f Left, v2f Right)
 {
     v2f Result = {Left.x-Right.x, Left.y-Right.y};
@@ -265,6 +284,13 @@ inline v2f
 operator/(v2f V, f32 Right)
 {
     v2f Result = {V.x/Right, V.y/Right};
+    return Result;
+}
+
+inline v2f
+operator/(f32 Left, v2f Right)
+{
+    v2f Result = {Left/Right.x, Left/Right.y};
     return Result;
 }
 

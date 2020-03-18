@@ -1,4 +1,7 @@
 /* Original Author: Armand (JJ) Karambasis */
+#include "imgui/imgui.cpp"
+#include "imgui/imgui_draw.cpp"
+#include "imgui/imgui_widgets.cpp"
 
 #pragma pack(push, 1)
 struct entity_data
@@ -75,12 +78,19 @@ void ReadGameState(development_game* Game, u32 FrameIndex)
 }
 
 void DrawWalkables(walking_system_recording* WalkingSystem)
-{
-    const f32 PointSize = 0.05f;
-    const f32 LineSize = 0.025f;
+{    
+    ImGui::Begin("Walking System");
     
-    WalkingSystem->EventRecordings[0].ShouldRender = true;
-    WalkingSystem->EventRecordings[1].ShouldRender = true;
+    ImGui::Checkbox("Pole Testing", &WalkingSystem->PoleTestingRecording.ShouldRender);
+    ImGui::Checkbox("Edge Testing", &WalkingSystem->EdgeTestingRecording.ShouldRender);
+    ImGui::Checkbox("Radius Culling", &WalkingSystem->RadiusTestingRecording.ShouldRender);
+    ImGui::Checkbox("Ring Building", &WalkingSystem->RingBuildingTestingRecording.ShouldRender);
+    ImGui::Checkbox("Ring Traversal", &WalkingSystem->RingTraversalTestingRecording.ShouldRender);
+    
+    ImGui::End();    
+    
+    const f32 PointSize = 0.05f;
+    const f32 LineSize = 0.025f;    
     for(u32 Recording = 0; Recording < ARRAYCOUNT(WalkingSystem->EventRecordings); Recording++)
     {
         walking_event_recording* EventRecording = WalkingSystem->EventRecordings + Recording;
@@ -107,7 +117,8 @@ void DrawWalkables(walking_system_recording* WalkingSystem)
 }
 
 void DevelopmentTick(development_game* Game)
-{            
+{
+    ImGui::NewFrame();
     if(!Game->DevInitialized)
     {
         Game->FrameRecordings.FrameStream = CreateArena(MEGABYTE(1));
@@ -217,4 +228,6 @@ void DevelopmentTick(development_game* Game)
     }                
     
     DrawWalkables(&Recording->WalkingSystemRecording);
+    
+    ImGui::Render();
 }

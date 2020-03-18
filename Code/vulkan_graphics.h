@@ -122,8 +122,14 @@ VULKAN_FUNCTION(vkCmdBindDescriptorSets);
 VULKAN_FUNCTION(vkUpdateDescriptorSets);
 VULKAN_FUNCTION(vkCreateBuffer);
 VULKAN_FUNCTION(vkMapMemory);
+VULKAN_FUNCTION(vkUnmapMemory);
 VULKAN_FUNCTION(vkCmdUpdateBuffer);
 VULKAN_FUNCTION(vkDestroyBuffer);
+VULKAN_FUNCTION(vkCmdBindVertexBuffers);
+VULKAN_FUNCTION(vkCmdBindIndexBuffer);
+VULKAN_FUNCTION(vkCreateSampler);
+VULKAN_FUNCTION(vkCmdPipelineBarrier);
+VULKAN_FUNCTION(vkCmdCopyBufferToImage);
 
 struct extensions_array
 {
@@ -169,6 +175,15 @@ struct render_buffer
     VkFramebuffer Framebuffers[3];
 };
 
+struct upload_buffer
+{
+    VkBuffer Buffer;
+    VkDeviceSize Size;
+    VkDeviceSize Used;    
+    VkDeviceMemory Memory;
+    u8* MappedMemory;
+};
+
 struct vulkan_graphics : public graphics
 {
     VkInstance Instance;
@@ -192,6 +207,7 @@ struct vulkan_graphics : public graphics
     VkBuffer CameraBuffer;
     m4* CameraBufferData;
     render_buffer RenderBuffer;  
+    upload_buffer UploadBuffer;
 };
 
 global vulkan_graphics __Vulkan_Graphics__;
@@ -255,6 +271,17 @@ struct debug_imgui_context
     VkDeviceSize IndexBufferSize;
     VkBuffer IndexBuffer;
     VkDeviceMemory IndexBufferMemory;
+    
+    VkDescriptorSet DescriptorSet;
+    VkDescriptorSetLayout DescriptorSetLayout;
+    
+    VkSampler FontSampler;
+    VkImage FontImage;
+    VkDeviceMemory FontImageMemory;
+    VkImageView FontImageView;
+    
+    VkPipeline Pipeline;
+    VkPipelineLayout PipelineLayout;    
 };
 
 struct developer_vulkan_graphics : public vulkan_graphics

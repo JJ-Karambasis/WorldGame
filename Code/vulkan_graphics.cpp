@@ -16,7 +16,31 @@ b32 IsCompatibleDevice(physical_device* GPU)
     return Result;
 }
 
-VkBufferCreateInfo GetBufferInfo(VkDeviceSize Size, VkImageUsageFlags Usage)
+inline void* 
+Push(upload_buffer* Buffer, ptr Size)
+{
+    ASSERT((Buffer->Used + Size) < Buffer->Size);
+    void* Result = (u8*)Buffer->MappedMemory + Buffer->Used;
+    Buffer->Used += Size;
+    return Result;
+}
+
+inline VkDeviceSize 
+PushWrite(upload_buffer* Buffer, void* Data, ptr Size)
+{
+    VkDeviceSize Result = Buffer->Used;
+    void* MappedData = Push(Buffer, Size);
+    CopyMemory(MappedData, Data, Size);
+    return Result;
+}
+
+inline void 
+Reset(upload_buffer* Buffer)
+{
+    Buffer->Used = 0;
+}
+
+VkBufferCreateInfo GetBufferInfo(VkDeviceSize Size, VkBufferUsageFlags Usage)
 {
     VkBufferCreateInfo Result = {};
     Result.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -84,7 +108,18 @@ VkPipelineMultisampleStateCreateInfo* DefaultMultisampleState()
     return &MultisampleState;
 }
 
-VkPipelineRasterizationStateCreateInfo* DefaultRasterizationState()
+VkPipelineRasterizationStateCreateInfo* DefaultCullNoneRasterizationState()
+{    
+    local VkPipelineRasterizationStateCreateInfo RasterizationState;
+    RasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    RasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+    RasterizationState.cullMode = VK_CULL_MODE_NONE;
+    RasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    RasterizationState.lineWidth = 1.0f;
+    return &RasterizationState;
+};
+
+VkPipelineRasterizationStateCreateInfo* DefaultCullBackRasterizationState()
 {    
     local VkPipelineRasterizationStateCreateInfo RasterizationState;
     RasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -231,11 +266,11 @@ i32 FindMemoryTypeIndex(VkPhysicalDeviceMemoryProperties* MemoryProperties,
     return -1;
 }
 
-VkDeviceMemory AllocateBufferMemory(physical_device* GPU, VkBuffer Buffer, VkMemoryPropertyFlags Flags)
+VkDeviceMemory AllocateBufferMemory(VkBuffer Buffer, VkMemoryPropertyFlags Flags)
 {
     memory_info MemoryInfo = GetBufferMemoryInfo(Buffer);
     
-    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GPU->MemoryProperties, &MemoryInfo.Requirements, Flags);
+    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GetVulkanGraphics()->SelectedGPU->MemoryProperties, &MemoryInfo.Requirements, Flags);
     if(MemoryTypeIndex == -1)
         WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the imgui vertex buffer.");    
     
@@ -262,11 +297,11 @@ VkDeviceMemory AllocateBufferMemory(physical_device* GPU, VkBuffer Buffer, VkMem
     return VK_NULL_HANDLE;
 }
 
-VkDeviceMemory AllocateImageMemory(physical_device* GPU, VkImage Image, VkMemoryPropertyFlags Flags)
+VkDeviceMemory AllocateImageMemory(VkImage Image, VkMemoryPropertyFlags Flags)
 {
     memory_info MemoryInfo = GetImageMemoryInfo(Image);
     
-    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GPU->MemoryProperties, &MemoryInfo.Requirements, Flags);
+    i32 MemoryTypeIndex = FindMemoryTypeIndex(&GetVulkanGraphics()->SelectedGPU->MemoryProperties, &MemoryInfo.Requirements, Flags);
     if(MemoryTypeIndex == -1)
         WRITE_AND_HANDLE_ERROR("Failed to find a valid memory type for the imgui vertex buffer.");    
     
@@ -291,6 +326,53 @@ VkDeviceMemory AllocateImageMemory(physical_device* GPU, VkImage Image, VkMemory
     
     handle_error:
     return VK_NULL_HANDLE;
+}
+
+VkDeviceMemory AllocateAndBindMemory(VkBuffer Buffer, VkMemoryPropertyFlags Flags)
+{    
+    VkDeviceMemory Memory = AllocateBufferMemory(Buffer, Flags);
+    BOOL_CHECK_AND_HANDLE(Memory, "Failed to allocate the buffer memory.");    
+    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(GetVulkanGraphics()->Device, Buffer, Memory, 0),"Failed to bind the buffer to the memory.");
+    
+    return Memory;
+    
+    handle_error:
+    return VK_NULL_HANDLE;
+}
+
+VkDeviceMemory AllocateAndBindMemory(VkImage Image, VkMemoryPropertyFlags Flags)
+{
+    VkDeviceMemory Memory = AllocateImageMemory(Image, Flags);
+    BOOL_CHECK_AND_HANDLE(Memory, "Failed to allocate the image memory.");    
+    VULKAN_CHECK_AND_HANDLE(vkBindImageMemory(GetVulkanGraphics()->Device, Image, Memory, 0),"Failed to bind the image to the memory.");
+    
+    return Memory;
+    
+    handle_error:
+    return VK_NULL_HANDLE;    
+}
+
+upload_buffer CreateUploadBuffer(VkDeviceSize Size)
+{   
+    upload_buffer Result = {};
+    
+    vulkan_graphics* Graphics = GetVulkanGraphics();
+    
+    VkBufferCreateInfo BufferInfo = GetBufferInfo(Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &BufferInfo, VK_NULL_HANDLE, &Result.Buffer), "Failed to create the upload buffer.");
+    
+    Result.Memory = AllocateAndBindMemory(Result.Buffer, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);        
+    BOOL_CHECK_AND_HANDLE(Result.Memory, "Failed to allocate the upload buffer memory.");            
+    
+    VULKAN_CHECK_AND_HANDLE(vkMapMemory(Graphics->Device, Result.Memory, 0, Size, 0, (void**)(&Result.MappedMemory)),
+                            "Failed to map the upload buffer to cpu memory.");
+    
+    Result.Size = Size;
+    
+    return Result;
+    
+    handle_error:
+    return {};
 }
 
 VkShaderModule CreateShader(char* Path)
@@ -364,11 +446,8 @@ render_buffer CreateRenderBuffer(v2i Dimensions, VkSwapchainKHR OldSwapchain)
     VULKAN_CHECK_AND_HANDLE(vkCreateImage(Graphics->Device, &DepthImageInfo, VK_NULL_HANDLE, &DepthImage), 
                             "Failed to create the depth image.");
     
-    VkDeviceMemory DepthMemory = AllocateImageMemory(Graphics->SelectedGPU, DepthImage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VkDeviceMemory DepthMemory = AllocateAndBindMemory(DepthImage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     BOOL_CHECK_AND_HANDLE(DepthMemory, "Failed to allocate the depth buffer memory.");
-    
-    VULKAN_CHECK_AND_HANDLE(vkBindImageMemory(Graphics->Device, DepthImage, DepthMemory, 0),
-                            "Failed to bind the depth image to the depth memory.");
     
     VkImageViewCreateInfo DepthImageViewInfo = {};
     DepthImageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -911,8 +990,9 @@ RENDER_GAME(RenderGame)
     
     Graphics->CameraBufferData[1] = InverseTransformM4(TargetCamera->Position, TargetCamera->Orientation);    
     
-    VULKAN_CHECK_AND_HANDLE(vkQueueWaitIdle(Graphics->GraphicsQueue), "Failed to wait for the graphics queue.");
-    VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed to reset the command pool.");
+    VULKAN_CHECK_AND_HANDLE(vkQueueWaitIdle(Graphics->GraphicsQueue), "Failed to wait for the graphics queue.");        
+    VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed to reset the command pool.");    
+    Reset(&Graphics->UploadBuffer);
     
     VkCommandBuffer CommandBuffer = Graphics->CommandBuffer;
     
@@ -1012,7 +1092,7 @@ RENDER_GAME(RenderGame)
             ptr VertexSize = ImGuiData->TotalVtxCount * sizeof(ImDrawVert);
             ptr IndexSize = ImGuiData->TotalIdxCount * sizeof(ImDrawIdx);
             
-            if(Ve rtexSize && IndexSize)
+            if(VertexSize && IndexSize)
             {                
                 if(ImGuiContext->VertexBufferSize < VertexSize)
                 {
@@ -1022,15 +1102,13 @@ RENDER_GAME(RenderGame)
                     if(ImGuiContext->VertexBufferMemory)
                         vkFreeMemory(DevGraphics->Device, ImGuiContext->VertexBufferMemory, VK_NULL_HANDLE);
                     
-                    VkBufferCreateInfo BufferInfo = GetBufferInfo(VertexSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                    VkBufferCreateInfo BufferInfo = GetBufferInfo(VertexSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
                     VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(DevGraphics->Device, &BufferInfo, VK_NULL_HANDLE, &ImGuiContext->VertexBuffer), 
                                             "Failed to create the imgui vertex buffer.");
                     
-                    ImGuiContext->VertexBufferMemory = AllocateBufferMemory(Graphics->SelectedGPU, ImGuiContext->VertexBuffer, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                    ImGuiContext->VertexBufferMemory = AllocateAndBindMemory(ImGuiContext->VertexBuffer, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
                     BOOL_CHECK_AND_HANDLE(ImGuiContext->VertexBufferMemory, "Failed to allocate the ImGui vertex buffer memory.");
                     
-                    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(DevGraphics->Device, ImGuiContext->VertexBuffer, ImGuiContext->VertexBufferMemory, 0), 
-                                            "Failed to bind the ImGui Vertex buffer to the memory.");                                                                                                                                                                                                                                                                                            
                     ImGuiContext->VertexBufferSize = VertexSize;
                 }
                 
@@ -1042,18 +1120,22 @@ RENDER_GAME(RenderGame)
                     if(ImGuiContext->IndexBufferMemory)
                         vkFreeMemory(DevGraphics->Device, ImGuiContext->IndexBufferMemory, VK_NULL_HANDLE);
                     
-                    VkBufferCreateInfo BufferInfo = GetBufferInfo(IndexSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+                    VkBufferCreateInfo BufferInfo = GetBufferInfo(IndexSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
                     VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(DevGraphics->Device, &BufferInfo, VK_NULL_HANDLE, &ImGuiContext->IndexBuffer),
                                             "Failed to create the imgui index buffer.");
                     
-                    ImGuiContext->IndexBufferMemory = AllocateBufferMemory(Graphics->SelectedGPU, ImGuiContext->IndexBuffer, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                    ImGuiContext->IndexBufferMemory = AllocateAndBindMemory(ImGuiContext->IndexBuffer, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);                    
                     BOOL_CHECK_AND_HANDLE(ImGuiContext->IndexBufferMemory, "Failed to allocate the ImGui index buffer memory.");
                     
-                    VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(DevGraphics->Device, ImGuiContext->IndexBuffer, ImGuiContext->IndexBufferMemory, 0),
-                                            "Failed to bind the ImGui Index bufffer to the memory.");
                     ImGuiContext->IndexBufferSize = IndexSize;
                 }
                 
+                u8* ImGuiVertexBufferData;
+                u8* ImGuiIndexBufferData;
+                VULKAN_CHECK_AND_HANDLE(vkMapMemory(Graphics->Device, ImGuiContext->VertexBufferMemory, 0, ImGuiContext->VertexBufferSize, 0, (void**)(&ImGuiVertexBufferData)),
+                                        "Failed to map the imgui vertex buffer memory to the cpu.");
+                VULKAN_CHECK_AND_HANDLE(vkMapMemory(Graphics->Device, ImGuiContext->IndexBufferMemory, 0, ImGuiContext->IndexBufferSize, 0, (void**)(&ImGuiIndexBufferData)),
+                                        "Failed to map the imgui index buffer memory to the cpu.");                
                 
                 VkDeviceSize VertexOffset = 0;
                 VkDeviceSize IndexOffset = 0;
@@ -1064,15 +1146,65 @@ RENDER_GAME(RenderGame)
                     ptr CmdVertexSize = CmdList->VtxBuffer.Size * sizeof(ImDrawVert);
                     ptr CmdIndexSize = CmdList->IdxBuffer.Size * sizeof(ImDrawIdx);
                     
-                    vkCmdUpdateBuffer(CommandBuffer, ImGuiContext->VertexBuffer, VertexOffset, CmdVertexSize, CmdList->VtxBuffer.Data);
-                    vkCmdUpdateBuffer(CommandBuffer, ImGuiContext->IndexBuffer, IndexOffset, CmdIndexSize, CmdList->IdxBuffer.Data);
+                    CopyMemory(ImGuiVertexBufferData+VertexOffset, CmdList->VtxBuffer.Data, CmdVertexSize);
+                    CopyMemory(ImGuiIndexBufferData+IndexOffset, CmdList->IdxBuffer.Data, CmdIndexSize);
                     
                     VertexOffset += CmdVertexSize;
                     IndexOffset += CmdIndexSize;
                 }
                 
+                vkUnmapMemory(Graphics->Device, ImGuiContext->VertexBufferMemory);
+                vkUnmapMemory(Graphics->Device, ImGuiContext->IndexBufferMemory);
+                
                 ASSERT(VertexOffset == VertexSize);
-                ASSERT(IndexOffset == IndexOffset);
+                ASSERT(IndexOffset == IndexSize);
+                
+                vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ImGuiContext->Pipeline);
+                vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ImGuiContext->PipelineLayout, 0, 1, &ImGuiContext->DescriptorSet, 0, NULL);
+                
+                VkDeviceSize Offset = 0;
+                vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &ImGuiContext->VertexBuffer, &Offset);
+                vkCmdBindIndexBuffer(CommandBuffer, ImGuiContext->IndexBuffer, 0, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT16);
+                
+                v2f Scale = 2.0f/ImGuiData->DisplaySize;
+                v2f Translate = -1.0f - (v2f(ImGuiData->DisplayPos)*Scale);
+                vkCmdPushConstants(CommandBuffer, ImGuiContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(v2f), &Scale);
+                vkCmdPushConstants(CommandBuffer, ImGuiContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(v2f), sizeof(v2f), &Translate);
+                
+                i32 GlobalVertexOffset = 0;
+                u32 GlobalIndexOffset = 0;
+                for(i32 CmdListIndex = 0; CmdListIndex < ImGuiData->CmdListsCount; CmdListIndex++)
+                {
+                    ImDrawList* CmdList = ImGuiData->CmdLists[CmdListIndex];
+                    for(i32 CmdIndex = 0; CmdIndex < CmdList->CmdBuffer.Size; CmdIndex++)
+                    {
+                        ImDrawCmd* Cmd =&CmdList->CmdBuffer[CmdIndex];
+                        ASSERT(!Cmd->UserCallback);
+                        
+                        v4f ClipRect = V4((Cmd->ClipRect.x - ImGuiData->DisplayPos.x) * ImGuiData->FramebufferScale.x,                        
+                                          (Cmd->ClipRect.y - ImGuiData->DisplayPos.y) * ImGuiData->FramebufferScale.y,
+                                          (Cmd->ClipRect.z - ImGuiData->DisplayPos.x) * ImGuiData->FramebufferScale.x,
+                                          (Cmd->ClipRect.w - ImGuiData->DisplayPos.y) * ImGuiData->FramebufferScale.y);
+                        
+                        if((ClipRect.x < WindowDim.x) && (ClipRect.y < WindowDim.y) && 
+                           (ClipRect.z >= 0.0f) && (ClipRect.w >= 0.0f))
+                        {
+                            if(ClipRect.x < 0.0f) ClipRect.x = 0.0f;
+                            if(ClipRect.y < 0.0f) ClipRect.y = 0.0f;
+                            
+                            VkRect2D ScissorRect;
+                            ScissorRect.offset.x = (i32)(ClipRect.x);
+                            ScissorRect.offset.y = (i32)(ClipRect.y);
+                            ScissorRect.extent.width = (u32)(ClipRect.z - ClipRect.x);
+                            ScissorRect.extent.height = (u32)(ClipRect.w - ClipRect.y);
+                            vkCmdSetScissor(CommandBuffer, 0, 1, &ScissorRect);
+                            vkCmdDrawIndexed(CommandBuffer, Cmd->ElemCount, 1, Cmd->IdxOffset + GlobalIndexOffset, Cmd->VtxOffset + GlobalVertexOffset, 0);
+                        }                        
+                    }
+                    
+                    GlobalVertexOffset += CmdList->VtxBuffer.Size;
+                    GlobalIndexOffset += CmdList->IdxBuffer.Size;
+                }
             }            
 #endif            
         }
@@ -1205,8 +1337,14 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LOAD_DEVICE_FUNCTION(vkUpdateDescriptorSets);
     LOAD_DEVICE_FUNCTION(vkCreateBuffer);
     LOAD_DEVICE_FUNCTION(vkMapMemory);
+    LOAD_DEVICE_FUNCTION(vkUnmapMemory);
     LOAD_DEVICE_FUNCTION(vkCmdUpdateBuffer);
     LOAD_DEVICE_FUNCTION(vkDestroyBuffer);
+    LOAD_DEVICE_FUNCTION(vkCmdBindVertexBuffers);
+    LOAD_DEVICE_FUNCTION(vkCmdBindIndexBuffer);
+    LOAD_DEVICE_FUNCTION(vkCreateSampler);        
+    LOAD_DEVICE_FUNCTION(vkCmdPipelineBarrier);
+    LOAD_DEVICE_FUNCTION(vkCmdCopyBufferToImage);
     
     if(Graphics->SelectedGPU->FoundDedicatedMemoryExtension)
     {
@@ -1234,6 +1372,9 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
     VULKAN_CHECK_AND_HANDLE(vkAllocateCommandBuffers(Graphics->Device, &CommandBufferInfo, &Graphics->CommandBuffer),
                             "Failed to allocate the command buffers.");        
+    
+    Graphics->UploadBuffer = CreateUploadBuffer(MEGABYTE(32));
+    BOOL_CHECK_AND_HANDLE(Graphics->UploadBuffer.Buffer, "Failed to create the graphics upload buffer.");
     
     VkAttachmentDescription AttachmentDescriptions[2] = {};    
     AttachmentDescriptions[0].format = Graphics->SelectedGPU->SurfaceFormat.format;
@@ -1280,13 +1421,16 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     BOOL_CHECK_AND_HANDLE(Graphics->RenderLock, "Failed to create the render lock.");
     BOOL_CHECK_AND_HANDLE(Graphics->PresentLock, "Failed to create the present lock.");
     
-    VkDescriptorPoolSize PoolSizes[1] = {};
+    VkDescriptorPoolSize PoolSizes[2] = {};
     PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     PoolSizes[0].descriptorCount = 3;
     
+    PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    PoolSizes[1].descriptorCount = 1;
+    
     VkDescriptorPoolCreateInfo DescriptorPoolInfo = {};
     DescriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    DescriptorPoolInfo.maxSets = 3;
+    DescriptorPoolInfo.maxSets = 4;
     DescriptorPoolInfo.poolSizeCount = ARRAYCOUNT(PoolSizes);
     DescriptorPoolInfo.pPoolSizes = PoolSizes;
     
@@ -1359,7 +1503,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     GraphicsPipelineInfo.pVertexInputState = EmptyVertexInputState();
     GraphicsPipelineInfo.pInputAssemblyState = TriangleListInputAssemblyState();
     GraphicsPipelineInfo.pViewportState = SingleViewportState();
-    GraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    GraphicsPipelineInfo.pRasterizationState = DefaultCullBackRasterizationState();
     GraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
     GraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();
     GraphicsPipelineInfo.pDepthStencilState = DepthOnState();
@@ -1492,7 +1636,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     PointGraphicsPipelineInfo.pVertexInputState = EmptyVertexInputState();
     PointGraphicsPipelineInfo.pInputAssemblyState = PointListInputAssemblyState();
     PointGraphicsPipelineInfo.pViewportState = SingleViewportState();
-    PointGraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    PointGraphicsPipelineInfo.pRasterizationState = DefaultCullBackRasterizationState();
     PointGraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
     PointGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();    
     PointGraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
@@ -1558,7 +1702,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     LineGraphicsPipelineInfo.pVertexInputState = EmptyVertexInputState();
     LineGraphicsPipelineInfo.pInputAssemblyState = PointListInputAssemblyState();
     LineGraphicsPipelineInfo.pViewportState = SingleViewportState();
-    LineGraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    LineGraphicsPipelineInfo.pRasterizationState = DefaultCullBackRasterizationState();
     LineGraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
     LineGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();    
     LineGraphicsPipelineInfo.pDynamicState = ViewportScissorDynamicState();
@@ -1619,8 +1763,8 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VkShaderModule DebugVolumesVertex   = CreateShader("shaders/vulkan/debug_volumes_vertex.spv");
     VkShaderModule DebugVolumesFragment = CreateShader("shaders/vulkan/debug_volumes_fragment.spv");
     
-    BOOL_CHECK_AND_HANDLE(DebugVolumesVertex, "Failed to create the debug volume vertex buffer.");
-    BOOL_CHECK_AND_HANDLE(DebugVolumesFragment, "Failed to create the debug fragment vertex buffer.");
+    BOOL_CHECK_AND_HANDLE(DebugVolumesVertex, "Failed to create the debug volume vertex shader.");
+    BOOL_CHECK_AND_HANDLE(DebugVolumesFragment, "Failed to create the debug fragment vertex shader.");
     
     VkPipelineShaderStageCreateInfo VolumeShaderStages[2] = {};
     VolumeShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1658,7 +1802,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     DebugVolumesGraphicsPipelineInfo.pVertexInputState = &DebugVolumesVertexInputState;
     DebugVolumesGraphicsPipelineInfo.pInputAssemblyState = LineListInputAssemblyState();
     DebugVolumesGraphicsPipelineInfo.pViewportState = SingleViewportState();
-    DebugVolumesGraphicsPipelineInfo.pRasterizationState = DefaultRasterizationState();
+    DebugVolumesGraphicsPipelineInfo.pRasterizationState = DefaultCullBackRasterizationState();
     DebugVolumesGraphicsPipelineInfo.pMultisampleState = DefaultMultisampleState();
     DebugVolumesGraphicsPipelineInfo.pColorBlendState = DefaultColorBlendState();
     DebugVolumesGraphicsPipelineInfo.pDepthStencilState = DepthOffState();
@@ -1718,6 +1862,178 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VULKAN_CHECK_AND_HANDLE(vkBindBufferMemory(Graphics->Device, VolumeContext->IndexBuffer, VolumeContext->Memory, DEBUGIndexMemoryOffset),
                             "Failed to bind the debug index buffer to the debug memory.");
     
+    debug_imgui_context* ImGuiContext = &DevGraphics->ImGuiContext;
+    
+    ImGuiIO& IO = ImGui::GetIO();
+    IO.BackendRendererName = "world_game_vulkan_graphics";
+    IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+    
+    VkSamplerCreateInfo ImGuiSamplerInfo = {};
+    ImGuiSamplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    ImGuiSamplerInfo.magFilter = VK_FILTER_LINEAR;
+    ImGuiSamplerInfo.minFilter = VK_FILTER_LINEAR;
+    ImGuiSamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    ImGuiSamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    ImGuiSamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    
+    //Explain imgui_impl_vulkan.cpp ?!
+    ImGuiSamplerInfo.minLod = -1000;
+    ImGuiSamplerInfo.maxLod =  1000;    
+    
+    ImGuiSamplerInfo.maxAnisotropy = 1.0f;
+    VULKAN_CHECK_AND_HANDLE(vkCreateSampler(Graphics->Device, &ImGuiSamplerInfo, VK_NULL_HANDLE, &ImGuiContext->FontSampler),
+                            "Failed to create the imgui sampler.");
+    
+    VkDescriptorSetLayoutBinding ImGuiLayoutBinding = {};
+    ImGuiLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    ImGuiLayoutBinding.descriptorCount = 1;
+    ImGuiLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    ImGuiLayoutBinding.pImmutableSamplers = &ImGuiContext->FontSampler;
+    
+    VkDescriptorSetLayoutCreateInfo ImGuiDescriptorSetLayoutInfo = {};
+    ImGuiDescriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    ImGuiDescriptorSetLayoutInfo.pBindings = &ImGuiLayoutBinding;
+    ImGuiDescriptorSetLayoutInfo.bindingCount = 1;
+    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(Graphics->Device, &ImGuiDescriptorSetLayoutInfo, VK_NULL_HANDLE, &ImGuiContext->DescriptorSetLayout),
+                            "Failed to create the imgui descriptor set layout.");
+    
+    VkDescriptorSetAllocateInfo ImGuiDescriptorSetInfo = {};
+    ImGuiDescriptorSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ImGuiDescriptorSetInfo.descriptorPool = Graphics->DescriptorPool;
+    ImGuiDescriptorSetInfo.descriptorSetCount = 1;
+    ImGuiDescriptorSetInfo.pSetLayouts = &ImGuiContext->DescriptorSetLayout;
+    VULKAN_CHECK_AND_HANDLE(vkAllocateDescriptorSets(Graphics->Device, &ImGuiDescriptorSetInfo, &ImGuiContext->DescriptorSet),
+                            "Failed to allocate the imgui descriptor set.");
+    
+    VkPushConstantRange ImGuiPushConstantRanges[1] = {};
+    ImGuiPushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;    
+    ImGuiPushConstantRanges[0].size = sizeof(v2f)*2;
+    
+    VkPipelineLayoutCreateInfo ImGuiPipelineLayoutInfo = {};
+    ImGuiPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    ImGuiPipelineLayoutInfo.setLayoutCount = 1;
+    ImGuiPipelineLayoutInfo.pSetLayouts = &ImGuiContext->DescriptorSetLayout;
+    ImGuiPipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(ImGuiPushConstantRanges);
+    ImGuiPipelineLayoutInfo.pPushConstantRanges = ImGuiPushConstantRanges;
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(Graphics->Device, &ImGuiPipelineLayoutInfo, VK_NULL_HANDLE, &ImGuiContext->PipelineLayout),
+                            "Failed to create the imgui pipeline layout.");    
+    
+    VkShaderModule ImGuiVertex   = CreateShader("shaders/vulkan/imgui_vertex.spv");
+    VkShaderModule ImGuiFragment = CreateShader("shaders/vulkan/imgui_fragment.spv");
+    
+    BOOL_CHECK_AND_HANDLE(ImGuiVertex, "Failed to create the imgui vertex shader.");
+    BOOL_CHECK_AND_HANDLE(ImGuiFragment, "Failed to create the imgui fragment shader.");
+    
+    VkPipelineShaderStageCreateInfo ImGuiShaderStages[2] = {};
+    ImGuiShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    ImGuiShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    ImGuiShaderStages[0].module = ImGuiVertex;
+    ImGuiShaderStages[0].pName = "main";
+    
+    ImGuiShaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    ImGuiShaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    ImGuiShaderStages[1].module = ImGuiFragment;
+    ImGuiShaderStages[1].pName = "main";
+    
+    VkVertexInputBindingDescription ImGuiVertexBindings[1] = {};
+    ImGuiVertexBindings[0].stride = sizeof(ImDrawVert);
+    ImGuiVertexBindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    ImGuiVertexBindings[0].binding = 0;
+    
+    VkVertexInputAttributeDescription ImGuiVertexAttributes[3] = {};
+    ImGuiVertexAttributes[0].location = 0;
+    ImGuiVertexAttributes[0].binding = ImGuiVertexBindings[0].binding;
+    ImGuiVertexAttributes[0].format = VK_FORMAT_R32G32_SFLOAT;
+    ImGuiVertexAttributes[0].offset = IM_OFFSETOF(ImDrawVert, pos);
+    
+    ImGuiVertexAttributes[1].location = 1;
+    ImGuiVertexAttributes[1].binding = ImGuiVertexBindings[0].binding;
+    ImGuiVertexAttributes[1].format = VK_FORMAT_R32G32_SFLOAT;
+    ImGuiVertexAttributes[1].offset = IM_OFFSETOF(ImDrawVert, uv);
+    
+    ImGuiVertexAttributes[2].location = 2;
+    ImGuiVertexAttributes[2].binding = ImGuiVertexBindings[0].binding;
+    ImGuiVertexAttributes[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+    ImGuiVertexAttributes[2].offset = IM_OFFSETOF(ImDrawVert, col);
+    
+    VkPipelineVertexInputStateCreateInfo ImGuiVertexInputState = {};
+    ImGuiVertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    ImGuiVertexInputState.vertexBindingDescriptionCount = ARRAYCOUNT(ImGuiVertexBindings);
+    ImGuiVertexInputState.pVertexBindingDescriptions = ImGuiVertexBindings;
+    ImGuiVertexInputState.vertexAttributeDescriptionCount = ARRAYCOUNT(ImGuiVertexAttributes);
+    ImGuiVertexInputState.pVertexAttributeDescriptions = ImGuiVertexAttributes;    
+    
+    VkPipelineColorBlendAttachmentState ImGuiBlendAttachment = {};
+    ImGuiBlendAttachment.blendEnable = VK_TRUE;
+    ImGuiBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    ImGuiBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    ImGuiBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    ImGuiBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    ImGuiBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    ImGuiBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    ImGuiBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    
+    VkPipelineColorBlendStateCreateInfo ImGuiBlendState = {};
+    ImGuiBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    ImGuiBlendState.attachmentCount = 1;
+    ImGuiBlendState.pAttachments = &ImGuiBlendAttachment;
+    
+    VkGraphicsPipelineCreateInfo ImGuiPipelineInfo = {};
+    ImGuiPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    ImGuiPipelineInfo.stageCount = ARRAYCOUNT(ImGuiShaderStages);
+    ImGuiPipelineInfo.pStages = ImGuiShaderStages;
+    ImGuiPipelineInfo.pVertexInputState = &ImGuiVertexInputState;
+    ImGuiPipelineInfo.pInputAssemblyState = TriangleListInputAssemblyState();
+    ImGuiPipelineInfo.pViewportState = SingleViewportState();
+    ImGuiPipelineInfo.pRasterizationState = DefaultCullNoneRasterizationState();
+    ImGuiPipelineInfo.pMultisampleState = DefaultMultisampleState();
+    ImGuiPipelineInfo.pDepthStencilState = DepthOffState();
+    ImGuiPipelineInfo.pColorBlendState = &ImGuiBlendState;
+    ImGuiPipelineInfo.pDynamicState = ViewportScissorDynamicState();
+    ImGuiPipelineInfo.layout = ImGuiContext->PipelineLayout;
+    ImGuiPipelineInfo.renderPass = Graphics->RenderPass;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &ImGuiPipelineInfo, VK_NULL_HANDLE, &ImGuiContext->Pipeline),
+                            "Failed to create the imgui pipeline.");
+    
+    vkDestroyShaderModule(Graphics->Device, ImGuiVertex, VK_NULL_HANDLE);
+    vkDestroyShaderModule(Graphics->Device, ImGuiFragment, VK_NULL_HANDLE);
+    
+    u8* ImGuiFontData;
+    i32 ImGuiFontWidth, ImGuiFontHeight;    
+    IO.Fonts->GetTexDataAsRGBA32(&ImGuiFontData, &ImGuiFontWidth, &ImGuiFontHeight);
+    ptr ImGuiFontDataSize = ImGuiFontWidth*ImGuiFontHeight*4*sizeof(u8);
+    
+    VkImageCreateInfo ImGuiFontInfo = {};
+    ImGuiFontInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ImGuiFontInfo.imageType = VK_IMAGE_TYPE_2D;
+    ImGuiFontInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ImGuiFontInfo.extent.width = ImGuiFontWidth;
+    ImGuiFontInfo.extent.height = ImGuiFontHeight;
+    ImGuiFontInfo.extent.depth = 1;
+    ImGuiFontInfo.mipLevels = 1;
+    ImGuiFontInfo.arrayLayers = 1;
+    ImGuiFontInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    ImGuiFontInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ImGuiFontInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    ImGuiFontInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ImGuiFontInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VULKAN_CHECK_AND_HANDLE(vkCreateImage(Graphics->Device, &ImGuiFontInfo, VK_NULL_HANDLE, &ImGuiContext->FontImage),
+                            "Failed to create the imgui font image.");
+    
+    ImGuiContext->FontImageMemory = AllocateAndBindMemory(ImGuiContext->FontImage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);        
+    BOOL_CHECK_AND_HANDLE(ImGuiContext->FontImageMemory, "Failed to allocate the ImGui Font image memory.");
+    
+    VkImageViewCreateInfo FontImageViewInfo = {};
+    FontImageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    FontImageViewInfo.image = ImGuiContext->FontImage;
+    FontImageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    FontImageViewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+    FontImageViewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    VULKAN_CHECK_AND_HANDLE(vkCreateImageView(Graphics->Device, &FontImageViewInfo, VK_NULL_HANDLE, &ImGuiContext->FontImageView),
+                            "Failed to create the ImGui font image view.");
+    
+    
     VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed ot reset the command buffer.");
     VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(Graphics->CommandBuffer, OneTimeCommandBufferBeginInfo()), "Failed to begin recording the command buffer.");
     {
@@ -1725,6 +2041,44 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
         vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, DEBUGCapsuleCapVertexSize, DEBUGCapsuleBodyVertexSize, CapsuleMesh->Body.Vertices);
         vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, 0, DEBUGCapsuleCapIndicesSize, CapsuleMesh->Cap.Indices);
         vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, DEBUGCapsuleCapIndicesSize, DEBUGCapsuleBodyIndicesSize, CapsuleMesh->Body.Indices);
+        
+        VkImageMemoryBarrier CopyBarrier[1] = {};
+        CopyBarrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        CopyBarrier[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        CopyBarrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        CopyBarrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        CopyBarrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        CopyBarrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        CopyBarrier[0].image = ImGuiContext->FontImage;
+        CopyBarrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        CopyBarrier[0].subresourceRange.levelCount = 1;
+        CopyBarrier[0].subresourceRange.layerCount = 1;
+        vkCmdPipelineBarrier(Graphics->CommandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, CopyBarrier);
+        
+        VkDeviceSize FontUploadOffset = PushWrite(&Graphics->UploadBuffer, ImGuiFontData, ImGuiFontDataSize);
+        
+        VkBufferImageCopy ImageRegion = {};
+        ImageRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        ImageRegion.imageSubresource.layerCount = 1;
+        ImageRegion.bufferOffset = FontUploadOffset;
+        ImageRegion.imageExtent.width = ImGuiFontWidth;
+        ImageRegion.imageExtent.height = ImGuiFontHeight;
+        ImageRegion.imageExtent.depth = 1;
+        vkCmdCopyBufferToImage(Graphics->CommandBuffer, Graphics->UploadBuffer.Buffer, ImGuiContext->FontImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageRegion);
+        
+        VkImageMemoryBarrier UseBarrier[1] = {};
+        UseBarrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        UseBarrier[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        UseBarrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        UseBarrier[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        UseBarrier[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        UseBarrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        UseBarrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        UseBarrier[0].image = ImGuiContext->FontImage;
+        UseBarrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        UseBarrier[0].subresourceRange.levelCount = 1;
+        UseBarrier[0].subresourceRange.layerCount = 1;
+        vkCmdPipelineBarrier(Graphics->CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, UseBarrier);        
     }    
     VULKAN_CHECK_AND_HANDLE(vkEndCommandBuffer(Graphics->CommandBuffer), "Failed to end the command buffer recording.");
     
@@ -1736,7 +2090,12 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VULKAN_CHECK_AND_HANDLE(vkQueueSubmit(Graphics->GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE), 
                             "Failed to submit the command buffer to the graphics queue.");
     
-    VkWriteDescriptorSet DebugDescriptorWrites[2] = {};    
+    VkDescriptorImageInfo DescriptorImageInfo = {};
+    DescriptorImageInfo.sampler = ImGuiContext->FontSampler;
+    DescriptorImageInfo.imageView = ImGuiContext->FontImageView;
+    DescriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;        
+    
+    VkWriteDescriptorSet DebugDescriptorWrites[3] = {};    
     DebugDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     DebugDescriptorWrites[0].dstSet = PrimitiveContext->DescriptorSet;
     DebugDescriptorWrites[0].dstBinding = 0;
@@ -1752,6 +2111,14 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     DebugDescriptorWrites[1].descriptorCount = 1;
     DebugDescriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     DebugDescriptorWrites[1].pBufferInfo = &DescriptorBufferInfo;
+    
+    DebugDescriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    DebugDescriptorWrites[2].dstSet = ImGuiContext->DescriptorSet;
+    DebugDescriptorWrites[2].dstBinding = 0;
+    DebugDescriptorWrites[2].dstArrayElement = 0;
+    DebugDescriptorWrites[2].descriptorCount = 1;
+    DebugDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    DebugDescriptorWrites[2].pImageInfo = &DescriptorImageInfo;
     
     vkUpdateDescriptorSets(DevGraphics->Device, ARRAYCOUNT(DebugDescriptorWrites), DebugDescriptorWrites, 0, VK_NULL_HANDLE);    
     
@@ -1774,6 +2141,10 @@ EXPORT WIN32_GRAPHICS_INIT(GraphicsInit)
     Global_Platform = Platform;
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);
     SetGlobalErrorStream(Global_Platform->ErrorStream);
+    
+#if DEVELOPER_BUILD
+    ImGui::SetCurrentContext(Context);
+#endif
     
     HMODULE VulkanLib = LoadLibrary("vulkan-1.dll");
     BOOL_CHECK_AND_HANDLE(VulkanLib, "Failed to load the vulkan library");    

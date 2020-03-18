@@ -45,7 +45,9 @@ struct graphics
 };
 
 #ifdef OS_WINDOWS
-#define WIN32_GRAPHICS_INIT(name) graphics* name(HWND Window, platform* Platform)
+//TODO(JJ): Remove this
+#include "imgui/imgui.h"
+#define WIN32_GRAPHICS_INIT(name) graphics* name(HWND Window, platform* Platform, ImGuiContext* Context)
 typedef WIN32_GRAPHICS_INIT(win32_graphics_init);
 #endif
 
