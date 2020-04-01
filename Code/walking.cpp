@@ -1,4 +1,4 @@
-#define GRID_DENSITY 0.1f
+#define GRID_DENSITY 0.2f
 
 inline v2i 
 GetCell(v2f Position)
@@ -128,6 +128,7 @@ void TestPoles(game* Game, walkable_grid* Grid)
             if(Pole->ZIntersection != -FLT_MAX)
             {
                 WALKING_SYSTEM_EVENT_DRAW_POINT(Pole->IntersectionPoint, Green());                
+                Pole->Flag = WALKABLE_POLE_FLAG_WALKABLE;
                 Pole->HitEntity = HitEntity;                                 
             }            
         }

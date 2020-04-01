@@ -3,6 +3,7 @@
 
 #if DEVELOPER_BUILD
 #include "dev_world_game.cpp"
+b32 Win32_DevWindowProc(HWND, UINT, WPARAM, LPARAM);
 #endif
 
 global LARGE_INTEGER Global_Frequency;
@@ -31,6 +32,11 @@ internal LRESULT CALLBACK
 Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     LRESULT Result = 0;
+    
+#if DEVELOPER_BUILD
+    if(Win32_DevWindowProc(Window, Message, WParam, LParam))
+        return Result;
+#endif    
     
     switch(Message)
     {        
@@ -561,75 +567,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                     return 0;
                 } break;
                 
-#if DEVELOPER_BUILD
-                
-                
-                case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
-                case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
-                case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
-                case WM_XBUTTONDOWN: case WM_XBUTTONDBLCLK:
+                case WM_INPUT:
                 {
-                    int button = 0;
-                    if (Message.message == WM_LBUTTONDOWN || Message.message == WM_LBUTTONDBLCLK) { button = 0; }
-                    if (Message.message == WM_RBUTTONDOWN || Message.message == WM_RBUTTONDBLCLK) { button = 1; }
-                    if (Message.message == WM_MBUTTONDOWN || Message.message == WM_MBUTTONDBLCLK) { button = 2; }
-                    if (Message.message == WM_XBUTTONDOWN || Message.message == WM_XBUTTONDBLCLK) { button = (GET_XBUTTON_WPARAM(Message.wParam) == XBUTTON1) ? 3 : 4; }
-                    if (!ImGui::IsAnyMouseDown() && GetCapture() == NULL)
-                        SetCapture(Window);
-                    IO.MouseDown[button] = true;                    
-                } break;
-                
-                case WM_LBUTTONUP:
-                case WM_RBUTTONUP:
-                case WM_MBUTTONUP:
-                case WM_XBUTTONUP:
-                {
-                    i32 Button = 0;
-                    if (Message.message == WM_LBUTTONUP) { Button = 0; }
-                    if (Message.message == WM_RBUTTONUP) { Button = 1; }
-                    if (Message.message == WM_MBUTTONUP) { Button = 2; }
-                    if (Message.message == WM_XBUTTONUP) { Button = (GET_XBUTTON_WPARAM(Message.wParam) == XBUTTON1) ? 3 : 4; }
-                    IO.MouseDown[Button] = false;
-                    if (!ImGui::IsAnyMouseDown() && GetCapture() == Window)
-                        ReleaseCapture();                                        
-                } break;
-                
-                case WM_MOUSEWHEEL:
-                {
-                    IO.MouseWheel += (f32)GET_WHEEL_DELTA_WPARAM(Message.wParam) / (f32)WHEEL_DELTA;                    
-                } break;
-                
-                case WM_KEYDOWN:
-                case WM_SYSKEYDOWN:
-                if (Message.wParam < 256)
-                {
-                    IO.KeysDown[Message.wParam] = 1;
-                } break;
-                
-                case WM_KEYUP:
-                case WM_SYSKEYUP:
-                {
-                    if (Message.wParam < 256)
-                        IO.KeysDown[Message.wParam] = 0;                    
-                } break;                
-                
-                case WM_CHAR:
-                {
-                    // You can also use ToAscii()+GetKeyboardState() to retrieve characters.
-                    if (Message.wParam > 0 && Message.wParam < 0x10000)
-                        IO.AddInputCharacterUTF16((unsigned short)Message.wParam);
-                } break;                
-                
-#endif
-            
-            case WM_INPUT:
-            {
-                UINT Size;
-                UINT Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
-                
-                void* InputData = PushSize(Size, NoClear, 8);                    
-                Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, InputData, &Size, sizeof(RAWINPUTHEADER));                    
-                
+                    UINT Size;
+                    UINT Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
+                    
+                    void* InputData = PushSize(Size, NoClear, 8);                    
+                    Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, InputData, &Size, sizeof(RAWINPUTHEADER));                    
+                    
                     RAWINPUT* RawInput = (RAWINPUT*)InputData;
                     RAWINPUTHEADER* RawInputHeader = &RawInput->header;
                     
@@ -686,7 +631,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                             
 #if DEVELOPER_BUILD
                             if(FrameRecording->RecordingState == RECORDING_STATE_NONE || FrameRecording->RecordingState == RECORDING_STATE_RECORDING)                            
-#endif
+    #endif
                             {
                                 switch(RawKeyboard->VKey)
                                 {
@@ -792,7 +737,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         Input.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
         //CONSOLE_LOG("dt: %f\n", Input.dt*1000.0f);
         StartTime = Win32_Clock();
-      
+        
         EndTemporaryMemory(&FrameArena);        
         CHECK_ARENA(GetDefaultArena());
     }
@@ -802,4 +747,81 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     Global_Platform->WriteEntireFile("Errors.log", ErrorMessage.Data, SafeU32(ErrorMessage.Length));
     MessageBox(NULL, "Error has occurred, please see Errors.log file.", NULL, MB_OK);     
     return -1;
+} 
+
+#if DEVELOPER_BUILD
+
+b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
+{
+    if(!ImGui::GetCurrentContext())
+        return false;
+    
+    ImGuiIO& IO = ImGui::GetIO();
+    
+    switch(Message)
+    {
+        case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDOWN: case WM_XBUTTONDBLCLK:
+        {
+            int button = 0;
+            if (Message == WM_LBUTTONDOWN || Message == WM_LBUTTONDBLCLK) { button = 0; }
+            if (Message == WM_RBUTTONDOWN || Message == WM_RBUTTONDBLCLK) { button = 1; }
+            if (Message == WM_MBUTTONDOWN || Message == WM_MBUTTONDBLCLK) { button = 2; }
+            if (Message == WM_XBUTTONDOWN || Message == WM_XBUTTONDBLCLK) { button = (GET_XBUTTON_WPARAM(WParam) == XBUTTON1) ? 3 : 4; }
+            if (!ImGui::IsAnyMouseDown() && GetCapture() == NULL)
+                SetCapture(Window);
+            IO.MouseDown[button] = true;                    
+        } break;
+        
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+        case WM_XBUTTONUP:
+        {
+            i32 Button = 0;
+            if (Message == WM_LBUTTONUP) { Button = 0; }
+            if (Message == WM_RBUTTONUP) { Button = 1; }
+            if (Message == WM_MBUTTONUP) { Button = 2; }
+            if (Message == WM_XBUTTONUP) { Button = (GET_XBUTTON_WPARAM(WParam) == XBUTTON1) ? 3 : 4; }
+            IO.MouseDown[Button] = false;
+            if (!ImGui::IsAnyMouseDown() && GetCapture() == Window)
+                ReleaseCapture();                                        
+        } break;
+        
+        case WM_MOUSEWHEEL:
+        {
+            IO.MouseWheel += (f32)GET_WHEEL_DELTA_WPARAM(WParam) / (f32)WHEEL_DELTA;                    
+        } break;
+        
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        {
+            if (WParam < 256)                    
+                IO.KeysDown[WParam] = 1;                    
+        }break;
+        
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+        {
+            if (WParam < 256)
+                IO.KeysDown[WParam] = 0;                    
+        } break;                
+        
+        case WM_CHAR:
+        {
+            // You can also use ToAscii()+GetKeyboardState() to retrieve characters.
+            if (WParam > 0 && WParam < 0x10000)
+                IO.AddInputCharacterUTF16((unsigned short)WParam);
+        } break;                    
+        
+        default:
+        {
+            return false;
+        } break;
+    }
+    
+    return true;
 }
+#endif

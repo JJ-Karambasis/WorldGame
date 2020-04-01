@@ -155,15 +155,21 @@ inline u64 MaximumU64(u64 A, u64 B)
     return Result;
 }
 
-inline f32 Clamp(f32 Value, f32 Min, f32 Max)
+inline f32 ClampF32(f32 Value, f32 Min, f32 Max)
 {
     f32 Result = MinimumF32(MaximumF32(Value, Min), Max);
     return Result;
 }
 
-inline f32 Saturate(f32 Value)
+inline i32 ClampI32(i32 Value, i32 Min, i32 Max)
 {
-    f32 Result = Clamp(Value, 0.0f, 1.0f);
+    i32 Result = MinimumI32(MaximumI32(Value, Min), Max);
+    return Result;
+}
+
+inline f32 SaturateF32(f32 Value)
+{
+    f32 Result = ClampF32(Value, 0.0f, 1.0f);
     return Result;
 }
 

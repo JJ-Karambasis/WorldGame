@@ -55,7 +55,7 @@ inline f32 Sqrt(f32 Value)
 inline f32 RSqrt(f32 Value)
 {
     //IMPORTANT(JJ): Probably don't want the intrinsic to handle the divide by 0 but I want to determine where these happen first and what the intrinsic will return (NAN or infinity?)
-    if(Abs(Value) < 0.00001f)
+    if(Abs(Value) < 1e-7f)
         ASSERT(false);
     
     f32 Result;
@@ -361,6 +361,13 @@ FloorV2(v2f Value)
     v2i Result;
     Result.x = FloorI32(Value.x);
     Result.y = FloorI32(Value.y);
+    return Result;
+}
+
+inline b32
+AreEqual(v2f P0, v2f P1, f32 Epsilon)
+{
+    b32 Result = SquareMagnitude(P0-P1) < Epsilon;
     return Result;
 }
 

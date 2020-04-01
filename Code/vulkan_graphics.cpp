@@ -1027,22 +1027,24 @@ RENDER_GAME(RenderGame)
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);             
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->PipelineLayout, 0, 1, &Graphics->DescriptorSet, 0, VK_NULL_HANDLE);
             
+            
+            
             player* Player = &Game->Player;
-            {
-                v3f ZAxis = V3(0.0f, 0.0f, 1.0f);
-                v3f YAxis = V3(Player->FacingDirection, 0.0f);
-                v3f XAxis = Cross(YAxis, ZAxis);
-                
-                XAxis *= (Player->Radius * 2.0f);
-                YAxis *= (Player->Radius * 2.0f);
-                ZAxis *= Player->Height;
+            v3f PlayerZ = V3(0.0f, 0.0f, 1.0f);
+            v3f PlayerY = V3(Player->FacingDirection, 0.0f);
+            v3f PlayerX = Cross(PlayerY, PlayerZ);
+#if 0 
+            {                
+                v3f XAxis = PlayerX*(Player->Radius * 2.0f);
+                v3f YAxis = PlayerY*(Player->Radius * 2.0f);
+                v3f ZAxis = PlayerZ*Player->Height;
                 
                 m4 Model = TransformM4(Player->Position, M3(XAxis, YAxis, ZAxis));
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Player->Color);                            
                 vkCmdDraw(CommandBuffer, 36, 1, 0, 0);                
             }
-            
+#endif
             for(static_entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
             {                
                 m4 Model = TransformM4(Entity->Transform);
@@ -1054,8 +1056,44 @@ RENDER_GAME(RenderGame)
 #if DEVELOPER_BUILD
             developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
             
-            debug_primitive_context* PrimitiveContext = &DevGraphics->PrimitiveContext;
+            debug_volume_context* VolumeContext = &DevGraphics->VolumeContext;
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VolumeContext->Pipeline);            
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VolumeContext->PipelineLayout, 0, 1, &VolumeContext->DescriptorSet, 0, VK_NULL_HANDLE);
             
+            VkDeviceSize VolumeVertexOffset = 0;
+            vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &VolumeContext->VertexBuffer, &VolumeVertexOffset);
+            vkCmdBindIndexBuffer(CommandBuffer, VolumeContext->IndexBuffer, 0, VK_INDEX_TYPE_UINT16);            
+            
+            {
+                debug_capsule_mesh* CapsuleMesh = &VolumeContext->CapsuleMesh;
+                
+                mesh* Cap = &CapsuleMesh->Cap;
+                mesh* Body = &CapsuleMesh->Body;
+                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Player->Color);
+                
+                v3f BodyZ = PlayerZ*Player->Height;
+                
+                v3f XAxis = PlayerX*Player->Radius;
+                v3f YAxis = PlayerY*Player->Radius;
+                v3f ZAxis = PlayerZ*Player->Radius;
+                m4 Model = TransformM4(Player->Position, M3(XAxis, YAxis, -ZAxis));                
+                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
+                vkCmdDrawIndexed(CommandBuffer, Cap->IndexCount, 1, 0, 0, 0); 
+                
+                Model = TransformM4(Player->Position + BodyZ, 
+                                    M3(XAxis, YAxis, ZAxis));
+                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);
+                vkCmdDrawIndexed(CommandBuffer, Cap->IndexCount, 1, 0, 0, 0);
+                                
+                Model = TransformM4(Player->Position+(BodyZ*0.5f), M3(XAxis, YAxis, BodyZ));
+                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);
+                vkCmdDrawIndexed(CommandBuffer, Body->IndexCount, 1, Cap->IndexCount, Cap->VertexCount, 0);
+                
+            }
+            
+            
+            debug_primitive_context* PrimitiveContext = &DevGraphics->PrimitiveContext;
+                        
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipeline);
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipelineLayout, 0, 1, &PrimitiveContext->DescriptorSet, 0, VK_NULL_HANDLE);
             
@@ -1162,8 +1200,8 @@ RENDER_GAME(RenderGame)
                 vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ImGuiContext->Pipeline);
                 vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ImGuiContext->PipelineLayout, 0, 1, &ImGuiContext->DescriptorSet, 0, NULL);
                 
-                VkDeviceSize Offset = 0;
-                vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &ImGuiContext->VertexBuffer, &Offset);
+                VkDeviceSize ImguiVertexOffset = 0;
+                vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &ImGuiContext->VertexBuffer, &ImguiVertexOffset);
                 vkCmdBindIndexBuffer(CommandBuffer, ImGuiContext->IndexBuffer, 0, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT16);
                 
                 v2f Scale = 2.0f/ImGuiData->DisplaySize;

@@ -39,8 +39,10 @@ struct development_input : public input
 enum walking_event_type
 {
     WALKING_EVENT_TYPE_UNKNOWN,
-    WALKING_EVENT_TYPE_DRAW_POINT,
-    WALKING_EVENT_TYPE_DRAW_EDGE
+    WALKING_EVENT_TYPE_DRAW_POINT,    
+    WALKING_EVENT_TYPE_DRAW_WALK_EDGE,
+    WALKING_EVENT_TYPE_DRAW_RING,
+    WALKING_EVENT_TYPE_DRAW_RING_TEST
 };
 
 struct walking_event
@@ -59,8 +61,25 @@ struct walking_event
         {
             v3f Point0;
             v3f Point1;
+            v3f Point2;
+        } DebugRing;
+        
+        struct
+        {
+            v3f PolePosition;
+            v2f EdgePosition;            
             c4 Color;
-        } DebugEdge;
+        } DebugWalkEdge;
+        
+        struct
+        {
+            v3f RingPoint0;
+            v3f RingPoint1;
+            v3f RingPoint2;
+            v3f RequestedPoint;
+            c4 RingColor;
+            c4 RequestedColor;
+        } DebugRingTest;
     };
 };
 
@@ -93,11 +112,11 @@ struct frame_recording
 {
     platform_file_handle* File;
     arena FrameStream;
-    u32 MaxFrameCount;
-    u32 FrameCount;
+    i32 MaxFrameCount;
+    i32 FrameCount;
     ptr* FrameOffsets;    
     ptr NextFrameOffset;
-    u32 CurrentFrameIndex;
+    i32 CurrentFrameIndex;
     recording_state RecordingState;        
     walking_system_recording WalkingSystemRecording;
 };
@@ -141,15 +160,40 @@ do \
     Event->DebugPoint.Color = color; \
 } while(0)
 
-#define WALKING_SYSTEM_EVENT_DRAW_EDGE(point0, point1, color) \
+#define WALKING_SYSTEM_EVENT_DRAW_RING(point0, point1, point2) \
 do \
 { \
     ASSERT(__Internal_Event_Recording__->EventCount < MAX_EVENTS); \
     walking_event* Event = &__Internal_Event_Recording__->Events[__Internal_Event_Recording__->EventCount++]; \
-    Event->Type = WALKING_EVENT_TYPE_DRAW_EDGE; \
-    Event->DebugEdge.Point0 = point0; \
-    Event->DebugEdge.Point1 = point1; \
-    Event->DebugEdge.Color = color; \
+    Event->Type = WALKING_EVENT_TYPE_DRAW_RING; \
+    Event->DebugRing.Point0 = point0; \
+    Event->DebugRing.Point1 = point1; \
+    Event->DebugRing.Point2 = point2; \
+} while(0)
+
+#define WALKING_SYSTEM_EVENT_DRAW_RING_TEST(point0, point1, point2, requested_point, color, request_color) \
+do \
+{ \
+    ASSERT(__Internal_Event_Recording__->EventCount < MAX_EVENTS); \
+    walking_event* Event = &__Internal_Event_Recording__->Events[__Internal_Event_Recording__->EventCount++]; \
+    Event->Type = WALKING_EVENT_TYPE_DRAW_RING_TEST; \
+    Event->DebugRingTest.RingPoint0 = point0; \
+    Event->DebugRingTest.RingPoint1 = point1; \
+    Event->DebugRingTest.RingPoint2 = point2; \
+    Event->DebugRingTest.RequestedPoint = requested_point; \
+    Event->DebugRingTest.RingColor = color; \
+    Event->DebugRingTest.RequestedColor = request_color; \
+} while(0)
+
+#define WALKING_SYSTEM_EVENT_DRAW_WALK_EDGE(pole, p, color) \
+do \
+{ \
+    ASSERT(__Internal_Event_Recording__->EventCount < MAX_EVENTS); \
+    walking_event* Event = &__Internal_Event_Recording__->Events[__Internal_Event_Recording__->EventCount++]; \
+    Event->Type = WALKING_EVENT_TYPE_DRAW_WALK_EDGE; \
+    Event->DebugWalkEdge.PolePosition = pole->IntersectionPoint; \
+    Event->DebugWalkEdge.EdgePosition = p; \
+    Event->DebugWalkEdge.Color = color; \
 } while(0)
 
 #endif

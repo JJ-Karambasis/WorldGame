@@ -86,8 +86,16 @@ struct surface_edge_intersection_query
     edge2D Edge;
 };
 
+enum walkable_pole_flag
+{
+    WALKABLE_POLE_FLAG_NONE,
+    WALKABLE_POLE_FLAG_WALKABLE,
+    WALKABLE_POLE_FLAG_WALK_EDGE,    
+};
+
 struct walkable_pole
 {
+    walkable_pole_flag Flag;
     union
     {
         v3f IntersectionPoint;
@@ -96,11 +104,11 @@ struct walkable_pole
             v2f Position2D;
             f32 ZIntersection;
         };
-    };        
-    static_entity* HitEntity;        
-    b32 IsCulled;
-    b32 HasRadiusProcessed;    
-    surface_edge_intersection_query SurfaceQueries[8];    
+    };
+    
+    static_entity* HitEntity;
+    b32 RadiusCheck;    
+    surface_edge_intersection_query SurfaceQueries[8];
 };
 
 struct walkable_grid

@@ -28,6 +28,14 @@ ray2D CreateRay2D(edge2D Edge)
     return Result;
 }
 
+ray2D CreateRay2D(v2f Origin, v2f Direction)
+{
+    ray2D Result = {};
+    Result.Origin = Origin;
+    Result.Direction = Normalize(Direction);
+    return Result;
+}
+
 triangle_mesh CreateBoxMesh(arena* Storage)
 {
     triangle_mesh Result = {};
@@ -189,6 +197,7 @@ b32 IsPointInTriangle2D(v3f a, v3f b, v3f c, v2f p)
 
 b32 IsDegenerateTriangle2D(v2f a, v2f b, v2f c, u32* LineIndices)
 {
+    //TODO(JJ): Probably need to replace this with some sort of epsilon check 
     b32 ABEqual = (a == b);
     b32 ACEqual = (a == c);
     b32 BCEqual = (b == c);
@@ -238,7 +247,7 @@ FindTriangleZ(v3f P0, v3f P1, v3f P2, v2f P)
     return Result;
 }
 
-v3f PointTriangleClosestPoint(v3f a, v3f b, v3f c, v3f p)
+v3f PointTriangleClosestPoint3D(v3f a, v3f b, v3f c, v3f p)
 {    
     v3f ab = b-a;
     v3f ac = c-a;
@@ -285,22 +294,78 @@ v3f PointTriangleClosestPoint(v3f a, v3f b, v3f c, v3f p)
     return a + ab*v + ac*w;
 }
 
-b32 EdgeToEdgeIntersection2D(v2f* Result, v2f P0, v2f P1, v2f P2, v2f P3)
+b32 RayToRayIntersection2D(v2f* Result, ray2D A, ray2D B)
 {
-    v2f E1 = P1 - P0;
-    v2f E2 = P3 - P2;    
-    f32 Determinant = -E2.x*E1.y + E1.x*E2.y;    
+    ASSERT((SquareMagnitude(A.Direction) > 0.0f) && (SquareMagnitude(B.Direction) > 0.0f));    
     
-    if(Abs(Determinant) < 1e-6f) return false;
+    f32 Determinant = B.Direction.x*A.Direction.y - B.Direction.y*A.Direction.x;
+    if(Abs(Determinant) < 1e-6f)
+        return false;
+    f32 InvDeterminant = 1.0f/Determinant;
+    
+    f32 dx = B.Origin.x - A.Origin.x;
+    f32 dy = B.Origin.y - A.Origin.y;
+    
+    f32 u = (dy*B.Direction.x - dx*B.Direction.y) * InvDeterminant;
+    f32 v = (dy*A.Direction.x - dx*A.Direction.y) * InvDeterminant;
+    
+    if(u >= 0 && v >= 0)
+    {
+        *Result = A.Origin + A.Direction*u;
+        return true;
+    }    
+    
+    return false;
+}
+
+b32 IsPointInCircle2D(v2f CenterP, f32 CircleR, v2f Point)
+{
+    f32 XComp = Square(Point.x - CenterP.x);
+    f32 YComp = Square(Point.y - CenterP.y);
+    b32 Result = (XComp + YComp) < Square(CircleR);
+    return Result;
+}
+
+b32 IsPointInSphere3D(v3f CenterP, f32 CircleR, v3f Point)
+{
+    f32 XComp = Square(Point.x - CenterP.x);
+    f32 YComp = Square(Point.y - CenterP.y);
+    f32 ZComp = Square(Point.z - CenterP.z);
+    b32 Result = (XComp + YComp + ZComp) < Square(CircleR);
+    return Result;
+}
+
+b32 LineIntersections2D(v2f p1, v2f p2, v2f p3, v2f p4, f32* t, f32* u)
+{
+    f32 p1p2x = p1.x-p2.x;
+    f32 p1p2y = p1.y-p2.y;
+    f32 p3p4x = p3.x-p4.x;
+    f32 p3p4y = p3.y-p4.y;    
+    
+    f32 Determinant = p1p2x*p3p4y - p1p2y*p3p4x;
+    if(Abs(Determinant) < 1e-6f)
+        return false;
     
     f32 InvDeterminant = 1.0f/Determinant;
     
-    f32 s = (-E1.y * (P0.x-P2.x) + E1.x * (P0.y-P2.y))*InvDeterminant;
-    f32 t = ( E2.x * (P0.y-P2.y) - E2.y * (P0.x-P2.x))*InvDeterminant;
+    f32 p1p3x = p1.x-p3.x;
+    f32 p1p3y = p1.y-p3.y;
     
-    if(s >= 0 && s <= 1.0f && t >= 0.0f && t <= 1.0f)
+    *t = (p1p3x*p3p4y - p1p3y*p3p4x)*InvDeterminant;
+    *u = -(p1p2x*p1p3y - p1p2y*p1p3x)*InvDeterminant;
+    return true;
+}
+
+
+b32 EdgeToEdgeIntersection2D(v2f* Result, v2f P0, v2f P1, v2f P2, v2f P3)
+{    
+    f32 t, u;
+    if(!LineIntersections2D(P0, P1, P2, P3, &t, &u))
+        return false;
+    
+    if(t >= 0 && t <= 1.0f && u >= 0.0f && u <= 1.0f)
     {
-        *Result = P0 + t*E1;
+        *Result = P0 + t*(P1-P0);
         return true;
     }
     
@@ -322,41 +387,22 @@ b32 EdgeToEdgeIntersection2D(v2f* Result, edge2D Edge0, edge3D Edge1)
     return EdgeToEdgeIntersection2D(Result, Edge0.P[0], Edge0.P[1], Edge1.P[0].xy, Edge1.P[1].xy);
 }
 
-b32 RayToRayIntersection2D(v2f* Result, ray2D A, ray2D B)
+v2f PointLineSegmentClosestPoint2D(v2f p0, v2f p1, v2f p)
 {
-    f32 Determinant = B.Direction.x*A.Direction.y - B.Direction.y*A.Direction.x;
-    if(Abs(Determinant) < 1e-6f)
-        return false;
-    f32 InvDeterminant = 1.0f/Determinant;
+    v2f Edge = p1-p0;
     
-    f32 dx = B.Origin.x - A.Origin.x;
-    f32 dy = B.Origin.y - A.Origin.y;
+    f32 SqrLength = SquareMagnitude(Edge);
+    ASSERT(SqrLength > 1e-6f);    
+    f32 t = SaturateF32(Dot(p-p0, Edge) / SqrLength);
     
-    f32 u = (dy*B.Direction.x - dx*B.Direction.y) * InvDeterminant;
-    f32 v = (dy*A.Direction.x - dx*A.Direction.y) * InvDeterminant;
-    
-    if(u >= 0 && v >= 0)
-    {
-        *Result = A.Origin + A.Direction*u;
-        return true;
-    }    
-    
-    return false;
-}
-
-b32 PointInCircle(v2f CenterP, f32 CircleR, v2f Point)
-{
-    f32 XComp = Square(Point.x - CenterP.x);
-    f32 YComp = Square(Point.y - CenterP.y);
-    b32 Result = (XComp + YComp) < Square(CircleR);
+    v2f Result = p0 + t*Edge;
     return Result;
 }
 
-b32 PointInSphere(v3f CenterP, f32 CircleR, v3f Point)
+b32 IsPointInCapsule2D(v2f p0, v2f p1, f32 r, v2f p)
 {
-    f32 XComp = Square(Point.x - CenterP.x);
-    f32 YComp = Square(Point.y - CenterP.y);
-    f32 ZComp = Square(Point.z - CenterP.z);
-    b32 Result = (XComp + YComp + ZComp) < Square(CircleR);
+    v2f ClosestPoint = PointLineSegmentClosestPoint2D(p0, p1, p);
+    b32 Result = SquareMagnitude(p-ClosestPoint) <= Square(r);
     return Result;
 }
+    
