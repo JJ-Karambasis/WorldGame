@@ -70,7 +70,7 @@ struct static_entity
     c4 Color;
     v3f Velocity;
     
-    triangle_mesh* Mesh;    
+    triangle3D_mesh* Mesh;    
     static_entity* Next;
 };
 
@@ -138,7 +138,7 @@ struct game
     input* Input;  
     camera Camera;
     
-    triangle_mesh BoxMesh;
+    triangle3D_mesh BoxMesh;
     
     arena WorldStorage;
 

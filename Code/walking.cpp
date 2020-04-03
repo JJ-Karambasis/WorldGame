@@ -1,4 +1,4 @@
-#define GRID_DENSITY 0.2f
+#define GRID_DENSITY 0.1f
 
 inline v2i 
 GetCell(v2f Position)
@@ -47,91 +47,95 @@ walkable_grid BuildWalkableGrid(v2i Min, v2i Max)
     walkable_grid Result = {};
     Result.PoleCount = V2i(Max.x-Min.x, Max.y-Min.y)+2;
     Result.CellCount = Result.PoleCount-1;
-    Result.Min = Min*GRID_DENSITY;
+    Result.Min = RoundPrecisionMag2f(Min*GRID_DENSITY, 10);
     Result.Poles = PushArray(Result.PoleCount.x*Result.PoleCount.y, walkable_pole, Clear, 0);
     for(i32 YIndex = 0; YIndex < Result.PoleCount.y; YIndex++)
     {
         for(i32 XIndex = 0; XIndex < Result.PoleCount.x; XIndex++)
         {
             walkable_pole* Pole = GetPole(&Result, XIndex, YIndex);
-            Pole->Position2D = Result.Min + V2(XIndex, YIndex)*GRID_DENSITY;            
+            Pole->Position2D = Result.Min + V2(XIndex, YIndex)*GRID_DENSITY;     
+            Pole->ZIntersection = -FLT_MAX;
         }
     }
     return Result;
 }
 
-void TestPoles(game* Game, walkable_grid* Grid)
+f32 TestEdgeForZ(edge3D Edge, v2f Position, f32 LargestZ)
 {
-    player* Player = &Game->Player;
-    
+    if(IsPointOnEdge2D(Edge, Position))
+    {
+        f32 Z = FindLineZ(Edge, Position);
+        if(Z > LargestZ)
+            return Z;
+    }    
+    return LargestZ;
+}
+
+v3f GetWalkPosition(game* Game, walkable_grid* Grid, v3f RequestedPosition, 
+                    f32 ZPosition, f32 Height, f32 Radius)
+{
     BEGIN_POLE_TESTING();
     for(i32 YIndex = 0; YIndex < Grid->PoleCount.y; YIndex++)
     {
         for(i32 XIndex = 0; XIndex < Grid->PoleCount.x; XIndex++)
-        {   
-            walkable_pole* Pole = GetPole(Grid, XIndex, YIndex);            
-            
-            Pole->ZIntersection = -FLT_MAX;
+        {
+            walkable_pole* Pole = GetPole(Grid, XIndex, YIndex);
+            //TODO(JJ): Replace with spatial partioning (quad-tree)
             
             static_entity* HitEntity = NULL;
-            triangle* HitTriangle = NULL;
             for(static_entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
-            {                   
-                triangle_mesh* Mesh = Entity->Mesh;
-                for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
-                {
-                    triangle* Triangle = Mesh->Triangles + TriangleIndex;
+            {
+                triangle3D_mesh* Triangles = Entity->Mesh;
+                for(u32 TriangleIndex = 0; TriangleIndex < Triangles->TriangleCount; TriangleIndex++)
+                {                    
+                    triangle3D Triangle = TransformTriangle3D(Triangles->Triangles[TriangleIndex], Entity->Transform);
                     
-                    v3f P[3] = 
+                    f32 ZIntersection = INFINITY;                                        
+                    if(IsPointInTriangle2D(Triangle, Pole->Position2D))
                     {
-                        TransformV3(Triangle->P[0], Entity->Transform),
-                        TransformV3(Triangle->P[1], Entity->Transform),
-                        TransformV3(Triangle->P[2], Entity->Transform)
-                    };                    
-                    
-                    f32 ZIntersection = INFINITY;
-                    
-                    u32 LineIndices[2];
-                    if(IsDegenerateTriangle2D(P[0].xy, P[1].xy, P[2].xy, LineIndices))
-                    {                            
-#if 0
-                        //TODO(JJ): Do we even need to handle this degenerate case? I feel like the rest of the algorithm 
-                        // will provide a much more numerically stable result than to figure out the triangles z on the
-                        //degenerate cases. Maybe we handle this case just for blockers since we know the players z should
-                        //just be exactly where the player z currently is                        
-                        if(IsPointOnLine2D(Pole->Position2D, P[LineIndices[0]].xy, P[LineIndices[1]].xy))                                                        
-                            ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                                                                        
-#endif
-                        
+                        ZIntersection = FindTriangleZ(Triangle, Pole->Position2D);
                     }
-                    else if(IsPointInTriangle2D(P[0].xy, P[1].xy, P[2].xy, Pole->Position2D))                            
-                        ZIntersection = FindTriangleZ(P[0], P[1], P[2], Pole->Position2D);                                                                                                                
+                    else
+                    {        
+                        edge3D Edges[3];
+                        GetTriangleEdges3D(Edges, Triangle);
+                        
+                        f32 LargestZ = -FLT_MAX;
+                        LargestZ = TestEdgeForZ(Edges[0], Pole->Position2D, LargestZ);
+                        LargestZ = TestEdgeForZ(Edges[1], Pole->Position2D, LargestZ);
+                        LargestZ = TestEdgeForZ(Edges[2], Pole->Position2D, LargestZ);
+                        
+                        if(LargestZ != -FLT_MAX)
+                            ZIntersection = LargestZ;
+                    }
                     
                     if(ZIntersection != INFINITY)
-                    {                           ;
-                        if((ZIntersection <= (Player->Position.z + Player->Height)) &&
-                           (ZIntersection > Pole->ZIntersection))
+                    {
+                        if(ZIntersection > Pole->ZIntersection)
                         {
-                            if(Pole->ZIntersection != -FLT_MAX)                                
-                                WALKING_SYSTEM_EVENT_DRAW_POINT(V3(Pole->Position2D, ZIntersection), Red());                            
+                            if(Pole->ZIntersection != -FLT_MAX)
+                                WALKING_SYSTEM_EVENT_DRAW_POINT(V3(Pole->Position2D, ZIntersection), Red());
                             
                             Pole->ZIntersection = ZIntersection;
-                            HitTriangle = Triangle;
-                            HitEntity = Entity;
+                            HitEntity = Entity;                                                            
                         }
                         else
-                            WALKING_SYSTEM_EVENT_DRAW_POINT(V3(Pole->Position2D, ZIntersection), Red());                                           
+                            WALKING_SYSTEM_EVENT_DRAW_POINT(V3(Pole->Position2D, ZIntersection), Red());
                     }
-                }                                                                            
+                }                                
             }
             
             if(Pole->ZIntersection != -FLT_MAX)
             {
-                WALKING_SYSTEM_EVENT_DRAW_POINT(Pole->IntersectionPoint, Green());                
-                Pole->Flag = WALKABLE_POLE_FLAG_WALKABLE;
-                Pole->HitEntity = HitEntity;                                 
+                WALKING_SYSTEM_EVENT_DRAW_POINT(Pole->IntersectionPoint, Green());
+                Pole->Flag = WALKABLE_POLE_FLAG_WALKABLE;                
+                Pole->HitEntity = HitEntity;
             }            
+            
         }
-    }        
+    }
+    
     END_POLE_TESTING();
+    return RequestedPosition;
 }

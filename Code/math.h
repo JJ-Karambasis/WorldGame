@@ -182,6 +182,25 @@ struct v2f
     };
 };
 
+inline v2i Round2i(v2f V)
+{
+    v2i Result = {RoundI32(V.x), RoundI32(V.y)};
+    return Result;
+}
+
+inline v2f RoundPrecisionMag2f(v2f V, u32 X)
+{
+    v2f Result = {RoundPrecisionMag(V.x, X), RoundPrecisionMag(V.y, X)};
+    return Result;
+}
+
+inline v2f RoundPrecision(v2f V, u32 Precision)
+{
+    u32 X = GetPrecision(Precision);
+    v2f Result = RoundPrecisionMag2f(V, X);
+    return Result;
+}
+
 inline v2f
 InvalidV2()
 {

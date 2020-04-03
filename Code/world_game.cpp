@@ -4,7 +4,7 @@
 #include "walking.cpp"
 
 inline static_entity* 
-CreateStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32 IsBlocker, triangle_mesh* Mesh)
+CreateStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32 IsBlocker, triangle3D_mesh* Mesh)
 {
     static_entity* Result = PushStruct(&Game->WorldStorage, static_entity, Clear, 0);    
     Result->Transform = CreateSQT(Position, Scale, Euler);
@@ -81,7 +81,7 @@ surface_edge_intersection_query SurfaceLineIntersectionQuery(walkable_pole* HitP
 {
     ASSERT(HitPole->HitEntity);    
     static_entity* Entity = HitPole->HitEntity;    
-    triangle_mesh* Triangles = Entity->Mesh;        
+    triangle3D_mesh* Triangles = Entity->Mesh;        
     
     surface_edge_intersection_query Result = {};
     Result.P = InvalidV2();
@@ -90,7 +90,7 @@ surface_edge_intersection_query SurfaceLineIntersectionQuery(walkable_pole* HitP
     f32 tBest = -FLT_MAX;
     for(u32 TriangleIndex = 0; TriangleIndex < Triangles->TriangleCount; TriangleIndex++)
     {           
-        triangle* Triangle = Triangles->Triangles + TriangleIndex;        
+        triangle3D* Triangle = Triangles->Triangles + TriangleIndex;        
         v3f P[3] = 
         {
             TransformV3(Triangle->P[0], Entity->Transform),
@@ -144,7 +144,7 @@ surface_edge_intersection_query SurfaceEdgeIntersectionQuery(walkable_pole* HitP
     ASSERT(HitPole->HitEntity);
     
     static_entity* Entity = HitPole->HitEntity;    
-    triangle_mesh* Triangles = Entity->Mesh;
+    triangle3D_mesh* Triangles = Entity->Mesh;
     
     edge2D D = CreateEdge2D(p0, p1);
         
@@ -155,7 +155,7 @@ surface_edge_intersection_query SurfaceEdgeIntersectionQuery(walkable_pole* HitP
         
     for(u32 TriangleIndex = 0; TriangleIndex < Triangles->TriangleCount; TriangleIndex++)
     {           
-        triangle* Triangle = Triangles->Triangles + TriangleIndex;
+        triangle3D* Triangle = Triangles->Triangles + TriangleIndex;
         
         v3f P[3] = 
         {
@@ -236,27 +236,15 @@ inline v3f Get3DPoint(walkable_pole* TargetPole, v2f Point)
 {
     v3f Result = V3(Point, INFINITY);    
     static_entity* HitEntity = TargetPole->HitEntity;
-    triangle_mesh* Mesh = HitEntity->Mesh;
+    triangle3D_mesh* Mesh = HitEntity->Mesh;
     for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
     {
-        triangle* Triangle = Mesh->Triangles + TriangleIndex;
-        v3f P[3] = 
+        triangle3D Triangle = TransformTriangle3D(Mesh->Triangles[TriangleIndex], HitEntity->Transform);                
+        if(IsPointInTriangle2D(Triangle, Point))
         {
-            TransformV3(Triangle->P[0], HitEntity->Transform),
-            TransformV3(Triangle->P[1], HitEntity->Transform),
-            TransformV3(Triangle->P[2], HitEntity->Transform)
-        };                
-        
-        if(!IsDegenerateTriangle2D(P[0].xy, P[1].xy, P[2].xy, NULL))
-        {             
-            if(IsPointInTriangle2D(P[0], P[1], P[2], Point))
-            {
-                Result.z = FindTriangleZ(P[0], P[1], P[2], Point);
-                break;
-            }
-        }
-        else
-            ASSERT(false);
+            Result.z = FindTriangleZ(Triangle, Point);
+            break;
+        }        
     }                            
     ASSERT(Result.z != INFINITY);  
     return Result;
@@ -500,13 +488,13 @@ EXPORT GAME_TICK(Tick)
     {
         Game->Initialized = true;
         Game->WorldStorage = CreateArena(KILOBYTE(32));
-        Game->BoxMesh = CreateBoxMesh(&Game->WorldStorage);
+        Game->BoxMesh = CreateBoxTriangleMesh(&Game->WorldStorage);
         
         Player->Color = RGBA(0.0f, 0.0f, 1.0f, 1.0f);
         Player->Position = V3(0.0f, 0.0f, 1.0f);
         Player->FacingDirection = V2(0.0f, 1.0f);
         
-        CreateStaticEntity(Game, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
+        CreateStaticEntity(Game, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.1f, 0.0f, PI*0.2f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
     }        
     
     Player->Radius = 0.5f;
@@ -550,6 +538,9 @@ EXPORT GAME_TICK(Tick)
     BEGIN_WALKING_SYSTEM(Game);    
     walkable_grid Grid = BuildWalkableGrid(MinimumCell, MaximumCell);                        
     
+    Player->Position = GetWalkPosition(Game, &Grid, RequestedPosition, Player->Position.z, Player->Height, Player->Radius);
+    
+    #if 0 
     TestPoles(Game, &Grid);    
     
     BEGIN_POLE_EDGE_TESTING();
@@ -1089,8 +1080,8 @@ EXPORT GAME_TICK(Tick)
     }
     
     END_RING_TRAVERSAL_TESTING();
-    
     Player->Position = FinalPosition;
+    #endif    
     END_WALKING_SYSTEM();
     DRAW_POINT(Player->Position, 0.05f, RGBA(0.0f, 0.0f, 0.0f, 1.0f));
     
