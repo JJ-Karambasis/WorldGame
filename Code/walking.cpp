@@ -72,6 +72,37 @@ f32 TestEdgeForZ(edge3D Edge, v2f Position, f32 LargestZ)
     return LargestZ;
 }
 
+grid_method_type IsCellWalkableMethodType(walkable_pole** CellPoles)
+{
+    u32 Method = 1;
+    if(CellPoles[POLE_CELL_INDEX_BOTTOM_LEFT]->Flag  == WALKABLE_POLE_FLAG_WALKABLE) Method *= 2;
+    if(CellPoles[POLE_CELL_INDEX_BOTTOM_RIGHT]->Flag == WALKABLE_POLE_FLAG_WALKABLE) Method *= 2;
+    if(CellPoles[POLE_CELL_INDEX_TOP_LEFT]->Flag     == WALKABLE_POLE_FLAG_WALKABLE) Method *= 2;
+    if(CellPoles[POLE_CELL_INDEX_TOP_RIGHT]->Flag    == WALKABLE_POLE_FLAG_WALKABLE) Method *= 2;
+    
+    switch(Method)
+    {
+        case 1:
+        return GRID_METHOD_TYPE_NONE;
+        
+        case 2:
+        return GRID_METHOD_TYPE_CORNER;
+        
+        case 4:
+        return GRID_METHOD_TYPE_WALL;
+        
+        case 8:
+        return GRID_METHOD_TYPE_TRIANGLE;
+        
+        case 16:
+        return GRID_METHOD_TYPE_SURFACE;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return GRID_METHOD_TYPE_UNKNOWN;
+}
+
 v3f GetWalkPosition(game* Game, walkable_grid* Grid, v3f RequestedPosition, 
                     f32 ZPosition, f32 Height, f32 Radius)
 {
@@ -131,11 +162,52 @@ v3f GetWalkPosition(game* Game, walkable_grid* Grid, v3f RequestedPosition,
                 WALKING_SYSTEM_EVENT_DRAW_POINT(Pole->IntersectionPoint, Green());
                 Pole->Flag = WALKABLE_POLE_FLAG_WALKABLE;                
                 Pole->HitEntity = HitEntity;
-            }            
-            
+            }                        
         }
     }
     
     END_POLE_TESTING();
+    
+    walk_edges WalkEdges = {};    
+    for(i32 YIndex = 0; YIndex < Grid->CellCount.y; YIndex++)
+    {
+        for(i32 XIndex = 0; XIndex < Grid->CellCount.x; XIndex++)
+        {
+            walkable_pole** CellPoles = GetCellPoles(Grid, XIndex, YIndex);
+            grid_method_type Type = IsCellWalkableMethodType(CellPoles);
+            switch(Type)
+            {
+                case GRID_METHOD_TYPE_CORNER:
+                {
+                } break;
+                
+                case GRID_METHOD_TYPE_TRIANGLE:
+                {
+                } break;
+                
+                case GRID_METHOD_TYPE_WALL:
+                {
+                    if(CellPoles[POLE_INDEX_BOTTOM_LEFT]->Flag == WALKABLE_POLE_FLAG_WALKABLE)
+                    {
+                        if(CellPoles[POLE_INDEX_TOP_LEFT]->Flag == WALKABLE_POLE_FLAG_WALKABLE)
+                        {
+                            
+                            
+                        }
+                        else if(CellPoles[POLE_INDEX_BOTTOM_RIGHT]->Flag == WALKABLE_POLE_FLAG_WALKABLE)
+                        {
+                        }
+                        else if(CellPoles[POLE_INDEX_TOP_RIGHT]->Flag == WALKABLE_POLE_FLAG_WALKABLE)
+                        {
+                            //TODO(JJ): Do we need to implement this
+                            NOT_IMPLEMENTED;
+                        }
+                        INVALID_ELSE;                           
+                    }
+                } break;                                
+            }
+        }
+    }
+    
     return RequestedPosition;
 }

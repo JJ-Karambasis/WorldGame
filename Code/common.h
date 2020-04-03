@@ -64,6 +64,7 @@
 #define INVALID_CODE *(int*)0 = 0
 #define INVALID_CASE(case_name) case case_name: { INVALID_CODE; } break
 #define INVALID_DEFAULT_CASE default: { INVALID_CODE; } break
+#define INVALID_ELSE else INVALID_CODE
 
 #ifdef OS_WINDOWS
 #define DEBUG_IF_AVAILABLE_OR_TERM __debugbreak()

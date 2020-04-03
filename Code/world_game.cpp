@@ -304,37 +304,6 @@ grid_method_type GetSurroundingPolesIsWalkableMethodType(walkable_pole* Pole0, w
     return GRID_METHOD_TYPE_UNKNOWN;
 }
 
-grid_method_type GetIsWalkableGridPolesMethodType(walkable_pole** Poles)
-{
-    u32 Method = 1;
-    if(IsWalkablePole(Poles[POLE_CELL_INDEX_BOTTOM_LEFT])) Method *= 2;
-    if(IsWalkablePole(Poles[POLE_CELL_INDEX_BOTTOM_RIGHT])) Method *= 2;
-    if(IsWalkablePole(Poles[POLE_CELL_INDEX_TOP_LEFT])) Method *= 2;
-    if(IsWalkablePole(Poles[POLE_CELL_INDEX_TOP_RIGHT])) Method *= 2;
-    
-    switch(Method)
-    {
-        case 1:
-        return GRID_METHOD_TYPE_NONE;
-        
-        case 2:
-        return GRID_METHOD_TYPE_CORNER;
-        
-        case 4:
-        return GRID_METHOD_TYPE_WALL;
-        
-        case 8:
-        return GRID_METHOD_TYPE_TRIANGLE;
-        
-        case 16:
-        return GRID_METHOD_TYPE_SURFACE;
-        
-        INVALID_DEFAULT_CASE;
-    }
-    
-    return GRID_METHOD_TYPE_UNKNOWN;
-}
-
 b32 PoleHasEdge(walkable_pole* Pole, walkable_pole* EdgePole, pole_index EdgeIndex)
 {    
     b32 Result = (Pole->SurfaceQueries[EdgeIndex].HasIntersected) || (EdgePole->Flag == WALKABLE_POLE_FLAG_WALK_EDGE);
