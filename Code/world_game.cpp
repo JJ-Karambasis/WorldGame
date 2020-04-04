@@ -15,7 +15,7 @@ CreateStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler, c4 Color, b32
     Game->StaticEntities.Head = Result;
     return Result;
 }
-
+#if 0
 walkable_pole** GetSurroundingPoles(walkable_grid* Grid, i32 XIndex, i32 YIndex)
 {
     walkable_pole** Result = PushArray(8, walkable_pole*, Clear, 0);    
@@ -138,7 +138,7 @@ surface_edge_intersection_query SurfaceLineIntersectionQuery(walkable_pole* HitP
     
     return Result;
 }
-
+ 
 surface_edge_intersection_query SurfaceEdgeIntersectionQuery(walkable_pole* HitPole, v2f p0, v2f p1)
 {     
     ASSERT(HitPole->HitEntity);
@@ -309,7 +309,6 @@ b32 PoleHasEdge(walkable_pole* Pole, walkable_pole* EdgePole, pole_index EdgeInd
     b32 Result = (Pole->SurfaceQueries[EdgeIndex].HasIntersected) || (EdgePole->Flag == WALKABLE_POLE_FLAG_WALK_EDGE);
     return Result;    
 }
-
 b32 PoleHasEdge(walkable_pole* Pole, walkable_pole** SurroundingPoles, pole_index EdgeIndex)
 {    
     b32 Result = PoleHasEdge(Pole, SurroundingPoles[EdgeIndex], EdgeIndex);
@@ -442,7 +441,7 @@ void HandleCorner(walkable_pole* Pole, v2f A, v2f B, pole_index CornerIndex)
         WALKING_SYSTEM_EVENT_DRAW_WALK_EDGE(Pole, CommonPoint, White());
     }
 }
-
+#endif
 extern "C"
 EXPORT GAME_TICK(Tick)
 {   
@@ -463,7 +462,7 @@ EXPORT GAME_TICK(Tick)
         Player->Position = V3(0.0f, 0.0f, 1.0f);
         Player->FacingDirection = V2(0.0f, 1.0f);
         
-        CreateStaticEntity(Game, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.1f, 0.0f, PI*0.2f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
+        CreateStaticEntity(Game, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.2f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
     }        
     
     Player->Radius = 0.5f;

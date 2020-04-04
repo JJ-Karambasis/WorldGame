@@ -259,7 +259,7 @@ b32 IsPointOnLine2D(v2f P0, v2f P1, v2f P)
     
     f32 dx = P1.x-P0.x;
     f32 dy = P1.y-P0.y;
-    f32 Epsilon = 0.003f * (Square(dx) + Square(dy));
+    f32 Epsilon = 1e-5f * (Square(dx) + Square(dy));
     
     b32 Result = Abs(Perp) < Epsilon;
     return Result;

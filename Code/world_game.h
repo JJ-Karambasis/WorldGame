@@ -13,6 +13,7 @@
 #include "geometry.h"
 #include "audio.h"
 #include "graphics.h"
+#include "walking.h"
 
 struct player
 {
@@ -22,36 +23,6 @@ struct player
     v2f FacingDirection;
     c4 Color;
     v3f Velocity;
-};
-
-enum pole_index
-{    
-    POLE_INDEX_BOTTOM_LEFT,
-    POLE_INDEX_BOTTOM,
-    POLE_INDEX_BOTTOM_RIGHT,
-    POLE_INDEX_LEFT, 
-    POLE_INDEX_RIGHT,
-    POLE_INDEX_TOP_LEFT,
-    POLE_INDEX_TOP,
-    POLE_INDEX_TOP_RIGHT,
-};
-
-enum pole_cell_index
-{
-    POLE_CELL_INDEX_BOTTOM_LEFT,
-    POLE_CELL_INDEX_BOTTOM_RIGHT,
-    POLE_CELL_INDEX_TOP_LEFT,
-    POLE_CELL_INDEX_TOP_RIGHT
-};
-
-enum grid_method_type
-{
-    GRID_METHOD_TYPE_UNKNOWN,
-    GRID_METHOD_TYPE_NONE,
-    GRID_METHOD_TYPE_CORNER,
-    GRID_METHOD_TYPE_WALL,
-    GRID_METHOD_TYPE_TRIANGLE,
-    GRID_METHOD_TYPE_SURFACE
 };
 
 struct static_entity
@@ -84,52 +55,6 @@ struct surface_edge_intersection_query
     b32 HasIntersected;
     v2f P;    
     edge2D Edge;
-};
-
-enum walkable_pole_flag
-{
-    WALKABLE_POLE_FLAG_NONE,
-    WALKABLE_POLE_FLAG_WALKABLE,
-    WALKABLE_POLE_FLAG_WALK_EDGE,    
-};
-
-struct walkable_pole
-{
-    walkable_pole_flag Flag;
-    union
-    {
-        v3f IntersectionPoint;
-        struct
-        {
-            v2f Position2D;
-            f32 ZIntersection;
-        };
-    };
-    
-    static_entity* HitEntity;
-    b32 RadiusCheck;    
-    surface_edge_intersection_query SurfaceQueries[8];
-};
-
-struct walkable_grid
-{
-    v2f Min;
-    v2i CellCount;
-    v2i PoleCount;
-    
-    
-    walkable_pole* Poles;
-};
-
-struct walkable_triangle_ring
-{ 
-    v3f P[3];    
-    walkable_triangle_ring* Next;
-};
-
-struct walkable_triangle_ring_list
-{
-    walkable_triangle_ring* Head;
 };
 
 struct game

@@ -669,6 +669,12 @@ inline v4f Green()
     return Result;
 }
 
+inline v4f Blue()
+{
+    v4f Result = RGBA(0.0f, 0.0f, 1.0f, 0.0f);
+    return Result;
+}
+
 inline v4f Yellow()
 {
     v4f Result = RGBA(1.0f, 1.0f, 0.0f, 1.0f);
