@@ -1045,7 +1045,7 @@ RENDER_GAME(RenderGame)
                 vkCmdDraw(CommandBuffer, 36, 1, 0, 0);                
             }
 #endif
-            for(static_entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
+            for(entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
             {                
                 m4 Model = TransformM4(Entity->Transform);
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                

@@ -471,12 +471,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     FrameRecording->MaxFrameCount = 1000000;    
     FrameRecording->FrameOffsets = PushArray(&Game.DevArena, FrameRecording->MaxFrameCount, ptr, Clear, 0);
     
-    for(u32 RecordingIndex = 0; RecordingIndex < ARRAYCOUNT(FrameRecording->WalkingSystemRecording.EventRecordings); RecordingIndex++)
-    {
-        walking_event_recording* Recordings = FrameRecording->WalkingSystemRecording.EventRecordings + RecordingIndex;
-        Recordings->Events = PushArray(&Game.DevArena, MAX_EVENTS, walking_event, Clear, 0);
-    }
-    
     IMGUI_CHECKVERSION();
     ImGuiContext* Context = ImGui::CreateContext();
     ImGui::StyleColorsDark();

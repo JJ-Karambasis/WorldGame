@@ -99,52 +99,6 @@ char* GetStringRecordingStateUI(recording_state RecordingState)
     return NULL;
 }
 
-void DrawWalkables(walking_system_recording* WalkingSystem)
-{        
-    ImGui::Checkbox("Pole Testing", &WalkingSystem->PoleTestingRecording.ShouldRender);
-    ImGui::Checkbox("Edge Testing", &WalkingSystem->EdgeTestingRecording.ShouldRender);
-    ImGui::Checkbox("Radius Culling", &WalkingSystem->RadiusTestingRecording.ShouldRender);
-    ImGui::Checkbox("Ring Building", &WalkingSystem->RingBuildingTestingRecording.ShouldRender);
-    ImGui::Checkbox("Ring Traversal", &WalkingSystem->RingTraversalTestingRecording.ShouldRender);
-    
-    const f32 PointSize = 0.05f;
-    const f32 LineSize = 0.025f;    
-    for(u32 Recording = 0; Recording < ARRAYCOUNT(WalkingSystem->EventRecordings); Recording++)
-    {
-        walking_event_recording* EventRecording = WalkingSystem->EventRecordings + Recording;
-        if(EventRecording->ShouldRender)
-        {
-            for(u32 EventIndex = 0; EventIndex < EventRecording->EventCount; EventIndex++)
-            {
-                walking_event* Event = &EventRecording->Events[EventIndex];
-                switch(Event->Type)
-                {
-                    case WALKING_EVENT_TYPE_DRAW_POINT:
-                    {
-                        DRAW_POINT(Event->DebugPoint.Point, PointSize, Event->DebugPoint.Color);
-                    } break;
-                    
-                    case WALKING_EVENT_TYPE_DRAW_WALK_EDGE:
-                    {                                                
-                        DRAW_LINE(Event->DebugWalkEdge.PolePosition, V3(Event->DebugWalkEdge.EdgePosition, Event->DebugWalkEdge.PolePosition.z), LineSize, LineSize, Event->DebugWalkEdge.Color);
-                    } break;
-                    
-                    case WALKING_EVENT_TYPE_DRAW_RING:
-                    {
-                        DRAW_POINT(Event->DebugRing.Point0, PointSize, White());
-                        DRAW_POINT(Event->DebugRing.Point1, PointSize, White());
-                        DRAW_POINT(Event->DebugRing.Point2, PointSize, White());                                                
-                        
-                        DRAW_LINE(Event->DebugRing.Point0, Event->DebugRing.Point1, LineSize, LineSize, White());
-                        DRAW_LINE(Event->DebugRing.Point1, Event->DebugRing.Point2, LineSize, LineSize, White());
-                        DRAW_LINE(Event->DebugRing.Point2, Event->DebugRing.Point0, LineSize, LineSize, White());                        
-                    } break;
-                }
-            }                        
-        }        
-    }    
-}
-
 void DevelopmentTick(development_game* Game)
 {
     ImGui::NewFrame();
@@ -250,10 +204,7 @@ void DevelopmentTick(development_game* Game)
     }                        
     
     ImGui::Begin("Dev Editor");
-    
-    
-    DrawWalkables(&Recording->WalkingSystemRecording);    
-    
+        
     ImGui::Text("Recording state %s", GetStringRecordingStateUI(Recording->RecordingState));        
     
     if((Recording->RecordingState == RECORDING_STATE_PLAYBACK) ||

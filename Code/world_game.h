@@ -13,7 +13,6 @@
 #include "geometry.h"
 #include "audio.h"
 #include "graphics.h"
-#include "walking.h"
 
 struct player
 {
@@ -25,9 +24,8 @@ struct player
     v3f Velocity;
 };
 
-struct static_entity
-{
-    b32 IsBlocker;
+struct entity
+{    
     union
     {
         sqt Transform;
@@ -42,19 +40,12 @@ struct static_entity
     v3f Velocity;
     
     triangle3D_mesh* Mesh;    
-    static_entity* Next;
+    entity* Next;
 };
 
-struct static_entity_list
+struct entity_list
 {
-    static_entity* Head;
-};
-
-struct surface_edge_intersection_query
-{
-    b32 HasIntersected;
-    v2f P;    
-    edge2D Edge;
+    entity* Head;
 };
 
 struct game
@@ -68,7 +59,7 @@ struct game
     arena WorldStorage;
 
     player Player;
-    static_entity_list  StaticEntities;        
+    entity_list  StaticEntities;        
 };
 
 #define GAME_TICK(name) void name(game* Game, graphics* Graphics, platform* Platform)
