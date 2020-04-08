@@ -250,6 +250,13 @@ operator+=(v2f& Left, f32 Right)
     return Left;
 }
 
+inline v2f&
+operator+=(v2f& Left, v2f Right)
+{
+    Left = Left + Right;
+    return Left;
+}
+
 inline v2f
 operator-(f32 Left, v2f Right)
 {
@@ -313,6 +320,13 @@ operator/(f32 Left, v2f Right)
     return Result;
 }
 
+inline v2f
+operator-(v2f V)
+{
+    v2f Result = {-V.x, -V.y};
+    return Result;
+}
+ 
 inline b32 operator!=(v2f Left, f32 Right)
 {
     b32 Result = (Left.x != Right) || (Left.y != Right);
@@ -331,10 +345,23 @@ inline b32 operator==(v2f Left, v2f Right)
     return Result;
 }
 
+inline v2f Abs(v2f V)
+{
+    v2f Result = {Abs(V.x), Abs(V.y)};
+    return Result;
+}
+
 inline f32
 Dot(v2f Left, v2f Right)
 {
     f32 Result = Left.x*Right.x + Left.y*Right.y;
+    return Result;
+}
+
+inline f32
+DotEpsilon(v2f Left, v2f Right)
+{
+    f32 Result = 2.0f * FLT_EPSILON * Dot(Abs(Left), Abs(Right));
     return Result;
 }
 
@@ -364,6 +391,20 @@ Normalize(v2f V)
 {
     f32 InvMag = InverseMagnitude(V);
     v2f Result = InvMag*V;
+    return Result;
+}
+
+inline v2f
+Perp(v2f V)
+{
+    v2f Result = {V.y, -V.x};
+    return Result;
+}
+
+inline v2f
+PerpCCW(v2f V)
+{
+    v2f Result = {-V.y, V.x};
     return Result;
 }
 

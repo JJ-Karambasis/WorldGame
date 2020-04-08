@@ -1,3 +1,8 @@
+#define GRID_DENSITY 0.1f
+
+#define POLE_COMPARISON_FUNC(name) b32 name(struct walkable_pole* Pole)
+typedef POLE_COMPARISON_FUNC(pole_comparison_func);
+
 enum pole_cell_index
 {
     POLE_CELL_INDEX_BOTTOM_LEFT,
@@ -12,6 +17,7 @@ enum pole_surrounding_index
     POLE_SURROUNDING_INDEX_BOTTOM,
     POLE_SURROUNDING_INDEX_BOTTOM_RIGHT,
     POLE_SURROUNDING_INDEX_LEFT,
+    POLE_SURROUNDING_INDEX_TARGET,
     POLE_SURROUNDING_INDEX_RIGHT,
     POLE_SURROUNDING_INDEX_TOP_LEFT,
     POLE_SURROUNDING_INDEX_TOP,
@@ -30,15 +36,17 @@ enum grid_method_type
 
 enum 
 {
-    WALKABLE_POLE_FLAG_NONE = 0,
-    WALKABLE_POLE_FLAG_WALKABLE = BIT_SET(0),
-    WALKABLE_POLE_FLAG_WALK_EDGE = BIT_SET(1),    
+    WALKABLE_POLE_FLAG_NONE      = 0,
+    WALKABLE_POLE_FLAG_WALKABLE  = 1,
+    WALKABLE_POLE_FLAG_WALK_EDGE = 2,
+    WALKABLE_POLE_FLAG_CULLED    = 4
 };
 
 struct surface_edge_test
 {
     f32 Distance;
     v2f Point;
+    edge2D Edge;
     b32 IsPoleWalkEdge;
 };
 
@@ -46,10 +54,12 @@ struct surface_test
 {
     b32 HasIntersected;
     v2f Point;
+    edge2D Edge;
 };
 
 struct walkable_pole
 {
+    v2i Index;
     u32 Flags;
     union
     {
@@ -61,9 +71,8 @@ struct walkable_pole
         };
     };
     
-    struct static_entity* HitEntity;
-    b32 RadiusCheck;        
-    surface_test SurfaceTests[8];
+    struct static_entity* HitEntity;    
+    surface_test SurfaceTests[9];
 };
 
 struct walkable_grid
@@ -98,10 +107,11 @@ CreateDefaultSurfaceEdgeTest()
 }
 
 inline surface_test
-CreateSurfaceTest(v2f Point)
+CreateSurfaceTest(v2f Point, edge2D Edge)
 {
     surface_test Result;
     Result.HasIntersected = true;
     Result.Point = Point;
+    Result.Edge = Edge;
     return Result;
 }

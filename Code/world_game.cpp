@@ -462,7 +462,8 @@ EXPORT GAME_TICK(Tick)
         Player->Position = V3(0.0f, 0.0f, 1.0f);
         Player->FacingDirection = V2(0.0f, 1.0f);
         
-        CreateStaticEntity(Game, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.2f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);        
+        CreateStaticEntity(Game, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), false, &Game->BoxMesh);   
+        CreateStaticEntity(Game, V3(0.0f, -7.5f, 0.0f), V3(1.0f, 5.0f, 1.0f), V3(), RGBA(0.25f, 0.0f, 0.0f, 1.0f), false, &Game->BoxMesh);
     }        
     
     Player->Radius = 0.5f;
@@ -572,7 +573,7 @@ EXPORT GAME_TICK(Tick)
                             surface_edge_intersection_query BQuery = SurfaceEdgeIntersectionQuery(Pole, SurroundingPoles, POLE_INDEX_BOTTOM);                                                            
                             
                             if(AQuery.HasIntersected && BQuery.HasIntersected)
-                            {                                
+                       IsE     {                                
                                 Pole->SurfaceQueries[POLE_INDEX_LEFT] = AQuery;
                                 Pole->SurfaceQueries[POLE_INDEX_BOTTOM] = BQuery;                                
                                 HandleCorner(Pole, AQuery.P, BQuery.P, POLE_INDEX_BOTTOM_LEFT);                                

@@ -18,11 +18,23 @@ struct triangle2D
     v2f P[3];
 };
 
+inline v2f GetEdgeDirection2D(edge2D Edge)
+{
+    v2f Result = Normalize(Edge.P[1]-Edge.P[0]);
+    return Result;
+}
+
 inline edge2D CreateEdge2D(v2f P0, v2f P1)
 {
     edge2D Result;
     Result.P[0] = P0;
     Result.P[1] = P1;
+    return Result;
+}
+
+inline edge2D CreateEdge2D(v2f* P)
+{
+    edge2D Result = CreateEdge2D(P[0], P[1]);
     return Result;
 }
 
@@ -35,7 +47,7 @@ inline edge2D CreateEdge2D(v3f P0, v3f P1)
 //NOTE(EVERYONE): Inline 2D functions
 inline ray2D CreateRay2D(edge2D Edge)
 {
-    ray2D Result = {Edge.P[0], Normalize(Edge.P[1]-Edge.P[0])};
+    ray2D Result = {Edge.P[0], GetEdgeDirection2D(Edge)};
     return Result;
 }
 

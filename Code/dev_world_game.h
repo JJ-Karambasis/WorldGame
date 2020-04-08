@@ -185,14 +185,14 @@ do \
     Event->DebugRingTest.RequestedColor = request_color; \
 } while(0)
 
-#define WALKING_SYSTEM_EVENT_DRAW_WALK_EDGE(pole, p, color) \
+#define WALKING_SYSTEM_EVENT_DRAW_WALK_EDGE(p0, p1, color) \
 do \
 { \
     ASSERT(__Internal_Event_Recording__->EventCount < MAX_EVENTS); \
     walking_event* Event = &__Internal_Event_Recording__->Events[__Internal_Event_Recording__->EventCount++]; \
     Event->Type = WALKING_EVENT_TYPE_DRAW_WALK_EDGE; \
-    Event->DebugWalkEdge.PolePosition = pole->IntersectionPoint; \
-    Event->DebugWalkEdge.EdgePosition = p; \
+    Event->DebugWalkEdge.PolePosition = p0; \
+    Event->DebugWalkEdge.EdgePosition = p1; \
     Event->DebugWalkEdge.Color = color; \
 } while(0)
 

@@ -96,59 +96,6 @@ FindTriangleZ(triangle3D Triangle, v2f P)
     return Result;
 }
 
-v3f PointTriangleClosestPoint3D(v3f P0, v3f P1, v3f P2, v3f P)
-{    
-    v3f P01 = P1-P0;
-    v3f P02 = P2-P0;
-    v3f PP0 = P-P0;
-    
-    f32 d1 = Dot(P01, PP0);
-    f32 d2 = Dot(P02, PP0);
-    if(d1 <= 0.0f && d2 <= 0.0f) return P0;
-    
-    v3f bp = P-P1;
-    f32 d3 = Dot(P01, bp);
-    f32 d4 = Dot(P02, bp);
-    if(d3 >= 0.0f && d4 <= d3) return P1;
-    
-    f32 vc = d1*d4 - d3*d2;
-    if(vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
-    {
-        f32 v = d1/(d1-d3);
-        return P0 + v*P01;
-    }
-    
-    v3f cp = P-P2;
-    f32 d5 = Dot(P01, cp);
-    f32 d6 = Dot(P02, cp);
-    if(d6 >= 0.0f && d5 <= d6) return P2;
-    
-    f32 vb = d5*d2 - d1*d6;
-    if(vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
-    {
-        f32 w = d2/(d2-d6);
-        return P0 + w*P02;
-    }
-    
-    f32 va = d3*d6 - d5*d4;
-    if(va <= 0.0f && (d4-d3) >= 0.0f && (d5-d6) >= 0.0f)
-    {
-        f32 w = (d4-d3)/((d4-d3)+(d5-d6));
-        return P1 + w*(P2-P1);
-    }
-    
-    f32 denom = 1.0f/(va+vb+vc);
-    f32 v = vb*denom;
-    f32 w = vc*denom;
-    return P0 + P01*v + P02*w;
-}
-
-v3f PointTriangleClosestPoint3D(triangle3D Triangle, v3f P)
-{
-    v3f Result = PointTriangleClosestPoint3D(Triangle.P[0], Triangle.P[1], Triangle.P[2], P);
-    return Result;
-}
-
 b32 RayToRayIntersection2D(v2f* Result, ray2D A, ray2D B)
 {
     if(!IsValidRay2D(A) || !IsValidRay2D(B))
@@ -175,23 +122,6 @@ b32 RayToRayIntersection2D(v2f* Result, ray2D A, ray2D B)
     return false;
 }
 
-b32 IsPointInCircle2D(v2f CenterP, f32 CircleR, v2f P)
-{
-    f32 XComp = Square(P.x - CenterP.x);
-    f32 YComp = Square(P.y - CenterP.y);
-    b32 Result = (XComp + YComp) < Square(CircleR);
-    return Result;
-}
-
-b32 IsPointInSphere3D(v3f CenterP, f32 CircleR, v3f P)
-{
-    f32 XComp = Square(P.x - CenterP.x);
-    f32 YComp = Square(P.y - CenterP.y);
-    f32 ZComp = Square(P.z - CenterP.z);
-    b32 Result = (XComp + YComp + ZComp) < Square(CircleR);
-    return Result;
-}
-
 b32 LineIntersections2D(v2f P1, v2f P2, v2f P3, v2f P4, f32* t, f32* u)
 {
     f32 P1P2x = P1.x-P2.x;
@@ -213,6 +143,21 @@ b32 LineIntersections2D(v2f P1, v2f P2, v2f P3, v2f P4, f32* t, f32* u)
     return true;
 }
 
+b32 LineIntersections2D(v2f* Result, v2f P1, v2f P2, v2f P3, v2f P4)
+{
+    f32 t, u;
+    if(LineIntersections2D(P1, P2, P3, P4, &t, &u))
+    {        
+        *Result = P1 + t*(P2-P1);
+        return true;
+    }    
+    return false;
+}
+
+b32 LineIntersections2D(v2f* Result, v2f* Line0, v2f* Line1)
+{
+    return LineIntersections2D(Result, Line0[0], Line0[1], Line1[0], Line1[1]);    
+}
 
 b32 EdgeToEdgeIntersection2D(v2f* Result, v2f P0, v2f P1, v2f P2, v2f P3)
 {    
@@ -220,7 +165,7 @@ b32 EdgeToEdgeIntersection2D(v2f* Result, v2f P0, v2f P1, v2f P2, v2f P3)
     if(!LineIntersections2D(P0, P1, P2, P3, &t, &u))
         return false;
     
-    if(t >= 0 && t <= 1.0f && u >= 0.0f && u <= 1.0f)
+    if(t > 0 && t < 1.0f && u > 0.0f && u < 1.0f)
     {
         *Result = P0 + t*(P1-P0);
         return true;
@@ -239,7 +184,7 @@ v2f PointLineSegmentClosestPoint2D(v2f P0, v2f P1, v2f P)
     v2f Edge = P1-P0;
     
     f32 SqrLength = SquareMagnitude(Edge);
-    ASSERT(SqrLength > 1e-6f);    
+    ASSERT(SqrLength != 0.0f);    
     f32 t = SaturateF32(Dot(P-P0, Edge) / SqrLength);
     
     v2f Result = P0 + t*Edge;
@@ -265,8 +210,17 @@ b32 IsPointOnLine2D(v2f P0, v2f P1, v2f P)
     return Result;
 }
 
+b32 IsPointOnLine2D(v2f* Line, v2f P)
+{
+    b32 Result = IsPointOnLine2D(Line[0], Line[1], P);
+    return Result;
+}
+
 b32 IsPointOnEdge2D(v2f P0, v2f P1, v2f P)
 {
+    if(AreEqual(P, P1, 1e-5f) || (AreEqual(P, P0, 1e-5f)))
+       return true;
+    
     if(!(((P0.x <= P.x) && (P.x <= P1.x)) || ((P1.x <= P.x) && (P.x <= P0.x))))
         return false;
     
@@ -274,6 +228,12 @@ b32 IsPointOnEdge2D(v2f P0, v2f P1, v2f P)
         return false;
     
     return IsPointOnLine2D(P0, P1, P);
+}
+
+b32 IsPointOnEdge2D(v2f* Edge, v2f P)
+{
+    b32 Result = IsPointOnEdge2D(Edge[0], Edge[1], P);
+    return Result;
 }
 
 b32 IsPointOnEdge2D(edge2D Edge, v2f P)
@@ -310,5 +270,17 @@ f32 FindLineZ(v3f P0, v3f P1, v2f P)
 f32 FindLineZ(edge3D Line, v2f P)
 {
     f32 Result = FindLineZ(Line.P[0], Line.P[1], P);
+    return Result;
+}
+
+b32 IsPointBehindLine(v2f* Line, v2f N, v2f P)
+{
+    b32 Result = Dot(P-Line[0], N) < 0.0f;
+    return Result;
+}
+
+b32 IsPointOnOrBehindLine(v2f* Line, v2f N, v2f P)
+{
+    b32 Result = IsPointOnLine2D(Line, P) || IsPointBehindLine(Line, N, P);
     return Result;
 }
