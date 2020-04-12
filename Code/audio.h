@@ -1,19 +1,10 @@
 #ifndef AUDIO_H
 #define AUDIO_H
 
-//NOTE(EVERYONE): We only support pcm integer formats for now
-struct audio_format
+struct playing_audio
 {
-    u16 BytesPerSample;    
-    u16 ChannelCount;
-    u32 SamplesPerSecond;
-};
-
-struct audio
-{
-    audio_format Format;
-    u64 SampleCount;    
-    void* Samples;
+    audio* Audio;
+    u32 PlayingSampleIndex;
 };
 
 #pragma pack(push, 1)

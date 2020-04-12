@@ -13,6 +13,12 @@
 //TODO(JJ): For opengl I think we need to use gl_VertexID instead of gl_VertexIndex
 #define VertexIndex gl_VertexIndex
 
+f32 Saturate(f32 V)
+{
+    f32 Result = clamp(V, 0.0f, 1.0f);
+    return Result;
+}
+
 v4f VulkanTransform(v4f V)
 {
     V.y = -V.y;

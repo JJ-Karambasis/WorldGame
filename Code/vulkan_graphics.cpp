@@ -976,7 +976,7 @@ RENDER_GAME(RenderGame)
         BOOL_CHECK_AND_HANDLE(ImageStatus == VK_SUCCESS, "Error acquiring image to present.");
     }
     
-    Graphics->CameraBufferData[0] = PerspectiveM4(PI*0.35f, SafeRatio(WindowDim.width, WindowDim.height), 0.01f, 1000.0f);
+    Graphics->CameraBufferData[0] = PerspectiveM4(PI*0.30f, SafeRatio(WindowDim.width, WindowDim.height), 0.01f, 1000.0f);
     
     camera* TargetCamera = &Game->Camera;
     
@@ -1027,30 +1027,21 @@ RENDER_GAME(RenderGame)
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->Pipeline);             
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Graphics->PipelineLayout, 0, 1, &Graphics->DescriptorSet, 0, VK_NULL_HANDLE);
             
-            
+            VkDeviceSize VertexBufferOffset = 0;
+            vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &Graphics->VertexBuffer, &VertexBufferOffset);
+            vkCmdBindIndexBuffer(CommandBuffer, Graphics->IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
             
             player* Player = &Game->Player;
             v3f PlayerZ = V3(0.0f, 0.0f, 1.0f);
             v3f PlayerY = V3(Player->FacingDirection, 0.0f);
             v3f PlayerX = Cross(PlayerY, PlayerZ);
-#if 0 
-            {                
-                v3f XAxis = PlayerX*(Player->Radius * 2.0f);
-                v3f YAxis = PlayerY*(Player->Radius * 2.0f);
-                v3f ZAxis = PlayerZ*Player->Height;
-                
-                m4 Model = TransformM4(Player->Position, M3(XAxis, YAxis, ZAxis));
-                vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
-                vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Player->Color);                            
-                vkCmdDraw(CommandBuffer, 36, 1, 0, 0);                
-            }
-#endif
-            for(entity* Entity = Game->StaticEntities.Head; Entity; Entity = Entity->Next)
+            
+            for(entity* Entity = Game->Entities.First; Entity; Entity = Entity->Next)
             {                
                 m4 Model = TransformM4(Entity->Transform);
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Entity->Color);                            
-                vkCmdDraw(CommandBuffer, 36, 1, 0, 0);                
+                vkCmdDrawIndexed(CommandBuffer, 36, 1, 0, 0, 0);                
             }
             
 #if DEVELOPER_BUILD
@@ -1064,11 +1055,11 @@ RENDER_GAME(RenderGame)
             vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &VolumeContext->VertexBuffer, &VolumeVertexOffset);
             vkCmdBindIndexBuffer(CommandBuffer, VolumeContext->IndexBuffer, 0, VK_INDEX_TYPE_UINT16);            
             
-            {
-                debug_capsule_mesh* CapsuleMesh = &VolumeContext->CapsuleMesh;
-                
-                mesh* Cap = &CapsuleMesh->Cap;
-                mesh* Body = &CapsuleMesh->Body;
+            
+            debug_capsule_mesh* CapsuleMesh = &VolumeContext->CapsuleMesh;                
+            debug_graphics_mesh* CapsuleCap = &CapsuleMesh->Cap;
+            debug_graphics_mesh* CapsuleBody = &CapsuleMesh->Body;
+            {                
                 vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Player->Color);
                 
                 v3f BodyZ = PlayerZ*Player->Height;
@@ -1076,24 +1067,44 @@ RENDER_GAME(RenderGame)
                 v3f XAxis = PlayerX*Player->Radius;
                 v3f YAxis = PlayerY*Player->Radius;
                 v3f ZAxis = PlayerZ*Player->Radius;
-                m4 Model = TransformM4(Player->Position, M3(XAxis, YAxis, -ZAxis));                
-                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
-                vkCmdDrawIndexed(CommandBuffer, Cap->IndexCount, 1, 0, 0, 0); 
                 
-                Model = TransformM4(Player->Position + BodyZ, 
+                v3f BottomPosition = Player->Position+ZAxis;
+                m4 Model = TransformM4(BottomPosition, M3(XAxis, YAxis, -ZAxis));                
+                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
+                vkCmdDrawIndexed(CommandBuffer, CapsuleCap->Indices.Count, 1, 0, 0, 0); 
+                
+                Model = TransformM4(BottomPosition + BodyZ, 
                                     M3(XAxis, YAxis, ZAxis));
                 vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);
-                vkCmdDrawIndexed(CommandBuffer, Cap->IndexCount, 1, 0, 0, 0);
-                                
-                Model = TransformM4(Player->Position+(BodyZ*0.5f), M3(XAxis, YAxis, BodyZ));
-                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);
-                vkCmdDrawIndexed(CommandBuffer, Body->IndexCount, 1, Cap->IndexCount, Cap->VertexCount, 0);
+                vkCmdDrawIndexed(CommandBuffer, CapsuleCap->Indices.Count, 1, 0, 0, 0);
                 
+                Model = TransformM4(BottomPosition+(BodyZ*0.5f), M3(XAxis, YAxis, BodyZ));
+                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);
+                vkCmdDrawIndexed(CommandBuffer, CapsuleBody->Indices.Count, 1, CapsuleCap->Indices.Count, CapsuleCap->Vertices.Count, 0);                
             }
             
+            if(DevGame->TurnOnVolumeOutline)
+            {
+                debug_graphics_mesh* BoxMesh = &VolumeContext->BoxMesh;
+                
+                u32 DEBUGBoxVertexOffset = CapsuleCap->Vertices.Count+CapsuleBody->Vertices.Count;
+                u32 DEBUGBoxIndexOffset = CapsuleCap->Indices.Count+CapsuleBody->Indices.Count;
+                for(entity* Entity = Game->Entities.First; Entity; Entity = Entity->Next)
+                {                   
+                    aabb3D AABB = TransformAABB3D(Entity->AABB, Entity->Transform);
+                    
+                    v3f Dim = GetAABB3DDim(AABB);                    
+                    v3f Position = V3(AABB.Min.xy + Dim.xy*0.5f, AABB.Min.z);
+                    
+                    m4 Model = TransformM4(Position, Dim);                    
+                    vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
+                    vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Global_Blue);                                                
+                    vkCmdDrawIndexed(CommandBuffer, BoxMesh->Indices.Count, 1, DEBUGBoxIndexOffset, DEBUGBoxVertexOffset, 0);                                
+                }
+            }
             
             debug_primitive_context* PrimitiveContext = &DevGraphics->PrimitiveContext;
-                        
+            
             vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipeline);
             vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->LinePipelineLayout, 0, 1, &PrimitiveContext->DescriptorSet, 0, VK_NULL_HANDLE);
             
@@ -1283,13 +1294,13 @@ RENDER_GAME(RenderGame)
     return false;    
 }
 
-b32 VulkanInit(void* PlatformSurfaceInfo)
+b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
 {
     vulkan_graphics* Graphics = GetVulkanGraphics();
     Graphics->RenderGame = RenderGame;    
     Graphics->DEBUGDrawLine = DEBUGDrawLine;
     Graphics->DEBUGDrawPoint = DEBUGDrawPoint;
-    Graphics->Storage = CreateArena(KILOBYTE(32));
+    Graphics->Storage = CreateArena(KILOBYTE(32));    
     
     LOAD_GLOBAL_FUNCTION(vkCreateInstance);
     LOAD_GLOBAL_FUNCTION(vkEnumerateInstanceExtensionProperties);
@@ -1414,6 +1425,22 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     Graphics->UploadBuffer = CreateUploadBuffer(MEGABYTE(32));
     BOOL_CHECK_AND_HANDLE(Graphics->UploadBuffer.Buffer, "Failed to create the graphics upload buffer.");
     
+    VkDeviceSize VertexBufferSize = GetVerticesSizeInBytes(&Assets->BoxGraphicsMesh);
+    VkDeviceSize IndexBufferSize = GetIndicesSizeInBytes(&Assets->BoxGraphicsMesh);
+    VkBufferCreateInfo VertexBufferInfo = GetBufferInfo(VertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    VkBufferCreateInfo IndexBufferInfo = GetBufferInfo(IndexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &VertexBufferInfo, VK_NULL_HANDLE, &Graphics->VertexBuffer),
+                            "Failed to create the graphics vertex buffer.");
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &IndexBufferInfo, VK_NULL_HANDLE, &Graphics->IndexBuffer),
+                            "Failed to create the graphics index buffer.");
+    
+    Graphics->VertexBufferMemory = AllocateAndBindMemory(Graphics->VertexBuffer, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    BOOL_CHECK_AND_HANDLE(Graphics->VertexBufferMemory, "Failed to allocate and bind the vertex buffer memory.");
+    Graphics->IndexBufferMemory = AllocateAndBindMemory(Graphics->IndexBuffer, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    BOOL_CHECK_AND_HANDLE(Graphics->IndexBufferMemory, "Failed to allocate and bind the index buffer memory.");
+    
     VkAttachmentDescription AttachmentDescriptions[2] = {};    
     AttachmentDescriptions[0].format = Graphics->SelectedGPU->SurfaceFormat.format;
     AttachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1474,12 +1501,12 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
     VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorPool(Graphics->Device, &DescriptorPoolInfo, VK_NULL_HANDLE, &Graphics->DescriptorPool),
                             "Failed to create the descriptor pool.");
+        
+    VkShaderModule OpaqueVertex   = CreateShader("shaders/vulkan/opaque_shading_vertex.spv");
+    VkShaderModule OpaqueFragment = CreateShader("shaders/vulkan/opaque_shading_fragment.spv");
     
-    VkShaderModule TestBoxVertex   = CreateShader("shaders/vulkan/test_box_vertex.spv");
-    VkShaderModule TestBoxFragment = CreateShader("shaders/vulkan/test_box_fragment.spv");
-    
-    BOOL_CHECK_AND_HANDLE(TestBoxVertex, "Failed to create the test box vertex shader.");
-    BOOL_CHECK_AND_HANDLE(TestBoxFragment, "Failed to create the test box fragment shader.");
+    BOOL_CHECK_AND_HANDLE(OpaqueVertex, "Failed to create the opaque vertex shader.");
+    BOOL_CHECK_AND_HANDLE(OpaqueFragment, "Failed to create the opaque fragment shader.");
     
     VkDescriptorSetLayoutBinding DescriptorBinding = {};
     DescriptorBinding.binding = 0;
@@ -1526,19 +1553,42 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VkPipelineShaderStageCreateInfo ShaderStages[2] = {};
     ShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     ShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    ShaderStages[0].module = TestBoxVertex;
+    ShaderStages[0].module = OpaqueVertex;
     ShaderStages[0].pName = "main";
     
     ShaderStages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     ShaderStages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-    ShaderStages[1].module = TestBoxFragment;
+    ShaderStages[1].module = OpaqueFragment;
     ShaderStages[1].pName  = "main";    
+        
+    VkVertexInputBindingDescription InputBindingDescription = {};
+    InputBindingDescription.binding = 0;
+    InputBindingDescription.stride = sizeof(graphics_vertex);
+    InputBindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;    
+    
+    VkVertexInputAttributeDescription VertexAttributeDescription[2] = {};
+    VertexAttributeDescription[0].location = 0;
+    VertexAttributeDescription[0].binding = InputBindingDescription.binding;
+    VertexAttributeDescription[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    VertexAttributeDescription[0].offset = 0;        
+    
+    VertexAttributeDescription[1].location = 1;
+    VertexAttributeDescription[1].binding = InputBindingDescription.binding;
+    VertexAttributeDescription[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    VertexAttributeDescription[1].offset = sizeof(v4f);
+    
+    VkPipelineVertexInputStateCreateInfo VertexInputState = {};
+    VertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;    
+    VertexInputState.vertexBindingDescriptionCount = 1;
+    VertexInputState.pVertexBindingDescriptions = &InputBindingDescription;
+    VertexInputState.vertexAttributeDescriptionCount = ARRAYCOUNT(VertexAttributeDescription);
+    VertexInputState.pVertexAttributeDescriptions = VertexAttributeDescription;    
     
     VkGraphicsPipelineCreateInfo GraphicsPipelineInfo = {};
     GraphicsPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     GraphicsPipelineInfo.stageCount = ARRAYCOUNT(ShaderStages);
     GraphicsPipelineInfo.pStages = ShaderStages;
-    GraphicsPipelineInfo.pVertexInputState = EmptyVertexInputState();
+    GraphicsPipelineInfo.pVertexInputState = &VertexInputState;
     GraphicsPipelineInfo.pInputAssemblyState = TriangleListInputAssemblyState();
     GraphicsPipelineInfo.pViewportState = SingleViewportState();
     GraphicsPipelineInfo.pRasterizationState = DefaultCullBackRasterizationState();
@@ -1553,8 +1603,8 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &GraphicsPipelineInfo, VK_NULL_HANDLE, &Graphics->Pipeline),
                             "Failed to create the graphics pipeline.");
     
-    vkDestroyShaderModule(Graphics->Device, TestBoxVertex, VK_NULL_HANDLE);
-    vkDestroyShaderModule(Graphics->Device, TestBoxFragment, VK_NULL_HANDLE);        
+    vkDestroyShaderModule(Graphics->Device, OpaqueVertex, VK_NULL_HANDLE);
+    vkDestroyShaderModule(Graphics->Device, OpaqueFragment, VK_NULL_HANDLE);        
     
     VkBufferCreateInfo CameraBufferInfo = GetBufferInfo(sizeof(m4)*2, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
     VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &CameraBufferInfo, VK_NULL_HANDLE, &Graphics->CameraBuffer),
@@ -1596,6 +1646,13 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     DescriptorWrites.pBufferInfo = &DescriptorBufferInfo;
     
     vkUpdateDescriptorSets(Graphics->Device, 1, &DescriptorWrites, 0, VK_NULL_HANDLE);
+    
+    
+    VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed ot reset the command buffer.");
+    VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(Graphics->CommandBuffer, OneTimeCommandBufferBeginInfo()), "Failed to begin recording the command buffer.");
+    
+    vkCmdUpdateBuffer(Graphics->CommandBuffer, Graphics->VertexBuffer, 0, GetVerticesSizeInBytes(&Assets->BoxGraphicsMesh), GetVertices(&Assets->BoxGraphicsMesh));
+    vkCmdUpdateBuffer(Graphics->CommandBuffer, Graphics->IndexBuffer, 0, GetIndicesSizeInBytes(&Assets->BoxGraphicsMesh), GetIndices(&Assets->BoxGraphicsMesh));
     
 #if DEVELOPER_BUILD
     developer_vulkan_graphics* DevGraphics = (developer_vulkan_graphics*)Graphics;
@@ -1858,13 +1915,17 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     VolumeContext->CapsuleMesh = DEBUGCreateCapsuleMesh(60);
     debug_capsule_mesh* CapsuleMesh = &VolumeContext->CapsuleMesh;
     
-    VkDeviceSize DEBUGCapsuleCapVertexSize = CapsuleMesh->Cap.VertexCount*sizeof(v3f);
-    VkDeviceSize DEBUGCapsuleBodyVertexSize = CapsuleMesh->Body.VertexCount*sizeof(v3f);
-    VkDeviceSize DEBUGCapsuleCapIndicesSize = CapsuleMesh->Cap.IndexCount*sizeof(u16);
-    VkDeviceSize DEBUGCapsuleBodyIndicesSize = CapsuleMesh->Body.IndexCount*sizeof(u16);
+    VolumeContext->BoxMesh = DEBUGCreateBoxMesh();
     
-    VkDeviceSize DEBUGVertexBufferSize = DEBUGCapsuleCapVertexSize+DEBUGCapsuleBodyVertexSize;
-    VkDeviceSize DEBUGIndexBufferSize = DEBUGCapsuleCapIndicesSize+DEBUGCapsuleBodyIndicesSize;
+    VkDeviceSize DEBUGCapsuleCapVertexSize = CapsuleMesh->Cap.Vertices.Count*sizeof(v3f);
+    VkDeviceSize DEBUGCapsuleBodyVertexSize = CapsuleMesh->Body.Vertices.Count*sizeof(v3f);
+    VkDeviceSize DEBUGBoxVertexSize = VolumeContext->BoxMesh.Vertices.Count*sizeof(v3f);
+    VkDeviceSize DEBUGCapsuleCapIndicesSize = CapsuleMesh->Cap.Indices.Count*sizeof(u16);
+    VkDeviceSize DEBUGCapsuleBodyIndicesSize = CapsuleMesh->Body.Indices.Count*sizeof(u16);
+    VkDeviceSize DEBUGBoxIndicesSize = VolumeContext->BoxMesh.Indices.Count*sizeof(u16);
+    
+    VkDeviceSize DEBUGVertexBufferSize = DEBUGCapsuleCapVertexSize+DEBUGCapsuleBodyVertexSize+DEBUGBoxVertexSize;
+    VkDeviceSize DEBUGIndexBufferSize = DEBUGCapsuleCapIndicesSize+DEBUGCapsuleBodyIndicesSize+DEBUGBoxIndicesSize;
     
     VkBufferCreateInfo DEBUGVertexBufferCreateInfo = GetBufferInfo(DEBUGVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT);    
     VULKAN_CHECK_AND_HANDLE(vkCreateBuffer(Graphics->Device, &DEBUGVertexBufferCreateInfo, VK_NULL_HANDLE, &VolumeContext->VertexBuffer),
@@ -2072,61 +2133,69 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
                             "Failed to create the ImGui font image view.");
     
     
-    VULKAN_CHECK_AND_HANDLE(vkResetCommandPool(Graphics->Device, Graphics->CommandPool, 0), "Failed ot reset the command buffer.");
-    VULKAN_CHECK_AND_HANDLE(vkBeginCommandBuffer(Graphics->CommandBuffer, OneTimeCommandBufferBeginInfo()), "Failed to begin recording the command buffer.");
     {
-        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, 0, DEBUGCapsuleCapVertexSize, CapsuleMesh->Cap.Vertices);
-        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, DEBUGCapsuleCapVertexSize, DEBUGCapsuleBodyVertexSize, CapsuleMesh->Body.Vertices);
-        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, 0, DEBUGCapsuleCapIndicesSize, CapsuleMesh->Cap.Indices);
-        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, DEBUGCapsuleCapIndicesSize, DEBUGCapsuleBodyIndicesSize, CapsuleMesh->Body.Indices);
+        VkDeviceSize VertexOffset = 0;        
         
-        VkImageMemoryBarrier CopyBarrier[1] = {};
-        CopyBarrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        CopyBarrier[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        CopyBarrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        CopyBarrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        CopyBarrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        CopyBarrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        CopyBarrier[0].image = ImGuiContext->FontImage;
-        CopyBarrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        CopyBarrier[0].subresourceRange.levelCount = 1;
-        CopyBarrier[0].subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(Graphics->CommandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, CopyBarrier);
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, VertexOffset, DEBUGCapsuleCapVertexSize, CapsuleMesh->Cap.Vertices.Ptr);
+        VertexOffset += DEBUGCapsuleCapVertexSize;
         
-        VkDeviceSize FontUploadOffset = PushWrite(&Graphics->UploadBuffer, ImGuiFontData, ImGuiFontDataSize);
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, VertexOffset, DEBUGCapsuleBodyVertexSize, CapsuleMesh->Body.Vertices.Ptr);
+        VertexOffset += DEBUGCapsuleBodyVertexSize;
         
-        VkBufferImageCopy ImageRegion = {};
-        ImageRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        ImageRegion.imageSubresource.layerCount = 1;
-        ImageRegion.bufferOffset = FontUploadOffset;
-        ImageRegion.imageExtent.width = ImGuiFontWidth;
-        ImageRegion.imageExtent.height = ImGuiFontHeight;
-        ImageRegion.imageExtent.depth = 1;
-        vkCmdCopyBufferToImage(Graphics->CommandBuffer, Graphics->UploadBuffer.Buffer, ImGuiContext->FontImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageRegion);
-        
-        VkImageMemoryBarrier UseBarrier[1] = {};
-        UseBarrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        UseBarrier[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        UseBarrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        UseBarrier[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        UseBarrier[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        UseBarrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        UseBarrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        UseBarrier[0].image = ImGuiContext->FontImage;
-        UseBarrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        UseBarrier[0].subresourceRange.levelCount = 1;
-        UseBarrier[0].subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(Graphics->CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, UseBarrier);        
-    }    
-    VULKAN_CHECK_AND_HANDLE(vkEndCommandBuffer(Graphics->CommandBuffer), "Failed to end the command buffer recording.");
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->VertexBuffer, VertexOffset, DEBUGBoxVertexSize, VolumeContext->BoxMesh.Vertices.Ptr);
+        VertexOffset += DEBUGBoxVertexSize;                    
+    }
     
-    VkSubmitInfo SubmitInfo = {};
-    SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    SubmitInfo.commandBufferCount = 1;
-    SubmitInfo.pCommandBuffers = &Graphics->CommandBuffer;
+    {
+        VkDeviceSize IndexOffset = 0;
+        
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, IndexOffset, DEBUGCapsuleCapIndicesSize, CapsuleMesh->Cap.Indices.Ptr);
+        IndexOffset += DEBUGCapsuleCapIndicesSize;
+        
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, IndexOffset, DEBUGCapsuleBodyIndicesSize, CapsuleMesh->Body.Indices.Ptr);
+        IndexOffset += DEBUGCapsuleBodyIndicesSize;
+        
+        vkCmdUpdateBuffer(Graphics->CommandBuffer, VolumeContext->IndexBuffer, IndexOffset, DEBUGBoxIndicesSize, VolumeContext->BoxMesh.Indices.Ptr);
+        IndexOffset += DEBUGBoxIndicesSize;
+    }
     
-    VULKAN_CHECK_AND_HANDLE(vkQueueSubmit(Graphics->GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE), 
-                            "Failed to submit the command buffer to the graphics queue.");
+    VkImageMemoryBarrier CopyBarrier[1] = {};
+    CopyBarrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    CopyBarrier[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    CopyBarrier[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    CopyBarrier[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    CopyBarrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    CopyBarrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    CopyBarrier[0].image = ImGuiContext->FontImage;
+    CopyBarrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    CopyBarrier[0].subresourceRange.levelCount = 1;
+    CopyBarrier[0].subresourceRange.layerCount = 1;
+    vkCmdPipelineBarrier(Graphics->CommandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, CopyBarrier);
+    
+    VkDeviceSize FontUploadOffset = PushWrite(&Graphics->UploadBuffer, ImGuiFontData, ImGuiFontDataSize);
+    
+    VkBufferImageCopy ImageRegion = {};
+    ImageRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    ImageRegion.imageSubresource.layerCount = 1;
+    ImageRegion.bufferOffset = FontUploadOffset;
+    ImageRegion.imageExtent.width = ImGuiFontWidth;
+    ImageRegion.imageExtent.height = ImGuiFontHeight;
+    ImageRegion.imageExtent.depth = 1;
+    vkCmdCopyBufferToImage(Graphics->CommandBuffer, Graphics->UploadBuffer.Buffer, ImGuiContext->FontImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &ImageRegion);
+    
+    VkImageMemoryBarrier UseBarrier[1] = {};
+    UseBarrier[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    UseBarrier[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    UseBarrier[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    UseBarrier[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    UseBarrier[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    UseBarrier[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    UseBarrier[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    UseBarrier[0].image = ImGuiContext->FontImage;
+    UseBarrier[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    UseBarrier[0].subresourceRange.levelCount = 1;
+    UseBarrier[0].subresourceRange.layerCount = 1;
+    vkCmdPipelineBarrier(Graphics->CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, UseBarrier);        
     
     VkDescriptorImageInfo DescriptorImageInfo = {};
     DescriptorImageInfo.sampler = ImGuiContext->FontSampler;
@@ -2162,6 +2231,16 @@ b32 VulkanInit(void* PlatformSurfaceInfo)
     
 #endif
     
+    VULKAN_CHECK_AND_HANDLE(vkEndCommandBuffer(Graphics->CommandBuffer), "Failed to end the command buffer recording.");
+    
+    VkSubmitInfo SubmitInfo = {};
+    SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    SubmitInfo.commandBufferCount = 1;
+    SubmitInfo.pCommandBuffers = &Graphics->CommandBuffer;
+    
+    VULKAN_CHECK_AND_HANDLE(vkQueueSubmit(Graphics->GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE), 
+                            "Failed to submit the command buffer to the graphics queue.");
+    
     return true;
     
     handle_error:
@@ -2190,7 +2269,7 @@ EXPORT WIN32_GRAPHICS_INIT(GraphicsInit)
     vkGetInstanceProcAddr  = (PFN_vkGetInstanceProcAddr)GetProcAddress(VulkanLib, "vkGetInstanceProcAddr");
     BOOL_CHECK_AND_HANDLE(vkGetInstanceProcAddr, "Failed to load the vulkan vkGetInstanceProcAddr function");
     
-    BOOL_CHECK_AND_HANDLE(VulkanInit(Window), "Failed to initialize the core vulkan graphics.");    
+    BOOL_CHECK_AND_HANDLE(VulkanInit(Window, Assets), "Failed to initialize the core vulkan graphics.");    
     return GetVulkanGraphics();
     
     handle_error:

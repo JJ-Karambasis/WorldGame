@@ -204,6 +204,10 @@ struct vulkan_graphics : public graphics
     VkPipelineLayout PipelineLayout;
     VkPipeline Pipeline;    
     VkDeviceMemory CameraBufferMemory;
+    VkBuffer VertexBuffer;
+    VkDeviceMemory VertexBufferMemory;
+    VkBuffer IndexBuffer;
+    VkDeviceMemory IndexBufferMemory;
     VkBuffer CameraBuffer;
     m4* CameraBufferData;
     render_buffer RenderBuffer;  
@@ -257,6 +261,7 @@ struct debug_volume_context
     VkPipeline Pipeline;
     
     debug_capsule_mesh CapsuleMesh;    
+    debug_graphics_mesh BoxMesh;
     VkDeviceMemory Memory;
     VkBuffer VertexBuffer;
     VkBuffer IndexBuffer;    

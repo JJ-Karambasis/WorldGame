@@ -10,19 +10,22 @@ typedef DEBUG_DRAW_POINT(debug_draw_point);
 #define DEBUG_DRAW_LINE(name) void name(v3f Position0, v3f Position1, f32 Width, f32 Height, c4 Color)
 typedef DEBUG_DRAW_LINE(debug_draw_line);
 
-struct mesh
+struct debug_graphics_vertex_array
 {
-    v3f* Vertices;
-    u32 VertexCount;
-    u16* Indices;
-    u32 IndexCount;
+    u32 Count;
+    v3f* Ptr;
 };
 
+struct debug_graphics_mesh
+{
+    debug_graphics_vertex_array Vertices;
+    graphics_index_array Indices;
+};
 
 struct debug_capsule_mesh
-{
-    mesh Cap;
-    mesh Body;
+{    
+    debug_graphics_mesh Cap;
+    debug_graphics_mesh Body;
 };
 
 struct camera
@@ -37,7 +40,7 @@ struct camera
 
 struct graphics
 {
-    arena Storage;    
+    arena Storage;        
     render_game* RenderGame;
     
     debug_draw_point* DEBUGDrawPoint;
@@ -47,7 +50,7 @@ struct graphics
 #ifdef OS_WINDOWS
 //TODO(JJ): Remove this
 #include "imgui/imgui.h"
-#define WIN32_GRAPHICS_INIT(name) graphics* name(HWND Window, platform* Platform, ImGuiContext* Context)
+#define WIN32_GRAPHICS_INIT(name) graphics* name(HWND Window, platform* Platform, assets* Assets, ImGuiContext* Context)
 typedef WIN32_GRAPHICS_INIT(win32_graphics_init);
 #endif
 

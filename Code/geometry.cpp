@@ -1,38 +1,4 @@
-triangle3D_mesh CreateBoxTriangleMesh(arena* Storage)
-{
-    triangle3D_mesh Result = {};
-    
-    Result.TriangleCount = 12;
-    Result.Triangles = PushArray(Storage, 12, triangle3D, Clear, 0);
-    
-    v3f Vertices[8] = 
-    {
-        V3(-0.5f, -0.5f, 1.0f),    
-        V3( 0.5f, -0.5f, 1.0f),
-        V3( 0.5f,  0.5f, 1.0f),
-        V3(-0.5f,  0.5f, 1.0f),
-        
-        V3( 0.5f, -0.5f, 0.0f),
-        V3(-0.5f, -0.5f, 0.0f),
-        V3(-0.5f,  0.5f, 0.0f),
-        V3( 0.5f,  0.5f, 0.0f)
-    };
-    
-    Result.Triangles[0]  = CreateTriangle3D(Vertices[0], Vertices[1], Vertices[2]);
-    Result.Triangles[1]  = CreateTriangle3D(Vertices[0], Vertices[2], Vertices[3]);
-    Result.Triangles[2]  = CreateTriangle3D(Vertices[1], Vertices[4], Vertices[7]);
-    Result.Triangles[3]  = CreateTriangle3D(Vertices[1], Vertices[7], Vertices[2]);
-    Result.Triangles[4]  = CreateTriangle3D(Vertices[4], Vertices[5], Vertices[6]);
-    Result.Triangles[5]  = CreateTriangle3D(Vertices[4], Vertices[6], Vertices[7]);
-    Result.Triangles[6]  = CreateTriangle3D(Vertices[5], Vertices[0], Vertices[3]);
-    Result.Triangles[7]  = CreateTriangle3D(Vertices[5], Vertices[3], Vertices[6]);
-    Result.Triangles[8]  = CreateTriangle3D(Vertices[3], Vertices[2], Vertices[7]);
-    Result.Triangles[9]  = CreateTriangle3D(Vertices[3], Vertices[7], Vertices[6]);
-    Result.Triangles[10] = CreateTriangle3D(Vertices[4], Vertices[1], Vertices[0]);
-    Result.Triangles[11] = CreateTriangle3D(Vertices[4], Vertices[0], Vertices[5]);
-    
-    return Result;    
-}
+#include "gjk.cpp"
 
 f32 GetTriangleArea2D(v2f P0, v2f P1, v2f P2)
 {
@@ -54,7 +20,7 @@ b32 IsPointInTriangle2D(v2f P0, v2f P1, v2f P2, v2f P)
     f32 s = (P0.y*P2.x - P0.x*P2.y + (P2.y-P0.y)*P.x + (P0.x-P2.x)*P.y)*Sign;
     f32 t = (P0.x*P1.y - P0.y*P1.x + (P0.y-P1.y)*P.x + (P1.x-P0.x)*P.y)*Sign;
     
-    b32 Result = (s > 0.0f) && (t > 0.0f) && (s+t) < 2.0f*A*Sign;
+    b32 Result = (s >= 0.0f) && (t >= 0.0f) && (s+t) <= 2.0f*A*Sign;
     return Result;
 }
 
@@ -273,14 +239,246 @@ f32 FindLineZ(edge3D Line, v2f P)
     return Result;
 }
 
-b32 IsPointBehindLine(v2f* Line, v2f N, v2f P)
+b32 IsPointBehindLine2D(v2f* Line, v2f N, v2f P)
 {
     b32 Result = Dot(P-Line[0], N) < 0.0f;
     return Result;
 }
 
-b32 IsPointOnOrBehindLine(v2f* Line, v2f N, v2f P)
+b32 IsPointOnOrBehindLine2D(v2f* Line, v2f N, v2f P)
 {
-    b32 Result = IsPointOnLine2D(Line, P) || IsPointBehindLine(Line, N, P);
+    b32 Result = IsPointOnLine2D(Line, P) || IsPointBehindLine2D(Line, N, P);
+    return Result;
+}
+
+v2f PointTriangleClosestPoint2D(v2f P0, v2f P1, v2f P2, v2f P)
+{
+    v2f P01 = P1-P0;
+    v2f P02 = P2-P0;
+    v2f PP0 = P-P0;
+    
+    f32 Proj01 = Dot(PP0, P01);
+    f32 Proj02 = Dot(PP0, P02);
+    if(Proj01 <= 0.0f && Proj02 <= 0.0f) return P0;
+    
+    v2f PP1 = P-P1;
+    f32 Proj03 = Dot(PP1, P01);
+    f32 Proj04 = Dot(PP1, P02);
+    if((Proj03 >= 0.0f) && (Proj04 <= Proj03)) return P1;
+    
+    f32 Proj0 = Proj01*Proj04 - Proj03*Proj02;
+    if((Proj0 <= 0.0f) && (Proj01 >= 0.0f) && (Proj03 <= 0.0f))
+    {
+        f32 t = Proj01 / (Proj01-Proj03);
+        v2f Result = P0 + t*P01;
+        return Result;
+    }
+    
+    v2f PP2 = P-P2;
+    f32 Proj05 = Dot(PP2, P01);
+    f32 Proj06 = Dot(PP2, P02);
+    if((Proj06 >= 0.0f) && (Proj05 <= Proj06)) return P2;
+    
+    f32 Proj1 = Proj05*Proj02 - Proj01*Proj06;
+    if((Proj1 <= 0.0f) && (Proj02 >= 0.0f) && (Proj06 <= 0.0f))
+    {
+        f32 t = Proj02 / (Proj02 - Proj06);
+        v2f Result = P0 + t*P02;
+        return Result;
+    }
+    
+    f32 Proj2 = Proj03*Proj06 - Proj05*Proj04;
+    if((Proj2 <= 0.0f) && ((Proj04-Proj03) >= 0.0f) && ((Proj05-Proj06) >= 0.0f))
+    {
+        f32 t = (Proj04-Proj03) / ((Proj04-Proj03) + (Proj05-Proj06));
+        v2f Result = P1 + t * (P2-P1);     
+        return Result;
+    }
+    
+    f32 Denominator = SafeInverse(Proj01+Proj02+Proj03);
+    f32 u = Proj02*Denominator;
+    f32 v = Proj01*Denominator;
+    v2f Result = P0+(P01*u)+(P02*v);
+    return Result;
+}
+
+v2f PointTriangleClosestPoint2D(triangle2D Triangle, v2f P)
+{
+    v2f Result = PointTriangleClosestPoint2D(Triangle.P[0], Triangle.P[1], Triangle.P[2], P);
+    return Result;
+}
+
+v2f PointTriangleClosestPoint2D(triangle3D Triangle, v2f P)
+{
+    v2f Result = PointTriangleClosestPoint2D(Triangle.P[0].xy, Triangle.P[1].xy, Triangle.P[2].xy, P);
+    return Result;
+}
+
+b32 CircleTriangleOverlap2D(v2f P0, v2f P1, v2f P2, v2f CenterP, f32 Radius)
+{
+    v2f ClosestPoint = PointTriangleClosestPoint2D(P0, P1, P2, CenterP);
+    b32 Result = SquareMagnitude(ClosestPoint-CenterP) <= Square(Radius);
+    return Result;
+}
+
+b32 CircleTriangleOverlap2D(triangle2D Triangle, v2f CenterP, f32 Radius)
+{
+    b32 Result = CircleTriangleOverlap2D(Triangle.P[0], Triangle.P[1], Triangle.P[2], CenterP, Radius);    
+    return Result;
+}
+
+b32 CircleTriangleOverlap2D(triangle3D Triangle, v2f CenterP, f32 Radius)
+{
+    b32 Result = CircleTriangleOverlap2D(Triangle.P[0].xy, Triangle.P[1].xy, Triangle.P[2].xy, CenterP, Radius);
+    return Result;    
+}
+
+b32 IsDegenerateTriangle2D(v2f P0, v2f P1, v2f P2)
+{
+    b32 Result = AreEqual(P0, P1, 1e-6f) || AreEqual(P0, P2, 1e-6f) || AreEqual(P1, P2, 1e-6f);
+    return Result;
+}
+
+b32 IsDegenerateTriangle2D(triangle2D Triangle)
+{
+    b32 Result = IsDegenerateTriangle2D(Triangle.P[0], Triangle.P[1], Triangle.P[2]);
+    return Result;
+}
+
+b32 IsDegenerateTriangle2D(triangle3D Triangle)
+{
+    b32 Result = IsDegenerateTriangle2D(Triangle.P[0].xy, Triangle.P[1].xy, Triangle.P[2].xy);
+    return Result;
+}
+
+SUPPORT_FUNCTION(AABB3DSupport)
+{
+    aabb3D* AABB = (aabb3D*)Data;
+    
+    v3f CenterPos;
+    v3f Dim;
+    GetAABB3DDimAndCenterPos(&CenterPos, &Dim, *AABB);
+    Dim *= 0.5f;
+    
+    v3f Result = CenterPos + V3(SIGN(Direction.x)*Dim.x, 
+                                SIGN(Direction.y)*Dim.y, 
+                                SIGN(Direction.z)*Dim.z);
+    return Result;
+}
+
+SUPPORT_FUNCTION(Line3DSupport)
+{
+    v3f* Line = (v3f*)Data;
+    if(Dot(Direction, Line[0]) < Dot(Direction, Line[1]))
+        return Line[1];    
+    return Line[0];
+}
+
+penetration_result PenetrationTestAABB3D(aabb3D A, aabb3D B)
+{
+    v3f CenterPoint;
+    v3f ADim;
+    GetAABB3DDimAndCenterPos(&CenterPoint, &ADim, A);
+    ADim *= 0.5f;
+    
+    B.Max += ADim;
+    B.Min -= ADim;
+    
+    penetration_result Result;
+    Result.Hit = false;
+    Result.Distance = INFINITY;
+    
+    v3f XNormal = {};    
+    f32 XDistance = 0.0f;
+    {
+        f32 Distance0 = MaximumF32(CenterPoint.x - B.Min.x, 0.0f);        
+        f32 Distance1 = MaximumF32(B.Max.x - CenterPoint.x, 0.0f);
+        
+        if((Distance0 != 0.0f) || (Distance1 != 0.0f))
+        {                        
+            if(Distance0 < Distance1)
+            {
+                XDistance = Distance0;
+                XNormal = V3(-1.0f, 0.0f, 0.0f);
+            }
+            else
+            {
+                XDistance = Distance1;
+                XNormal = V3(1.0f, 0.0f, 0.0f);
+            }
+        }        
+    }
+    
+    v3f YNormal = {};    
+    f32 YDistance = 0.0f;
+    {
+        f32 Distance0 = MaximumF32(CenterPoint.y - B.Min.y, 0.0f);        
+        f32 Distance1 = MaximumF32(B.Max.y - CenterPoint.y, 0.0f);
+        
+        if((Distance0 != 0.0f) || (Distance1 != 0.0f))
+        {                        
+            if(Distance0 < Distance1)
+            {
+                YDistance = Distance0;
+                YNormal = V3(0.0f, -1.0f, 0.0f);
+            }
+            else
+            {
+                YDistance = Distance1;
+                YNormal = V3(0.0f, 1.0f, 0.0f);
+            }
+        }        
+    }
+    
+    v3f ZNormal = {};    
+    f32 ZDistance = 0.0f;
+    {
+        f32 Distance0 = MaximumF32(CenterPoint.z - B.Min.z, 0.0f);        
+        f32 Distance1 = MaximumF32(B.Max.z - CenterPoint.z, 0.0f);
+        
+        if((Distance0 != 0.0f) || (Distance1 != 0.0f))
+        {                        
+            if(Distance0 < Distance1)
+            {
+                ZDistance = Distance0;
+                ZNormal = V3(0.0f, 0.0f, -1.0f);
+            }
+            else
+            {
+                ZDistance = Distance1;
+                ZNormal = V3(0.0f, 0.0f, 1.0f);
+            }
+        }        
+    }
+    
+    if((ZDistance != 0.0f) && (YDistance != 0.0f) && (XDistance != 0.0f))
+    {
+        Result.Hit = true;        
+        
+        if(ZDistance < YDistance)
+        {
+            if(ZDistance < XDistance)
+            {
+                Result.Distance = ZDistance;
+                Result.Normal = ZNormal;
+            }
+            else
+            {
+                Result.Distance = XDistance;
+                Result.Normal = XNormal;
+            }
+        }
+        else if(YDistance < XDistance)
+        {
+            Result.Distance = YDistance;
+            Result.Normal = YNormal;
+        }
+        else
+        {
+            Result.Distance = XDistance;
+            Result.Normal = XNormal;
+        }
+    }
+    
     return Result;
 }

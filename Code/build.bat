@@ -1,7 +1,7 @@
 @echo off
 
 set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533
-set Common=-DDEVELOPER_BUILD=1 -Od -nologo -FC -Z7 -Oi -EHsc- %Debug% %Warnings% 
+set Common=-DDEVELOPER_BUILD=1 -Od -nologo -FC -Z7 -Oi -EHsc- %Warnings% 
 
 IF NOT EXIST ..\din mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data
@@ -33,6 +33,9 @@ pushd ..\data\shaders\vulkan
 IF %COMPILE_SHADERS% == 1 (
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_vertex.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_fragment.spv
+
+    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\opaque_shading.glsl -o opaque_shading_vertex.spv
+    glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\opaque_shading.glsl -o opaque_shading_fragment.spv
 
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_volumes.glsl -o debug_volumes_vertex.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\debug_volumes.glsl -o debug_volumes_fragment.spv

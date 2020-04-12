@@ -54,7 +54,11 @@ struct development_game : public game
     b32 InDevelopmentMode;
     camera DevCamera;      
     frame_recording FrameRecordings;
+    u32 WalkingTriangleCount;
+    u32 MaxGJKIterations;
     b32 DevInitialized;        
+    bool TurnOnVolumeOutline;
+    bool TurnAudioOn;
 };
 
 #endif

@@ -204,7 +204,7 @@ void DevelopmentTick(development_game* Game)
     }                        
     
     ImGui::Begin("Dev Editor");
-        
+    
     ImGui::Text("Recording state %s", GetStringRecordingStateUI(Recording->RecordingState));        
     
     if((Recording->RecordingState == RECORDING_STATE_PLAYBACK) ||
@@ -217,6 +217,19 @@ void DevelopmentTick(development_game* Game)
             Recording->CurrentFrameIndex = ClampI32(Recording->CurrentFrameIndex, 0, Recording->FrameCount);                        
         }        
     }
+    
+    ImGui::Text("Walking Triangle Count %d", Game->WalkingTriangleCount); 
+    Game->WalkingTriangleCount = 0;
+    
+    ImGui::Text("Max GJK Iterations %d", Game->MaxGJKIterations);
+    
+    ImGui::Checkbox("Show Debug Volumes", &Game->TurnOnVolumeOutline);
+    
+    b32 AudioStatus = Game->TurnAudioOn;
+    ImGui::Checkbox("Turn Audio On", &Game->TurnAudioOn);
+    if(Game->TurnAudioOn != AudioStatus)
+        Global_Platform->ToggleAudio(Game->Audio, Game->TurnAudioOn);
+    
     ImGui::End();
     
     bool True = true;

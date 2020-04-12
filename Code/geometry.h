@@ -1,6 +1,11 @@
 #ifndef GEOMETRY_H
 #define GEOMETRY_H
 
+#include "gjk.h"
+
+#define SUPPORT_FUNCTION(name) v3f name(void* Data, v3f Direction) 
+typedef SUPPORT_FUNCTION(support_function);
+
 //NOTE(EVERYONE): 2D structures
 struct edge2D
 {
@@ -79,6 +84,12 @@ struct edge3D
     v3f P[2];
 };
 
+struct aabb3D
+{
+    v3f Min;
+    v3f Max;
+};
+
 struct triangle3D
 {
     v3f P[3];        
@@ -100,12 +111,57 @@ inline edge3D CreateEdge3D(v3f P0, v3f P1)
     return Result;
 }
 
+inline aabb3D CreateAABB3D(v3f Min, v3f Max)
+{
+    aabb3D Result;
+    Result.Min = Min;
+    Result.Max = Max;
+    return Result;
+}
+
+inline v3f GetAABB3DDim(aabb3D AABB)
+{
+    v3f Result = AABB.Max - AABB.Min;
+    return Result;
+}
+
+inline void GetAABB3DDimAndCenterPos(v3f* CenterPos, v3f* Dim, aabb3D AABB)
+{
+    *Dim = AABB.Max-AABB.Min;
+    *CenterPos = AABB.Min + *Dim*0.5f;    
+}
+
+inline aabb3D TransformAABB3D(aabb3D AABB, sqt Transform)
+{
+    Transform.Orientation = IdentityQuaternion();
+    
+    aabb3D Result;
+    Result.Min = TransformV3(AABB.Min, Transform);
+    Result.Max = TransformV3(AABB.Max, Transform);
+    return Result;    
+}
+
 inline triangle3D CreateTriangle3D(v3f P0, v3f P1, v3f P2)
 {
     triangle3D Result;
     Result.P[0] = P0;
     Result.P[1] = P1;
     Result.P[2] = P2;
+    return Result;
+}
+
+inline triangle3D InvalidTriangle3D()
+{
+    triangle3D Result;
+    Result.P[0] = InvalidV3();
+    Result.P[1] = InvalidV3();
+    Result.P[2] = InvalidV3();
+    return Result;
+}
+
+inline b32 IsInvalidTriangle3D(triangle3D Triangle)
+{
+    b32 Result = IsInvalidV3(Triangle.P[0]) || IsInvalidV3(Triangle.P[1]) || IsInvalidV3(Triangle.P[2]);
     return Result;
 }
 
@@ -131,5 +187,13 @@ inline void GetTriangleEdges3D(edge3D* Edges, triangle3D Triangle)
     Edges[1] = CreateEdge3D(Triangle.P[1], Triangle.P[2]);
     Edges[2] = CreateEdge3D(Triangle.P[2], Triangle.P[0]);
 }
+
+//NOTE(EVERYONE): All other structures and inline functions
+struct penetration_result
+{
+    b32 Hit;
+    v3f Normal;
+    f32 Distance;
+};
 
 #endif

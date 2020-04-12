@@ -47,6 +47,7 @@ struct platform_file_handle
 struct win32_audio : public audio
 {
     IDirectSoundBuffer* SoundBuffer;
+    u32 RunningSampleIndex;
 };
 
 #endif

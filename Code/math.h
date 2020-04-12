@@ -55,7 +55,7 @@ inline f32 Sqrt(f32 Value)
 inline f32 RSqrt(f32 Value)
 {
     //IMPORTANT(JJ): Probably don't want the intrinsic to handle the divide by 0 but I want to determine where these happen first and what the intrinsic will return (NAN or infinity?)
-    if(Abs(Value) < 1e-7f)
+    if(Abs(Value) < 1e-8f)
         ASSERT(false);
     
     f32 Result;
@@ -265,10 +265,31 @@ operator-(f32 Left, v2f Right)
 }
 
 inline v2f
+operator-(v2f Left, f32 Right)
+{
+    v2f Result = {Left.x-Right, Left.y-Right};
+    return Result;
+}
+
+inline v2f
 operator-(v2f Left, v2f Right)
 {
     v2f Result = {Left.x-Right.x, Left.y-Right.y};
     return Result;
+}
+
+inline v2f& 
+operator-=(v2f& Left, f32 Right)
+{
+    Left = Left - Right;
+    return Left;
+}
+
+inline v2f&
+operator-=(v2f& Left, v2f Right)
+{
+    Left = Left - Right;
+    return Left;
 }
 
 inline v2f 
@@ -306,6 +327,13 @@ operator*(v2f Left, v2f Right)
     return Result;
 }
 
+inline v2f&
+operator*=(v2f& Left, v2f Right)
+{
+    Left = Left * Right;
+    return Left;
+}
+
 inline v2f
 operator/(v2f V, f32 Right)
 {
@@ -326,7 +354,7 @@ operator-(v2f V)
     v2f Result = {-V.x, -V.y};
     return Result;
 }
- 
+
 inline b32 operator!=(v2f Left, f32 Right)
 {
     b32 Result = (Left.x != Right) || (Left.y != Right);
@@ -509,6 +537,13 @@ InvalidV3()
     return Result;
 }
 
+inline b32 
+IsInvalidV3(v3f V)
+{
+    b32 Result = ((V.x == INFINITY) || (V.y == INFINITY) || (V.z == INFINITY));
+    return Result;
+}
+
 inline v3f
 operator+(v3f Left, v3f Right)
 {
@@ -534,6 +569,13 @@ operator-(v3f Left, v3f Right)
     Result.y = Left.y - Right.y;
     Result.z = Left.z - Right.z;
     return Result;
+}
+
+inline v3f&
+operator-=(v3f& Left, v3f Right)
+{
+    Left = Left - Right;
+    return Left;
 }
 
 inline v3f 
@@ -570,6 +612,13 @@ operator*(v3f Left, v3f Right)
     return Result;
 }
 
+inline v3f&
+operator*=(v3f& Left, v3f Right)
+{
+    Left = Left * Right;
+    return Left;
+}
+
 inline v3f 
 operator/(v3f Left, v3f Right)
 {
@@ -584,6 +633,12 @@ inline v3f
 operator-(v3f V)
 {
     v3f Result = {-V.x, -V.y, -V.z};
+    return Result;
+}
+
+inline b32 operator!=(v3f Left, v3f Right)
+{
+    b32 Result = (Left.x != Right.x) || (Left.y != Right.y) || (Left.z != Right.z);
     return Result;
 }
 
@@ -670,6 +725,13 @@ V4(f32 x, f32 y, f32 z, f32 w)
 }
 
 inline v4f 
+V4(f32* xyz, f32 w)
+{
+    v4f Result = V4(xyz[0], xyz[1], xyz[2], w);    
+    return Result;
+}
+
+inline v4f 
 V4(v3f xyz, f32 w)
 {
     v4f Result;
@@ -710,10 +772,10 @@ inline v4f Green()
     return Result;
 }
 
+global v4f Global_Blue = RGBA(0.0f, 0.0f, 1.0f, 0.0f);
 inline v4f Blue()
-{
-    v4f Result = RGBA(0.0f, 0.0f, 1.0f, 0.0f);
-    return Result;
+{    
+    return Global_Blue;
 }
 
 inline v4f Yellow()
@@ -892,6 +954,17 @@ Transpose(m4 M)
     Result.m31 = M.m13;
     Result.m32 = M.m23;
     Result.m33 = M.m33;
+    return Result;
+}
+
+inline m4 
+TransformM4(v3f Position, v3f Scale)
+{
+    m4 Result;
+    Result.XAxis = V4(Scale.x, 0.0f,    0.0f,    0.0f);
+    Result.YAxis = V4(0.0f,    Scale.y, 0.0f,    0.0f);
+    Result.ZAxis = V4(0.0f,    0.0f,    Scale.z, 0.0f);
+    Result.Translation = V4(Position, 1.0f);
     return Result;
 }
 
