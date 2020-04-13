@@ -238,8 +238,5 @@ void DevelopmentTick(development_game* Game)
     
     ImGui::End();
     
-    bool True = true;
-    ImGui::ShowDemoWindow(&True);
-    
     ImGui::Render();
 }
