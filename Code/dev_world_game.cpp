@@ -40,13 +40,13 @@ void WriteGameState(development_game* Game)
     frame_recording* FrameRecording = &Game->FrameRecordings;
     FrameRecording->FrameOffsets[FrameRecording->FrameCount++] = FrameRecording->NextFrameOffset;
     
-    player* Player = &Game->Player;    
+    player* Player = &Game->Worlds[Game->CurrentWorldIndex].Player;    
     input* Input = Game->Input;
     
     ptr EntrySize = 0;
     PushWriteStruct(&FrameRecording->FrameStream, &Player->Position, v3f, 0); EntrySize += sizeof(v3f);
     PushWriteStruct(&FrameRecording->FrameStream, &Player->Velocity, v3f, 0); EntrySize += sizeof(v3f);
-    PushWriteStruct(&FrameRecording->FrameStream, &Input->dt, f32, 0); EntrySize += sizeof(f32);
+    PushWriteStruct(&FrameRecording->FrameStream, &Game->dt, f32, 0); EntrySize += sizeof(f32);
     PushWriteArray(&FrameRecording->FrameStream, Input->Buttons, ARRAYCOUNT(Input->Buttons), button, 0); EntrySize += sizeof(Input->Buttons);         
     FrameRecording->NextFrameOffset += EntrySize;
 }
@@ -56,7 +56,7 @@ void ReadGameState(development_game* Game, u32 FrameIndex)
     frame_recording* FrameRecording = &Game->FrameRecordings;    
     ptr Offset = GetFrameFileOffset(FrameRecording->FrameOffsets, FrameRecording->FrameCount, FrameIndex);
     
-    player* Player = &Game->Player;
+    player* Player = &Game->Worlds[Game->CurrentWorldIndex].Player;
     input* Input = Game->Input;
     
 #pragma pack(push, 1)
@@ -74,7 +74,7 @@ void ReadGameState(development_game* Game, u32 FrameIndex)
     
     Player->Position = Context.Position;
     Player->Velocity = Context.Velocity;
-    Input->dt = Context.dt;
+    Game->dt = Context.dt;
     CopyArray(Input->Buttons, Context.Buttons, ARRAYCOUNT(input::Buttons), button);
 }
 
@@ -205,6 +205,8 @@ void DevelopmentTick(development_game* Game)
     
     ImGui::Begin("Dev Editor");
     
+    ImGui::Text("MS/f %f", Game->LastTickFrameTime*1000.0f);
+    
     ImGui::Text("Recording state %s", GetStringRecordingStateUI(Recording->RecordingState));        
     
     if((Recording->RecordingState == RECORDING_STATE_PLAYBACK) ||
@@ -218,11 +220,15 @@ void DevelopmentTick(development_game* Game)
         }        
     }
     
-    ImGui::Text("Walking Triangle Count %d", Game->WalkingTriangleCount); 
-    Game->WalkingTriangleCount = 0;
+    ImGui::Text("Current World Index %d", Game->CurrentWorldIndex);
     
-    ImGui::Text("Max GJK Iterations %d", Game->MaxGJKIterations);
+    ImGui::Text("World 0 Walking Triangle Count %d", Game->WalkingTriangleCount[0]); 
+    Game->WalkingTriangleCount[0] = 0;
     
+    ImGui::Text("World 1 Walking Triangle Count %d", Game->WalkingTriangleCount[1]); 
+    Game->WalkingTriangleCount[1] = 0;
+    
+    ImGui::Text("Max GJK Iterations %d", Game->MaxGJKIterations);    
     ImGui::Checkbox("Show Debug Volumes", &Game->TurnOnVolumeOutline);
     
     b32 AudioStatus = Game->TurnAudioOn;

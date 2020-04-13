@@ -18,6 +18,12 @@ struct ray2D
     v2f Direction;
 };
 
+struct circle2D
+{
+    v2f CenterP;
+    f32 Radius;
+};
+
 struct triangle2D
 {
     v2f P[3];
@@ -70,12 +76,55 @@ inline b32 IsValidRay2D(ray2D Ray)
     return Result;    
 }
 
+inline circle2D CreateCircle2D(v2f CenterP, f32 Radius)
+{
+    circle2D Result = {CenterP, Radius};
+    return Result;
+}
+
 inline triangle2D CreateTriangle2D(v2f P0, v2f P1, v2f P2)
 {
     triangle2D Result;
     Result.P[0] = P0;
     Result.P[1] = P1;
     Result.P[2] = P2;
+}
+
+inline void GetTriangleEdgeDirections2D(v2f* Edges, v2f P0, v2f P1, v2f P2)
+{
+    Edges[0] = P1-P0;
+    Edges[1] = P2-P1;
+    Edges[2] = P0-P2;    
+}
+
+inline void GetTriangleEdgeDirections2D(v2f* E, edge2D* Edges)
+{
+    E[0] = Edges[0].P[1]-Edges[0].P[0];
+    E[1] = Edges[1].P[1]-Edges[1].P[0];
+    E[2] = Edges[2].P[1]-Edges[2].P[0];
+}
+
+inline void GetTriangleEdgeDirections2D(v2f* Edges, triangle2D Triangle)
+{
+    GetTriangleEdgeDirections2D(Edges, Triangle.P[0], Triangle.P[1], Triangle.P[2]);    
+}
+
+inline void GetTriangleNormals2D(v2f* Normals, v2f* E)
+{    
+    Normals[0] = Perp(E[0]);
+    Normals[1] = Perp(E[1]);
+    Normals[2] = Perp(E[2]);
+    
+    Normals[0] = Dot(Normals[0], E[2]) < 0.0f ? -Normals[0] : Normals[0];
+    Normals[1] = Dot(Normals[1], E[0]) < 0.0f ? -Normals[1] : Normals[1];
+    Normals[2] = Dot(Normals[2], E[1]) < 0.0f ? -Normals[2] : Normals[2];    
+}
+
+inline void GetTriangleNormals2D(v2f* Normals, edge2D* Edges)
+{
+    v2f E[3];
+    GetTriangleEdgeDirections2D(E, Edges);    
+    GetTriangleNormals2D(Normals, E);
 }
 
 //NOTE(EVERYONE): 3D structures
@@ -174,18 +223,18 @@ inline triangle3D TransformTriangle3D(triangle3D Triangle, sqt Transform)
     return Result;
 }
 
-inline void GetTriangleEdges2D(edge2D* Edges, triangle3D Triangle)
-{
-    Edges[0] = CreateEdge2D(Triangle.P[0], Triangle.P[1]);
-    Edges[1] = CreateEdge2D(Triangle.P[1], Triangle.P[2]);
-    Edges[2] = CreateEdge2D(Triangle.P[2], Triangle.P[0]);
-}
-
 inline void GetTriangleEdges3D(edge3D* Edges, triangle3D Triangle)
 {
     Edges[0] = CreateEdge3D(Triangle.P[0], Triangle.P[1]);
     Edges[1] = CreateEdge3D(Triangle.P[1], Triangle.P[2]);
     Edges[2] = CreateEdge3D(Triangle.P[2], Triangle.P[0]);
+}
+
+inline void GetTriangleEdges2D(edge2D* Edges, triangle3D Triangle)
+{
+    Edges[0] = CreateEdge2D(Triangle.P[0], Triangle.P[1]);
+    Edges[1] = CreateEdge2D(Triangle.P[1], Triangle.P[2]);
+    Edges[2] = CreateEdge2D(Triangle.P[2], Triangle.P[0]);
 }
 
 //NOTE(EVERYONE): All other structures and inline functions
@@ -195,5 +244,25 @@ struct penetration_result
     v3f Normal;
     f32 Distance;
 };
+
+struct time_result_2D
+{
+    f32 Time;
+    v2f ContactPoint;
+};
+
+inline time_result_2D InvalidTimeResult2D()
+{
+    time_result_2D Result;
+    Result.Time = FLT_MAX;
+    Result.ContactPoint = InvalidV2();
+    return Result;
+}
+
+inline b32 IsInvalidTimeResult2D(time_result_2D TimeResult)
+{
+    b32 Result = (TimeResult.Time == FLT_MAX) || (TimeResult.ContactPoint == InvalidV2());
+    return Result;
+}
 
 #endif

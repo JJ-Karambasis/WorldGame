@@ -54,16 +54,15 @@ inline f32 Sqrt(f32 Value)
 
 inline f32 RSqrt(f32 Value)
 {
-    //IMPORTANT(JJ): Probably don't want the intrinsic to handle the divide by 0 but I want to determine where these happen first and what the intrinsic will return (NAN or infinity?)
-    if(Abs(Value) < 1e-8f)
-        ASSERT(false);
-    
+    //IMPORTANT(JJ): Probably don't want the intrinsic to handle the divide by 0 but I want to determine where these happen first and what the intrinsic will return (NAN or infinity?)    
     f32 Result;
 #if MSVC_COMPILER        
     Result = _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(Value)));
 #else    
     Result = 1.0f/Sqrt(Value);    
 #endif
+    
+    ASSERT(Result != INFINITY);
     return Result;
 }
 
@@ -205,6 +204,13 @@ inline v2f
 InvalidV2()
 {
     v2f Result = {INFINITY, INFINITY};
+    return Result;
+}
+
+inline v2f 
+V2()
+{
+    v2f Result = {};
     return Result;
 }
 

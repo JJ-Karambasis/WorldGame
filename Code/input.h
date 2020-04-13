@@ -19,8 +19,7 @@ struct input
             button MoveRight;    
             button SwitchWorld;
         };
-    };            
-    f32 dt;
+    };                
 };
 
 inline b32 IsDown(button Button)

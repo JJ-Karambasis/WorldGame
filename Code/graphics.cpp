@@ -8,6 +8,8 @@
 #include "imgui/imgui_widgets.cpp"
 #endif
 
+#include "world.cpp"
+
 void DEBUGPopulateCircleIndices(u16** Indices, u16 StartSampleIndex, u16 CircleSampleCount)
 {
     u16* IndicesAt = *Indices;    

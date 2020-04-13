@@ -655,7 +655,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     
     CloseHandle(CreateThread(NULL, 0, AudioThread, &Game, 0, NULL));
     
-    Input.dt = 1.0f/60.0f; 
+    Game.dt = 1.0f/60.0f; 
     u64 StartTime = Win32_Clock();
     for(;;)
     {   
@@ -816,12 +816,12 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         v2i WindowDim = Win32_GetWindowDim(Window);
         
         //TODO(JJ): Probably don't want this
-        if(Input.dt > 1.0f/20.0f)
-            Input.dt = 1.0f/20.0f;
+        if(Game.dt > 1.0f/20.0f)
+            Game.dt = 1.0f/20.0f;
         
 #if DEVELOPER_BUILD
         IO.DisplaySize = ImVec2((f32)WindowDim.width, (f32)WindowDim.height);
-        IO.DeltaTime = Input.dt;
+        IO.DeltaTime = Game.dt;
         IO.KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         IO.KeyShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
         IO.KeyAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
@@ -857,7 +857,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             }
         }
         
-        Input.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
+        Game.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
         //CONSOLE_LOG("dt: %f\n", Input.dt*1000.0f);
         StartTime = Win32_Clock();
         

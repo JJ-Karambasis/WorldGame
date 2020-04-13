@@ -1,4 +1,5 @@
 #include "vulkan_graphics.h"
+#include "geometry.cpp"
 #include "graphics.cpp"
 
 b32 IsCompatibleDevice(physical_device* GPU)
@@ -1031,12 +1032,14 @@ RENDER_GAME(RenderGame)
             vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &Graphics->VertexBuffer, &VertexBufferOffset);
             vkCmdBindIndexBuffer(CommandBuffer, Graphics->IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
             
-            player* Player = &Game->Player;
+            world* World = GetCurrentWorld(Game);
+            
+            player* Player = &World->Player;
             v3f PlayerZ = V3(0.0f, 0.0f, 1.0f);
             v3f PlayerY = V3(Player->FacingDirection, 0.0f);
             v3f PlayerX = Cross(PlayerY, PlayerZ);
             
-            for(entity* Entity = Game->Entities.First; Entity; Entity = Entity->Next)
+            for(entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
             {                
                 m4 Model = TransformM4(Entity->Transform);
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
@@ -1089,7 +1092,7 @@ RENDER_GAME(RenderGame)
                 
                 u32 DEBUGBoxVertexOffset = CapsuleCap->Vertices.Count+CapsuleBody->Vertices.Count;
                 u32 DEBUGBoxIndexOffset = CapsuleCap->Indices.Count+CapsuleBody->Indices.Count;
-                for(entity* Entity = Game->Entities.First; Entity; Entity = Entity->Next)
+                for(entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
                 {                   
                     aabb3D AABB = TransformAABB3D(Entity->AABB, Entity->Transform);
                     

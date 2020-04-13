@@ -1,5 +1,14 @@
 #include "gjk.cpp"
 
+b32 IsTriangle2DClockwise(v2f P0, v2f P1, v2f P2)
+{
+    f32 Det = P0.x*(P1.y-P2.y) - P0.y*(P1.x-P2.x) + (P1.x*P2.y - P1.y*P2.x);
+    ASSERT(Det != 0.0f);
+    
+    b32 Result = Det < 0.0f;
+    return Result;    
+}
+
 f32 GetTriangleArea2D(v2f P0, v2f P1, v2f P2)
 {
     f32 Result = Abs((P0.x*(P1.y-P2.y) + P1.x*(P2.y-P0.y) + P2.x*(P0.y-P1.y))*0.5f);
@@ -93,7 +102,7 @@ b32 LineIntersections2D(v2f P1, v2f P2, v2f P3, v2f P4, f32* t, f32* u)
     f32 P1P2x = P1.x-P2.x;
     f32 P1P2y = P1.y-P2.y;
     f32 P3P4x = P3.x-P4.x;
-    f32 P3P4y = P3.y-P4.y;    
+    f32 P3P4y = P3.y-P4.y;        
     
     f32 Determinant = P1P2x*P3P4y - P1P2y*P3P4x;
     if(Determinant == 0.0f)
@@ -104,45 +113,62 @@ b32 LineIntersections2D(v2f P1, v2f P2, v2f P3, v2f P4, f32* t, f32* u)
     f32 P1P3x = P1.x-P3.x;
     f32 P1P3y = P1.y-P3.y;
     
-    *t = (P1P3x*P3P4y - P1P3y*P3P4x)*InvDeterminant;
-    *u = -(P1P2x*P1P3y - P1P2y*P1P3x)*InvDeterminant;
+    if(t)
+        *t = (P1P3x*P3P4y - P1P3y*P3P4x)*InvDeterminant;
+    
+    if(u)
+        *u = -(P1P2x*P1P3y - P1P2y*P1P3x)*InvDeterminant;
     return true;
 }
 
-b32 LineIntersections2D(v2f* Result, v2f P1, v2f P2, v2f P3, v2f P4)
+b32 EdgeIntersections2D(v2f P0, v2f P1, v2f P2, v2f P3, f32* t, f32* u)
 {
-    f32 t, u;
-    if(LineIntersections2D(P1, P2, P3, P4, &t, &u))
-    {        
-        *Result = P1 + t*(P2-P1);
+    f32 t0, u0;
+    if(!LineIntersections2D(P0, P1, P2, P3, &t0, &u0))
+        return false;
+    
+    if((t0 >= 0.0f) && (t0 <= 1.0f) && (u0 >= 0.0f) && (u0 <= 1.0f))
+    {
+        if(t) *t = t0;
+        if(u) *u = u0;
         return true;
-    }    
+    }  
+    
     return false;
 }
 
-b32 LineIntersections2D(v2f* Result, v2f* Line0, v2f* Line1)
+b32 EdgeCircleIntersections2D(v2f P0, v2f P1, v2f CenterP, f32 Radius, f32* t)
 {
-    return LineIntersections2D(Result, Line0[0], Line0[1], Line1[0], Line1[1]);    
-}
-
-b32 EdgeToEdgeIntersection2D(v2f* Result, v2f P0, v2f P1, v2f P2, v2f P3)
-{    
-    f32 t, u;
-    if(!LineIntersections2D(P0, P1, P2, P3, &t, &u))
+    v2f R = P1-P0;
+    v2f F = P0-CenterP;
+    
+    f32 A = SquareMagnitude(R);
+    f32 B = 2.0f*Dot(F, R);
+    f32 C = SquareMagnitude(F) - Square(Radius);
+    
+    f32 Disc = B*B-4*A*C;
+    if(Disc < 0.0f)    
         return false;
     
-    if(t > 0 && t < 1.0f && u > 0.0f && u < 1.0f)
+    f32 Root = Sqrt(Disc);
+    
+    f32 t0 = (-B - Root)/(2*A);
+    f32 t1 = (-B + Root)/(2*A);
+    
+    b32 Result = false;
+    if(t0 > 0.0f && t0 < 1.0f)    
     {
-        *Result = P0 + t*(P1-P0);
-        return true;
+        t[0] = t0;        
+        Result = true;
+    }    
+    
+    if(t1 > 0.0f && t1 < 1.0f)
+    {
+        t[1] = t1;        
+        Result = true;
     }
     
-    return false;    
-}
-
-b32 EdgeToEdgeIntersection2D(v2f* Result, edge2D Edge0, edge2D Edge1)
-{
-    return EdgeToEdgeIntersection2D(Result, Edge0.P[0], Edge0.P[1], Edge1.P[0], Edge1.P[1]);
+    return Result;
 }
 
 v2f PointLineSegmentClosestPoint2D(v2f P0, v2f P1, v2f P)
@@ -185,7 +211,7 @@ b32 IsPointOnLine2D(v2f* Line, v2f P)
 b32 IsPointOnEdge2D(v2f P0, v2f P1, v2f P)
 {
     if(AreEqual(P, P1, 1e-5f) || (AreEqual(P, P0, 1e-5f)))
-       return true;
+        return true;
     
     if(!(((P0.x <= P.x) && (P.x <= P1.x)) || ((P1.x <= P.x) && (P.x <= P0.x))))
         return false;
@@ -314,22 +340,32 @@ v2f PointTriangleClosestPoint2D(triangle3D Triangle, v2f P)
     return Result;
 }
 
-b32 CircleTriangleOverlap2D(v2f P0, v2f P1, v2f P2, v2f CenterP, f32 Radius)
+b32 TriangleCircleOverlap2D(v2f P0, v2f P1, v2f P2, v2f CenterP, f32 Radius)
 {
-    v2f ClosestPoint = PointTriangleClosestPoint2D(P0, P1, P2, CenterP);
-    b32 Result = SquareMagnitude(ClosestPoint-CenterP) <= Square(Radius);
+    if(!IsPointInTriangle2D(P0, P1, P2, CenterP))
+    {        
+        v2f ClosestPoint = PointTriangleClosestPoint2D(P0, P1, P2, CenterP);
+        b32 Result = SquareMagnitude(ClosestPoint-CenterP) <= Square(Radius);
+        return Result;
+    }    
+    return true;
+}
+
+b32 TriangleCircleOverlap2D(triangle2D Triangle, v2f CenterP, f32 Radius)
+{
+    b32 Result = TriangleCircleOverlap2D(Triangle.P[0], Triangle.P[1], Triangle.P[2], CenterP, Radius);    
     return Result;
 }
 
-b32 CircleTriangleOverlap2D(triangle2D Triangle, v2f CenterP, f32 Radius)
+b32 TriangleCircleOverlap2D(triangle3D Triangle, v2f CenterP, f32 Radius)
 {
-    b32 Result = CircleTriangleOverlap2D(Triangle.P[0], Triangle.P[1], Triangle.P[2], CenterP, Radius);    
-    return Result;
+    b32 Result = TriangleCircleOverlap2D(Triangle.P[0].xy, Triangle.P[1].xy, Triangle.P[2].xy, CenterP, Radius);
+    return Result;    
 }
 
-b32 CircleTriangleOverlap2D(triangle3D Triangle, v2f CenterP, f32 Radius)
+b32 TriangleCircleOverlap2D(triangle3D Triangle, circle2D Circle)
 {
-    b32 Result = CircleTriangleOverlap2D(Triangle.P[0].xy, Triangle.P[1].xy, Triangle.P[2].xy, CenterP, Radius);
+    b32 Result = TriangleCircleOverlap2D(Triangle.P[0].xy, Triangle.P[1].xy, Triangle.P[2].xy, Circle.CenterP, Circle.Radius);
     return Result;    
 }
 
@@ -477,6 +513,103 @@ penetration_result PenetrationTestAABB3D(aabb3D A, aabb3D B)
         {
             Result.Distance = XDistance;
             Result.Normal = XNormal;
+        }
+    }
+    
+    return Result;
+}
+
+circle2D CombineCircles(v2f CenterP0, f32 Radius0, v2f CenterP1, f32 Radius1)
+{
+    v2f Offset = CenterP1-CenterP0;
+    f32 SqrDistance = SquareMagnitude(Offset);    
+    f32 RadiusDiff = Radius1-Radius0;
+    
+    circle2D Result = {};   
+    if(Square(RadiusDiff) >= SqrDistance)
+    {
+        if(Radius0 > Radius1)
+        {
+            Result.CenterP = CenterP0;
+            Result.Radius = Radius0;            
+        }
+        else
+        {
+            Result.CenterP = CenterP1;
+            Result.Radius = Radius1;
+        }
+    }
+    else
+    {
+        f32 Distance = Sqrt(SqrDistance);
+        Result.Radius = (Distance+Radius0+Radius1)*0.5f;
+        Result.CenterP = CenterP0;
+        if(Distance > 0)
+            Result.CenterP += Offset*((Result.Radius-Radius0)/Distance);
+    }
+    
+    return Result;
+}
+
+time_result_2D EdgeCapsuleIntersectionTime2D(v2f P0, v2f P1, v2f C0, v2f C1, f32 Radius, v2f* Normal)
+{
+    time_result_2D Result = InvalidTimeResult2D();
+    
+    v2f L = Normalize(C1-C0);
+    v2f N = PerpCCW(L);
+    
+    v2f P[4] = 
+    {
+        C0 + N*Radius,
+        C1 + N*Radius,
+        C0 - N*Radius,
+        C1 - N*Radius
+    };
+    
+    f32 t[6] = {INFINITY, INFINITY, INFINITY, INFINITY, INFINITY, INFINITY};        
+    EdgeIntersections2D(P0, P1, P[0], P[1], &t[0], NULL);
+    EdgeIntersections2D(P0, P1, P[2], P[3], &t[1], NULL);
+    EdgeCircleIntersections2D(P0, P1, C0, Radius, &t[2]);
+    EdgeCircleIntersections2D(P0, P1, C1, Radius, &t[4]);    
+    
+    for(u32 i = 0; i < 6; i++)
+    {        
+        if(t[i] != INFINITY && t[i] < Result.Time)            
+        {            
+            Result.ContactPoint = P0 + t[i]*(P1-P0);
+            
+            switch(i)
+            {
+                case 0:
+                {
+                    *Normal = N;
+                    break;
+                } 
+                
+                case 1:
+                {
+                    *Normal = -N;
+                    break;
+                }
+                
+                case 2:
+                case 3:
+                {
+                    *Normal = Normalize(Result.ContactPoint-C0);
+                    break;
+                }
+                
+                case 4:
+                case 5:
+                {
+                    *Normal = Normalize(Result.ContactPoint-C1);
+                    break;
+                }
+                
+                INVALID_DEFAULT_CASE;
+            }
+            
+            Result.Time = t[i];                    
         }
     }
     

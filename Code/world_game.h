@@ -16,46 +16,7 @@
 #include "assets.h"
 #include "audio.h"
 #include "graphics.h"
-
-struct player
-{
-    v3f Position;
-    f32 Radius;
-    f32 Height;
-    v2f FacingDirection;
-    c4 Color;
-    v3f Velocity;
-};
-
-struct entity
-{    
-    b32 Simulate;   
-    triangle3D_mesh* WalkableMesh;    
-    aabb3D AABB;        
-    
-    union
-    {
-        sqt Transform;
-        struct
-        {
-            quaternion Orientation;
-            v3f Position;
-            v3f Scale;
-        };
-    };
-    c4 Color;
-    v3f Velocity;        
-    
-    entity* Next;
-    entity* Prev;
-};
-
-struct entity_list
-{
-    entity* First;
-    entity* Last;
-    u32 Count;
-};
+#include "world.h"
 
 struct game
 {
@@ -65,11 +26,11 @@ struct game
     input* Input;  
     camera Camera;
     
-    arena WorldStorage;
+    arena GameStorage;
     
-    player Player;
-    
-    entity_list Entities;    
+    f32 dt;
+    u32 CurrentWorldIndex;
+    world Worlds[2];        
 };
 
 #define MOVE_ACCELERATION 20.0f
@@ -89,23 +50,25 @@ GAME_TICK(Game_TickStub)
 global development_game* __Internal_Developer_Game__;
 #define DEVELOPER_GAME(Game) __Internal_Developer_Game__ = (development_game*)Game
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) __Internal_Developer_Game__->MaxGJKIterations = MaximumI32(__Internal_Developer_Game__->MaxGJKIterations, Iterations)
+#define DEVELOPER_INCREMENT_WALKING_TRIANGLE() __Internal_Developer_Game__->WalkingTriangleCount[WorldIndex]++
 
 global graphics* __Internal_Developer_Graphics__;
 #define DEVELOPER_GRAPHICS(Graphics) __Internal_Developer_Graphics__ = Graphics
 #define DRAW_POINT(position, size, color) __Internal_Developer_Graphics__->DEBUGDrawPoint(position, size, color)
 #define DRAW_LINE(position0, position1, width, height, color) __Internal_Developer_Graphics__->DEBUGDrawLine(position0, position1, width, height, color)
 
-#define DRAW_TRIANGLE(p0, p1, p2, color, width) \
+#define DRAW_TRIANGLE(triangle, color, width) \
 do \
 { \
-    DRAW_LINE(p0, p1, width, width, color); \
-    DRAW_LINE(p1, p2, width, width, color);\
-    DRAW_LINE(p2, p0, width, width, color);\
+    DRAW_LINE(triangle.P[0], triangle.P[1], width, width, color); \
+    DRAW_LINE(triangle.P[1], triangle.P[2], width, width, color);\
+    DRAW_LINE(triangle.P[2], triangle.P[0], width, width, color);\
 } while(0)
 
 #else
 #define DEVELOPER_GAME(Game)
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
+#define DEVELOPER_INCREMENT_WALKING_TRIANGLE()
 
 #define DEVELOPER_GRAPHICS(Graphics)
 #define DRAW_POINT(position, size, color)
