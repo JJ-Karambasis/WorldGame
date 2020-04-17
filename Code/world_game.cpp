@@ -3,15 +3,12 @@
 #include "audio.cpp"
 #include "world.cpp"
 
-inline entity* CreateEntity(game* Game, u32 WorldIndex, b32 Simulate, v3f Position, v3f Scale, v3f Euler, c4 Color, triangle3D_mesh* WalkableMesh=NULL)
+inline box_entity* CreateEntity(game* Game, u32 WorldIndex, b32 Walkable, v3f Position, v3f Scale, v3f Euler, c4 Color)
 {
-    entity* Result = PushStruct(&Game->GameStorage, entity, Clear, 0);        
+    box_entity* Result = PushStruct(&Game->GameStorage, box_entity, Clear, 0);        
     Result->Transform = CreateSQT(Position, Scale, Euler);
     Result->Color = Color;    
-    Result->Simulate = Simulate;
-    Result->WalkableMesh = WalkableMesh;
-    
-    Result->AABB = CreateAABB3D(V3(-0.5f, -0.5f, 0.0f), V3( 0.5f, 0.5f, 1.0f));
+    Result->Walkable = Walkable;
     
     AddToList(&Game->Worlds[WorldIndex].Entities, Result);
     
@@ -19,27 +16,26 @@ inline entity* CreateEntity(game* Game, u32 WorldIndex, b32 Simulate, v3f Positi
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, b32 Simulate, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, triangle3D_mesh* WalkableMesh=NULL)
+CreateEntityInBothWorlds(game* Game, b32 Walkable, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
 {
-    CreateEntity(Game, 0, Simulate, Position, Scale, Euler, Color0, WalkableMesh);
-    CreateEntity(Game, 1, Simulate, Position, Scale, Euler, Color1, WalkableMesh);
+    CreateEntity(Game, 0, Walkable, Position, Scale, Euler, Color0);
+    CreateEntity(Game, 1, Walkable, Position, Scale, Euler, Color1);
 }
 
 inline void
-CreateLinkedEntities(game* Game, b32 Simulate, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, 
-                     v3f Euler0, v3f Euler1, c4 Color0, c4 Color1, triangle3D_mesh* WalkableMesh = NULL)
+CreateLinkedEntities(game* Game, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
 {
-    entity* A = CreateEntity(Game, 0, Simulate, Position0, Scale0, Euler0, Color0, WalkableMesh);
-    entity* B = CreateEntity(Game, 1, Simulate, Position1, Scale1, Euler1, Color1, WalkableMesh);
+    box_entity* A = CreateEntity(Game, 0, false, Position0, Scale0, Euler0, Color0);
+    box_entity* B = CreateEntity(Game, 1, false, Position1, Scale1, Euler1, Color1);
     
     A->Link = B;
     B->Link = A;
 }
 
 inline void
-CreateLinkedEntities(game* Game, b32 Simulate, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, triangle3D_mesh* WalkableMesh=NULL)                      
+CreateLinkedEntities(game* Game, b32 Simulate, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)                      
 {
-    CreateLinkedEntities(Game, Simulate, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1, WalkableMesh);    
+    CreateLinkedEntities(Game, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);    
 }
 
 inline blocker*
@@ -86,24 +82,21 @@ EXPORT GAME_TICK(Tick)
         Game->Worlds[1].Player.Position = V3(0.0f, 0.0f, 1.0f);
         Game->Worlds[1].Player.FacingDirection = V2(0.0f, 1.0f);        
         
-        CreateEntityInBothWorlds(Game, false, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxTriangleMesh);                
+        CreateEntityInBothWorlds(Game, true, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
+        CreateEntityInBothWorlds(Game, true, V3(0.0f, 0.0f, 10.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
+        
         CreateBlockersInBothWorlds(Game, V3(-5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f,  5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3(-5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f,  5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3( 5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f, -5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3( 5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f, -5.0f, 1.0f), 1.0f);
-        CreateBlockersInBothWorlds(Game, V3( 3.0f, -3.0f, 1.0f), 1.0f, V3( 3.0f,  3.0f, 1.0f), 1.0f);
-        
-        CreateEntity(Game, 0, false, V3(2.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.25f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxTriangleMesh);        
-        CreateEntity(Game, 0, false, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.25f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxTriangleMesh);                
+        CreateBlockersInBothWorlds(Game, V3( 3.0f, -3.0f, 1.0f), 1.0f, V3( 2.0f,  3.0f, 1.0f), 1.0f);
         
         CreateLinkedEntities(Game, true, V3(0.0f, -2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
-    }        
+    }            
     
     if(IsPressed(Game->Input->SwitchWorld))
         Game->CurrentWorldIndex = !Game->CurrentWorldIndex;
     
-    IntegrateWorld(Game, 0);
-    IntegrateWorld(Game, 1);
     UpdateWorld(Game, 0);
     UpdateWorld(Game, 1);
     

@@ -168,6 +168,13 @@ inline aabb3D CreateAABB3D(v3f Min, v3f Max)
     return Result;
 }
 
+inline aabb3D CreateAABB3DCenterDim(v3f Center, v3f Dim)
+{    
+    v3f HalfDim = Dim*0.5f;
+    aabb3D Result = CreateAABB3D(Center-HalfDim, Center+HalfDim);
+    return Result;
+}
+
 inline v3f GetAABB3DDim(aabb3D AABB)
 {
     v3f Result = AABB.Max - AABB.Min;

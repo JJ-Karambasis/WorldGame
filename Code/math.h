@@ -355,9 +355,16 @@ operator/(f32 Left, v2f Right)
 }
 
 inline v2f
-operator-(v2f V)
+Negate(v2f V)
 {
     v2f Result = {-V.x, -V.y};
+    return Result;
+}
+
+inline v2f
+operator-(v2f V)
+{
+    v2f Result = Negate(V);
     return Result;
 }
 
@@ -379,7 +386,7 @@ inline b32 operator==(v2f Left, v2f Right)
     return Result;
 }
 
-inline v2f Abs(v2f V)
+inline v2f Abs2f(v2f V)
 {
     v2f Result = {Abs(V.x), Abs(V.y)};
     return Result;
@@ -395,7 +402,7 @@ Dot(v2f Left, v2f Right)
 inline f32
 DotEpsilon(v2f Left, v2f Right)
 {
-    f32 Result = 2.0f * FLT_EPSILON * Dot(Abs(Left), Abs(Right));
+    f32 Result = 2.0f * FLT_EPSILON * Dot(Abs2f(Left), Abs2f(Right));
     return Result;
 }
 
@@ -697,6 +704,12 @@ struct v4f
     {
         struct
         {
+            v2f xy;
+            v2f zw;
+        };
+        
+        struct
+        {
             v3f xyz;
             f32 __unused_0__;
         };
@@ -725,6 +738,16 @@ V4(f32 x, f32 y, f32 z, f32 w)
     v4f Result;
     Result.x = x;
     Result.y = y;
+    Result.z = z;
+    Result.w = w;
+    return Result;
+}
+
+inline v4f 
+V4(v2f xy, f32 z, f32 w)
+{
+    v4f Result;
+    Result.xy = xy;    
     Result.z = z;
     Result.w = w;
     return Result;
@@ -766,10 +789,10 @@ inline v4f White()
     return Result;
 }
 
+global v4f Global_Red = RGBA(1.0f, 0.0f, 0.0f, 1.0f);
 inline v4f Red()
 {
-    v4f Result = RGBA(1.0f, 0.0f, 0.0f, 1.0f);
-    return Result;
+    return Global_Red;
 }
 
 inline v4f Green()

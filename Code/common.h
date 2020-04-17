@@ -329,4 +329,22 @@ inline u64 BijectiveMap(u32 A, u32 B)
     return Result;
 }
 
+inline b32 IsInInterval(f32 Min, f32 Max, f32 V)
+{
+    b32 Result = (V >= Min) && (V <= Max);
+    return Result;    
+}
+
+inline b32 IsRangeInInterval(f32 Min, f32 Max, f32 RangeMin, f32 RangeMax)
+{
+    b32 Result = IsInInterval(Min, Max, RangeMin) || IsInInterval(Min, Max, RangeMax);
+    return Result;
+}
+
+inline b32 AreEqual(f32 A, f32 B, f32 Epsilon)
+{
+    b32 Result = Abs(A-B) < Epsilon;
+    return Result;
+}
+
 #endif

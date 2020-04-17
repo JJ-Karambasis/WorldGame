@@ -171,6 +171,23 @@ b32 EdgeCircleIntersections2D(v2f P0, v2f P1, v2f CenterP, f32 Radius, f32* t)
     return Result;
 }
 
+b32 CircleRectangleOverlap2D(v2f CenterP, f32 Radius, v2f Min, v2f Max)
+{
+    v2f HalfDim = (Max-Min)*0.5f;
+    v2f Center = Min+HalfDim;
+    v2f CircleDistance = Abs2f(CenterP-Min);
+    
+    if(CircleDistance.x > (Center.x + Radius)) return false;
+    if(CircleDistance.y > (Center.y + Radius)) return false;
+    
+    if(CircleDistance.x <= Center.x) return true;
+    if(CircleDistance.y <= Center.y) return true;
+    
+    f32 DistanceSqr = Square(CircleDistance.x - Center.x) + Square(CircleDistance.y - Center.y);
+    return DistanceSqr <= Square(Radius);
+    
+}
+
 v2f PointLineSegmentClosestPoint2D(v2f P0, v2f P1, v2f P)
 {
     v2f Edge = P1-P0;
@@ -435,12 +452,12 @@ penetration_result PenetrationTestAABB3D(aabb3D A, aabb3D B)
             if(Distance0 < Distance1)
             {
                 XDistance = Distance0;
-                XNormal = V3(-1.0f, 0.0f, 0.0f);
+                XNormal = V3(1.0f, 0.0f, 0.0f);
             }
             else
             {
                 XDistance = Distance1;
-                XNormal = V3(1.0f, 0.0f, 0.0f);
+                XNormal = V3(-1.0f, 0.0f, 0.0f);
             }
         }        
     }
@@ -456,12 +473,12 @@ penetration_result PenetrationTestAABB3D(aabb3D A, aabb3D B)
             if(Distance0 < Distance1)
             {
                 YDistance = Distance0;
-                YNormal = V3(0.0f, -1.0f, 0.0f);
+                YNormal = V3(0.0f, 1.0f, 0.0f);
             }
             else
             {
                 YDistance = Distance1;
-                YNormal = V3(0.0f, 1.0f, 0.0f);
+                YNormal = V3(0.0f, -1.0f, 0.0f);
             }
         }        
     }
@@ -477,12 +494,12 @@ penetration_result PenetrationTestAABB3D(aabb3D A, aabb3D B)
             if(Distance0 < Distance1)
             {
                 ZDistance = Distance0;
-                ZNormal = V3(0.0f, 0.0f, -1.0f);
+                ZNormal = V3(0.0f, 0.0f, 1.0f);
             }
             else
             {
                 ZDistance = Distance1;
-                ZNormal = V3(0.0f, 0.0f, 1.0f);
+                ZNormal = V3(0.0f, 0.0f, -1.0f);
             }
         }        
     }
@@ -551,65 +568,209 @@ circle2D CombineCircles(v2f CenterP0, f32 Radius0, v2f CenterP1, f32 Radius1)
     return Result;
 }
 
-time_result_2D EdgeCapsuleIntersectionTime2D(v2f P0, v2f P1, v2f C0, v2f C1, f32 Radius, v2f* Normal)
+time_result_2D MovingCircleEdgeIntersectionTime(v2f P0, v2f P1, f32 Radius, v2f E0, v2f E1, v2f* Normal)
 {
     time_result_2D Result = InvalidTimeResult2D();
     
-    v2f L = Normalize(C1-C0);
+    v2f L = Normalize(E1-E0);
     v2f N = PerpCCW(L);
     
     v2f P[4] = 
     {
-        C0 + N*Radius,
-        C1 + N*Radius,
-        C0 - N*Radius,
-        C1 - N*Radius
+        E0 + N*Radius,
+        E1 + N*Radius,
+        E0 - N*Radius,
+        E1 - N*Radius
     };
     
     f32 t[6] = {INFINITY, INFINITY, INFINITY, INFINITY, INFINITY, INFINITY};        
     EdgeIntersections2D(P0, P1, P[0], P[1], &t[0], NULL);
     EdgeIntersections2D(P0, P1, P[2], P[3], &t[1], NULL);
-    EdgeCircleIntersections2D(P0, P1, C0, Radius, &t[2]);
-    EdgeCircleIntersections2D(P0, P1, C1, Radius, &t[4]);    
+    EdgeCircleIntersections2D(P0, P1, E0, Radius, &t[2]);
+    EdgeCircleIntersections2D(P0, P1, E1, Radius, &t[4]);    
     
     for(u32 i = 0; i < 6; i++)
     {        
         if(t[i] != INFINITY && t[i] < Result.Time)            
-        {            
+        {               
             Result.ContactPoint = P0 + t[i]*(P1-P0);
             
-            switch(i)
+            if(Normal)
             {
-                case 0:
+                switch(i)
                 {
-                    *Normal = N;
-                    break;
-                } 
-                
-                case 1:
-                {
-                    *Normal = -N;
-                    break;
+                    case 0:
+                    {
+                        *Normal = N;
+                        break;
+                    } 
+                    
+                    case 1:
+                    {
+                        *Normal = -N;
+                        break;
+                    }
+                    
+                    case 2:
+                    case 3:
+                    {
+                        *Normal = Normalize(Result.ContactPoint-E0);
+                        break;
+                    }
+                    
+                    case 4:
+                    case 5:
+                    {
+                        *Normal = Normalize(Result.ContactPoint-E1);
+                        break;
+                    }
+                    
+                    INVALID_DEFAULT_CASE;
                 }
-                
-                case 2:
-                case 3:
-                {
-                    *Normal = Normalize(Result.ContactPoint-C0);
-                    break;
-                }
-                
-                case 4:
-                case 5:
-                {
-                    *Normal = Normalize(Result.ContactPoint-C1);
-                    break;
-                }
-                
-                INVALID_DEFAULT_CASE;
             }
             
-            Result.Time = t[i];                    
+            Result.Time = MaximumF32(0.0f, t[i]);
+        }
+    }
+    
+    return Result;
+}
+
+time_result_2D MovingCircleRectangleIntersectionTime2D(v2f CenterP0, v2f CenterP1, f32 Radius, 
+                                                       v2f RectMin, v2f RectMax, v2f* Normal)
+{            
+    time_result_2D Result = InvalidTimeResult2D();
+    
+    v2f Edges[4][2] = 
+    {
+        {RectMin, V2(RectMin.x, RectMax.y)},
+        {Edges[0][1], RectMax},
+        {RectMax, V2(RectMax.x, RectMin.y)},
+        {Edges[2][1], RectMin}
+    };
+    
+    for(u32 EdgeIndex = 0; EdgeIndex < 4; EdgeIndex++)
+    {
+        v2f HitNormal = {};
+        time_result_2D TimeResult = MovingCircleEdgeIntersectionTime(CenterP0, CenterP1, Radius, Edges[EdgeIndex][0], Edges[EdgeIndex][1], &HitNormal);
+        if(!IsInvalidTimeResult2D(TimeResult))
+        {
+            if(TimeResult.Time < Result.Time)
+            {
+                Result = TimeResult;
+                if(Normal) *Normal = HitNormal;
+            }
+        }        
+    }
+    
+    return Result;
+}
+
+u32 FindRectangleSupportIndex(v2f Direction)
+{    
+    if(SIGN(Direction.x) >= 0.0f)
+    {
+        if(SIGN(Direction.y) >= 0.0f)
+            return 3;
+        else
+            return 1;
+    }
+    else
+    {
+        if(SIGN(Direction.y) >= 0.0f)
+            return 2;
+        else
+            return 0;
+    }    
+}
+
+u32 FindAdjVerticalSupportIndex(u32 SupportIndex)
+{
+    if(SupportIndex == 0)
+        return 2;
+    
+    if(SupportIndex == 1)
+        return 3;
+    
+    if(SupportIndex == 2)
+        return 0;
+    
+    if(SupportIndex == 3)
+        return 1;
+    
+    INVALID_CODE;
+    return (u32)-1;
+}
+
+u32 FindAdjHorizontalSupportIndex(u32 SupportIndex)
+{
+    if(SupportIndex == 0)
+        return 1;
+    
+    if(SupportIndex == 1)
+        return 0;
+    
+    if(SupportIndex == 2)
+        return 3;
+    
+    if(SupportIndex == 3)
+        return 2;
+    
+    INVALID_CODE;
+    return (u32)-1;
+}
+
+time_result_2D MovingRectangleEdgeIntersectionTime(v2f CenterP0, v2f CenterP1, v2f Dim, v2f E0, v2f E1, v2f* Normal)
+{
+    //0 bottom left, 1 bottom right, 2 top left, 3 top right    
+    v2f Direction = E0-E1;    
+    u32 SupportIndex0 = FindRectangleSupportIndex(Direction);
+    u32 AdjVerticalSupportIndex0 = FindAdjVerticalSupportIndex(SupportIndex0);
+    u32 AdjHorizontalSupportIndex0 = FindAdjHorizontalSupportIndex(SupportIndex0);
+    
+    u32 SupportIndex1 = FindRectangleSupportIndex(-Direction);
+    u32 AdjVerticalSupportIndex1 = FindAdjVerticalSupportIndex(SupportIndex1);
+    u32 AdjHorizontalSupportIndex1 = FindAdjHorizontalSupportIndex(SupportIndex1);
+    
+    v2f HalfDim = Dim*0.5f;
+    v2f Offsets[4] = 
+    {
+        -HalfDim, 
+        V2(HalfDim.x, -HalfDim.y),
+        V2(-HalfDim.x, HalfDim.y),
+        HalfDim
+    };
+    
+    //TODO(JJ): We need to handle this case
+    ASSERT((SupportIndex1 == AdjVerticalSupportIndex0) || (SupportIndex1 == AdjHorizontalSupportIndex0));
+    
+    v2f Edges[6][2] = 
+    {
+        {E0 + Offsets[SupportIndex0], E0 + Offsets[AdjHorizontalSupportIndex0]},
+        {E0 + Offsets[SupportIndex0], E0 + Offsets[AdjVerticalSupportIndex0]},
+        {E1 + Offsets[SupportIndex1], E1 + Offsets[AdjHorizontalSupportIndex1]},
+        {E1 + Offsets[SupportIndex1], E1 + Offsets[AdjVerticalSupportIndex1]},
+        {Edges[1][1], Edges[3][1]},
+        {Edges[0][1], Edges[2][1]}
+    };        
+    
+    time_result_2D Result = InvalidTimeResult2D();
+    for(u32 EdgeIndex = 0; EdgeIndex < 6; EdgeIndex++)
+    {
+        f32 t;
+        if(EdgeIntersections2D(CenterP0, CenterP1, Edges[EdgeIndex][0], Edges[EdgeIndex][1], &t, NULL) && (t < Result.Time))
+        {
+            v2f CenterP10 = CenterP1-CenterP0;
+            Result.ContactPoint = CenterP0 + t*CenterP10;
+            
+            if(Normal)
+            {
+                *Normal = Normalize(PerpCCW(Edges[EdgeIndex][1] - Edges[EdgeIndex][0]));
+                if(Dot(*Normal, CenterP10) > 0)
+                    *Normal = Negate(*Normal);                                
+            }
+            
+            Result.Time = MaximumF32(0.0f, t);
         }
     }
     

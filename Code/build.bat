@@ -31,14 +31,14 @@ popd
 
 pushd ..\data\shaders\vulkan
 IF %COMPILE_SHADERS% == 1 (
-    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_vertex.spv
-    glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\test_box.glsl -o test_box_fragment.spv
-
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\opaque_shading.glsl -o opaque_shading_vertex.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\opaque_shading.glsl -o opaque_shading_fragment.spv
 
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_volumes.glsl -o debug_volumes_vertex.spv
     glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\debug_volumes.glsl -o debug_volumes_fragment.spv
+
+    glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\quad.glsl -o quad_vertex.spv
+    glslc -O0 -DFRAGMENT -fshader-stage=fragment ..\..\..\code\shaders\glsl\4.5\quad.glsl -o quad_fragment.spv
 
     glslc -O0 -DVERTEX   -fshader-stage=vertex   ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_vertex.spv
     glslc -O0 -DGEOMETRY -fshader-stage=geometry ..\..\..\code\shaders\glsl\4.5\debug_point.glsl -o debug_point_geometry.spv

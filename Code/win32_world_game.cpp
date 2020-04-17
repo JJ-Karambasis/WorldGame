@@ -523,9 +523,7 @@ AudioThread(void* Paramter)
         while(Delta < TargetSecondsPerFrame)        
             Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);        
         
-        FlipWallClock = Global_Platform->Clock();
-        
-        CONSOLE_LOG("Sample Index %d\n", PlayingSampleIndex);
+        FlipWallClock = Global_Platform->Clock();        
     }
 #endif        
 }

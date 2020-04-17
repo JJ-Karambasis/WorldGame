@@ -1039,7 +1039,7 @@ RENDER_GAME(RenderGame)
             v3f PlayerY = V3(Player->FacingDirection, 0.0f);
             v3f PlayerX = Cross(PlayerY, PlayerZ);
             
-            for(entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
+            for(box_entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
             {                
                 m4 Model = TransformM4(Entity->Transform);
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
@@ -1092,9 +1092,9 @@ RENDER_GAME(RenderGame)
                 
                 u32 DEBUGBoxVertexOffset = CapsuleCap->Vertices.Count+CapsuleBody->Vertices.Count;
                 u32 DEBUGBoxIndexOffset = CapsuleCap->Indices.Count+CapsuleBody->Indices.Count;
-                for(entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
+                for(box_entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
                 {                   
-                    aabb3D AABB = TransformAABB3D(Entity->AABB, Entity->Transform);
+                    aabb3D AABB = GetAABB(Entity);
                     
                     v3f Dim = GetAABB3DDim(AABB);                    
                     v3f Position = V3(AABB.Min.xy + Dim.xy*0.5f, AABB.Min.z);
@@ -1137,6 +1137,27 @@ RENDER_GAME(RenderGame)
                 vkCmdDraw(CommandBuffer, 1, 1, 0, 0);
             }
             PrimitiveContext->PointCount = 0;            
+            
+            vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->QuadPipeline);
+            vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PrimitiveContext->QuadPipelineLayout, 0, 1, &PrimitiveContext->QuadDescriptorSet, 0, VK_NULL_HANDLE);
+            
+            if(DevGame->TurnBlockerDrawingOn)
+            {
+                vkCmdPushConstants(CommandBuffer, PrimitiveContext->QuadPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(v4f[4]), sizeof(c4), &Global_Red);
+                for(blocker* Blocker = World->Blockers.First; Blocker; Blocker = Blocker->Next)
+                {
+                    v4f QuadVertices[4] = 
+                    {
+                        V4(Blocker->P0, 1.0f), 
+                        V4(Blocker->P1, 1.0f), 
+                        V4(Blocker->P1.xy, Blocker->P1.z + Blocker->Height1, 1.0f),
+                        V4(Blocker->P0.xy, Blocker->P0.z + Blocker->Height0, 1.0f)
+                    };
+                    
+                    vkCmdPushConstants(CommandBuffer, PrimitiveContext->QuadPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(v4f[4]), QuadVertices);
+                    vkCmdDraw(CommandBuffer, 6, 1, 0, 0);
+                }
+            }
             
             debug_imgui_context* ImGuiContext = &DevGraphics->ImGuiContext;            
             ImDrawData* ImGuiData = ImGui::GetDrawData();
@@ -1491,20 +1512,20 @@ b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
     
     VkDescriptorPoolSize PoolSizes[2] = {};
     PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    PoolSizes[0].descriptorCount = 3;
+    PoolSizes[0].descriptorCount = 4;
     
     PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     PoolSizes[1].descriptorCount = 1;
     
     VkDescriptorPoolCreateInfo DescriptorPoolInfo = {};
     DescriptorPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    DescriptorPoolInfo.maxSets = 4;
+    DescriptorPoolInfo.maxSets = 5;
     DescriptorPoolInfo.poolSizeCount = ARRAYCOUNT(PoolSizes);
     DescriptorPoolInfo.pPoolSizes = PoolSizes;
     
     VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorPool(Graphics->Device, &DescriptorPoolInfo, VK_NULL_HANDLE, &Graphics->DescriptorPool),
                             "Failed to create the descriptor pool.");
-        
+    
     VkShaderModule OpaqueVertex   = CreateShader("shaders/vulkan/opaque_shading_vertex.spv");
     VkShaderModule OpaqueFragment = CreateShader("shaders/vulkan/opaque_shading_fragment.spv");
     
@@ -1518,13 +1539,13 @@ b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
     DescriptorBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     
     VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutInfo = {};
+    
     DescriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     DescriptorSetLayoutInfo.bindingCount = 1;
     DescriptorSetLayoutInfo.pBindings = &DescriptorBinding;
     
     VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(Graphics->Device, &DescriptorSetLayoutInfo, VK_NULL_HANDLE, &Graphics->DescriptorSetLayout),
                             "Failed to create the descriptor set layout.");
-    
     VkPushConstantRange PushConstantRanges[2] = {};
     PushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     PushConstantRanges[0].offset = 0;
@@ -1563,7 +1584,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
     ShaderStages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
     ShaderStages[1].module = OpaqueFragment;
     ShaderStages[1].pName  = "main";    
-        
+    
     VkVertexInputBindingDescription InputBindingDescription = {};
     InputBindingDescription.binding = 0;
     InputBindingDescription.stride = sizeof(graphics_vertex);
@@ -1745,7 +1766,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
     
     VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &PointGraphicsPipelineInfo, VK_NULL_HANDLE, &PrimitiveContext->PointPipeline),
                             "Failed to create the debug point graphics pipeline.");
-    
+    ;
     vkDestroyShaderModule(DevGraphics->Device, DebugPointVertex, VK_NULL_HANDLE);
     vkDestroyShaderModule(DevGraphics->Device, DebugPointGeometry, VK_NULL_HANDLE);        
     vkDestroyShaderModule(DevGraphics->Device, DebugPointFragment, VK_NULL_HANDLE);
@@ -1815,6 +1836,87 @@ b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
     vkDestroyShaderModule(DevGraphics->Device, DebugLineVertex, VK_NULL_HANDLE);
     vkDestroyShaderModule(DevGraphics->Device, DebugLineGeometry, VK_NULL_HANDLE);
     vkDestroyShaderModule(DevGraphics->Device, DebugLineFragment, VK_NULL_HANDLE);
+    
+    VkShaderModule DebugQuadVertex = CreateShader("shaders/vulkan/quad_vertex.spv");
+    VkShaderModule DebugQuadFragment = CreateShader("shaders/vulkan/quad_fragment.spv");        
+    
+    VkDescriptorSetLayoutBinding QuadDescriptorBinding = {};
+    QuadDescriptorBinding.binding = 0;
+    QuadDescriptorBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    QuadDescriptorBinding.descriptorCount = 1;
+    QuadDescriptorBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    
+    VkDescriptorSetLayoutCreateInfo QuadDescriptorSetLayoutInfo = {};
+    QuadDescriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    QuadDescriptorSetLayoutInfo.bindingCount = 1;
+    QuadDescriptorSetLayoutInfo.pBindings = &QuadDescriptorBinding;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateDescriptorSetLayout(Graphics->Device, &QuadDescriptorSetLayoutInfo, VK_NULL_HANDLE, &PrimitiveContext->QuadDescriptorSetLayout),
+                            "Failed to create the quad descriptor set layout.");
+    
+    VkPushConstantRange QuadPushConstantRanges[2] = {};
+    QuadPushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    QuadPushConstantRanges[0].offset = 0;
+    QuadPushConstantRanges[0].size = sizeof(v4f[4]);
+    
+    QuadPushConstantRanges[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    QuadPushConstantRanges[1].offset = sizeof(v4f[4]);
+    QuadPushConstantRanges[1].size = sizeof(c4);
+    
+    VkPipelineLayoutCreateInfo QuadPipelineLayoutInfo = {};
+    QuadPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    QuadPipelineLayoutInfo.setLayoutCount = 1;
+    QuadPipelineLayoutInfo.pSetLayouts = &PrimitiveContext->QuadDescriptorSetLayout;
+    QuadPipelineLayoutInfo.pushConstantRangeCount = ARRAYCOUNT(QuadPushConstantRanges);
+    QuadPipelineLayoutInfo.pPushConstantRanges = QuadPushConstantRanges;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreatePipelineLayout(Graphics->Device, &QuadPipelineLayoutInfo, VK_NULL_HANDLE, &PrimitiveContext->QuadPipelineLayout),
+                            "Failed to create the quad pipeline layout.");
+    
+    VkDescriptorSetAllocateInfo QuadDescriptorSetInfo = {};
+    QuadDescriptorSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    QuadDescriptorSetInfo.descriptorPool = Graphics->DescriptorPool;
+    QuadDescriptorSetInfo.descriptorSetCount = 1;
+    QuadDescriptorSetInfo.pSetLayouts = &PrimitiveContext->QuadDescriptorSetLayout;
+    
+    VULKAN_CHECK_AND_HANDLE(vkAllocateDescriptorSets(Graphics->Device, &QuadDescriptorSetInfo, &PrimitiveContext->QuadDescriptorSet),
+                            "Failed to allocate the quad descriptor set.");
+    
+    VkPipelineShaderStageCreateInfo QuadShaderStages[2] = {};
+    QuadShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    QuadShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    QuadShaderStages[0].module = DebugQuadVertex;
+    QuadShaderStages[0].pName = "main";
+    
+    QuadShaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    QuadShaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    QuadShaderStages[1].module = DebugQuadFragment;
+    QuadShaderStages[1].pName = "main";        
+    
+    VkGraphicsPipelineCreateInfo QuadPipelineInfo = {};
+    QuadPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    QuadPipelineInfo.stageCount = ARRAYCOUNT(QuadShaderStages);
+    QuadPipelineInfo.pStages = QuadShaderStages;
+    QuadPipelineInfo.pVertexInputState = EmptyVertexInputState();
+    QuadPipelineInfo.pInputAssemblyState = TriangleListInputAssemblyState();
+    QuadPipelineInfo.pViewportState = SingleViewportState();
+    QuadPipelineInfo.pRasterizationState = DefaultCullNoneRasterizationState();
+    QuadPipelineInfo.pMultisampleState = DefaultMultisampleState();
+    QuadPipelineInfo.pColorBlendState = DefaultColorBlendState();
+    QuadPipelineInfo.pDepthStencilState = DepthOnState();
+    QuadPipelineInfo.pDynamicState = ViewportScissorDynamicState();
+    QuadPipelineInfo.layout = PrimitiveContext->QuadPipelineLayout;
+    QuadPipelineInfo.renderPass = Graphics->RenderPass;
+    QuadPipelineInfo.subpass = 0;
+    
+    VULKAN_CHECK_AND_HANDLE(vkCreateGraphicsPipelines(Graphics->Device, VK_NULL_HANDLE, 1, &QuadPipelineInfo, VK_NULL_HANDLE, &PrimitiveContext->QuadPipeline),
+                            "Failed to create the quad graphics pipeline.");    
+    
+    BOOL_CHECK_AND_HANDLE(DebugQuadVertex, "Failed to create the debug quad vertex shader.");
+    BOOL_CHECK_AND_HANDLE(DebugQuadFragment, "Failed to create the debug quad fragment shader.");
+    
+    vkDestroyShaderModule(DevGraphics->Device, DebugQuadVertex, VK_NULL_HANDLE);
+    vkDestroyShaderModule(DevGraphics->Device, DebugQuadFragment, VK_NULL_HANDLE);
     
     debug_volume_context* VolumeContext = &DevGraphics->VolumeContext;    
     VkDescriptorSetLayoutBinding DebugVolumeDescriptorBinding = {};
@@ -2205,7 +2307,7 @@ b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
     DescriptorImageInfo.imageView = ImGuiContext->FontImageView;
     DescriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;        
     
-    VkWriteDescriptorSet DebugDescriptorWrites[3] = {};    
+    VkWriteDescriptorSet DebugDescriptorWrites[4] = {};    
     DebugDescriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     DebugDescriptorWrites[0].dstSet = PrimitiveContext->DescriptorSet;
     DebugDescriptorWrites[0].dstBinding = 0;
@@ -2229,6 +2331,14 @@ b32 VulkanInit(void* PlatformSurfaceInfo, assets* Assets)
     DebugDescriptorWrites[2].descriptorCount = 1;
     DebugDescriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     DebugDescriptorWrites[2].pImageInfo = &DescriptorImageInfo;
+    
+    DebugDescriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    DebugDescriptorWrites[3].dstSet = PrimitiveContext->QuadDescriptorSet;
+    DebugDescriptorWrites[3].dstBinding = 0;
+    DebugDescriptorWrites[3].dstArrayElement = 0;
+    DebugDescriptorWrites[3].descriptorCount = 1;
+    DebugDescriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    DebugDescriptorWrites[3].pBufferInfo = &DescriptorBufferInfo;    
     
     vkUpdateDescriptorSets(DevGraphics->Device, ARRAYCOUNT(DebugDescriptorWrites), DebugDescriptorWrites, 0, VK_NULL_HANDLE);    
     

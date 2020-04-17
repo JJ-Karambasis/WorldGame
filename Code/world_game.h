@@ -33,9 +33,6 @@ struct game
     world Worlds[2];        
 };
 
-#define MOVE_ACCELERATION 20.0f
-#define MOVE_DAMPING 5.0f
-
 #define GAME_TICK(name) void name(game* Game, graphics* Graphics, platform* Platform)
 typedef GAME_TICK(game_tick);
 

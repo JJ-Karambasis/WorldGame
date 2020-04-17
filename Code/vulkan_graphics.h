@@ -210,6 +210,8 @@ struct vulkan_graphics : public graphics
     VkDeviceMemory IndexBufferMemory;
     VkBuffer CameraBuffer;
     m4* CameraBufferData;
+    
+    
     render_buffer RenderBuffer;  
     upload_buffer UploadBuffer;
 };
@@ -234,6 +236,14 @@ struct debug_line
     c4 Color;
 };
 
+struct debug_quad
+{
+    v3f Position0;
+    v3f Position1;
+    v3f Position2;
+    v3f Position3;
+};
+
 struct debug_primitive_context
 {
     VkDescriptorSetLayout DescriptorSetLayout;
@@ -245,11 +255,19 @@ struct debug_primitive_context
     VkPipelineLayout LinePipelineLayout;
     VkPipeline LinePipeline;        
     
+    VkDescriptorSetLayout QuadDescriptorSetLayout;
+    VkDescriptorSet QuadDescriptorSet;
+    VkPipelineLayout QuadPipelineLayout;        
+    VkPipeline QuadPipeline;
+    
     u32 PointCount;
     debug_point DebugPoints[8096];
     
     u32 LineCount;
     debug_line DebugLines[2048];    
+        
+    u32 QuadCount;
+    debug_quad DebugQuads[2048];
 };
 
 struct debug_volume_context

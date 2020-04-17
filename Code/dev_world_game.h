@@ -59,6 +59,7 @@ struct development_game : public game
     b32 DevInitialized;        
     bool TurnOnVolumeOutline;
     bool TurnAudioOn;
+    bool TurnBlockerDrawingOn;
     
     f32 LastTickFrameTime;
 };

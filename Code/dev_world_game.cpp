@@ -99,6 +99,22 @@ char* GetStringRecordingStateUI(recording_state RecordingState)
     return NULL;
 }
 
+char* GetStringPlayerStateUI(player_state PlayerState)
+{
+    switch(PlayerState)
+    {
+        case PLAYER_STATE_DEFAULT:
+        return "Default";
+        
+        case PLAYER_STATE_PUSHING:
+        return "Pushing";
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return NULL;
+}
+
 void DevelopmentTick(development_game* Game)
 {
     ImGui::NewFrame();
@@ -207,6 +223,18 @@ void DevelopmentTick(development_game* Game)
     
     ImGui::Text("MS/f %f", Game->LastTickFrameTime*1000.0f);
     
+    ImGui::Text("Current World Index %d", Game->CurrentWorldIndex);
+    
+    ImGui::Text("Player 0:\n\t State: %s\n\t Position: (%.3f, %.3f, %.3f)\n\t Velocity: (%.3f, %.3f, %.3f)", 
+                GetStringPlayerStateUI(Game->Worlds[0].Player.State),
+                Game->Worlds[0].Player.Position.x, Game->Worlds[0].Player.Position.y, Game->Worlds[0].Player.Position.z, 
+                Game->Worlds[0].Player.Velocity.x, Game->Worlds[0].Player.Velocity.y, Game->Worlds[0].Player.Velocity.z);
+    
+    ImGui::Text("Player 1:\n\t State: %s\n\t Position: (%.3f, %.3f, %.3f)\n\t Velocity: (%.3f, %.3f, %.3f)", 
+                GetStringPlayerStateUI(Game->Worlds[1].Player.State),
+                Game->Worlds[1].Player.Position.x, Game->Worlds[1].Player.Position.y, Game->Worlds[1].Player.Position.z, 
+                Game->Worlds[1].Player.Velocity.x, Game->Worlds[1].Player.Velocity.y, Game->Worlds[1].Player.Velocity.z);    
+    
     ImGui::Text("Recording state %s", GetStringRecordingStateUI(Recording->RecordingState));        
     
     if((Recording->RecordingState == RECORDING_STATE_PLAYBACK) ||
@@ -220,8 +248,6 @@ void DevelopmentTick(development_game* Game)
         }        
     }
     
-    ImGui::Text("Current World Index %d", Game->CurrentWorldIndex);
-    
     ImGui::Text("World 0 Walking Triangle Count %d", Game->WalkingTriangleCount[0]); 
     Game->WalkingTriangleCount[0] = 0;
     
@@ -229,6 +255,8 @@ void DevelopmentTick(development_game* Game)
     Game->WalkingTriangleCount[1] = 0;
     
     ImGui::Text("Max GJK Iterations %d", Game->MaxGJKIterations);    
+    
+    ImGui::Checkbox("Show Blockers", &Game->TurnBlockerDrawingOn);
     ImGui::Checkbox("Show Debug Volumes", &Game->TurnOnVolumeOutline);
     
     b32 AudioStatus = Game->TurnAudioOn;

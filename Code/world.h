@@ -3,11 +3,9 @@
 
 #include "player.h"
 
-struct entity
+struct box_entity
 {    
-    b32 Simulate;   
-    triangle3D_mesh* WalkableMesh;    
-    aabb3D AABB;        
+    b32 Walkable;       
     
     union
     {
@@ -22,10 +20,10 @@ struct entity
     c4 Color;
     v3f Velocity;        
     
-    entity* Link;
+    box_entity* Link;
     
-    entity* Next;
-    entity* Prev;
+    box_entity* Next;
+    box_entity* Prev;
 };
 
 struct blocker
@@ -48,8 +46,8 @@ struct blocker_list
 
 struct entity_list
 {
-    entity* First;
-    entity* Last;
+    box_entity* First;
+    box_entity* Last;
     u32 Count;
 };
 
