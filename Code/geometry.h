@@ -252,15 +252,30 @@ struct penetration_result
     f32 Distance;
 };
 
-struct time_result_2D
+struct penetration_result_2D
 {
+    b32 Hit;
+    v2f Normal;
+    f32 Distance;
+};
+
+struct time_result_2D
+{    
     f32 Time;
     v2f ContactPoint;
+    v2f Normal;
 };
+
+inline time_result_2D CreateTimeResult(f32 Time)
+{
+    time_result_2D Result = {};
+    Result.Time = Time;
+    return Result;
+}
 
 inline time_result_2D InvalidTimeResult2D()
 {
-    time_result_2D Result;
+    time_result_2D Result = {};
     Result.Time = FLT_MAX;
     Result.ContactPoint = InvalidV2();
     return Result;

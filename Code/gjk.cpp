@@ -455,11 +455,12 @@ gjk_result GJK(support_function* SupportA, void* SupportAData,
     Simplex.ClosestDistance = FLT_MAX;
 
     v3f CsoD = V3(1.0f, 0.0f, 0.0f);    
-    u32 MaxIterations = GJK_MAX_ITERATIONS;
     
-    u32 Iteration = 0;
-    for(Iteration = 0; Iteration < MaxIterations; Iteration++)
-    {
+    //TODO(JJ): Cap this out
+    for(u32 Iteration = 0; ; Iteration++)
+    {        
+        DEVELOPER_MAX_GJK_ITERATIONS(Iteration);           
+        
         v3f ASupportPos = SupportA(SupportAData, -CsoD);
         v3f BSupportPos = SupportB(SupportBData,  CsoD);
         CsoD = BSupportPos - ASupportPos;
@@ -471,7 +472,7 @@ gjk_result GJK(support_function* SupportA, void* SupportAData,
         Vertex->ASupportPos = ASupportPos;
         Vertex->BSupportPos = BSupportPos;        
         Vertex->CsoD = CsoD;
-
+        
         Simplex.Barycentric[Simplex.VertexCount++] = 1.0f;
         switch(Simplex.VertexCount)
         {
@@ -499,17 +500,13 @@ gjk_result GJK(support_function* SupportA, void* SupportAData,
         
         if(!AreGettingCloser(&Simplex))        
             break;
-
+        
         CsoD = NewSearchDirection(&Simplex);
         
         if(SquareMagnitude(CsoD) < (GJK_EPSILON*GJK_EPSILON))
-            break;        
+            break;                
     }
 
-    ASSERT(Iteration < MaxIterations);
-    
-    DEVELOPER_MAX_GJK_ITERATIONS(Iteration);   
-    
     f32 BarycentricRatio = GetInvTotalBarycentric(Simplex.Barycentric, Simplex.VertexCount);
     switch(Simplex.VertexCount)
     {

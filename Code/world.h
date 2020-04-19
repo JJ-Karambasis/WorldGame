@@ -3,9 +3,16 @@
 
 #include "player.h"
 
+enum box_entity_type
+{
+    BOX_ENTITY_TYPE_DEFAULT,
+    BOX_ENTITY_TYPE_WALKABLE,
+    BOX_ENTITY_TYPE_PUSHABLE
+};
+
 struct box_entity
 {    
-    b32 Walkable;       
+    box_entity_type Type;    
     
     union
     {

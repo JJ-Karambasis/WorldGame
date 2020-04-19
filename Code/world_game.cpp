@@ -3,61 +3,6 @@
 #include "audio.cpp"
 #include "world.cpp"
 
-inline box_entity* CreateEntity(game* Game, u32 WorldIndex, b32 Walkable, v3f Position, v3f Scale, v3f Euler, c4 Color)
-{
-    box_entity* Result = PushStruct(&Game->GameStorage, box_entity, Clear, 0);        
-    Result->Transform = CreateSQT(Position, Scale, Euler);
-    Result->Color = Color;    
-    Result->Walkable = Walkable;
-    
-    AddToList(&Game->Worlds[WorldIndex].Entities, Result);
-    
-    return Result;
-}
-
-inline void
-CreateEntityInBothWorlds(game* Game, b32 Walkable, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
-{
-    CreateEntity(Game, 0, Walkable, Position, Scale, Euler, Color0);
-    CreateEntity(Game, 1, Walkable, Position, Scale, Euler, Color1);
-}
-
-inline void
-CreateLinkedEntities(game* Game, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
-{
-    box_entity* A = CreateEntity(Game, 0, false, Position0, Scale0, Euler0, Color0);
-    box_entity* B = CreateEntity(Game, 1, false, Position1, Scale1, Euler1, Color1);
-    
-    A->Link = B;
-    B->Link = A;
-}
-
-inline void
-CreateLinkedEntities(game* Game, b32 Simulate, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)                      
-{
-    CreateLinkedEntities(Game, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);    
-}
-
-inline blocker*
-CreateBlocker(game* Game, u32 WorldIndex, v3f P0, f32 Height0, v3f P1, f32 Height1)
-{
-    blocker* Blocker = PushStruct(&Game->GameStorage, blocker, Clear, 0);
-    Blocker->P0 = P0;
-    Blocker->P1 = P1;
-    Blocker->Height0 = Height0;
-    Blocker->Height1 = Height1;
-    
-    AddToList(&Game->Worlds[WorldIndex].Blockers, Blocker);
-    
-    return Blocker;
-}
-
-inline void CreateBlockersInBothWorlds(game* Game, v3f P0, f32 Height0, v3f P1, f32 Height1)
-{
-    CreateBlocker(Game, 0, P0, Height0, P1, Height1);
-    CreateBlocker(Game, 1, P0, Height0, P1, Height1);
-}
-
 extern "C"
 EXPORT GAME_TICK(Tick)
 {   
@@ -74,31 +19,34 @@ EXPORT GAME_TICK(Tick)
         Game->Initialized = true;
         Game->GameStorage = CreateArena(KILOBYTE(32));
         
+        Game->PlayerRadius = 0.35f;
+        Game->PlayerHeight = 1.0f;        
+        
         Game->Worlds[0].Player.Color = RGBA(0.0f, 0.0f, 1.0f, 1.0f);
         Game->Worlds[0].Player.Position = V3(0.0f, 0.0f, 1.0f);
-        Game->Worlds[0].Player.FacingDirection = V2(0.0f, 1.0f);
+        Game->Worlds[0].Player.FacingDirection = V2(0.0f, 1.0f);        
         
         Game->Worlds[1].Player.Color = RGBA(1.0f, 0.0f, 0.0f, 1.0f);
         Game->Worlds[1].Player.Position = V3(0.0f, 0.0f, 1.0f);
         Game->Worlds[1].Player.FacingDirection = V2(0.0f, 1.0f);        
         
-        CreateEntityInBothWorlds(Game, true, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
-        CreateEntityInBothWorlds(Game, true, V3(0.0f, 0.0f, 10.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
+        CreateEntityInBothWorlds(Game, BOX_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
+        CreateEntityInBothWorlds(Game, BOX_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 10.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
         
         CreateBlockersInBothWorlds(Game, V3(-5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f,  5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3(-5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f,  5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3( 5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f, -5.0f, 1.0f), 1.0f);
-        CreateBlockersInBothWorlds(Game, V3( 5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f, -5.0f, 1.0f), 1.0f);
-        CreateBlockersInBothWorlds(Game, V3( 3.0f, -3.0f, 1.0f), 1.0f, V3( 2.0f,  3.0f, 1.0f), 1.0f);
+        CreateBlockersInBothWorlds(Game, V3( 5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f, -5.0f, 1.0f), 1.0f);                
         
-        CreateLinkedEntities(Game, true, V3(0.0f, -2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
+        CreateEntityInBothWorlds(Game, BOX_ENTITY_TYPE_DEFAULT, V3(0.0f, -2.5f, 1.0f), V3(5.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
+        CreateLinkedEntities(Game, BOX_ENTITY_TYPE_PUSHABLE, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
     }            
     
     if(IsPressed(Game->Input->SwitchWorld))
         Game->CurrentWorldIndex = !Game->CurrentWorldIndex;
     
-    UpdateWorld(Game, 0);
-    UpdateWorld(Game, 1);
+    UpdateWorld2(Game, 0);
+    UpdateWorld2(Game, 1);
     
 #if DEVELOPER_BUILD
     development_game* DevGame = (development_game*)Game;

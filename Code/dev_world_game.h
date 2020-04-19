@@ -56,6 +56,7 @@ struct development_game : public game
     frame_recording FrameRecordings;
     u32 WalkingTriangleCount[2];
     u32 MaxGJKIterations;
+    u32 MaxTimeIterations;
     b32 DevInitialized;        
     bool TurnOnVolumeOutline;
     bool TurnAudioOn;

@@ -30,7 +30,10 @@ struct game
     
     f32 dt;
     u32 CurrentWorldIndex;
+    
     world Worlds[2];        
+    f32 PlayerRadius;
+    f32 PlayerHeight;
 };
 
 #define GAME_TICK(name) void name(game* Game, graphics* Graphics, platform* Platform)
@@ -48,6 +51,7 @@ global development_game* __Internal_Developer_Game__;
 #define DEVELOPER_GAME(Game) __Internal_Developer_Game__ = (development_game*)Game
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) __Internal_Developer_Game__->MaxGJKIterations = MaximumI32(__Internal_Developer_Game__->MaxGJKIterations, Iterations)
 #define DEVELOPER_INCREMENT_WALKING_TRIANGLE() __Internal_Developer_Game__->WalkingTriangleCount[WorldIndex]++
+#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) __Internal_Developer_Game__->MaxTimeIterations = MaximumI32(__Internal_Developer_Game__->MaxTimeIterations, Iterations)
 
 global graphics* __Internal_Developer_Graphics__;
 #define DEVELOPER_GRAPHICS(Graphics) __Internal_Developer_Graphics__ = Graphics
@@ -66,7 +70,7 @@ do \
 #define DEVELOPER_GAME(Game)
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
 #define DEVELOPER_INCREMENT_WALKING_TRIANGLE()
-
+#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations)
 #define DEVELOPER_GRAPHICS(Graphics)
 #define DRAW_POINT(position, size, color)
 #define DRAW_LINE(position0, position1, width, height, color)

@@ -254,6 +254,7 @@ void DevelopmentTick(development_game* Game)
     ImGui::Text("World 1 Walking Triangle Count %d", Game->WalkingTriangleCount[1]); 
     Game->WalkingTriangleCount[1] = 0;
     
+    ImGui::Text("Max Time Iterations %d", Game->MaxTimeIterations);
     ImGui::Text("Max GJK Iterations %d", Game->MaxGJKIterations);    
     
     ImGui::Checkbox("Show Blockers", &Game->TurnBlockerDrawingOn);

@@ -546,8 +546,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     Assets.Arena = CreateArena(MEGABYTE(64));
     
     Assets.BoxTriangleMesh = CreateBoxTriangleMesh(&Assets.Arena);
-    Assets.BoxGraphicsMesh = DEBUGGraphicsLoadMesh(&Assets.Arena, "Box.obj");
-    Assets.TestAudio = DEBUGLoadWAVFile("Test.wav");
+    Assets.BoxGraphicsMesh = DEBUGGraphicsLoadMesh(&Assets.Arena, "Box.obj");    
     
     string EXEFilePathName = Win32_GetExePathWithName();
     string EXEFilePath = GetFilePath(EXEFilePathName);    
@@ -651,8 +650,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!GameCode.GameLibrary.Library)    
         WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
     
+#if 0 
+    Assets.TestAudio = DEBUGLoadWAVFile("Test.wav");
     CloseHandle(CreateThread(NULL, 0, AudioThread, &Game, 0, NULL));
-    
+#endif
     Game.dt = 1.0f/60.0f; 
     u64 StartTime = Win32_Clock();
     for(;;)

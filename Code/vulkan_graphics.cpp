@@ -1065,11 +1065,11 @@ RENDER_GAME(RenderGame)
             {                
                 vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Player->Color);
                 
-                v3f BodyZ = PlayerZ*Player->Height;
+                v3f BodyZ = PlayerZ*Game->PlayerHeight;
                 
-                v3f XAxis = PlayerX*Player->Radius;
-                v3f YAxis = PlayerY*Player->Radius;
-                v3f ZAxis = PlayerZ*Player->Radius;
+                v3f XAxis = PlayerX*Game->PlayerRadius;
+                v3f YAxis = PlayerY*Game->PlayerRadius;
+                v3f ZAxis = PlayerZ*Game->PlayerRadius;
                 
                 v3f BottomPosition = Player->Position+ZAxis;
                 m4 Model = TransformM4(BottomPosition, M3(XAxis, YAxis, -ZAxis));                

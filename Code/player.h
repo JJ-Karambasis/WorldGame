@@ -10,18 +10,21 @@ enum player_state
     PLAYER_STATE_PUSHING
 };
 
+struct pushing_state
+{
+    struct box_entity* Object;
+    v2f Direction;
+};
+
 struct player
 {
     v3f Position;
-    f32 Radius;
-    f32 Height;
     v2f FacingDirection;
     c4 Color;
     v3f Velocity;
     
     player_state State;
-    struct box_entity* PushingBlock;
-    v2f PushDirection;
+    pushing_state Pushing;    
 };
 
 void UpdatePlayer(game* Game, u32 WorldIndex);
