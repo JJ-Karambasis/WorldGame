@@ -13,6 +13,7 @@ EXPORT GAME_TICK(Tick)
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     
     u64 Start = Global_Platform->Clock();
+    u64 StartCycles = GetCycles();
     
     if(!Game->Initialized)
     {        
@@ -116,4 +117,5 @@ EXPORT GAME_TICK(Tick)
     }   
     
     DevGame->LastTickFrameTime = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), Start);
+    DevGame->LastFrameCycles = GetCycles()-StartCycles;
 }

@@ -222,6 +222,7 @@ void DevelopmentTick(development_game* Game)
     ImGui::Begin("Dev Editor");
     
     ImGui::Text("MS/f %f", Game->LastTickFrameTime*1000.0f);
+    ImGui::Text("Cycles %d", Game->LastFrameCycles);
     
     ImGui::Text("Current World Index %d", Game->CurrentWorldIndex);
     
