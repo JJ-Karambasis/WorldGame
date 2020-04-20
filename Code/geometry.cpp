@@ -289,9 +289,15 @@ f32 FindLineZ(edge3D Line, v2f P)
     return Result;
 }
 
+b32 IsPointBehindLine2D(v2f LineP, v2f N, v2f P)
+{
+    b32 Result = Dot(P-LineP, N) < 0.0f;
+    return Result;
+}
+
 b32 IsPointBehindLine2D(v2f* Line, v2f N, v2f P)
 {
-    b32 Result = Dot(P-Line[0], N) < 0.0f;
+    b32 Result = IsPointBehindLine2D(Line[0], N, P);
     return Result;
 }
 
@@ -651,9 +657,7 @@ time_result_2D MovingCircleEdgeIntersectionTime2D(v2f P0, v2f P1, f32 Radius, v2
     penetration_result_2D InitialPenetration = CircleEdgePenetrationResult2D(P0, Radius, E0, E1);
     if(InitialPenetration.Hit)
     {
-        Result.Time = 0.0f;
-        Result.Normal = InitialPenetration.Normal;
-        Result.ContactPoint = P0 + InitialPenetration.Normal*InitialPenetration.Distance;
+        Result = CreateTimeResult(InitialPenetration, P0);        
         return Result;
     }
     
@@ -727,9 +731,7 @@ time_result_2D MovingCircleRectangleIntersectionTime2D(v2f CenterP0, v2f CenterP
     penetration_result_2D InitialPenetration = CircleRectanglePenetrationResult2D(CenterP0, Radius, RectMin, RectMax);
     if(InitialPenetration.Hit)
     {
-        Result.Time = 0.0f;
-        Result.Normal = InitialPenetration.Normal;
-        Result.ContactPoint = CenterP0 + InitialPenetration.Normal*InitialPenetration.Distance;
+        Result = CreateTimeResult(InitialPenetration, CenterP0);        
         return Result;
     }
     
@@ -808,10 +810,61 @@ u32 FindAdjHorizontalSupportIndex(u32 SupportIndex)
     return (u32)-1;
 }
 
-time_result_2D MovingRectangleEdgeIntersectionTime2D(v2f CenterP0, v2f CenterP1, v2f Dim, v2f E0, v2f E1)
+penetration_result_2D RectangleEdgePenetrationResult2D(v2f CenterP, v2f HalfDim, v2f E0, v2f E1)
 {
-    //TODO(JJ): Will need to do a penetration test against the edge in case the rectangle initially intersections
-    //the edge to find the right contact point and contact normal
+    penetration_result_2D Result = {};
+    
+    v2f ClosestPoint = PointLineSegmentClosestPoint2D(E0, E1, CenterP);
+    v2f Normal = Normalize(CenterP-ClosestPoint);
+    
+    v2f Offsets[4] = 
+    {
+        -HalfDim, 
+        V2(HalfDim.x, -HalfDim.y),
+        V2(-HalfDim.x, HalfDim.y),
+        HalfDim
+    };
+    
+    f32 BestDistance = -FLT_MAX;
+        
+    for(u32 PointIndex = 0; PointIndex < 4; PointIndex++)
+    {
+        v2f TestP = CenterP+Offsets[PointIndex];
+        
+        //NOTE(EVERYONE): It must be penetrating to return results. If it is on the line skip since the distance is so small
+        if(IsPointOnLine2D(E0, E1, TestP))
+            continue;
+        
+        if(IsPointBehindLine2D(E0, Normal, TestP))
+        {                    
+            v2f P = PointLineSegmentClosestPoint2D(E0, E1, TestP);                                
+            f32 Distance = SquareMagnitude(P-TestP);
+            if(Distance > BestDistance)            
+                BestDistance = Distance;       
+        }
+    }
+    
+    if(BestDistance != -FLT_MAX)
+    {
+        Result.Hit = true;
+        Result.Normal = Normal;
+        Result.Distance = Sqrt(BestDistance);
+    }
+    
+    return Result;
+}
+
+time_result_2D MovingRectangleEdgeIntersectionTime2D(v2f CenterP0, v2f CenterP1, v2f Dim, v2f E0, v2f E1)
+{    
+    v2f HalfDim = Dim*0.5f;    
+    time_result_2D Result = InvalidTimeResult2D();
+    
+    penetration_result_2D InitialPenetration = RectangleEdgePenetrationResult2D(CenterP0, HalfDim, E0, E1);
+    if(InitialPenetration.Hit)
+    {
+        Result = CreateTimeResult(InitialPenetration, CenterP0);
+        return Result;
+    }
     
     //0 bottom left, 1 bottom right, 2 top left, 3 top right    
     v2f Direction = E0-E1;    
@@ -823,17 +876,16 @@ time_result_2D MovingRectangleEdgeIntersectionTime2D(v2f CenterP0, v2f CenterP1,
     u32 AdjVerticalSupportIndex1 = FindAdjVerticalSupportIndex(SupportIndex1);
     u32 AdjHorizontalSupportIndex1 = FindAdjHorizontalSupportIndex(SupportIndex1);
     
-    v2f HalfDim = Dim*0.5f;
+    //TODO(JJ): We need to handle this case
+    ASSERT((SupportIndex1 == AdjVerticalSupportIndex0) || (SupportIndex1 == AdjHorizontalSupportIndex0));
+    
     v2f Offsets[4] = 
     {
         -HalfDim, 
         V2(HalfDim.x, -HalfDim.y),
         V2(-HalfDim.x, HalfDim.y),
         HalfDim
-    };
-    
-    //TODO(JJ): We need to handle this case
-    ASSERT((SupportIndex1 == AdjVerticalSupportIndex0) || (SupportIndex1 == AdjHorizontalSupportIndex0));
+    };    
     
     v2f Edges[6][2] = 
     {
@@ -844,8 +896,7 @@ time_result_2D MovingRectangleEdgeIntersectionTime2D(v2f CenterP0, v2f CenterP1,
         {Edges[1][1], Edges[3][1]},
         {Edges[0][1], Edges[2][1]}
     };        
-    
-    time_result_2D Result = InvalidTimeResult2D();
+        
     for(u32 EdgeIndex = 0; EdgeIndex < 6; EdgeIndex++)
     {
         f32 t;
@@ -858,7 +909,7 @@ time_result_2D MovingRectangleEdgeIntersectionTime2D(v2f CenterP0, v2f CenterP1,
             if(Dot(Result.Normal, CenterP10) > 0)
                 Result.Normal = -Result.Normal;            
             
-            Result.Time = MaximumF32(0.0f, t);
+            Result.Time = t;
         }
     }
     
@@ -945,9 +996,7 @@ time_result_2D MovingRectangleRectangleIntersectionTime2D(v2f CenterP0, v2f Cent
     penetration_result_2D InitialPenetration = PenetrationTestAABB2D(CenterP0, DimP, CenterS, DimS);
     if(InitialPenetration.Hit)
     {
-        Result.Time = 0.0f;
-        Result.Normal = InitialPenetration.Normal;
-        Result.ContactPoint = CenterP0 + InitialPenetration.Normal*InitialPenetration.Distance;
+        Result = CreateTimeResult(InitialPenetration, CenterP0);        
         return Result;
     }
     

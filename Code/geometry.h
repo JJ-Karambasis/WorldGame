@@ -266,6 +266,14 @@ struct time_result_2D
     v2f Normal;
 };
 
+inline time_result_2D CreateTimeResult(penetration_result_2D Penetration, v2f P)
+{
+    time_result_2D Result = {};
+    Result.Normal = Penetration.Normal;
+    Result.ContactPoint = P + Penetration.Normal*Penetration.Distance;
+    return Result;
+}
+
 inline time_result_2D CreateTimeResult(f32 Time)
 {
     time_result_2D Result = {};
