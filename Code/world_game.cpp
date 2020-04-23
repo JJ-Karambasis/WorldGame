@@ -3,6 +3,9 @@
 #include "audio.cpp"
 #include "world.cpp"
 
+#define PLAYER_RADIUS 0.35f
+#define PLAYER_HEIGHT 1.0f
+
 extern "C"
 EXPORT GAME_TICK(Tick)
 {   
@@ -28,28 +31,20 @@ EXPORT GAME_TICK(Tick)
             world* World = GetWorld(Game, WorldIndex);
             World->EntityPool.NextKey = 1;
             World->EntityPool.FreeHead = -1;            
+            
+            CreatePlayer(Game, WorldIndex, V3(0.0f, 0.0f, 1.0f), PLAYER_RADIUS, PLAYER_HEIGHT, Blue());            
         }
         
-        Game->Worlds[0].Player.Color = RGBA(0.0f, 0.0f, 1.0f, 1.0f);
-        Game->Worlds[0].Player.Position = V3(0.0f, 0.0f, 1.0f);
-        Game->Worlds[0].Player.FacingDirection = V2(0.0f, 1.0f);        
-        
-        Game->Worlds[1].Player.Color = RGBA(1.0f, 0.0f, 0.0f, 1.0f);
-        Game->Worlds[1].Player.Position = V3(0.0f, 0.0f, 1.0f);
-        Game->Worlds[1].Player.FacingDirection = V2(0.0f, 1.0f);        
-        
-        CreateEntityInBothWorlds(Game, BOX_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
-        CreateEntityInBothWorlds(Game, BOX_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 10.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 10.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f));                
         
         CreateBlockersInBothWorlds(Game, V3(-5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f,  5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3(-5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f,  5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3( 5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f, -5.0f, 1.0f), 1.0f);
         CreateBlockersInBothWorlds(Game, V3( 5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f, -5.0f, 1.0f), 1.0f);                
         
-        CreateEntityInBothWorlds(Game, BOX_ENTITY_TYPE_DEFAULT, V3(0.0f, -2.5f, 1.0f), V3(5.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
-        
-        
-        CreateSingleLinkedEntities(Game, BOX_ENTITY_TYPE_PUSHABLE, 1, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
+        CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3(0.0f, -2.5f, 1.0f), V3(5.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
+        CreateSingleLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, 1, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));        
     }            
     
     if(IsPressed(Game->Input->SwitchWorld))
@@ -119,11 +114,13 @@ EXPORT GAME_TICK(Tick)
     else    
     #endif
     {
-        camera* Camera = &Game->Camera;
-        
+        camera* Camera = &Game->Camera;        
         world* World = GetCurrentWorld(Game);
-        Camera->Position = World->Player.Position;
-        Camera->FocalPoint = World->Player.Position;
+        
+        world_entity* PlayerEntity = GetEntity(World, World->Player.EntityID);
+        
+        Camera->Position = PlayerEntity->Position;
+        Camera->FocalPoint = PlayerEntity->Position;
         Camera->Position.z += 6.0f;
         Camera->Orientation = IdentityM3();
     }   

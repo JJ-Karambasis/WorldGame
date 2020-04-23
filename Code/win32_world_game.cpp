@@ -1,6 +1,8 @@
 #include "win32_world_game.h"
 #include "audio.cpp"
+#include "geometry.cpp"
 #include "assets.cpp"
+#include "world.cpp"
 
 #if DEVELOPER_BUILD
 #include "dev_world_game.cpp"

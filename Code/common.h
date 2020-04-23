@@ -120,6 +120,12 @@ inline u32 SafeU32(u64 Value)
     return (u32)Value;
 }
 
+inline i32 SafeI32(i64 Value)
+{
+    ASSERT((Value >= INT_MIN) && (Value <= INT_MAX));    
+    return (i32)Value;
+}
+
 inline i32 MinimumI32(i32 A, i32 B)
 {
     i32 Result = (A <= B) ? A : B;

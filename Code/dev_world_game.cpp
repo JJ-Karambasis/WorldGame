@@ -44,8 +44,8 @@ void WriteGameState(development_game* Game)
     input* Input = Game->Input;
     
     ptr EntrySize = 0;
-    PushWriteStruct(&FrameRecording->FrameStream, &Player->Position, v3f, 0); EntrySize += sizeof(v3f);
-    PushWriteStruct(&FrameRecording->FrameStream, &Player->Velocity, v3f, 0); EntrySize += sizeof(v3f);
+    //PushWriteStruct(&FrameRecording->FrameStream, &Player->Position, v3f, 0); EntrySize += sizeof(v3f);
+    //PushWriteStruct(&FrameRecording->FrameStream, &Player->Velocity, v3f, 0); EntrySize += sizeof(v3f);
     PushWriteStruct(&FrameRecording->FrameStream, &Game->dt, f32, 0); EntrySize += sizeof(f32);
     PushWriteArray(&FrameRecording->FrameStream, Input->Buttons, ARRAYCOUNT(Input->Buttons), button, 0); EntrySize += sizeof(Input->Buttons);         
     FrameRecording->NextFrameOffset += EntrySize;
@@ -72,8 +72,8 @@ void ReadGameState(development_game* Game, u32 FrameIndex)
     platform_file_handle* File = FrameRecording->File;
     ASSERT(Global_Platform->ReadFile(File, &Context, sizeof(Context), (u64)Offset));
     
-    Player->Position = Context.Position;
-    Player->Velocity = Context.Velocity;
+    //Player->Position = Context.Position;
+    //Player->Velocity = Context.Velocity;
     Game->dt = Context.dt;
     CopyArray(Input->Buttons, Context.Buttons, ARRAYCOUNT(input::Buttons), button);
 }
@@ -226,15 +226,18 @@ void DevelopmentTick(development_game* Game)
     
     ImGui::Text("Current World Index %d", Game->CurrentWorldIndex);
     
+    world_entity* PlayerEntity0 = GetPlayerEntity(Game, 0);
+    world_entity* PlayerEntity1 = GetPlayerEntity(Game, 1);
+    
     ImGui::Text("Player 0:\n\t State: %s\n\t Position: (%.3f, %.3f, %.3f)\n\t Velocity: (%.3f, %.3f, %.3f)", 
                 GetStringPlayerStateUI(Game->Worlds[0].Player.State),
-                Game->Worlds[0].Player.Position.x, Game->Worlds[0].Player.Position.y, Game->Worlds[0].Player.Position.z, 
-                Game->Worlds[0].Player.Velocity.x, Game->Worlds[0].Player.Velocity.y, Game->Worlds[0].Player.Velocity.z);
+                PlayerEntity0->Position.x, PlayerEntity0->Position.y, PlayerEntity0->Position.z, 
+                PlayerEntity0->Velocity.x, PlayerEntity0->Velocity.y, PlayerEntity0->Velocity.z);
     
     ImGui::Text("Player 1:\n\t State: %s\n\t Position: (%.3f, %.3f, %.3f)\n\t Velocity: (%.3f, %.3f, %.3f)", 
                 GetStringPlayerStateUI(Game->Worlds[1].Player.State),
-                Game->Worlds[1].Player.Position.x, Game->Worlds[1].Player.Position.y, Game->Worlds[1].Player.Position.z, 
-                Game->Worlds[1].Player.Velocity.x, Game->Worlds[1].Player.Velocity.y, Game->Worlds[1].Player.Velocity.z);    
+                PlayerEntity1->Position.x, PlayerEntity1->Position.y, PlayerEntity1->Position.z, 
+                PlayerEntity1->Velocity.x, PlayerEntity1->Velocity.y, PlayerEntity1->Velocity.z);    
     
     ImGui::Text("Recording state %s", GetStringRecordingStateUI(Recording->RecordingState));        
     

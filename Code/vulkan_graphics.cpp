@@ -1035,12 +1035,14 @@ RENDER_GAME(RenderGame)
             world* World = GetCurrentWorld(Game);
             
             player* Player = &World->Player;
+            world_entity* PlayerEntity = GetEntity(World, Player->EntityID);
+            
             v3f PlayerZ = V3(0.0f, 0.0f, 1.0f);
-            v3f PlayerY = V3(Player->FacingDirection, 0.0f);
+            v3f PlayerY = V3(0.0f, 1.0f, 0.0f);
             v3f PlayerX = Cross(PlayerY, PlayerZ);
             
-            for(box_entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
-            {                
+            for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+            {                            
                 m4 Model = TransformM4(Entity->Transform);
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
                 vkCmdPushConstants(CommandBuffer, Graphics->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Entity->Color);                            
@@ -1063,7 +1065,7 @@ RENDER_GAME(RenderGame)
             debug_graphics_mesh* CapsuleCap = &CapsuleMesh->Cap;
             debug_graphics_mesh* CapsuleBody = &CapsuleMesh->Body;
             {                
-                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Player->Color);
+                vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &PlayerEntity->Color);
                 
                 v3f BodyZ = PlayerZ*Game->PlayerHeight;
                 
@@ -1071,7 +1073,7 @@ RENDER_GAME(RenderGame)
                 v3f YAxis = PlayerY*Game->PlayerRadius;
                 v3f ZAxis = PlayerZ*Game->PlayerRadius;
                 
-                v3f BottomPosition = Player->Position+ZAxis;
+                v3f BottomPosition = PlayerEntity->Position+ZAxis;
                 m4 Model = TransformM4(BottomPosition, M3(XAxis, YAxis, -ZAxis));                
                 vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
                 vkCmdDrawIndexed(CommandBuffer, CapsuleCap->Indices.Count, 1, 0, 0, 0); 
@@ -1092,17 +1094,15 @@ RENDER_GAME(RenderGame)
                 
                 u32 DEBUGBoxVertexOffset = CapsuleCap->Vertices.Count+CapsuleBody->Vertices.Count;
                 u32 DEBUGBoxIndexOffset = CapsuleCap->Indices.Count+CapsuleBody->Indices.Count;
-                for(box_entity* Entity = World->Entities.First; Entity; Entity = Entity->Next)
-                {                   
-                    aabb3D AABB = GetAABB(Entity);
-                    
-                    v3f Dim = GetAABB3DDim(AABB);                    
-                    v3f Position = V3(AABB.Min.xy + Dim.xy*0.5f, AABB.Min.z);
-                    
-                    m4 Model = TransformM4(Position, Dim);                    
-                    vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
-                    vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Global_Blue);                                                
-                    vkCmdDrawIndexed(CommandBuffer, BoxMesh->Indices.Count, 1, DEBUGBoxIndexOffset, DEBUGBoxVertexOffset, 0);                                
+                for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+                {                       
+                    if(Entity->Type != WORLD_ENTITY_TYPE_PLAYER)
+                    {
+                        m4 Model = TransformM4(Entity->Position, Entity->Scale);                    
+                        vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m4), &Model);                
+                        vkCmdPushConstants(CommandBuffer, VolumeContext->PipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(m4), sizeof(c4), &Global_Blue);                                                
+                        vkCmdDrawIndexed(CommandBuffer, BoxMesh->Indices.Count, 1, DEBUGBoxIndexOffset, DEBUGBoxVertexOffset, 0);                                
+                    }
                 }
             }
             
