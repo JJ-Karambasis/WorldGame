@@ -1,59 +1,3 @@
-inline box_entity* CreateEntity(game* Game, box_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color)
-{
-    box_entity* Result = PushStruct(&Game->GameStorage, box_entity, Clear, 0);        
-    Result->Transform = CreateSQT(Position, Scale, Euler);
-    Result->Type = Type;
-    Result->Color = Color;        
-    Result->WorldIndex = WorldIndex;
-    
-    AddToList(&Game->Worlds[WorldIndex].Entities, Result);
-    
-    return Result;
-}
-
-inline void
-CreateEntityInBothWorlds(game* Game, box_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
-{
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1);
-}
-
-inline void
-CreateLinkedEntities(game* Game, box_entity_type Type, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
-{
-    box_entity* A = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0);
-    box_entity* B = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1);
-    
-    A->Link = B;
-    B->Link = A;
-}
-
-inline void
-CreateLinkedEntities(game* Game, box_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)                      
-{
-    CreateLinkedEntities(Game, Type, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);    
-}
-
-inline blocker*
-CreateBlocker(game* Game, u32 WorldIndex, v3f P0, f32 Height0, v3f P1, f32 Height1)
-{
-    blocker* Blocker = PushStruct(&Game->GameStorage, blocker, Clear, 0);
-    Blocker->P0 = P0;
-    Blocker->P1 = P1;
-    Blocker->Height0 = Height0;
-    Blocker->Height1 = Height1;
-    
-    AddToList(&Game->Worlds[WorldIndex].Blockers, Blocker);
-    
-    return Blocker;
-}
-
-inline void CreateBlockersInBothWorlds(game* Game, v3f P0, f32 Height0, v3f P1, f32 Height1)
-{
-    CreateBlocker(Game, 0, P0, Height0, P1, Height1);
-    CreateBlocker(Game, 1, P0, Height0, P1, Height1);
-}
-
 inline world* 
 GetWorld(game* Game, u32 WorldIndex)
 {
@@ -80,6 +24,180 @@ GetPlayer(game* Game, u32 WorldIndex)
 {
     player* Player = &Game->Worlds[WorldIndex].Player;
     return Player;
+}
+
+world_entity* AllocateEntity(world_entity_pool* Pool)
+{
+    i32 Index;
+    if(Pool->FreeHead != -1)
+    {
+        Index = Pool->FreeHead;
+    }
+    else
+    {
+        //CONFIRM(JJ): Should we handle a dynamically grow entity pool? Doubt it
+        ASSERT(Pool->MaxUsed < MAX_WORLD_ENTITIES);
+        Index = Pool->MaxUsed++;
+    }
+    
+    world_entity* Result = Pool->Entities + Index;    
+    if(Pool->FreeHead != -1)    
+        Pool->FreeHead = Result->ID & 0xFFFFFFFF;
+    
+    Result->ID = (Pool->NextKey++ << 32) | Index;
+    return Result;
+}
+
+b32 IsEntityAllocated(world_entity* Entity)
+{
+    b32 Result = (Entity->ID & 0xFFFFFFFF00000000) != 0;
+    return Result;
+}
+
+world_entity* GetEntity(world_entity_pool* Pool, i64 ID)
+{
+    i64 Index = ID & 0xFFFFFFFF;
+    ASSERT(Index <= Pool->MaxUsed);
+    world_entity* Result = Pool->Entities + Index;
+    return Result;
+}
+
+world_entity* GetEntity(world* World, i64 ID)
+{    
+    world_entity* Result = GetEntity(&World->EntityPool, ID);
+    return Result;
+}
+
+i64 CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color)
+{
+    world* World = GetWorld(Game, WorldIndex);
+    world_entity* Entity = AllocateEntity(&World->EntityPool);
+    
+    Entity->Type = Type;
+    Entity->WorldIndex = WorldIndex;
+    Entity->Transform = CreateSQT(Position, Scale, Euler);
+    Entity->Color = Color;
+        
+    return Entity->ID;
+}
+
+inline void
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
+{
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1);    
+}
+
+inline void
+CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
+{
+    i64 AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0);
+    i64 BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1);
+    
+    GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
+    GetEntity(&Game->Worlds[1], BID)->LinkID = AID;    
+}
+
+inline void
+CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)                      
+{
+    CreateDualLinkedEntities(Game, Type, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);    
+}
+
+inline void
+CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
+{
+    i64 AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0);
+    i64 BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1);
+    
+    ASSERT((LinkWorldIndex == 0) || (LinkWorldIndex == 1));
+    
+    if(LinkWorldIndex == 0)
+        GetEntity(&Game->Worlds[1], BID)->LinkID = AID;
+    else
+        GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
+}
+
+inline void
+CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
+{
+    CreateSingleLinkedEntities(Game, Type, LinkWorldIndex, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);        
+}
+
+inline box_entity* CreateEntity(game* Game, box_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color)
+{
+    box_entity* Result = PushStruct(&Game->GameStorage, box_entity, Clear, 0);        
+    Result->Transform = CreateSQT(Position, Scale, Euler);
+    Result->Type = Type;
+    Result->Color = Color;        
+    Result->WorldIndex = WorldIndex;
+    
+    AddToList(&Game->Worlds[WorldIndex].Entities, Result);
+    
+    return Result;
+}
+
+inline void
+CreateEntityInBothWorlds(game* Game, box_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
+{
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1);
+}
+
+inline void
+CreateDualLinkedEntities(game* Game, box_entity_type Type, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
+{
+    box_entity* A = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0);
+    box_entity* B = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1);
+    
+    A->Link = B;
+    B->Link = A;
+}
+
+inline void
+CreateSingleLinkedEntities(game* Game, box_entity_type Type, u32 LinkWorldIndex, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
+{
+    box_entity* A = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0);
+    box_entity* B = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1);
+    
+    ASSERT((LinkWorldIndex == 0) || (LinkWorldIndex == 1));
+        
+    if(LinkWorldIndex == 0)
+        B->Link = A;
+    else
+        A->Link = B;    
+}
+
+inline void
+CreateDualLinkedEntities(game* Game, box_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)                      
+{
+    CreateDualLinkedEntities(Game, Type, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);    
+}
+
+inline void
+CreateSingleLinkedEntities(game* Game, box_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
+{
+    CreateSingleLinkedEntities(Game, Type, LinkWorldIndex, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);        
+}
+
+inline blocker*
+CreateBlocker(game* Game, u32 WorldIndex, v3f P0, f32 Height0, v3f P1, f32 Height1)
+{
+    blocker* Blocker = PushStruct(&Game->GameStorage, blocker, Clear, 0);
+    Blocker->P0 = P0;
+    Blocker->P1 = P1;
+    Blocker->Height0 = Height0;
+    Blocker->Height1 = Height1;
+    
+    AddToList(&Game->Worlds[WorldIndex].Blockers, Blocker);
+    
+    return Blocker;
+}
+
+inline void CreateBlockersInBothWorlds(game* Game, v3f P0, f32 Height0, v3f P1, f32 Height1)
+{
+    CreateBlocker(Game, 0, P0, Height0, P1, Height1);
+    CreateBlocker(Game, 1, P0, Height0, P1, Height1);
 }
 
 void IntegrateWorld(game* Game, u32 WorldIndex)
@@ -147,11 +265,10 @@ inline b32 IsInRangeOfBlockerZ(blocker* Blocker, f32 BottomZ, f32 TopZ)
     return Result;
 }
 
-inline void 
-ResolveDeltas(v2f* MoveDelta, v2f* Velocity, v2f Normal)
-{
-    *MoveDelta -= Dot(*MoveDelta, Normal)*Normal;
-    *Velocity -= Dot(*Velocity, Normal)*Normal;
+void OnWorldSwitch(game* Game, u32 LastWorldIndex, u32 CurrentWorldIndex)
+{        
+    player* LastPlayer = GetPlayer(Game, LastWorldIndex);
+    LastPlayer->Velocity = {};
 }
 
 void UpdateEntity(game* Game, box_entity* Object, v2f Acceleration)
@@ -163,8 +280,11 @@ void UpdateEntity(game* Game, box_entity* Object, v2f Acceleration)
     Objects[0] = Object;        
     
     if(Object->Link)        
+    {
         Objects[1] = Object->Link;            
-    
+        ASSERT(Object->Link->Link == NULL);
+    }
+            
     b32 StopProcessing[2] = {};
     
     f32 dt = Game->dt;
@@ -264,9 +384,9 @@ void UpdateEntity(game* Game, box_entity* Object, v2f Acceleration)
     }                
 }
 
-void UpdateWorld(game* Game, u32 WorldIndex)
-{
-    world* World = GetWorld(Game, WorldIndex);
+void UpdateWorld(game* Game)
+{    
+    world* World = GetWorld(Game, Game->CurrentWorldIndex);
     player* Player = &World->Player;
     
     f32 PlayerHeight = TrueHeight(Game->PlayerHeight, Game->PlayerRadius);
@@ -275,24 +395,22 @@ void UpdateWorld(game* Game, u32 WorldIndex)
     input* Input = Game->Input;
     
     v2f MoveDirection = {};
-    if(IsCurrentWorldIndex(Game, WorldIndex))
-    {
-        if(IsDown(Input->MoveForward))
-            MoveDirection.y = 1.0f;
-        
-        if(IsDown(Input->MoveBackward))
-            MoveDirection.y = -1.0f;
-        
-        if(IsDown(Input->MoveRight))
-            MoveDirection.x = 1.0f;
-        
-        if(IsDown(Input->MoveLeft))
-            MoveDirection.x = -1.0f;
-        
-        if(MoveDirection != 0)
-            MoveDirection = Normalize(MoveDirection);
-    }
     
+    if(IsDown(Input->MoveForward))
+        MoveDirection.y = 1.0f;
+    
+    if(IsDown(Input->MoveBackward))
+        MoveDirection.y = -1.0f;
+    
+    if(IsDown(Input->MoveRight))
+        MoveDirection.x = 1.0f;
+    
+    if(IsDown(Input->MoveLeft))
+        MoveDirection.x = -1.0f;
+    
+    if(MoveDirection != 0)
+        MoveDirection = Normalize(MoveDirection);
+        
     f32 dt = Game->dt;    
     v2f MoveAcceleration = MoveDirection*MOVE_ACCELERATION;    
     
@@ -309,10 +427,9 @@ void UpdateWorld(game* Game, u32 WorldIndex)
         Pushing = Player->Pushing;
     }
     else
-    {   
+    {                   
         if(Player->Pushing.Object)
-        {
-            CONSOLE_LOG("Clearing\n");
+        {            
             Player->Pushing.Object->Velocity = {};
             if(Player->Pushing.Object->Link)
                 Player->Pushing.Object->Link->Velocity = {};

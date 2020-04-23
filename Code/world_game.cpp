@@ -23,6 +23,13 @@ EXPORT GAME_TICK(Tick)
         Game->PlayerRadius = 0.35f;
         Game->PlayerHeight = 1.0f;        
         
+        for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            world* World = GetWorld(Game, WorldIndex);
+            World->EntityPool.NextKey = 1;
+            World->EntityPool.FreeHead = -1;            
+        }
+        
         Game->Worlds[0].Player.Color = RGBA(0.0f, 0.0f, 1.0f, 1.0f);
         Game->Worlds[0].Player.Position = V3(0.0f, 0.0f, 1.0f);
         Game->Worlds[0].Player.FacingDirection = V2(0.0f, 1.0f);        
@@ -40,14 +47,19 @@ EXPORT GAME_TICK(Tick)
         CreateBlockersInBothWorlds(Game, V3( 5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f, -5.0f, 1.0f), 1.0f);                
         
         CreateEntityInBothWorlds(Game, BOX_ENTITY_TYPE_DEFAULT, V3(0.0f, -2.5f, 1.0f), V3(5.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
-        CreateLinkedEntities(Game, BOX_ENTITY_TYPE_PUSHABLE, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
+        
+        
+        CreateSingleLinkedEntities(Game, BOX_ENTITY_TYPE_PUSHABLE, 1, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
     }            
     
     if(IsPressed(Game->Input->SwitchWorld))
-        Game->CurrentWorldIndex = !Game->CurrentWorldIndex;
+    {
+        u32 PrevIndex = Game->CurrentWorldIndex;
+        Game->CurrentWorldIndex = !PrevIndex;
+        OnWorldSwitch(Game, PrevIndex, Game->CurrentWorldIndex);          
+    }
     
-    UpdateWorld(Game, 0);
-    UpdateWorld(Game, 1);
+    UpdateWorld(Game);    
     
 #if DEVELOPER_BUILD
     development_game* DevGame = (development_game*)Game;

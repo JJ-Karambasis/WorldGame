@@ -50,7 +50,7 @@ GAME_TICK(Game_TickStub)
 global development_game* __Internal_Developer_Game__;
 #define DEVELOPER_GAME(Game) __Internal_Developer_Game__ = (development_game*)Game
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) __Internal_Developer_Game__->MaxGJKIterations = MaximumI32(__Internal_Developer_Game__->MaxGJKIterations, Iterations)
-#define DEVELOPER_INCREMENT_WALKING_TRIANGLE() __Internal_Developer_Game__->WalkingTriangleCount[WorldIndex]++
+#define DEVELOPER_INCREMENT_WALKING_TRIANGLE() __Internal_Developer_Game__->WalkingTriangleCount[Game->CurrentWorldIndex]++
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) __Internal_Developer_Game__->MaxTimeIterations = MaximumI32(__Internal_Developer_Game__->MaxTimeIterations, Iterations)
 
 global graphics* __Internal_Developer_Graphics__;
