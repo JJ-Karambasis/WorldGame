@@ -4,6 +4,7 @@ inline box_entity* CreateEntity(game* Game, box_entity_type Type, u32 WorldIndex
     Result->Transform = CreateSQT(Position, Scale, Euler);
     Result->Type = Type;
     Result->Color = Color;        
+    Result->WorldIndex = WorldIndex;
     
     AddToList(&Game->Worlds[WorldIndex].Entities, Result);
     
@@ -74,6 +75,13 @@ IsCurrentWorldIndex(game* Game, u32 WorldIndex)
     return Result;
 }
 
+inline player* 
+GetPlayer(game* Game, u32 WorldIndex)
+{
+    player* Player = &Game->Worlds[WorldIndex].Player;
+    return Player;
+}
+
 void IntegrateWorld(game* Game, u32 WorldIndex)
 {
     world* World = GetWorld(Game, WorldIndex);
@@ -110,6 +118,13 @@ TimeResultTest(f32* tMin, time_result_2D TimeResult)
     return false;
 }
 
+inline void
+ApplyVelocityXY(box_entity* Entity, v2f MoveAcceleration, f32 dt, f32 Damping)
+{
+    Entity->Velocity.xy += MoveAcceleration*dt;
+    Entity->Velocity *= Damping;
+}
+
 inline b32 IsPlayerPushingObject(player* Player, v2f MoveDirection)
 {
 #define DIRECTION_BIAS 1e-4f
@@ -132,7 +147,124 @@ inline b32 IsInRangeOfBlockerZ(blocker* Blocker, f32 BottomZ, f32 TopZ)
     return Result;
 }
 
-void UpdateWorld2(game* Game, u32 WorldIndex)
+inline void 
+ResolveDeltas(v2f* MoveDelta, v2f* Velocity, v2f Normal)
+{
+    *MoveDelta -= Dot(*MoveDelta, Normal)*Normal;
+    *Velocity -= Dot(*Velocity, Normal)*Normal;
+}
+
+void UpdateEntity(game* Game, box_entity* Object, v2f Acceleration)
+{   
+    u32 ObjectCount = 2;
+    
+    v2f MoveDeltas[2] = {};
+    box_entity* Objects[2] = {};            
+    Objects[0] = Object;        
+    
+    if(Object->Link)        
+        Objects[1] = Object->Link;            
+    
+    b32 StopProcessing[2] = {};
+    
+    f32 dt = Game->dt;
+    f32 VelocityDamping = (1.0f / (1.0f + dt*MOVE_DAMPING));    
+    for(u32 ObjectIndex = 0; ObjectIndex < ObjectCount; ObjectIndex++)
+    {
+        if(Objects[ObjectIndex])
+        {
+            ApplyVelocityXY(Objects[ObjectIndex], Acceleration, dt, VelocityDamping);
+            MoveDeltas[ObjectIndex] = Objects[ObjectIndex]->Velocity.xy*dt;
+        }
+        else
+            StopProcessing[ObjectIndex] = true;
+    }
+    
+#define MOVE_DELTA_EPSILON 1e-6f
+    
+    for(u32 Iterations=0; ; Iterations++)
+    {
+        DEVELOPER_MAX_TIME_ITERATIONS(Iterations);                
+        time_result_2D BestResults[2] = {InvalidTimeResult2D(), InvalidTimeResult2D()};
+        
+        for(u32 ObjectIndex = 0; ObjectIndex < ObjectCount; ObjectIndex++)
+        {
+            if(!StopProcessing[ObjectIndex])
+            {
+                if(SquareMagnitude(MoveDeltas[ObjectIndex]) > MOVE_DELTA_EPSILON)
+                {   
+                    world* ObjectWorld = GetWorld(Game, Objects[ObjectIndex]->WorldIndex);
+                    v2f TargetPosition = Objects[ObjectIndex]->Position.xy + MoveDeltas[ObjectIndex];
+                    
+                    for(blocker* Blocker = ObjectWorld->Blockers.First; Blocker; Blocker = Blocker->Next)
+                    {
+                        if(IsInRangeOfBlockerZ(Blocker, Objects[ObjectIndex]->Position.z, Objects[ObjectIndex]->Position.z + Objects[ObjectIndex]->Scale.z))
+                        {
+                            time_result_2D TimeResult = MovingRectangleEdgeIntersectionTime2D(Objects[ObjectIndex]->Position.xy, TargetPosition, Objects[ObjectIndex]->Scale.xy, Blocker->P0.xy, Blocker->P1.xy);
+                            if(!IsInvalidTimeResult2D(TimeResult) && (TimeResult.Time < BestResults[ObjectIndex].Time))
+                                BestResults[ObjectIndex] = TimeResult;                        
+                        }
+                    }         
+                    
+                    for(box_entity* BoxEntity = ObjectWorld->Entities.First; BoxEntity; BoxEntity = BoxEntity->Next)
+                    {
+                        if((BoxEntity->Type != BOX_ENTITY_TYPE_WALKABLE) && (BoxEntity != Objects[ObjectIndex]))
+                        {
+                            if(IsRangeInInterval(BoxEntity->Position.z, BoxEntity->Position.z+BoxEntity->Scale.z, Objects[ObjectIndex]->Position.z, Objects[ObjectIndex]->Position.z+Objects[ObjectIndex]->Scale.z))
+                            {                                    
+                                time_result_2D TimeResult = MovingRectangleRectangleIntersectionTime2D(Objects[ObjectIndex]->Position.xy, TargetPosition, Objects[ObjectIndex]->Scale.xy,
+                                                                                                       BoxEntity->Position.xy, BoxEntity->Scale.xy);
+                                if(!IsInvalidTimeResult2D(TimeResult) && (TimeResult.Time < BestResults[ObjectIndex].Time))
+                                    BestResults[ObjectIndex] = TimeResult;                                    
+                            }
+                        }
+                    }                        
+                }
+                else
+                    StopProcessing[ObjectIndex] = true;
+            }
+        }
+        
+        for(u32 ObjectIndex = 0; ObjectIndex < 2; ObjectIndex++)
+        {
+            if(!StopProcessing[ObjectIndex])
+            {
+                player* Player = GetPlayer(Game, Objects[ObjectIndex]->WorldIndex);
+                
+                v2f TargetPosition = Objects[ObjectIndex]->Position.xy + MoveDeltas[ObjectIndex];
+                
+                if(!IsInvalidTimeResult2D(BestResults[ObjectIndex]))
+                {                    
+                    v2f Delta = BestResults[ObjectIndex].ContactPoint - Objects[ObjectIndex]->Position.xy;
+                    Objects[ObjectIndex]->Position.xy = BestResults[ObjectIndex].ContactPoint;                            
+                    
+                    MoveDeltas[ObjectIndex] = TargetPosition - BestResults[ObjectIndex].ContactPoint;
+                    if(BestResults[ObjectIndex].Normal != 0)
+                    {                        
+                        MoveDeltas[ObjectIndex] = MoveDeltas[ObjectIndex] - Dot(MoveDeltas[ObjectIndex], BestResults[ObjectIndex].Normal)*BestResults[ObjectIndex].Normal;
+                        Objects[ObjectIndex]->Velocity.xy = Objects[ObjectIndex]->Velocity.xy - Dot(Objects[ObjectIndex]->Velocity.xy, BestResults[ObjectIndex].Normal)*BestResults[ObjectIndex].Normal;                                            
+                    }
+                    
+                    if(Player->Pushing.Object == Objects[ObjectIndex])                                
+                        Player->Position.xy += Delta;
+                }
+                else
+                {
+                    Objects[ObjectIndex]->Position.xy = TargetPosition;
+                    if(Player->Pushing.Object == Objects[ObjectIndex])
+                        Player->Position.xy += MoveDeltas[ObjectIndex];
+                    
+                    StopProcessing[ObjectIndex] = true;
+                }
+            }                                                               
+        }           
+        
+        if(StopProcessing[0] && StopProcessing[1])
+            break;        
+    }                
+}
+
+void UpdateWorld(game* Game, u32 WorldIndex)
 {
     world* World = GetWorld(Game, WorldIndex);
     player* Player = &World->Player;
@@ -166,89 +298,25 @@ void UpdateWorld2(game* Game, u32 WorldIndex)
     
     f32 VelocityDamping = (1.0f / (1.0f + dt*MOVE_DAMPING));
     
-#define MOVE_DELTA_EPSILON 1e-6f
-    
     pushing_state Pushing = {};
     if(IsPlayerPushingObject(Player, MoveDirection))
     {                     
-        Player->Velocity = {};
+        Player->Velocity = {};        
+        box_entity* Object = Player->Pushing.Object;                
         
-        box_entity* Object = Player->Pushing.Object;
-        
-        Object->Velocity.xy += MoveAcceleration*dt;
-        Object->Velocity.xy *= VelocityDamping;
-        
-        v2f MoveDelta = Object->Velocity.xy*dt;
-        
-        //TODO(JJ): Cap this out
-        for(u32 Iterations = 0; ;Iterations++)
-        {
-            DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
-            if(SquareMagnitude(MoveDelta) > MOVE_DELTA_EPSILON)
-            {   
-                v2f TargetPosition = Object->Position.xy + MoveDelta;
-                
-                time_result_2D BestResult = InvalidTimeResult2D();
-                
-                for(blocker* Blocker = World->Blockers.First; Blocker; Blocker = Blocker->Next)
-                {
-                    if(IsInRangeOfBlockerZ(Blocker, Object->Position.z, Object->Position.z+Object->Scale.z))
-                    {
-                        time_result_2D TimeResult = MovingRectangleEdgeIntersectionTime2D(Object->Position.xy, TargetPosition, Object->Scale.xy, Blocker->P0.xy, Blocker->P1.xy);
-                        if(!IsInvalidTimeResult2D(TimeResult) && (TimeResult.Time < BestResult.Time))
-                           BestResult = TimeResult;                        
-                    }
-                }
-                
-                for(box_entity* BoxEntity = World->Entities.First; BoxEntity; BoxEntity = BoxEntity->Next)
-                {
-                    if((BoxEntity->Type != BOX_ENTITY_TYPE_WALKABLE) && (BoxEntity != Object))
-                    {
-                        if(IsRangeInInterval(BoxEntity->Position.z, BoxEntity->Position.z+BoxEntity->Scale.z, Player->Position.z, Player->Position.z+PlayerHeight))
-                        {
-                            
-                            time_result_2D TimeResult = MovingRectangleRectangleIntersectionTime2D(Object->Position.xy, TargetPosition, Object->Scale.xy,
-                                                                                                   BoxEntity->Position.xy, BoxEntity->Scale.xy);
-                            if(!IsInvalidTimeResult2D(TimeResult) && (TimeResult.Time < BestResult.Time))
-                                BestResult = TimeResult;
-                            
-                        }
-                    }
-                }
-                
-                if(!IsInvalidTimeResult2D(BestResult))
-                {
-                    v2f Delta = BestResult.ContactPoint - Object->Position.xy;
-                    Object->Position.xy = BestResult.ContactPoint;
-                    Player->Position.xy += Delta;
-                    
-                    MoveDelta = TargetPosition - BestResult.ContactPoint;
-                    
-                    if(BestResult.Normal != 0)
-                    {
-                        MoveDelta = MoveDelta - Dot(MoveDelta, BestResult.Normal)*BestResult.Normal;
-                        Object->Velocity.xy = Object->Velocity.xy - Dot(Object->Velocity.xy, BestResult.Normal)*BestResult.Normal;                                            
-                    }
-                }
-                else
-                {
-                    Object->Position.xy = TargetPosition;
-                    Player->Position.xy += MoveDelta;                    
-                    break;
-                }                
-            }
-            else
-            {
-                break;
-            }
-        }
+        UpdateEntity(Game, Object, MoveAcceleration);
         
         Pushing = Player->Pushing;
     }
     else
     {   
         if(Player->Pushing.Object)
+        {
+            CONSOLE_LOG("Clearing\n");
             Player->Pushing.Object->Velocity = {};
+            if(Player->Pushing.Object->Link)
+                Player->Pushing.Object->Link->Velocity = {};
+        }
         
         player_state PlayerState = {};                        
         
@@ -331,10 +399,8 @@ void UpdateWorld2(game* Game, u32 WorldIndex)
         Player->State = PlayerState;
     }
     
-    if(Player->State == PLAYER_STATE_PUSHING)
-    {
-        Player->Pushing = Pushing;
-    }
+    Player->Pushing = Pushing;
+    
     
     f32 BestPointZ = -FLT_MAX;
     triangle3D BestTriangle = InvalidTriangle3D();          

@@ -13,6 +13,7 @@ enum box_entity_type
 struct box_entity
 {    
     box_entity_type Type;    
+    u32 WorldIndex;
     
     union
     {

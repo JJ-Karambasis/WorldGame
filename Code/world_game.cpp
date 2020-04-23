@@ -46,8 +46,8 @@ EXPORT GAME_TICK(Tick)
     if(IsPressed(Game->Input->SwitchWorld))
         Game->CurrentWorldIndex = !Game->CurrentWorldIndex;
     
-    UpdateWorld2(Game, 0);
-    UpdateWorld2(Game, 1);
+    UpdateWorld(Game, 0);
+    UpdateWorld(Game, 1);
     
 #if DEVELOPER_BUILD
     development_game* DevGame = (development_game*)Game;
