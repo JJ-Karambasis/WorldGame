@@ -1,8 +1,6 @@
 #ifndef WORLD_H
 #define WORLD_H
 
-#include "player.h"
-
 enum world_entity_type
 {
     WORLD_ENTITY_TYPE_STATIC,
@@ -41,11 +39,19 @@ struct collider
     };
 };
 
+struct world_entity_id
+{
+    i64 ID;
+    u32 WorldIndex;
+};
+
+inline world_entity_id MakeEntityID(i64 ID, u32 WorldIndex) { world_entity_id Result = {ID, WorldIndex}; return Result; }
+inline world_entity_id InvalidEntityID() { return MakeEntityID(-1, (u32)-1); }
+inline b32 IsInvalidEntityID(world_entity_id ID) { return (ID.ID == -1) || ((ID.WorldIndex != 0) && (ID.WorldIndex != 1)); }
+    
 struct world_entity
 {
-    world_entity_type Type;    
-    u32 WorldIndex;
-    
+    world_entity_type Type;            
     union
     {
         sqt Transform;
@@ -62,8 +68,8 @@ struct world_entity
     
     collider Collider;
     
-    i64 ID;
-    i64 LinkID;
+    world_entity_id ID;
+    world_entity_id LinkID;
     
     void* UserData;
 };
@@ -86,15 +92,21 @@ enum player_state
     PLAYER_STATE_PUSHING
 };
 
+struct time_of_impact_result
+{
+    time_result_2D TimeResult;
+    world_entity_id HitEntityID;    
+};
+
 struct pushing_state
 {
-    i64 EntityID;
+    world_entity_id EntityID;    
     v2f Direction;
 };
 
 struct player
 {
-    i64 EntityID;    
+    world_entity_id EntityID;    
     player_state State;
     pushing_state Pushing;
 };
@@ -120,8 +132,7 @@ struct blocker_list
 struct world
 {    
     world_entity_pool EntityPool;
-    player Player;
-    
+    player Player;    
     blocker_list Blockers;
 };
 
