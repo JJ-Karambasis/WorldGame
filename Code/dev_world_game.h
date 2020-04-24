@@ -2,33 +2,34 @@
 #ifndef DEV_WORLD_GAME_H
 #define DEV_WORLD_GAME_H
 
-#define MAX_FRAME_RECORDINGS 
+#if DEVELOPER_BUILD
+
+#define CAMERA_ANGULAR_DAMPING 10.0f
+#define CAMERA_ANGULAR_ACCELERATION 5.0f
+#define CAMERA_LINEAR_DAMPING 10.0f     
+#define CAMERA_LINEAR_ACCELERATION 7.5f
+#define CAMERA_SCROLL_ACCELERATION 300.0f*5
+#define CAMERA_SCROLL_DAMPING 7.5f
+#define CAMERA_MIN_DISTANCE 0.1f        
+
+#define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
+#define DEVELOPER_MAX_WALKING_TRIANGLE()
+#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations)
+#define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
 
 #include "imgui/imgui.h"
 
-enum recording_state
-{
-    RECORDING_STATE_NONE,
-    RECORDING_STATE_RECORDING,    
-    RECORDING_STATE_PLAYBACK,
-    RECORDING_STATE_CYCLE
-};
-
-struct development_input : public input
+struct dev_input
 {
     union
     {
-        button DevButtons[8];
+        button Buttons[4];
         struct
         {
+            button ToggleDevState;
             button Alt;
             button LMB;
-            button MMB;
-            button RecordButton;
-            button PlaybackButton;
-            button CycleButton;
-            button CycleLeft;
-            button CycleRight;
+            button MMB;            
         };
     };
     v2i MouseDelta;
@@ -36,34 +37,34 @@ struct development_input : public input
     f32 Scroll;
 };
 
-struct frame_recording
+struct dev_context
 {
-    platform_file_handle* File;
-    arena FrameStream;
-    i32 MaxFrameCount;
-    i32 FrameCount;
-    ptr* FrameOffsets;    
-    ptr NextFrameOffset;
-    i32 CurrentFrameIndex;
-    recording_state RecordingState;            
+    b32 InDevelopmentMode;    
+    dev_input Input;    
+    camera Camera;
+    
+    
+    void* PlatformData;
+    b32 Initialized;
 };
 
-struct development_game : public game
+void Platform_InitImGui(void* PlatformData);
+void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt);
+
+inline b32 IsInDevelopmentMode(dev_context* Context)
 {
-    arena DevArena;        
-    b32 InDevelopmentMode;
-    camera DevCamera;      
-    frame_recording FrameRecordings;
-    u32 WalkingTriangleCount[2];
-    u32 MaxGJKIterations;
-    u32 MaxTimeIterations;    
-    b32 DevInitialized;        
-    bool TurnOnVolumeOutline;
-    bool TurnAudioOn;
-    bool TurnBlockerDrawingOn;
-    
-    f32 LastTickFrameTime;
-    u64 LastFrameCycles;
-};
+    if(Context)
+        return Context->InDevelopmentMode;    
+    return false;
+}
+
+#else
+
+#define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
+#define DEVELOPER_MAX_WALKING_TRIANGLE()
+#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations)
+#define NOT_IN_DEVELOPMENT_MODE() true
+
+#endif
 
 #endif

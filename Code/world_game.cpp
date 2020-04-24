@@ -10,15 +10,9 @@
 
 extern "C"
 EXPORT GAME_TICK(Tick)
-{   
-    DEVELOPER_GRAPHICS(Graphics);
-    DEVELOPER_GAME(Game);        
-    
+{       
     Global_Platform = Platform;        
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
-    
-    u64 Start = Global_Platform->Clock();
-    u64 StartCycles = GetCycles();
     
     if(!Game->Initialized)
     {        
@@ -68,11 +62,11 @@ EXPORT GAME_TICK(Tick)
     Camera->Position.z += 6.0f;
     Camera->Orientation = IdentityM3();
     
-    m4 Perspective = PerspectiveM4(PI*0.30f, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), 0.01f, 100.0f);
-    m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);
-    
-    if(Graphics->Initialized)
+    if(Graphics->Initialized && NOT_IN_DEVELOPMENT_MODE())
     {        
+        m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+        m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
+        
         PushClear(Graphics, Black());        
         
         PushProjection(Graphics, Perspective); 
@@ -86,78 +80,5 @@ EXPORT GAME_TICK(Tick)
             ASSERT(Game->Assets->BoxGraphicsMesh);
             PushDrawShadedColoredMesh(Graphics, Game->Assets->BoxGraphicsMesh, Entity->Transform, Entity->Color); 
         }
-    }
-    
-#if 0 
-#if DEVELOPER_BUILD
-    development_game* DevGame = (development_game*)Game;
-    if(DevGame->InDevelopmentMode)
-    {
-        development_input* DevInput = (development_input*)Game->Input;
-        
-        camera* DevCamera = &DevGame->DevCamera;
-        
-        const f32 ANGULAR_DAMPING = 10.0f;
-        const f32 ANGULAR_ACCELERATION = 5.0f;
-        const f32 LINEAR_DAMPING = 10.0f;     
-        const f32 LINEAR_ACCELERATION = 7.5f;
-        const f32 SCROLL_ACCELERATION = 300.0f*5;
-        const f32 SCROLL_DAMPING = 7.5f;  
-        const f32 MIN_DISTANCE = 0.1f;        
-        
-        if(IsDown(DevInput->Alt))
-        {                                    
-            if(IsDown(DevInput->LMB))
-            {
-                DevCamera->AngularVelocity.x += (DevInput->MouseDelta.y*Game->dt*ANGULAR_ACCELERATION);
-                DevCamera->AngularVelocity.y += (DevInput->MouseDelta.x*Game->dt*ANGULAR_ACCELERATION);                                        
-            }
-            
-            if(IsDown(DevInput->MMB))
-            {
-                DevCamera->Velocity.x += (DevInput->MouseDelta.x*Game->dt*LINEAR_ACCELERATION);
-                DevCamera->Velocity.y += (DevInput->MouseDelta.y*Game->dt*LINEAR_ACCELERATION);                                        
-            }
-            
-            if(Abs(DevInput->Scroll) > 0.0f)            
-                DevCamera->Velocity.z -= DevInput->Scroll*Game->dt*SCROLL_ACCELERATION;                                            
-        }                
-        
-        DevCamera->AngularVelocity *= (1.0f / (1.0f+Game->dt*ANGULAR_DAMPING));            
-        v3f Eulers = (DevCamera->AngularVelocity*Game->dt);            
-        
-        quaternion Orientation = Normalize(RotQuat(DevCamera->Orientation.XAxis, Eulers.pitch)*RotQuat(DevCamera->Orientation.YAxis, Eulers.yaw));
-        DevCamera->Orientation *= ToMatrix3(Orientation);
-        
-        DevCamera->Velocity.xy *= (1.0f /  (1.0f+Game->dt*LINEAR_DAMPING));            
-        v2f Vel = DevCamera->Velocity.xy*Game->dt;
-        v3f Delta = Vel.x*DevCamera->Orientation.XAxis - Vel.y*DevCamera->Orientation.YAxis;
-        
-        DevCamera->FocalPoint += Delta;
-        DevCamera->Position += Delta;
-        
-        DevCamera->Velocity.z *= (1.0f/ (1.0f+Game->dt*SCROLL_DAMPING));            
-        DevCamera->Distance += DevCamera->Velocity.z*Game->dt;            
-        
-        if(DevCamera->Distance < MIN_DISTANCE)
-            DevCamera->Distance = MIN_DISTANCE;
-        
-        DevCamera->Position = DevCamera->FocalPoint + (DevCamera->Orientation.ZAxis*DevCamera->Distance);
-    }
-    else    
-    #endif
-    {
-        camera* Camera = &Game->Camera;        
-        world* World = GetCurrentWorld(Game);
-        
-        world_entity* PlayerEntity = GetEntity(World, World->Player.EntityID);
-        
-        Camera->Position = PlayerEntity->Position;
-        Camera->FocalPoint = PlayerEntity->Position;
-        Camera->Position.z += 6.0f;
-        Camera->Orientation = IdentityM3();
-    }   
-    DevGame->LastTickFrameTime = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), Start);
-    DevGame->LastFrameCycles = GetCycles()-StartCycles;
-#endif
+    }    
 }

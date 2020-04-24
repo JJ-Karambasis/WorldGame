@@ -721,7 +721,7 @@ UpdateWorld(game* Game)
                         }
                     }
                 }
-                DEVELOPER_INCREMENT_WALKING_TRIANGLE();
+                DEVELOPER_MAX_WALKING_TRIANGLE();
             }
         }
     }

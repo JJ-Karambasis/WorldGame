@@ -8,7 +8,18 @@
 
 #if DEVELOPER_BUILD
 #include "dev_world_game.cpp"
-b32 Win32_DevWindowProc(HWND, UINT, WPARAM, LPARAM);
+b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam);
+void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* Keyboard);
+void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
+#define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
+#define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse(&DevContext, RawMouse)
+#define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard(&DevContext, RawKeyboard)
+#define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(&DevContext, &Game, &Graphics)
+#else
+#define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) false
+#define DEVELOPMENT_HANDLE_MOUSE(RawMouse) 
+#define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) 
+#define DEVELOPMENT_TICK(Game, Graphics)
 #endif
 
 global LARGE_INTEGER Global_Frequency;
@@ -38,10 +49,8 @@ Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     LRESULT Result = 0;
     
-#if DEVELOPER_BUILD
-    if(Win32_DevWindowProc(Window, Message, WParam, LParam))
+    if(DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam))
         return Result;
-#endif    
     
     switch(Message)
     {        
@@ -447,8 +456,6 @@ DWORD WINAPI
 AudioThread(void* Paramter)
 {
     
-#if 1 
-    
     game* Game = (game*)Paramter;                
     win32_audio* Audio = (win32_audio *)Game->Audio;
     
@@ -476,98 +483,94 @@ AudioThread(void* Paramter)
         u64 AudioWallClock = Global_Platform->Clock();
         f32 FromBeginToAudioSeconds = (f32)Global_Platform->ElapsedTime(AudioWallClock, FlipWallClock);
         
-#if DEVELOPER_BUILD
-        if(((development_game*)Game)->TurnAudioOn)
-#endif
-        {
-            DWORD PlayCursor;
-            DWORD WriteCursor;
-            if(SoundBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
-            {            
-                if(!SoundIsValid)
-                {
-                    Audio->RunningSampleIndex = WriteCursor / BytesPerSample;
-                    SoundIsValid = true;
-                }
-                
-                DWORD ByteToLock = ((Audio->RunningSampleIndex*BytesPerSample) % SoundBufferSize);
-                
-                DWORD ExpectedSoundBytesPerFrame =
-                    (int)((f32)(Audio->Format.SamplesPerSecond*BytesPerSample) / TARGET_AUDIO_HZ);
-                f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
-                DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(f32)ExpectedSoundBytesPerFrame);
-                
-                DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
-                
-                DWORD SafeWriteCursor = WriteCursor;
-                if(SafeWriteCursor < PlayCursor)
-                {
-                    SafeWriteCursor += SoundBufferSize;
-                }
-                ASSERT(SafeWriteCursor >= PlayCursor);
-                SafeWriteCursor += SafetyBytes;
-                
-                b32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
-                
-                DWORD TargetCursor = 0;
-                if(AudioCardIsLowLatency)
-                {
-                    TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
-                }
-                else
-                {
-                    TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame + SafetyBytes);
-                }
-                TargetCursor = (TargetCursor % SoundBufferSize);
-                
-                DWORD BytesToWrite = 0;
-                if(ByteToLock > TargetCursor)
-                {
-                    BytesToWrite = (SoundBufferSize - ByteToLock);
-                    BytesToWrite += TargetCursor;
-                }
-                else
-                {
-                    BytesToWrite = TargetCursor - ByteToLock;
-                }
-                
-                VOID* Region1;
-                VOID* Region2;
-                DWORD Region1Size;            
-                DWORD Region2Size;
-                if(SUCCEEDED(SoundBuffer->Lock(ByteToLock, BytesToWrite, &Region1, &Region1Size, &Region2, &Region2Size, 0)))
-                {                
-                    DWORD Region1SampleCount = Region1Size/BytesPerSample;
-                    
-                    i16* DstSample  = (i16*)Region1;                 
-                    for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
-                    {
-                        *DstSample++ = TestAudio->Samples[PlayingSampleIndex*2];
-                        *DstSample++ = TestAudio->Samples[(PlayingSampleIndex*2)+1];
-                        
-                        Audio->RunningSampleIndex++;
-                        PlayingSampleIndex++;
-                    }
-                    
-                    DWORD Region2SampleCount = Region2Size/BytesPerSample;
-                    DstSample  = (i16*)Region2;                 
-                    for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
-                    {
-                        *DstSample++ = TestAudio->Samples[PlayingSampleIndex*2];
-                        *DstSample++ = TestAudio->Samples[(PlayingSampleIndex*2)+1];
-                        
-                        Audio->RunningSampleIndex++;
-                        PlayingSampleIndex++;
-                    }
-                    
-                    SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);                
-                }            
+        DWORD PlayCursor;
+        DWORD WriteCursor;
+        if(SoundBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
+        {            
+            if(!SoundIsValid)
+            {
+                Audio->RunningSampleIndex = WriteCursor / BytesPerSample;
+                SoundIsValid = true;
+            }
+            
+            DWORD ByteToLock = ((Audio->RunningSampleIndex*BytesPerSample) % SoundBufferSize);
+            
+            DWORD ExpectedSoundBytesPerFrame =
+                (int)((f32)(Audio->Format.SamplesPerSecond*BytesPerSample) / TARGET_AUDIO_HZ);
+            f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
+            DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(f32)ExpectedSoundBytesPerFrame);
+            
+            DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
+            
+            DWORD SafeWriteCursor = WriteCursor;
+            if(SafeWriteCursor < PlayCursor)
+            {
+                SafeWriteCursor += SoundBufferSize;
+            }
+            ASSERT(SafeWriteCursor >= PlayCursor);
+            SafeWriteCursor += SafetyBytes;
+            
+            b32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
+            
+            DWORD TargetCursor = 0;
+            if(AudioCardIsLowLatency)
+            {
+                TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
             }
             else
             {
-                SoundIsValid = false;
-            }                  
+                TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame + SafetyBytes);
+            }
+            TargetCursor = (TargetCursor % SoundBufferSize);
+            
+            DWORD BytesToWrite = 0;
+            if(ByteToLock > TargetCursor)
+            {
+                BytesToWrite = (SoundBufferSize - ByteToLock);
+                BytesToWrite += TargetCursor;
+            }
+            else
+            {
+                BytesToWrite = TargetCursor - ByteToLock;
+            }
+            
+            VOID* Region1;
+            VOID* Region2;
+            DWORD Region1Size;            
+            DWORD Region2Size;
+            if(SUCCEEDED(SoundBuffer->Lock(ByteToLock, BytesToWrite, &Region1, &Region1Size, &Region2, &Region2Size, 0)))
+            {                
+                DWORD Region1SampleCount = Region1Size/BytesPerSample;
+                
+                i16* DstSample  = (i16*)Region1;                 
+                for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
+                {
+                    *DstSample++ = TestAudio->Samples[PlayingSampleIndex*2];
+                    *DstSample++ = TestAudio->Samples[(PlayingSampleIndex*2)+1];
+                    
+                    Audio->RunningSampleIndex++;
+                    PlayingSampleIndex++;
+                }
+                
+                DWORD Region2SampleCount = Region2Size/BytesPerSample;
+                DstSample  = (i16*)Region2;                 
+                for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
+                {
+                    *DstSample++ = TestAudio->Samples[PlayingSampleIndex*2];
+                    *DstSample++ = TestAudio->Samples[(PlayingSampleIndex*2)+1];
+                    
+                    Audio->RunningSampleIndex++;
+                    PlayingSampleIndex++;
+                }
+                
+                SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);                
+            }            
         }
+        else
+        {
+            SoundIsValid = false;
+        }                  
+        
         
         f32 Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);
         while(Delta < TargetSecondsPerFrame)        
@@ -575,7 +578,7 @@ AudioThread(void* Paramter)
         
         FlipWallClock = Global_Platform->Clock();        
     }
-#endif        
+    
 }
 
 int CALLBACK 
@@ -634,50 +637,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!Audio.SoundBuffer)
         WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");        
     
-#if DEVELOPER_BUILD    
-    development_input Input = {};
-    development_game Game = {};
-    
-    Game.DevArena = CreateArena(MEGABYTE(32));
-    frame_recording* FrameRecording = &Game.FrameRecordings;        
-    FrameRecording->MaxFrameCount = 1000000;    
-    FrameRecording->FrameOffsets = PushArray(&Game.DevArena, FrameRecording->MaxFrameCount, ptr, Clear, 0);
-    
-    IMGUI_CHECKVERSION();
-    ImGuiContext* Context = ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    
-    ImGuiIO& IO = ImGui::GetIO();
-    IO.BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
-    IO.BackendPlatformName = "world_game_win32_platform";
-    IO.ImeWindowHandle = Window;
-    IO.KeyMap[ImGuiKey_Tab] = VK_TAB;
-    IO.KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
-    IO.KeyMap[ImGuiKey_RightArrow] = VK_RIGHT;
-    IO.KeyMap[ImGuiKey_UpArrow] = VK_UP;
-    IO.KeyMap[ImGuiKey_DownArrow] = VK_DOWN;
-    IO.KeyMap[ImGuiKey_PageUp] = VK_PRIOR;
-    IO.KeyMap[ImGuiKey_PageDown] = VK_NEXT;
-    IO.KeyMap[ImGuiKey_Home] = VK_HOME;
-    IO.KeyMap[ImGuiKey_End] = VK_END;
-    IO.KeyMap[ImGuiKey_Insert] = VK_INSERT;
-    IO.KeyMap[ImGuiKey_Delete] = VK_DELETE;
-    IO.KeyMap[ImGuiKey_Backspace] = VK_BACK;
-    IO.KeyMap[ImGuiKey_Space] = VK_SPACE;
-    IO.KeyMap[ImGuiKey_Enter] = VK_RETURN;
-    IO.KeyMap[ImGuiKey_Escape] = VK_ESCAPE;
-    IO.KeyMap[ImGuiKey_KeyPadEnter] = VK_RETURN;
-    IO.KeyMap[ImGuiKey_A] = 'A';
-    IO.KeyMap[ImGuiKey_C] = 'C';
-    IO.KeyMap[ImGuiKey_V] = 'V';
-    IO.KeyMap[ImGuiKey_X] = 'X';
-    IO.KeyMap[ImGuiKey_Y] = 'Y';
-    IO.KeyMap[ImGuiKey_Z] = 'Z';
-    
-#else
     input Input = {};
-    game Game = {};
-#endif
+    game Game = {};    
     
     Game.Assets = &Assets;
     Game.Input = &Input;
@@ -695,6 +656,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         WRITE_AND_HANDLE_ERROR("Failed to load the graphics's dll code.");
     
     Assets.Graphics = &Graphics;    
+    
+    void* DevPointer = NULL;
+#if DEVELOPER_BUILD
+    dev_context DevContext = {};
+    DevContext.PlatformData = Window;
+    
+    DevPointer = &DevContext;
+#endif
     
 #if 0 
     Assets.TestAudio = DEBUGLoadWAVFile("Test.wav");
@@ -717,16 +686,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);            
         }
         
-        Input.MouseDelta = {};
-        
-#if DEVELOPER_BUILD                
-        Input.Scroll = 0.0f;
-        for(u32 DevButtonIndex = 0; DevButtonIndex < ARRAYCOUNT(Input.DevButtons); DevButtonIndex++)
-            Input.DevButtons[DevButtonIndex].WasDown = Input.DevButtons[DevButtonIndex].IsDown;        
-#endif
-        
-        for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        
-            Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
         MSG Message;
         while(PeekMessage(&Message, NULL, 0, 0, PM_REMOVE))
         {
@@ -752,40 +711,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                     {
                         case RIM_TYPEMOUSE:
                         {
-                            RAWMOUSE* RawMouse = &RawInput->data.mouse;                            
-                            Input.MouseDelta = V2i(RawMouse->lLastX, RawMouse->lLastY);                                                           
-                            
-#if DEVELOPER_BUILD                            
-                            switch(RawMouse->usButtonFlags)
-                            {
-                                case RI_MOUSE_LEFT_BUTTON_DOWN:
-                                {
-                                    Input.LMB.IsDown = true;                                    
-                                } break;
-                                
-                                case RI_MOUSE_LEFT_BUTTON_UP:
-                                {
-                                    Input.LMB.IsDown = false;
-                                    Input.LMB.WasDown = true;
-                                } break;
-                                
-                                case RI_MOUSE_MIDDLE_BUTTON_DOWN:
-                                {
-                                    Input.MMB.IsDown = true;
-                                } break;
-                                
-                                case RI_MOUSE_MIDDLE_BUTTON_UP:
-                                {
-                                    Input.MMB.IsDown = false;
-                                    Input.MMB.WasDown = true;
-                                } break;
-                                
-                                case RI_MOUSE_WHEEL:
-                                {
-                                    Input.Scroll = (f32)(i16)RawMouse->usButtonData / (f32)WHEEL_DELTA;
-                                } break;
-                            }              
-#endif
+                            RAWMOUSE* RawMouse = &RawInput->data.mouse;                                                        
+                            DEVELOPMENT_HANDLE_MOUSE(RawMouse);                            
                         } break;
                         
                         case RIM_TYPEKEYBOARD:
@@ -799,55 +726,16 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                             if(Quit)
                                 PostQuitMessage(0);
                             
-#if DEVELOPER_BUILD
-                            if(FrameRecording->RecordingState == RECORDING_STATE_NONE || FrameRecording->RecordingState == RECORDING_STATE_RECORDING)                            
-    #endif
-                            {
-                                switch(RawKeyboard->VKey)
-                                {
-                                    BIND_KEY('W', Input.MoveForward);
-                                    BIND_KEY('S', Input.MoveBackward);
-                                    BIND_KEY('A', Input.MoveLeft);
-                                    BIND_KEY('D', Input.MoveRight);                            
-                                    BIND_KEY('Q', Input.SwitchWorld);                                
-                                }
-                            }                            
-#if DEVELOPER_BUILD           
-                            else
-                            {
-                                ClearArray(Input.Buttons, ARRAYCOUNT(input::Buttons), button); 
-                            }
-                            
                             switch(RawKeyboard->VKey)
                             {
-                                BIND_KEY(VK_MENU, Input.Alt);
-                                BIND_KEY('0', Input.RecordButton);
-                                BIND_KEY('1', Input.PlaybackButton);
-                                BIND_KEY('2', Input.CycleButton);
-                                BIND_KEY(VK_LEFT, Input.CycleLeft);
-                                BIND_KEY(VK_RIGHT, Input.CycleRight);
-                            }   
-                            
-                            if(RawKeyboard->Flags == RI_KEY_MAKE)
-                            {
-                                switch(RawKeyboard->VKey)
-                                {
-                                    case VK_F5:
-                                    {
-                                        Game.InDevelopmentMode = !Game.InDevelopmentMode;
-                                        
-                                        if(Game.InDevelopmentMode)
-                                        {
-                                            Game.DevCamera.Position = Game.Camera.Position;
-                                            Game.DevCamera.AngularVelocity = {};
-                                            Game.DevCamera.Orientation = IdentityM3();
-                                            Game.DevCamera.FocalPoint = Game.Camera.FocalPoint;
-                                            Game.DevCamera.Distance = Magnitude(Game.DevCamera.FocalPoint - Game.DevCamera.Position);
-                                        }
-                                    } break;          
-                                }
+                                BIND_KEY('W', Input.MoveForward);
+                                BIND_KEY('S', Input.MoveBackward);
+                                BIND_KEY('A', Input.MoveLeft);
+                                BIND_KEY('D', Input.MoveRight);                            
+                                BIND_KEY('Q', Input.SwitchWorld);                                
                             }
-#endif
+                            
+                            DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard);                            
                         } break;
                     }
                 } break;
@@ -866,37 +754,15 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         if(Game.dt > 1.0f/20.0f)
             Game.dt = 1.0f/20.0f;
         
-#if DEVELOPER_BUILD
-        IO.DisplaySize = ImVec2((f32)Graphics.RenderDim.width, (f32)Graphics.RenderDim.height);
-        IO.DeltaTime = Game.dt;
-        IO.KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        IO.KeyShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-        IO.KeyAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-        if(IO.WantSetMousePos)
-        {
-            v2i Position = V2i(IO.MousePos.x, IO.MousePos.y);
-            ClientToScreen(Window, (POINT*)&Position);
-            SetCursorPos(Position.x, Position.y);
-        }
+        DEVELOPMENT_TICK(Game, Graphics);        
         
-        IO.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
-        POINT MousePosition;
-        if(HWND ActiveWindow = GetForegroundWindow())
-        {
-            if(ActiveWindow == Window || IsChild(ActiveWindow, Window))
-            {
-                if(GetCursorPos(&MousePosition) && ScreenToClient(Window, &MousePosition))                
-                    IO.MousePos = ImVec2((f32)MousePosition.x, (f32)MousePosition.y);                
-            }
-        }                
-        
-        //DevelopmentTick(&Game);        
-#endif        
-                
-        GameCode.Tick(&Game, &Graphics, Global_Platform);                                
+        GameCode.Tick(&Game, &Graphics, Global_Platform, DevPointer);                                
         
         Graphics.PlatformData = Window;        
         GraphicsCode.ExecuteRenderCommands(&Graphics, Global_Platform);
+        
+        for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        
+            Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
         
         Game.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
         //CONSOLE_LOG("dt: %f\n", Input.dt*1000.0f);
@@ -914,6 +780,70 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 } 
 
 #if DEVELOPER_BUILD
+
+void Platform_InitImGui(void* PlatformData)
+{    
+    IMGUI_CHECKVERSION();
+    ImGuiContext* Context = ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    
+    ImGuiIO& IO = ImGui::GetIO();
+    IO.BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
+    IO.BackendPlatformName = "world_game_win32_platform";
+    IO.ImeWindowHandle = (HWND)PlatformData;
+    IO.KeyMap[ImGuiKey_Tab] = VK_TAB;
+    IO.KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
+    IO.KeyMap[ImGuiKey_RightArrow] = VK_RIGHT;
+    IO.KeyMap[ImGuiKey_UpArrow] = VK_UP;
+    IO.KeyMap[ImGuiKey_DownArrow] = VK_DOWN;
+    IO.KeyMap[ImGuiKey_PageUp] = VK_PRIOR;
+    IO.KeyMap[ImGuiKey_PageDown] = VK_NEXT;
+    IO.KeyMap[ImGuiKey_Home] = VK_HOME;
+    IO.KeyMap[ImGuiKey_End] = VK_END;
+    IO.KeyMap[ImGuiKey_Insert] = VK_INSERT;
+    IO.KeyMap[ImGuiKey_Delete] = VK_DELETE;
+    IO.KeyMap[ImGuiKey_Backspace] = VK_BACK;
+    IO.KeyMap[ImGuiKey_Space] = VK_SPACE;
+    IO.KeyMap[ImGuiKey_Enter] = VK_RETURN;
+    IO.KeyMap[ImGuiKey_Escape] = VK_ESCAPE;
+    IO.KeyMap[ImGuiKey_KeyPadEnter] = VK_RETURN;
+    IO.KeyMap[ImGuiKey_A] = 'A';
+    IO.KeyMap[ImGuiKey_C] = 'C';
+    IO.KeyMap[ImGuiKey_V] = 'V';
+    IO.KeyMap[ImGuiKey_X] = 'X';
+    IO.KeyMap[ImGuiKey_Y] = 'Y';
+    IO.KeyMap[ImGuiKey_Z] = 'Z';    
+}
+
+void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt)
+{
+    HWND Window = (HWND)PlatformData;
+    
+    ImGuiIO* IO = &ImGui::GetIO();
+    
+    IO->DisplaySize = ImVec2((f32)RenderDim.width, (f32)RenderDim.height);
+    IO->DeltaTime = dt;
+    IO->KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    IO->KeyShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    IO->KeyAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    if(IO->WantSetMousePos)
+    {
+        v2i Position = V2i(IO->MousePos.x, IO->MousePos.y);
+        ClientToScreen(Window, (POINT*)&Position);
+        SetCursorPos(Position.x, Position.y);
+    }
+    
+    IO->MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+    POINT MousePosition;
+    if(HWND ActiveWindow = GetForegroundWindow())
+    {
+        if(ActiveWindow == Window || IsChild(ActiveWindow, Window))
+        {
+            if(GetCursorPos(&MousePosition) && ScreenToClient(Window, &MousePosition))                
+                IO->MousePos = ImVec2((f32)MousePosition.x, (f32)MousePosition.y);                
+        }
+    }      
+}
 
 b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
@@ -988,4 +918,53 @@ b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
     
     return true;
 }
+
+void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* RawKeyboard)
+{   
+    dev_input* Input = &DevContext->Input;
+    
+    switch(RawKeyboard->VKey)
+    {
+        BIND_KEY(VK_F5, Input->ToggleDevState);
+        BIND_KEY(VK_MENU, Input->Alt);        
+    }       
+}
+
+void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
+{
+    dev_input* Input = &DevContext->Input;
+    
+    Input->MouseDelta = V2i(RawMouse->lLastX, RawMouse->lLastY);
+    
+    switch(RawMouse->usButtonFlags)
+    {
+        case RI_MOUSE_LEFT_BUTTON_DOWN:
+        {
+            Input->LMB.IsDown = true;                                    
+        } break;
+        
+        case RI_MOUSE_LEFT_BUTTON_UP:
+        {
+            Input->LMB.IsDown = false;
+            Input->LMB.WasDown = true;
+        } break;
+        
+        case RI_MOUSE_MIDDLE_BUTTON_DOWN:
+        {
+            Input->MMB.IsDown = true;
+        } break;
+        
+        case RI_MOUSE_MIDDLE_BUTTON_UP:
+        {
+            Input->MMB.IsDown = false;
+            Input->MMB.WasDown = true;
+        } break;
+        
+        case RI_MOUSE_WHEEL:
+        {
+            Input->Scroll = (f32)(i16)RawMouse->usButtonData / (f32)WHEEL_DELTA;
+        } break;
+    }           
+}
+
 #endif

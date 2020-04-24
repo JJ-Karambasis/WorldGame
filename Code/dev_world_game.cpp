@@ -4,272 +4,113 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
-#pragma pack(push, 1)
-struct entity_data
-{
-    b32 IsBlocker;
-    sqt Transform;
-    c4 Color;
-    v3f Velocity;
-};
-#pragma pack(pop)
+#include "graphics_2.cpp"
 
-inline ptr 
-GetFrameOffsetSize(u32 FrameCount)
+void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
 {
-    ptr Result = sizeof(ptr)*FrameCount;
-    return Result;
-}
-
-inline ptr 
-GetFrameOffsetArraySize(u32 FrameCount)
-{
-    ptr Result = GetFrameOffsetSize(FrameCount) + sizeof(u32);
-    return Result;
-}
-
-inline ptr
-GetFrameFileOffset(ptr* Array, u32 FrameCount, u32 FrameIndex)
-{
-    ptr Result = GetFrameOffsetArraySize(FrameCount) + Array[FrameIndex];
-    return Result;
-}
-
-void WriteGameState(development_game* Game)
-{
-    frame_recording* FrameRecording = &Game->FrameRecordings;
-    FrameRecording->FrameOffsets[FrameRecording->FrameCount++] = FrameRecording->NextFrameOffset;
-    
-    player* Player = &Game->Worlds[Game->CurrentWorldIndex].Player;    
-    input* Input = Game->Input;
-    
-    ptr EntrySize = 0;
-    //PushWriteStruct(&FrameRecording->FrameStream, &Player->Position, v3f, 0); EntrySize += sizeof(v3f);
-    //PushWriteStruct(&FrameRecording->FrameStream, &Player->Velocity, v3f, 0); EntrySize += sizeof(v3f);
-    PushWriteStruct(&FrameRecording->FrameStream, &Game->dt, f32, 0); EntrySize += sizeof(f32);
-    PushWriteArray(&FrameRecording->FrameStream, Input->Buttons, ARRAYCOUNT(Input->Buttons), button, 0); EntrySize += sizeof(Input->Buttons);         
-    FrameRecording->NextFrameOffset += EntrySize;
-}
-
-void ReadGameState(development_game* Game, u32 FrameIndex)
-{
-    frame_recording* FrameRecording = &Game->FrameRecordings;    
-    ptr Offset = GetFrameFileOffset(FrameRecording->FrameOffsets, FrameRecording->FrameCount, FrameIndex);
-    
-    player* Player = &Game->Worlds[Game->CurrentWorldIndex].Player;
-    input* Input = Game->Input;
-    
-#pragma pack(push, 1)
-    struct
+    if(!DevContext->Initialized)
     {
-        v3f Position;
-        v3f Velocity;
-        f32 dt;
-        button Buttons[ARRAYCOUNT(input::Buttons)];
-    } Context;
-    
-#pragma pack(pop)
-    platform_file_handle* File = FrameRecording->File;
-    ASSERT(Global_Platform->ReadFile(File, &Context, sizeof(Context), (u64)Offset));
-    
-    //Player->Position = Context.Position;
-    //Player->Velocity = Context.Velocity;
-    Game->dt = Context.dt;
-    CopyArray(Input->Buttons, Context.Buttons, ARRAYCOUNT(input::Buttons), button);
-}
-
-char* GetStringRecordingStateUI(recording_state RecordingState)
-{
-    switch(RecordingState)
-    {
-        case RECORDING_STATE_NONE:                
-        return "None";
-        
-        case RECORDING_STATE_RECORDING:    
-        return "Recording";
-        
-        case RECORDING_STATE_PLAYBACK:
-        return "Playback";
-        
-        case RECORDING_STATE_CYCLE:
-        return "Cycle";
-        
-        INVALID_DEFAULT_CASE;
-    }
-    return NULL;
-}
-
-char* GetStringPlayerStateUI(player_state PlayerState)
-{
-    switch(PlayerState)
-    {
-        case PLAYER_STATE_DEFAULT:
-        return "Default";
-        
-        case PLAYER_STATE_PUSHING:
-        return "Pushing";
-        
-        INVALID_DEFAULT_CASE;
+        Platform_InitImGui(DevContext->PlatformData);        
+        DevContext->Initialized = true;
     }
     
-    return NULL;
-}
-
-void DevelopmentTick(development_game* Game)
-{
-    ImGui::NewFrame();
-    if(!Game->DevInitialized)
+    dev_input* Input = &DevContext->Input;    
+    
+    if(IsPressed(Input->ToggleDevState))
     {
-        Game->FrameRecordings.FrameStream = CreateArena(MEGABYTE(1));
-        Game->DevInitialized = true;
-    }
-    
-    development_input* Input = (development_input*)Game->Input;
-    
-    frame_recording* Recording = &Game->FrameRecordings;
-    if(IsPressed(Input->RecordButton))
-    {                
-        if(Recording->RecordingState == RECORDING_STATE_NONE)
+        DevContext->InDevelopmentMode = !DevContext->InDevelopmentMode;
+        if(IsInDevelopmentMode(DevContext))
         {
-            Recording->RecordingState = RECORDING_STATE_RECORDING;
+            DevContext->Camera.Position = Game->Camera.Position;
+            DevContext->Camera.AngularVelocity = {};
+            DevContext->Camera.Orientation = IdentityM3();
+            DevContext->Camera.FocalPoint = Game->Camera.FocalPoint;
+            DevContext->Camera.Distance = Magnitude(DevContext->Camera.FocalPoint-DevContext->Camera.Position);
         }
-        else if(Recording->RecordingState == RECORDING_STATE_RECORDING)
-        {
-            platform_file_handle* File = Global_Platform->OpenFile("frame_recording.data", PLATFORM_FILE_ATTRIBUTES_WRITE);
-            ASSERT(File);
-            
-            Global_Platform->WriteFile(File, &Recording->FrameCount, sizeof(u32), NO_OFFSET);
-            Global_Platform->WriteFile(File, Recording->FrameOffsets, (u32)GetFrameOffsetSize(Recording->FrameCount), NO_OFFSET);
-            
-            for(arena_block* Block = Recording->FrameStream.First; Block; Block = Block->Next)
+    }
+    
+    if(IsInDevelopmentMode(DevContext))
+    {        
+        Platform_DevUpdate(DevContext->PlatformData, Graphics->RenderDim, Game->dt);
+        
+        camera* Camera = &DevContext->Camera;
+        
+        if(IsDown(Input->Alt))
+        {                                    
+            if(IsDown(Input->LMB))
             {
-                if(Block->Used)
-                    Global_Platform->WriteFile(File, Block->Memory, (u32)Block->Used, NO_OFFSET);
+                Camera->AngularVelocity.x += (Input->MouseDelta.y*Game->dt*CAMERA_ANGULAR_ACCELERATION);
+                Camera->AngularVelocity.y += (Input->MouseDelta.x*Game->dt*CAMERA_ANGULAR_ACCELERATION);                                        
             }
             
-            Recording->CurrentFrameIndex = 0;                        
-            Recording->FrameCount = 0;
-            Recording->NextFrameOffset = 0;                        
-            ResetArena(&Recording->FrameStream);
-            Global_Platform->CloseFile(File);
-            Recording->RecordingState = RECORDING_STATE_NONE;
-        }            
-    }
-    
-    if(IsPressed(Input->PlaybackButton))
-    {
-        if(Recording->RecordingState == RECORDING_STATE_NONE)
-        {            
-            Recording->File = Global_Platform->OpenFile("frame_recording.data", PLATFORM_FILE_ATTRIBUTES_READ);
-            ASSERT(Recording->File);
+            if(IsDown(Input->MMB))
+            {
+                Camera->Velocity.x += (Input->MouseDelta.x*Game->dt*CAMERA_LINEAR_ACCELERATION);
+                Camera->Velocity.y += (Input->MouseDelta.y*Game->dt*CAMERA_LINEAR_ACCELERATION);                                        
+            }
             
-            Global_Platform->ReadFile(Recording->File, &Recording->FrameCount, sizeof(u32), NO_OFFSET);
-            ASSERT(Recording->FrameCount < Recording->MaxFrameCount);
-            Global_Platform->ReadFile(Recording->File, Recording->FrameOffsets, sizeof(ptr)*Recording->FrameCount, NO_OFFSET);                        
+            if(Abs(Input->Scroll) > 0.0f)            
+                Camera->Velocity.z -= Input->Scroll*Game->dt*CAMERA_SCROLL_ACCELERATION;                                            
+        }                
+        
+        Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
+        v3f Eulers = (Camera->AngularVelocity*Game->dt);            
+        
+        quaternion Orientation = Normalize(RotQuat(Camera->Orientation.XAxis, Eulers.pitch)*RotQuat(Camera->Orientation.YAxis, Eulers.yaw));
+        Camera->Orientation *= ToMatrix3(Orientation);
+        
+        Camera->Velocity.xy *= (1.0f /  (1.0f+Game->dt*CAMERA_LINEAR_DAMPING));            
+        v2f Vel = Camera->Velocity.xy*Game->dt;
+        v3f Delta = Vel.x*Camera->Orientation.XAxis - Vel.y*Camera->Orientation.YAxis;
+        
+        Camera->FocalPoint += Delta;
+        Camera->Position += Delta;
+        
+        Camera->Velocity.z *= (1.0f/ (1.0f+Game->dt*CAMERA_SCROLL_DAMPING));            
+        Camera->Distance += Camera->Velocity.z*Game->dt;            
+        
+        if(Camera->Distance < CAMERA_MIN_DISTANCE)
+            Camera->Distance = CAMERA_MIN_DISTANCE;
+        
+        Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
+        
+        if(Graphics->Initialized)
+        {                        
+#if 0
+            ImGui::NewFrame();
             
-            Recording->RecordingState = RECORDING_STATE_PLAYBACK;
-        }
-        else if((Recording->RecordingState == RECORDING_STATE_PLAYBACK) ||
-                (Recording->RecordingState == RECORDING_STATE_CYCLE))
-        {
-            ReadGameState(Game, 0);
-            Recording->RecordingState = RECORDING_STATE_NONE;            
-            Recording->CurrentFrameIndex = 0; 
-            Recording->FrameCount = 0;            
-            Global_Platform->CloseFile(Recording->File);
-        }
+            ImGui::Begin("Dev Editor");
+            
+            local bool Open; 
+            ImGui::ShowDemoWindow(&Open);
+            
+            ImGui::End();
+            ImGui::Render();
+#endif
+            
+            m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+            m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
+            
+            PushClear(Graphics, Black());        
+            
+            PushProjection(Graphics, Perspective); 
+            PushCameraView(Graphics, CameraView);
+            
+            world* World = GetCurrentWorld(Game);
+            for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+            {
+                if(!Game->Assets->BoxGraphicsMesh)        
+                    Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.obj");
+                
+                ASSERT(Game->Assets->BoxGraphicsMesh);
+                PushDrawShadedColoredMesh(Graphics, Game->Assets->BoxGraphicsMesh, Entity->Transform, Entity->Color); 
+            }
+            
+        }                
     }
     
-    if(IsPressed(Input->CycleButton))
-    {
-        if(Recording->RecordingState == RECORDING_STATE_PLAYBACK)
-        {
-            Recording->RecordingState = RECORDING_STATE_CYCLE;
-        }
-        else if(Recording->RecordingState == RECORDING_STATE_CYCLE)
-        {
-            Recording->RecordingState = RECORDING_STATE_PLAYBACK;
-            Recording->CurrentFrameIndex = 0; 
-        }
-    }
-    
-    if(IsPressed(Input->CycleLeft) && (Recording->RecordingState == RECORDING_STATE_CYCLE))        
-        Recording->CurrentFrameIndex = MaximumI32(Recording->CurrentFrameIndex-1, 0);    
-    
-    if(IsPressed(Input->CycleRight) && (Recording->RecordingState == RECORDING_STATE_CYCLE))    
-        Recording->CurrentFrameIndex = MinimumI32(Recording->CurrentFrameIndex+1, Recording->FrameCount);            
-    
-    switch(Recording->RecordingState)
-    {
-        case RECORDING_STATE_RECORDING:
-        {
-            WriteGameState(Game);
-        } break;
-        
-        case RECORDING_STATE_PLAYBACK:
-        {
-            if(Recording->CurrentFrameIndex >= Recording->FrameCount)
-                Recording->CurrentFrameIndex = 0;
-            ReadGameState(Game, Recording->CurrentFrameIndex++);
-        } break;
-        
-        case RECORDING_STATE_CYCLE:
-        {
-            ReadGameState(Game, Recording->CurrentFrameIndex);                                    
-        } break;
-    }                        
-    
-    ImGui::Begin("Dev Editor");
-    
-    ImGui::Text("MS/f %f", Game->LastTickFrameTime*1000.0f);
-    ImGui::Text("Cycles %d", Game->LastFrameCycles);
-    
-    ImGui::Text("Current World Index %d", Game->CurrentWorldIndex);
-    
-    world_entity* PlayerEntity0 = GetPlayerEntity(Game, 0);
-    world_entity* PlayerEntity1 = GetPlayerEntity(Game, 1);
-    
-    ImGui::Text("Player 0:\n\t State: %s\n\t Position: (%.3f, %.3f, %.3f)\n\t Velocity: (%.3f, %.3f, %.3f)", 
-                GetStringPlayerStateUI(Game->Worlds[0].Player.State),
-                PlayerEntity0->Position.x, PlayerEntity0->Position.y, PlayerEntity0->Position.z, 
-                PlayerEntity0->Velocity.x, PlayerEntity0->Velocity.y, PlayerEntity0->Velocity.z);
-    
-    ImGui::Text("Player 1:\n\t State: %s\n\t Position: (%.3f, %.3f, %.3f)\n\t Velocity: (%.3f, %.3f, %.3f)", 
-                GetStringPlayerStateUI(Game->Worlds[1].Player.State),
-                PlayerEntity1->Position.x, PlayerEntity1->Position.y, PlayerEntity1->Position.z, 
-                PlayerEntity1->Velocity.x, PlayerEntity1->Velocity.y, PlayerEntity1->Velocity.z);    
-    
-    ImGui::Text("Recording state %s", GetStringRecordingStateUI(Recording->RecordingState));        
-    
-    if((Recording->RecordingState == RECORDING_STATE_PLAYBACK) ||
-       (Recording->RecordingState == RECORDING_STATE_CYCLE))
-    {
-        ImGui::Text("Frame Count: %d", Recording->FrameCount);
-        if(Recording->RecordingState == RECORDING_STATE_CYCLE)
-        {        
-            ImGui::InputInt("Frame Index", &Recording->CurrentFrameIndex, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue);
-            Recording->CurrentFrameIndex = ClampI32(Recording->CurrentFrameIndex, 0, Recording->FrameCount);                        
-        }        
-    }
-    
-    ImGui::Text("World 0 Walking Triangle Count %d", Game->WalkingTriangleCount[0]); 
-    Game->WalkingTriangleCount[0] = 0;
-    
-    ImGui::Text("World 1 Walking Triangle Count %d", Game->WalkingTriangleCount[1]); 
-    Game->WalkingTriangleCount[1] = 0;
-    
-    ImGui::Text("Max Time Iterations %d", Game->MaxTimeIterations);
-    ImGui::Text("Max GJK Iterations %d", Game->MaxGJKIterations);    
-    
-    ImGui::Checkbox("Show Blockers", &Game->TurnBlockerDrawingOn);
-    ImGui::Checkbox("Show Debug Volumes", &Game->TurnOnVolumeOutline);
-    
-    b32 AudioStatus = Game->TurnAudioOn;
-    ImGui::Checkbox("Turn Audio On", &Game->TurnAudioOn);
-    if(Game->TurnAudioOn != AudioStatus)
-        Global_Platform->ToggleAudio(Game->Audio, Game->TurnAudioOn);
-    
-    ImGui::End();
-    
-    ImGui::Render();
+    Input->MouseDelta = {};
+    Input->Scroll = 0.0f;
+    for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input->Buttons); ButtonIndex++)
+        Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
 }

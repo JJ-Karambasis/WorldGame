@@ -72,7 +72,7 @@
 #define DEBUG_IF_AVAILABLE_OR_TERM INVALID_CODE
 #endif
 
-#ifdef DEVELOPER_BUILD
+#if DEVELOPER_BUILD
 #define ASSERT(x) if(!(x)) DEBUG_IF_AVAILABLE_OR_TERM
 #else
 #define ASSERT(x)
