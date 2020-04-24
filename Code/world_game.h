@@ -2,13 +2,6 @@
 #define GAME_NAME "WorldGame"
 
 #include "common.h"
-#include "memory.h"
-#include "list.h"
-#include "hash_table.h"
-#include "string.h"
-#include "error.h"
-#include "riff.h"
-#include "math.h"
 
 #include "platform.h"
 #include "input.h"

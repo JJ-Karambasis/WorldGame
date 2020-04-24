@@ -7,10 +7,10 @@ IF NOT EXIST ..\din mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data
 IF NOT EXIST ..\data\shaders\vulkan mkdir ..\data\shaders\vulkan
 
-set COMPILE_PLATFORM=1
+set COMPILE_PLATFORM=0
 set COMPILE_GRAPHICS=1
-set COMPILE_GAME=1
-set COMPILE_SHADERS=1
+set COMPILE_GAME=0
+set COMPILE_SHADERS=0
 
 pushd ..\Bin
 del *.pdb > NUL 2> NUL
@@ -19,8 +19,12 @@ IF %COMPILE_GAME% == 1 (
     cl %Common% -LD -DOS_WINDOWS ..\code\world_game.cpp -link -opt:ref -incremental:no -pdb:World_Game_%RANDOM%.pdb -out:World_Game.dll
 )
 
+REM IF %COMPILE_GRAPHICS% == 1 (
+REM    cl %Common% -LD -DOS_WINDOWS ..\code\vulkan_graphics.cpp -link user32.lib -opt:ref -incremental:no -pdb:Vulkan_Graphics_%RANDOM%.pdb -out:Vulkan_Graphics.dll
+REM )
+
 IF %COMPILE_GRAPHICS% == 1 (
-    cl %Common% -LD -DOS_WINDOWS ..\code\vulkan_graphics.cpp -link user32.lib -opt:ref -incremental:no -pdb:Vulkan_Graphics_%RANDOM%.pdb -out:Vulkan_Graphics.dll
+    cl %Common% -LD -DOS_WINDOWS ..\code\opengl.cpp -link user32.lib gdi32.lib opengl32.lib -opt:ref -incremental:no -pdb:OpenGL_%RANDOM%.pdb -out:OpenGL.dll
 )
 
 IF %COMPILE_PLATFORM% == 1 (
