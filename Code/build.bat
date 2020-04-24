@@ -7,9 +7,9 @@ IF NOT EXIST ..\din mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data
 IF NOT EXIST ..\data\shaders\vulkan mkdir ..\data\shaders\vulkan
 
-set COMPILE_PLATFORM=0
+set COMPILE_PLATFORM=1
 set COMPILE_GRAPHICS=1
-set COMPILE_GAME=0
+set COMPILE_GAME=1
 set COMPILE_SHADERS=0
 
 pushd ..\Bin

@@ -19,7 +19,7 @@ inline b32 operator!=(indices_uint_pair Left, indices_uint_pair Right)
     return Result;
 }
 
-graphics_mesh DEBUGGraphicsLoadMesh(arena* Storage, char* File)
+graphics_mesh* LoadGraphicsMesh(assets* Assets, char* File)
 {
     buffer Buffer = Global_Platform->ReadEntireFile(File);
     
@@ -32,16 +32,20 @@ graphics_mesh DEBUGGraphicsLoadMesh(arena* Storage, char* File)
     
     ASSERT(Code == TINYOBJ_SUCCESS);
     
-    graphics_mesh Result = {};
-    
-    graphics_vertex_array* VertexArray = &Result.Vertices;
-    graphics_index_array* IndexArray = &Result.Indices;
-    
     hash_table<indices_uint_pair> HashTable = CreateHashTable<indices_uint_pair>(8096); 
+        
+    graphics_vertex_buffer VertexBuffer = {};
+    graphics_index_buffer IndexBuffer = {};    
     
-    IndexArray->Count = Attributes.num_face_num_verts*3;
-    graphics_vertex* VertexData = PushArray(IndexArray->Count, graphics_vertex, Clear, 0);
-    IndexArray->Ptr = PushArray(Storage, IndexArray->Count, u16, Clear, 0);
+    IndexBuffer.IndexCount = Attributes.num_face_num_verts*3;
+    IndexBuffer.Format = GRAPHICS_INDEX_FORMAT_32_BIT;
+    IndexBuffer.Data = PushSize(&Assets->Arena, GetIndexBufferSize(&IndexBuffer), Clear, 0);        
+    
+    VertexBuffer.Format = GRAPHICS_VERTEX_FORMAT_P3_N3;
+    graphics_vertex_p3_n3* VertexData = PushArray(IndexBuffer.IndexCount, graphics_vertex_p3_n3, Clear, 0);
+    
+    ASSERT(IndexBuffer.Format == GRAPHICS_INDEX_FORMAT_32_BIT);
+    u32* Indices = (u32*)IndexBuffer.Data;
     
     u16 NextIndex = 0;
     for(u32 FaceIndex = 0; FaceIndex < Attributes.num_face_num_verts; FaceIndex++)
@@ -53,29 +57,31 @@ graphics_mesh DEBUGGraphicsLoadMesh(arena* Storage, char* File)
         {   
             u32 VertexIndex = (FaceIndex*3)+FaceVertexIndex;
             
-            u16 Index = SafeU16(VertexArray->Count);
+            u16 Index = SafeU16(VertexBuffer.VertexCount);
             indices_uint_pair Pair = {{(u32)Face->v_idx, (u32)Face->vn_idx}, Index};
             if(HashTable[Pair])
             {
-                IndexArray->Ptr[VertexIndex] = HashTable.Table[HashTable.GetHashIndex(Pair)].Key.VertexIndex;
+                Indices[VertexIndex] = HashTable.Table[HashTable.GetHashIndex(Pair)].Key.VertexIndex;
             }
             else
             {                
                 VertexData[Index] = 
                 {
-                    V4(Attributes.vertices+(Face->v_idx*3),  1.0f),
-                    V4(Attributes.normals+(Face->vn_idx*3), 0.0f)
+                    V3(Attributes.vertices+(Face->v_idx*3)),
+                    V3(Attributes.normals+(Face->vn_idx*3))
                 };
                 
-                VertexArray->Count++;
-                IndexArray->Ptr[VertexIndex] = Index;
+                VertexBuffer.VertexCount++;
+                Indices[VertexIndex] = Index;                
             }
             
             Face++;
         }
     }
     
-    VertexArray->Ptr = PushWriteArray(Storage, VertexData, VertexArray->Count, graphics_vertex, 0);
+    VertexBuffer.Data = PushWriteArray(&Assets->Arena, VertexData, VertexBuffer.VertexCount, graphics_vertex_p3_n3, 0);    
+    
+    graphics_mesh* Result = Assets->Graphics->AllocateMesh(Assets->Graphics, VertexBuffer, IndexBuffer);
     
     return Result;
 }

@@ -4,6 +4,8 @@
 #include "assets.cpp"
 #include "world.cpp"
 
+#include "graphics_2.h"
+
 #if DEVELOPER_BUILD
 #include "dev_world_game.cpp"
 b32 Win32_DevWindowProc(HWND, UINT, WPARAM, LPARAM);
@@ -110,7 +112,8 @@ win32_game_code Win32_DefaultGameCode()
     return Result;
 }
 
-win32_game_code Win32_LoadGameCode(string DLLPath, string TempDLLPath)
+win32_game_code 
+Win32_LoadGameCode(string DLLPath, string TempDLLPath)
 {
     win32_game_code Result = {};    
     BOOL CopyResult = CopyFile(DLLPath.Data, TempDLLPath.Data, false);
@@ -126,12 +129,57 @@ win32_game_code Win32_LoadGameCode(string DLLPath, string TempDLLPath)
     return Result;
 }
 
-void Win32_UnloadGameCode(win32_game_code* GameCode, string TempDLLPath)
+void 
+Win32_UnloadGameCode(win32_game_code* GameCode, string TempDLLPath)
 {
     if(GameCode->GameLibrary.Library)
     {
-        ASSERT(FreeLibrary(GameCode->GameLibrary.Library));
+        FreeLibrary(GameCode->GameLibrary.Library);
         GameCode->GameLibrary.Library = NULL;       
+        DeleteFile(TempDLLPath.Data);
+    }
+}
+
+inline win32_graphics_code 
+Win32_DefaultGraphicsCode(graphics* Graphics)
+{
+    win32_graphics_code Result = {};
+    Result.ExecuteRenderCommands = Graphics_ExecuteRenderCommandsStub;
+    Graphics->AllocateMesh = Graphics_AllocateMeshStub;
+    return Result;
+}
+
+win32_graphics_code
+Win32_LoadGraphicsCode(graphics* Graphics, string DLLPath, string TempDLLPath)
+{
+    win32_graphics_code Result = {};
+    BOOL CopyResult = CopyFile(DLLPath.Data, TempDLLPath.Data, false);
+    if(!CopyResult)
+        return Win32_DefaultGraphicsCode(Graphics);
+    
+    Result.GraphicsLibrary.Library = LoadLibrary(TempDLLPath.Data);
+    if(!Result.GraphicsLibrary.Library)
+        return Win32_DefaultGraphicsCode(Graphics);
+    
+    Result.ExecuteRenderCommands = (execute_render_commands*)GetProcAddress(Result.GraphicsLibrary.Library, "ExecuteRenderCommands");
+    if(!Result.ExecuteRenderCommands)
+        return Win32_DefaultGraphicsCode(Graphics);
+    
+#define LOAD_GRAPHICS_FUNCTION(type, name) Graphics->##name = (type*)GetProcAddress(Result.GraphicsLibrary.Library, #name); if(!Graphics->##name) return Win32_DefaultGraphicsCode(Graphics)
+    
+    LOAD_GRAPHICS_FUNCTION(allocate_mesh, AllocateMesh);
+    
+    Result.GraphicsLibrary.LastWriteTime = Win32_GetFileCreationTime(DLLPath);
+    return Result;
+}
+
+void 
+Win32_UnloadGraphicsCode(win32_graphics_code* GraphicsCode, string TempDLLPath)
+{
+    if(GraphicsCode->GraphicsLibrary.Library)
+    {
+        FreeLibrary(GraphicsCode->GraphicsLibrary.Library);
+        GraphicsCode->GraphicsLibrary.Library = NULL;
         DeleteFile(TempDLLPath.Data);
     }
 }
@@ -547,14 +595,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     assets Assets = {};
     Assets.Arena = CreateArena(MEGABYTE(64));
     
-    Assets.BoxTriangleMesh = CreateBoxTriangleMesh(&Assets.Arena);
-    Assets.BoxGraphicsMesh = DEBUGGraphicsLoadMesh(&Assets.Arena, "Box.obj");    
+    Assets.BoxTriangleMesh = CreateBoxTriangleMesh(&Assets.Arena);    
     
     string EXEFilePathName = Win32_GetExePathWithName();
     string EXEFilePath = GetFilePath(EXEFilePathName);    
     string GameDLLPathName = Concat(EXEFilePath, "World_Game.dll");
     string TempDLLPathName = Concat(EXEFilePath, "World_Game_Temp.dll");    
-    string VulkanGraphicsDLLPathName = Concat(EXEFilePath, "Vulkan_Graphics.dll");
+    string OpenGLGraphicsDLLPathName = Concat(EXEFilePath, "OpenGL.dll");
+    string OpenGLGraphicsTempDLLPathName = Concat(EXEFilePath, "OpenGL_Temp.dll");    
     
     u16 KeyboardUsage = 6;
     u16 MouseUsage = 2;
@@ -584,7 +632,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     u32 SoundBufferSeconds = 2;
     win32_audio Audio = Win32_InitDSound(Window, SoundBufferSeconds, CreateAudioFormat(2, 48000)); 
     if(!Audio.SoundBuffer)
-        WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");
+        WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");        
     
 #if DEVELOPER_BUILD    
     development_input Input = {};
@@ -631,19 +679,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     game Game = {};
 #endif
     
-    HMODULE GraphicsLib = LoadLibrary(VulkanGraphicsDLLPathName.Data);
-    if(!GraphicsLib)
-        WRITE_AND_HANDLE_ERROR("Failed to load the graphics dll %s.", VulkanGraphicsDLLPathName.Data);
-    
-    win32_graphics_init* GraphicsInit = (win32_graphics_init*)GetProcAddress(GraphicsLib, "GraphicsInit");
-    if(!GraphicsInit)
-        WRITE_AND_HANDLE_ERROR("Failed to load the graphics initialize routine.");
-    
-    temp_arena TempArena = BeginTemporaryMemory();
-    graphics* Graphics = GraphicsInit(Window, Global_Platform, &Assets, Context);
-    BOOL_CHECK_AND_HANDLE(Graphics, "Failed to initialize the graphics.");
-    EndTemporaryMemory(&TempArena);
-    
     Game.Assets = &Assets;
     Game.Input = &Input;
     Game.Audio = &Audio;
@@ -652,15 +687,26 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!GameCode.GameLibrary.Library)    
         WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
     
+    
+    graphics Graphics = {};
+    Graphics.GraphicsStorage = CreateArena(KILOBYTE(32));
+    win32_graphics_code GraphicsCode = Win32_LoadGraphicsCode(&Graphics, OpenGLGraphicsDLLPathName, OpenGLGraphicsTempDLLPathName);
+    if(!GraphicsCode.GraphicsLibrary.Library)
+        WRITE_AND_HANDLE_ERROR("Failed to load the graphics's dll code.");
+    
+    Assets.Graphics = &Graphics;    
+    
 #if 0 
     Assets.TestAudio = DEBUGLoadWAVFile("Test.wav");
     CloseHandle(CreateThread(NULL, 0, AudioThread, &Game, 0, NULL));
 #endif
+    
+    
     Game.dt = 1.0f/60.0f; 
     u64 StartTime = Win32_Clock();
     for(;;)
     {   
-        DEVELOPER_GRAPHICS(Graphics);
+        //DEVELOPER_GRAPHICS(Graphics);
         
         temp_arena FrameArena = BeginTemporaryMemory();
         
@@ -814,14 +860,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             }
         }
         
-        v2i WindowDim = Win32_GetWindowDim(Window);
+        Graphics.RenderDim = Win32_GetWindowDim(Window);
         
         //TODO(JJ): Probably don't want this
         if(Game.dt > 1.0f/20.0f)
             Game.dt = 1.0f/20.0f;
         
 #if DEVELOPER_BUILD
-        IO.DisplaySize = ImVec2((f32)WindowDim.width, (f32)WindowDim.height);
+        IO.DisplaySize = ImVec2((f32)Graphics.RenderDim.width, (f32)Graphics.RenderDim.height);
         IO.DeltaTime = Game.dt;
         IO.KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         IO.KeyShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -844,19 +890,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             }
         }                
         
-        DevelopmentTick(&Game);        
+        //DevelopmentTick(&Game);        
 #endif        
+                
+        GameCode.Tick(&Game, &Graphics, Global_Platform);                                
         
-        GameCode.Tick(&Game, Graphics, Global_Platform);                        
-        if(WindowDim != 0)
-        {
-            if(!Graphics->RenderGame(&Game, WindowDim))
-            {
-                ASSERT(false); 
-                //TODO(JJ): Probably should fallback to Direct3D or OpenGL to try and recover so the game doesn't 
-                //just straight crash. At least we can warn the user
-            }
-        }
+        Graphics.PlatformData = Window;        
+        GraphicsCode.ExecuteRenderCommands(&Graphics, Global_Platform);
         
         Game.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
         //CONSOLE_LOG("dt: %f\n", Input.dt*1000.0f);

@@ -544,6 +544,13 @@ V3(f32 x, f32 y, f32 z)
 }
 
 inline v3f
+V3(f32* V)
+{
+    v3f Result = V3(V[0], V[1], V[2]);
+    return Result;
+}
+
+inline v3f
 InvalidV3()
 {
     v3f Result = {INFINITY, INFINITY, INFINITY};
@@ -810,6 +817,12 @@ inline v4f Blue()
 inline v4f Yellow()
 {
     v4f Result = RGBA(1.0f, 1.0f, 0.0f, 1.0f);
+    return Result;
+}
+
+inline v4f Black()
+{
+    v4f Result = RGBA(0.0f, 0.0f, 0.0f, 1.0f);
     return Result;
 }
 

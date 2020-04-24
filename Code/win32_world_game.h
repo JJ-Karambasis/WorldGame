@@ -34,8 +34,14 @@ struct win32_hot_loaded_library
 
 struct win32_game_code
 {
-    win32_hot_loaded_library GameLibrary;
+    win32_hot_loaded_library GameLibrary;    
     game_tick* Tick;        
+};
+
+struct win32_graphics_code
+{
+    win32_hot_loaded_library GraphicsLibrary;
+    execute_render_commands* ExecuteRenderCommands;
 };
 
 struct platform_file_handle

@@ -51,50 +51,77 @@ struct graphics_index_buffer
     void* Data;
 };
 
-enum command_type
+struct graphics_mesh
 {
-    COMMAND_SUBMIT_PROJECTION,
-    COMMAND_SUBMIT_CAMERA_VIEW,
-    COMMAND_DRAW_SHADED_COLOR_ENTITY
+    graphics_vertex_buffer VertexBuffer;
+    graphics_index_buffer IndexBuffer;
 };
 
-struct command
+enum push_command_type
 {
-    command_type Type;
+    PUSH_COMMAND_UNKNOWN,
+    PUSH_COMMAND_CLEAR,
+    PUSH_COMMAND_PROJECTION,
+    PUSH_COMMAND_CAMERA_VIEW,
+    PUSH_COMMAND_DRAW_SHADED_COLORED_MESH
 };
 
-struct command_4x4_matrix : public command
+struct push_command
+{
+    push_command_type Type;
+};
+
+struct push_command_clear : public push_command
+{
+    f32 R, G, B, A;
+};
+
+struct push_command_4x4_matrix : public push_command
 {
     m4 Matrix;
 };
 
-struct command_draw_shaded_entity : public command
+struct push_command_draw_shaded_colored_mesh : public push_command
 {
-    
+    graphics_mesh* Mesh;
+    m4 WorldTransform;
+    f32 R, G, B, A;
 };
 
 //CONFIRM(JJ): Is this alright to be fixed sized?
 #define MAX_COMMAND_COUNT 1024
-struct command_list
+struct push_command_list
 {
-    command* Ptr[MAX_COMMAND_COUNT];
+    push_command* Ptr[MAX_COMMAND_COUNT];
     u32 Count;
 };
 
+#define ALLOCATE_MESH(name) graphics_mesh* name(struct graphics* Graphics, graphics_vertex_buffer VertexBuffer, graphics_index_buffer IndexBuffer)
+typedef ALLOCATE_MESH(allocate_mesh);
+
+#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, platform* Platform)
+typedef EXECUTE_RENDER_COMMANDS(execute_render_commands);
+
 struct graphics
-{    
-    command_list CommandList;
+{   
+    arena GraphicsStorage;
     
-    void* PlatformData;
+    v2i RenderDim;
+    push_command_list CommandList;    
+    void* PlatformData;    
+    b32 Initialized;        
     
-    b32 Initialized;
+    allocate_mesh* AllocateMesh;
 };
 
-#define GRAPHICS_GET_RENDER_COMMANDS(name) void name(graphics* Graphics)
-#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, platform* Platform)
+ALLOCATE_MESH(Graphics_AllocateMeshStub)
+{
+    return NULL;
+}
 
-typedef GRAPHICS_GET_RENDER_COMMANDS(graphics_get_render_commands);
-typedef EXECUTE_RENDER_COMMANDS(execute_render_commands);
+EXECUTE_RENDER_COMMANDS(Graphics_ExecuteRenderCommandsStub)
+{
+}
 
 inline ptr 
 GetVertexSize(graphics_vertex_format Format)

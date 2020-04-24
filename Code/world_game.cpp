@@ -2,6 +2,8 @@
 #include "geometry.cpp"
 #include "audio.cpp"
 #include "world.cpp"
+#include "assets.cpp"
+#include "graphics_2.cpp"
 
 #define PLAYER_RADIUS 0.35f
 #define PLAYER_HEIGHT 1.0f
@@ -54,8 +56,39 @@ EXPORT GAME_TICK(Tick)
         OnWorldSwitch(Game, PrevIndex, Game->CurrentWorldIndex);          
     }
     
-    UpdateWorld(Game);    
+    UpdateWorld(Game);            
     
+    camera* Camera = &Game->Camera;        
+    world* World = GetCurrentWorld(Game);
+    
+    world_entity* PlayerEntity = GetEntity(World, World->Player.EntityID);
+    
+    Camera->Position = PlayerEntity->Position;
+    Camera->FocalPoint = PlayerEntity->Position;
+    Camera->Position.z += 6.0f;
+    Camera->Orientation = IdentityM3();
+    
+    m4 Perspective = PerspectiveM4(PI*0.30f, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), 0.01f, 100.0f);
+    m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);
+    
+    if(Graphics->Initialized)
+    {        
+        PushClear(Graphics, Black());        
+        
+        PushProjection(Graphics, Perspective); 
+        PushCameraView(Graphics, CameraView);
+        
+        for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+        {
+            if(!Game->Assets->BoxGraphicsMesh)        
+                Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.obj");
+            
+            ASSERT(Game->Assets->BoxGraphicsMesh);
+            PushDrawShadedColoredMesh(Graphics, Game->Assets->BoxGraphicsMesh, Entity->Transform, Entity->Color); 
+        }
+    }
+    
+#if 0 
 #if DEVELOPER_BUILD
     development_game* DevGame = (development_game*)Game;
     if(DevGame->InDevelopmentMode)
@@ -124,7 +157,7 @@ EXPORT GAME_TICK(Tick)
         Camera->Position.z += 6.0f;
         Camera->Orientation = IdentityM3();
     }   
-    
     DevGame->LastTickFrameTime = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), Start);
     DevGame->LastFrameCycles = GetCycles()-StartCycles;
+#endif
 }

@@ -1,6 +1,58 @@
 #include "opengl.h"
 #include "opengl_shaders.cpp"
 
+inline GLenum
+GetIndexType(graphics_mesh* Mesh)
+{    
+    ASSERT(Mesh->IndexBuffer.Format != GRAPHICS_INDEX_FORMAT_UNKNOWN);
+    GLenum IndexType = (Mesh->IndexBuffer.Format == GRAPHICS_INDEX_FORMAT_32_BIT) ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+    return IndexType;
+}
+
+extern "C"
+EXPORT ALLOCATE_MESH(AllocateMesh)
+{   
+    //TODO(JJ): We should allocate this data structure from a pool of opengl graphics meshes later
+    opengl_graphics_mesh* Result = PushStruct(&Graphics->GraphicsStorage, opengl_graphics_mesh, Clear, 0);
+    
+    Result->VertexBuffer = VertexBuffer;
+    Result->IndexBuffer = IndexBuffer;
+    
+    glGenVertexArrays(1, &Result->VAO);
+    glGenBuffers(1, &Result->VBO);
+    glGenBuffers(1, &Result->EBO);
+    
+    glBindVertexArray(Result->VAO);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, Result->VBO);
+    glBufferData(GL_ARRAY_BUFFER, GetVertexBufferSize(&Result->VertexBuffer), Result->VertexBuffer.Data, GL_STATIC_DRAW);
+    
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Result->EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, GetIndexBufferSize(&Result->IndexBuffer), Result->IndexBuffer.Data, GL_STATIC_DRAW);
+    
+    switch(VertexBuffer.Format)
+    {
+        case GRAPHICS_VERTEX_FORMAT_P3_N3:
+        {
+            GLuint PAttribute = 0;
+            GLuint NAttribute = 1;
+            
+            GLsizei Stride = (GLsizei)GetVertexSize(VertexBuffer.Format);
+            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)0);
+            glVertexAttribPointer(NAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)(sizeof(v3f)));
+            
+            
+            glEnableVertexAttribArray(PAttribute);
+            glEnableVertexAttribArray(NAttribute);            
+            
+        } break;
+    }
+    
+    glBindVertexArray(0);    
+    
+    return Result;
+}
+
 GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar** FSCode, u32 FSCodeCount)
 {    
     GLuint VertexShader   = glCreateShader(GL_VERTEX_SHADER);
@@ -58,7 +110,7 @@ GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar*
 
 #ifdef OS_WINDOWS
 
-LOAD_PROC(Win32_LoadProc)
+void* Platform_LoadProc(char* FunctionName)
 {
     void* Function = (void*)wglGetProcAddress(FunctionName);
     if(Function == 0 ||
@@ -72,7 +124,7 @@ LOAD_PROC(Win32_LoadProc)
     return Function;
 }
 
-load_proc* Win32_InitOpenGL(void* PlatformData)
+b32 Platform_InitOpenGL(void* PlatformData)
 {
     HWND Window = (HWND)PlatformData;
     HDC DeviceContext = GetDC(Window);
@@ -105,7 +157,7 @@ load_proc* Win32_InitOpenGL(void* PlatformData)
     int Attribs[] = 
     {
         WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 0,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
         WGL_CONTEXT_FLAGS_ARB, AttribFlags,                
         0
     };
@@ -125,11 +177,19 @@ load_proc* Win32_InitOpenGL(void* PlatformData)
     
     wglSwapIntervalEXT(1);
     
-    return Win32_LoadProc;
+    return true;
     
     handle_error:
-    return NULL;
+    return false;
 }
+
+void Platform_SwapBuffers(void* PlatformData)
+{
+    HWND Window = (HWND)PlatformData;
+    HDC DeviceContext = GetDC(Window);
+    SwapBuffers(DeviceContext);
+}
+
 #endif
 
 extern "C"
@@ -139,13 +199,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);
     
     if(!Graphics->Initialized)
-    {
-        load_proc* LoadProc = NULL;
-        
-#ifdef OS_WINDOWS        
-        LoadProc = Win32_InitOpenGL(Graphics->PlatformData);
-        BOOL_CHECK_AND_HANDLE(LoadProc, "Failed to initialize the win32 version of opengl.");        
-#endif
+    {        
+        BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(Graphics->PlatformData), "Failed to initialize the win32 version of opengl.");                
         
         LOAD_FUNCTION(PFNGLCREATESHADERPROC, glCreateShader);
         LOAD_FUNCTION(PFNGLSHADERSOURCEPROC, glShaderSource);
@@ -159,35 +214,95 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         LOAD_FUNCTION(PFNGLGETPROGRAMIVPROC, glGetProgramiv);
         LOAD_FUNCTION(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog);        
         LOAD_FUNCTION(PFNGLDETACHSHADERPROC, glDetachShader);
+        LOAD_FUNCTION(PFNGLGENVERTEXARRAYSPROC, glGenVertexArrays);
+        LOAD_FUNCTION(PFNGLGENBUFFERSPROC, glGenBuffers);
+        LOAD_FUNCTION(PFNGLBINDVERTEXARRAYPROC, glBindVertexArray);
+        LOAD_FUNCTION(PFNGLBINDBUFFERPROC, glBindBuffer);
+        LOAD_FUNCTION(PFNGLBUFFERDATAPROC, glBufferData);
+        LOAD_FUNCTION(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer);
+        LOAD_FUNCTION(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray);
+        LOAD_FUNCTION(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation);
+        LOAD_FUNCTION(PFNGLUSEPROGRAMPROC, glUseProgram);
+        LOAD_FUNCTION(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
+        LOAD_FUNCTION(PFNGLUNIFORM4FPROC, glUniform4f);
+        LOAD_FUNCTION(PFNGLDRAWELEMENTSBASEVERTEXPROC, glDrawElementsBaseVertex);
+        
+        const GLchar* VertexShader[] = { Shader_Header, VertexShader_StandardWorldSpaceToClipSpace };
+        const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_StandardPhongShading };
+        
+        Global_StandardPhongShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
+        Global_StandardPhongShader.ProjectionLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Projection");
+        Global_StandardPhongShader.ViewLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "View");
+        Global_StandardPhongShader.ModelLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Model");
+        Global_StandardPhongShader.ColorLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Color");
         
         Graphics->Initialized = true;
     } 
     
-    command_list* CommandList = &Graphics->CommandList;
-    
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
     
+    GLuint BoundProgram = (GLuint)-1;
+    
+    glViewport(0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+    
+    push_command_list* CommandList = &Graphics->CommandList;        
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
     {
-        command* Command = CommandList->Ptr[CommandIndex];
+        push_command* Command = CommandList->Ptr[CommandIndex];
         switch(Command->Type)
-        {
-            case COMMAND_SUBMIT_PROJECTION:
+        {   
+            case PUSH_COMMAND_CLEAR:
             {
-                Projection = ((command_4x4_matrix*)Command)->Matrix;
+                push_command_clear* ClearCommand = (push_command_clear*)Command;
+                
+                glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+                glClearColor(ClearCommand->R, ClearCommand->G, ClearCommand->B, ClearCommand->A);
+                glClearDepth(1.0f); 
+                
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(GL_LEQUAL);
             } break;
             
-            case COMMAND_SUBMIT_CAMERA_VIEW:
+            case PUSH_COMMAND_PROJECTION:
             {
-                CameraView = ((command_4x4_matrix*)Command)->Matrix;
+                Projection = ((push_command_4x4_matrix*)Command)->Matrix;
             } break;
             
-            case COMMAND_DRAW_SHADED_COLOR_ENTITY:
+            case PUSH_COMMAND_CAMERA_VIEW:
             {
+                CameraView = ((push_command_4x4_matrix*)Command)->Matrix;
             } break;
+            
+            case PUSH_COMMAND_DRAW_SHADED_COLORED_MESH:
+            {
+                push_command_draw_shaded_colored_mesh* DrawShadedColoredMesh = (push_command_draw_shaded_colored_mesh*)Command;
+                                
+                opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawShadedColoredMesh->Mesh;
+                if(BoundProgram != Global_StandardPhongShader.Program)
+                {
+                    BoundProgram = Global_StandardPhongShader.Program;
+                    glUseProgram(BoundProgram);
+                    
+                    glUniformMatrix4fv(Global_StandardPhongShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
+                    glUniformMatrix4fv(Global_StandardPhongShader.ViewLocation, 1, GL_FALSE, CameraView.M);                    
+                }
+                
+                glUniformMatrix4fv(Global_StandardPhongShader.ModelLocation, 1, GL_FALSE, DrawShadedColoredMesh->WorldTransform.M);
+                glUniform4f(Global_StandardPhongShader.ColorLocation, DrawShadedColoredMesh->R, DrawShadedColoredMesh->G, DrawShadedColoredMesh->B, DrawShadedColoredMesh->A);
+                                
+                glBindVertexArray(Mesh->VAO);
+                
+                GLenum IndexType = GetIndexType(Mesh);                
+                glDrawElementsBaseVertex(GL_TRIANGLES, Mesh->IndexBuffer.IndexCount, IndexType, 0, 0);
+                
+            } break;
+            
+            INVALID_DEFAULT_CASE;
         }
     }
+    
+    Platform_SwapBuffers(Graphics->PlatformData);
     
     CommandList->Count = 0;
     

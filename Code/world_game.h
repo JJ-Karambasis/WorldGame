@@ -6,10 +6,20 @@
 #include "platform.h"
 #include "input.h"
 #include "geometry.h"
+#include "graphics_2.h"
 #include "assets.h"
 #include "audio.h"
-#include "graphics.h"
 #include "world.h"
+
+struct camera
+{
+    v3f Velocity;
+    v3f Position;    
+    v3f FocalPoint;
+    m3 Orientation;
+    v3f AngularVelocity;
+    f32 Distance;
+};
 
 struct game
 {
