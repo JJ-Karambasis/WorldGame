@@ -2,6 +2,23 @@
 #include "opengl_shaders.cpp"
 
 inline GLenum
+GetBlendFactor(graphics_blend Blend)
+{    
+    switch(Blend)
+    {
+        case GRAPHICS_BLEND_SRC_ALPHA:
+        return GL_SRC_ALPHA;
+        
+        case GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA:
+        return GL_ONE_MINUS_SRC_ALPHA;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (GLenum)-1;
+}
+
+inline GLenum
 GetIndexType(graphics_mesh* Mesh)
 {    
     ASSERT(Mesh->IndexBuffer.Format != GRAPHICS_INDEX_FORMAT_UNKNOWN);
@@ -252,16 +269,58 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         push_command* Command = CommandList->Ptr[CommandIndex];
         switch(Command->Type)
         {   
-            case PUSH_COMMAND_CLEAR:
+            case PUSH_COMMAND_CLEAR_COLOR:
             {
-                push_command_clear* ClearCommand = (push_command_clear*)Command;
+                push_command_clear_color* ClearColorCommand = (push_command_clear_color*)Command;
                 
                 glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-                glClearColor(ClearCommand->R, ClearCommand->G, ClearCommand->B, ClearCommand->A);
-                glClearDepth(1.0f); 
+                glClearColor(ClearColorCommand->R, ClearColorCommand->G, ClearColorCommand->B, ClearColorCommand->A);                                
+            } break;
+            
+            case PUSH_COMMAND_CLEAR_COLOR_AND_DEPTH:
+            {
+                push_command_clear_color_and_depth* ClearColorAndDepthCommand = (push_command_clear_color_and_depth*)Command;                
+                glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+                glClearColor(ClearColorAndDepthCommand->R, ClearColorAndDepthCommand->G, ClearColorAndDepthCommand->B, ClearColorAndDepthCommand->A);
+                glClearDepth(ClearColorAndDepthCommand->Depth);                
+            } break;
+            
+            case PUSH_COMMAND_DEPTH:
+            {
+                push_command_depth* CommandDepth = (push_command_depth*)Command;
+                if(CommandDepth->Enable)
+                {                
+                    glEnable(GL_DEPTH_TEST);
+                    glDepthFunc(GL_LEQUAL);
+                }
+                else
+                    glDisable(GL_DEPTH_TEST);
+            } break;
+            
+            case PUSH_COMMAND_CULL:
+            {
+                push_command_cull* CommandCull = (push_command_cull*)Command;
+                if(CommandCull->Enable) 
+                    glEnable(GL_CULL_FACE);                
+                else
+                    glDisable(GL_CULL_FACE);
+            } break;
+            
+            case PUSH_COMMAND_BLEND:
+            {
+                push_command_blend* CommandBlend = (push_command_blend*)Command;
+                if(CommandBlend->Enable)
+                {
+                    glEnable(GL_BLEND);
+                    
+                    GLenum SrcFactor = GetBlendFactor(CommandBlend->SrcGraphicsBlend);
+                    GLenum DstFactor = GetBlendFactor(CommandBlend->DstGraphicsBlend);
+                    
+                    glBlendFunc(SrcFactor, DstFactor);                                        
+                }
+                else
+                    glDisable(GL_BLEND);
                 
-                glEnable(GL_DEPTH_TEST);
-                glDepthFunc(GL_LEQUAL);
             } break;
             
             case PUSH_COMMAND_PROJECTION:

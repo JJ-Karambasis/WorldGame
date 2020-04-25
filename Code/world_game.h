@@ -6,7 +6,7 @@
 #include "platform.h"
 #include "input.h"
 #include "geometry.h"
-#include "graphics_2.h"
+#include "graphics.h"
 #include "assets.h"
 #include "audio.h"
 #include "world.h"

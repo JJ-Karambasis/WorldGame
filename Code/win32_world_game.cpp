@@ -4,7 +4,7 @@
 #include "assets.cpp"
 #include "world.cpp"
 
-#include "graphics_2.h"
+#include "graphics.cpp"
 
 #if DEVELOPER_BUILD
 #include "dev_world_game.cpp"
@@ -177,6 +177,8 @@ Win32_LoadGraphicsCode(graphics* Graphics, string DLLPath, string TempDLLPath)
 #define LOAD_GRAPHICS_FUNCTION(type, name) Graphics->##name = (type*)GetProcAddress(Result.GraphicsLibrary.Library, #name); if(!Graphics->##name) return Win32_DefaultGraphicsCode(Graphics)
     
     LOAD_GRAPHICS_FUNCTION(allocate_mesh, AllocateMesh);
+    //LOAD_GRAPHICS_FUNCTION(allocate_dynamic_mesh, AllocateDynamicMesh);
+    //LOAD_GRAPHICS_FUNCTION(stream_mesh_data, StreamMeshData);
     
     Result.GraphicsLibrary.LastWriteTime = Win32_GetFileCreationTime(DLLPath);
     return Result;

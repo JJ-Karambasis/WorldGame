@@ -1,7 +1,7 @@
 @echo off
 
 set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533
-set Common=-DDEVELOPER_BUILD=0 -O2 -nologo -FC -Z7 -Oi -EHsc- %Warnings% 
+set Common=-DDEVELOPER_BUILD=1 -Od -nologo -FC -Z7 -Oi -EHsc- %Warnings% 
 
 IF NOT EXIST ..\din mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data

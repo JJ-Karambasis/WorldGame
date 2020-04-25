@@ -386,6 +386,18 @@ inline b32 operator==(v2f Left, v2f Right)
     return Result;
 }
 
+inline b32 operator<(v2f Left, v2f Right)
+{
+    b32 Result = (Left.x < Right.x) && (Left.y < Right.y);
+    return Result;
+}
+
+inline b32 operator>=(v2f Left, f32 Right)
+{
+    b32 Result = (Left.x >= Right) && (Left.y >= Right);
+    return Result;
+}
+
 inline v2f Abs2f(v2f V)
 {
     v2f Result = {Abs(V.x), Abs(V.y)};

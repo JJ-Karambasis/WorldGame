@@ -24,6 +24,12 @@ struct circle2D
     f32 Radius;
 };
 
+struct rect2D
+{
+    v2f Min;
+    v2f Max;
+};
+
 struct triangle2D
 {
     v2f P[3];
@@ -79,6 +85,14 @@ inline b32 IsValidRay2D(ray2D Ray)
 inline circle2D CreateCircle2D(v2f CenterP, f32 Radius)
 {
     circle2D Result = {CenterP, Radius};
+    return Result;
+}
+
+inline rect2D CreateRect2D(f32 x0, f32 y0, f32 x1, f32 y1)
+{
+    rect2D Result;
+    Result.Min = V2(x0, y0);
+    Result.Max = V2(x1, y1);
     return Result;
 }
 

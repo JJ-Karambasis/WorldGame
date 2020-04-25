@@ -3,7 +3,7 @@
 #include "audio.cpp"
 #include "world.cpp"
 #include "assets.cpp"
-#include "graphics_2.cpp"
+#include "graphics.cpp"
 
 #define PLAYER_RADIUS 0.35f
 #define PLAYER_HEIGHT 1.0f
@@ -67,7 +67,9 @@ EXPORT GAME_TICK(Tick)
         m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
         m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
         
-        PushClear(Graphics, Black());        
+        PushClearColorAndDepth(Graphics, Black(), 1.0f);        
+                
+        PushDepth(Graphics, true);
         
         PushProjection(Graphics, Perspective); 
         PushCameraView(Graphics, CameraView);

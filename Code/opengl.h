@@ -1,7 +1,7 @@
 #ifndef OPENGL_H
 #define OPENGL_H
 
-#include "graphics_2.h"
+#include "graphics.h"
 
 #include "opengl/gl.h"
 #include "opengl/glext.h"

@@ -4,7 +4,88 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
-#include "graphics_2.cpp"
+void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
+{    
+    ImGui::NewFrame();
+    
+    local bool Open; 
+    ImGui::ShowDemoWindow(&Open);
+    
+    ImGui::End();
+    ImGui::Render();        
+}
+
+void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
+{    
+    if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
+        return;
+    
+    camera* Camera = &DevContext->Camera;
+        
+    PushClearColorAndDepth(Graphics, Black(), 1.0f);            
+    
+    PushDepth(Graphics, true);
+    
+    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+    m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
+    
+    PushProjection(Graphics, Perspective); 
+    PushCameraView(Graphics, CameraView);
+    
+    world* World = GetCurrentWorld(Game);
+    for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+    {
+        if(!Game->Assets->BoxGraphicsMesh)        
+            Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.obj");
+        
+        ASSERT(Game->Assets->BoxGraphicsMesh);
+        PushDrawShadedColoredMesh(Graphics, Game->Assets->BoxGraphicsMesh, Entity->Transform, Entity->Color); 
+    }   
+    
+    
+#if 0         
+    
+    DevelopmentImGui(DevContext, Game, Graphics);
+    
+    ptr IndexSize = GetIndexSize(DevContext->ImGuiMesh->IndexBuffer.Format);
+    
+    PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);    
+    PushCull(Graphics, false);
+    PushDepth(Graphics, false);        
+    
+    ImDrawData* DrawData = ImGui::GetDrawData();
+    for(i32 CmdListIndex = 0; CmdListIndex < DrawData->CmdListsCount; CmdListIndex++)
+    {
+        if(!DevContext->ImGuiMesh)
+            DevContext->ImGuiMesh = Graphics->AllocateDynamicMesh(Graphics, GRAPHICS_VERTEX_FORMAT_P2_UV_C, GRAPHICS_INDEX_FORMAT_16_BIT);
+        
+        ImDrawList* CmdList = DrawData->CmdLists[CmdListIndex];        
+        Graphics->StreamMeshData(DevContext->ImGuiMesh, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size*sizeof(graphics_vertex_p2_uv_c), 
+                                 CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size*IndexSize);
+        
+        for(i32 CmdIndex = 0; CmdIndex < CmdList->CmdBuffer.Size; CmdIndex++)
+        {
+            ImDrawCmd* Cmd = &CmdList->CmdBuffer[CmdIndex];
+            ASSERT(!Cmd->UserCallback);
+            
+            rect2D Rect = CreateRect2D(Cmd->ClipRect.x, Cmd->ClipRect.y, Cmd->ClipRect.z, Cmd->ClipRect.w);
+            
+            if((Rect.Min < V2(Graphics->RenderDim)) && (Rect.Max >= 0.0f))
+            {
+                PushScissor(Rect.Min.x, Graphics->RenderDim.height - Rect.Max.y, 
+                            Rect.Max.x - Rect.Min.x, Rect.Max.y - Rect.Min.y);   
+                
+                graphics_texture* Texture = (graphics_texture*)Cmd->TextureID;
+                PushDrawImGuiUI(Graphics, &DevContext->ImGuiMesh, Texture, Cmd->ElemCount, Cmd->IdxOffset, Cmd->VtxOffset);                 
+            }            
+        }
+    }
+    
+    PushBlend(Graphics, false);
+    PushCull(Graphics, true);
+    PushDepth(Graphics, true);    
+#endif
+}
 
 void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
 {
@@ -74,39 +155,9 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
         
-        if(Graphics->Initialized)
-        {                        
-#if 0
-            ImGui::NewFrame();
-            
-            ImGui::Begin("Dev Editor");
-            
-            local bool Open; 
-            ImGui::ShowDemoWindow(&Open);
-            
-            ImGui::End();
-            ImGui::Render();
-#endif
-            
-            m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
-            m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
-            
-            PushClear(Graphics, Black());        
-            
-            PushProjection(Graphics, Perspective); 
-            PushCameraView(Graphics, CameraView);
-            
-            world* World = GetCurrentWorld(Game);
-            for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
-            {
-                if(!Game->Assets->BoxGraphicsMesh)        
-                    Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.obj");
-                
-                ASSERT(Game->Assets->BoxGraphicsMesh);
-                PushDrawShadedColoredMesh(Graphics, Game->Assets->BoxGraphicsMesh, Entity->Transform, Entity->Color); 
-            }
-            
-        }                
+        if(Graphics->Initialized)                                
+            DevelopmentRender(DevContext, Game, Graphics);
+        
     }
     
     Input->MouseDelta = {};

@@ -43,6 +43,7 @@ struct dev_context
     dev_input Input;    
     camera Camera;
     
+    graphics_mesh* ImGuiMesh;
     
     void* PlatformData;
     b32 Initialized;

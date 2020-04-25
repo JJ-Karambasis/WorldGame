@@ -1,5 +1,5 @@
 global const char* Shader_Header = R"(
-#version 330
+#version 330 core
 #define v4f vec4
 #define v3f vec3
 #define v2f vec2
@@ -58,6 +58,42 @@ void main()
     c3 FinalColor = Diffuse+Specular;
     
     FragColor = c4(FinalColor, 1.0f);
+}
+
+)";
+
+global const char* VertexShader_ImGui = R"(
+
+layout (location = 0) in v2f P;
+layout (location = 1) in v2f UV;
+layout (location = 2) in c4  C;
+
+out v2f FragUV;
+out c4  FragColor;
+
+uniform m4 Projection;
+
+void main()
+{
+    FragUV = UV;
+    FragColor = C;
+    gl_Position = Projection*v4f(P, 0, 1);
+}
+
+)";
+
+global const char* FragmentShader_ImGui = R"(
+
+in v2f FragUV;
+in c4 FragColor;
+
+out c4 FinalColor;
+
+uniform sampler2D Texture;
+
+void main()
+{
+    FinalColor = FragColor * texture(Texture, FragUV.st);
 }
 
 )";
