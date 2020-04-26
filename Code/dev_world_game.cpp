@@ -4,6 +4,23 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
+graphics_texture* AllocateImGuiFont(graphics* Graphics)
+{    
+    ImGuiIO* IO = &ImGui::GetIO();
+    void* ImGuiFontData;
+    v2i ImGuiFontDimensions;
+    
+    IO->Fonts->GetTexDataAsRGBA32((unsigned char**)&ImGuiFontData, &ImGuiFontDimensions.width, &ImGuiFontDimensions.height);
+    
+    graphics_sampler_info SamplerInfo = {};
+    SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
+    SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
+    
+    graphics_texture* FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, &SamplerInfo);        
+    IO->Fonts->TexID = (ImTextureID)FontTexture;    
+    return FontTexture;
+}
+
 void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
 {    
     ImGui::NewFrame();
@@ -11,7 +28,6 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     local bool Open; 
     ImGui::ShowDemoWindow(&Open);
     
-    ImGui::End();
     ImGui::Render();        
 }
 
@@ -19,6 +35,8 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
 {    
     if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
         return;
+    
+    DevelopmentImGui(DevContext, Game, Graphics);
     
     camera* Camera = &DevContext->Camera;
         
@@ -30,7 +48,7 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
     m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
     
     PushProjection(Graphics, Perspective); 
-    PushCameraView(Graphics, CameraView);
+    PushCameraView(Graphics, CameraView);        
     
     world* World = GetCurrentWorld(Game);
     for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
@@ -41,17 +59,15 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
         ASSERT(Game->Assets->BoxGraphicsMesh);
         PushDrawShadedColoredMesh(Graphics, Game->Assets->BoxGraphicsMesh, Entity->Transform, Entity->Color); 
     }   
-    
-    
-#if 0         
-    
-    DevelopmentImGui(DevContext, Game, Graphics);
-    
-    ptr IndexSize = GetIndexSize(DevContext->ImGuiMesh->IndexBuffer.Format);
+        
+    ptr IndexSize = sizeof(ImDrawIdx);
     
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);    
     PushCull(Graphics, false);
     PushDepth(Graphics, false);        
+    
+    m4 Orthographic = OrthographicM4(0, (f32)Graphics->RenderDim.width, 0, (f32)Graphics->RenderDim.height, -1.0f, 1.0f);
+    PushProjection(Graphics, Orthographic);
     
     ImDrawData* DrawData = ImGui::GetDrawData();
     for(i32 CmdListIndex = 0; CmdListIndex < DrawData->CmdListsCount; CmdListIndex++)
@@ -68,23 +84,14 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
             ImDrawCmd* Cmd = &CmdList->CmdBuffer[CmdIndex];
             ASSERT(!Cmd->UserCallback);
             
-            rect2D Rect = CreateRect2D(Cmd->ClipRect.x, Cmd->ClipRect.y, Cmd->ClipRect.z, Cmd->ClipRect.w);
-            
-            if((Rect.Min < V2(Graphics->RenderDim)) && (Rect.Max >= 0.0f))
-            {
-                PushScissor(Rect.Min.x, Graphics->RenderDim.height - Rect.Max.y, 
-                            Rect.Max.x - Rect.Min.x, Rect.Max.y - Rect.Min.y);   
-                
-                graphics_texture* Texture = (graphics_texture*)Cmd->TextureID;
-                PushDrawImGuiUI(Graphics, &DevContext->ImGuiMesh, Texture, Cmd->ElemCount, Cmd->IdxOffset, Cmd->VtxOffset);                 
-            }            
+            graphics_texture* Texture = (graphics_texture*)Cmd->TextureId;
+            PushDrawImGuiUI(Graphics, DevContext->ImGuiMesh, Texture, Cmd->ElemCount, Cmd->IdxOffset, Cmd->VtxOffset);                             
         }
     }
     
     PushBlend(Graphics, false);
     PushCull(Graphics, true);
-    PushDepth(Graphics, true);    
-#endif
+    PushDepth(Graphics, true);            
 }
 
 void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
@@ -92,7 +99,10 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     if(!DevContext->Initialized)
     {
         Platform_InitImGui(DevContext->PlatformData);        
-        DevContext->Initialized = true;
+        
+        AllocateImGuiFont(Graphics);
+        
+        DevContext->Initialized = true;                        
     }
     
     dev_input* Input = &DevContext->Input;    
@@ -155,9 +165,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
         
-        if(Graphics->Initialized)                                
-            DevelopmentRender(DevContext, Game, Graphics);
-        
+        DevelopmentRender(DevContext, Game, Graphics);        
     }
     
     Input->MouseDelta = {};

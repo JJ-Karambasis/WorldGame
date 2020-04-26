@@ -62,7 +62,7 @@ EXPORT GAME_TICK(Tick)
     Camera->Position.z += 6.0f;
     Camera->Orientation = IdentityM3();
     
-    if(Graphics->Initialized && NOT_IN_DEVELOPMENT_MODE())
+    if(NOT_IN_DEVELOPMENT_MODE())
     {        
         m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
         m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        

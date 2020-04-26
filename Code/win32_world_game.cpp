@@ -14,7 +14,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse(&DevContext, RawMouse)
 #define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard(&DevContext, RawKeyboard)
-#define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(&DevContext, &Game, &Graphics)
+#define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(&DevContext, Game, Graphics)
 #else
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) false
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) 
@@ -150,35 +150,33 @@ Win32_UnloadGameCode(win32_game_code* GameCode, string TempDLLPath)
 }
 
 inline win32_graphics_code 
-Win32_DefaultGraphicsCode(graphics* Graphics)
+Win32_DefaultGraphicsCode()
 {
     win32_graphics_code Result = {};
-    Result.ExecuteRenderCommands = Graphics_ExecuteRenderCommandsStub;
-    Graphics->AllocateMesh = Graphics_AllocateMeshStub;
+    Result.InitGraphics = Graphics_InitGraphicsStub;
+    Result.ExecuteRenderCommands = Graphics_ExecuteRenderCommandsStub;        
     return Result;
 }
 
 win32_graphics_code
-Win32_LoadGraphicsCode(graphics* Graphics, string DLLPath, string TempDLLPath)
+Win32_LoadGraphicsCode(string DLLPath, string TempDLLPath)
 {
     win32_graphics_code Result = {};
     BOOL CopyResult = CopyFile(DLLPath.Data, TempDLLPath.Data, false);
     if(!CopyResult)
-        return Win32_DefaultGraphicsCode(Graphics);
+        return Win32_DefaultGraphicsCode();
     
     Result.GraphicsLibrary.Library = LoadLibrary(TempDLLPath.Data);
     if(!Result.GraphicsLibrary.Library)
-        return Win32_DefaultGraphicsCode(Graphics);
+        return Win32_DefaultGraphicsCode();
+    
+    Result.InitGraphics = (init_graphics*)GetProcAddress(Result.GraphicsLibrary.Library, "InitGraphics");
+    if(!Result.InitGraphics)
+        return Win32_DefaultGraphicsCode();
     
     Result.ExecuteRenderCommands = (execute_render_commands*)GetProcAddress(Result.GraphicsLibrary.Library, "ExecuteRenderCommands");
     if(!Result.ExecuteRenderCommands)
-        return Win32_DefaultGraphicsCode(Graphics);
-    
-#define LOAD_GRAPHICS_FUNCTION(type, name) Graphics->##name = (type*)GetProcAddress(Result.GraphicsLibrary.Library, #name); if(!Graphics->##name) return Win32_DefaultGraphicsCode(Graphics)
-    
-    LOAD_GRAPHICS_FUNCTION(allocate_mesh, AllocateMesh);
-    //LOAD_GRAPHICS_FUNCTION(allocate_dynamic_mesh, AllocateDynamicMesh);
-    //LOAD_GRAPHICS_FUNCTION(stream_mesh_data, StreamMeshData);
+        return Win32_DefaultGraphicsCode();
     
     Result.GraphicsLibrary.LastWriteTime = Win32_GetFileCreationTime(DLLPath);
     return Result;
@@ -650,14 +648,15 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!GameCode.GameLibrary.Library)    
         WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
     
-    
-    graphics Graphics = {};
-    Graphics.GraphicsStorage = CreateArena(KILOBYTE(32));
-    win32_graphics_code GraphicsCode = Win32_LoadGraphicsCode(&Graphics, OpenGLGraphicsDLLPathName, OpenGLGraphicsTempDLLPathName);
+    win32_graphics_code GraphicsCode = Win32_LoadGraphicsCode(OpenGLGraphicsDLLPathName, OpenGLGraphicsTempDLLPathName);
     if(!GraphicsCode.GraphicsLibrary.Library)
         WRITE_AND_HANDLE_ERROR("Failed to load the graphics's dll code.");
     
-    Assets.Graphics = &Graphics;    
+    graphics* Graphics = GraphicsCode.InitGraphics(Global_Platform, Window);
+    if(!Graphics)
+        WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");
+    
+    Assets.Graphics = Graphics;    
     
     void* DevPointer = NULL;
 #if DEVELOPER_BUILD
@@ -750,18 +749,17 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             }
         }
         
-        Graphics.RenderDim = Win32_GetWindowDim(Window);
+        Graphics->RenderDim = Win32_GetWindowDim(Window);
         
         //TODO(JJ): Probably don't want this
         if(Game.dt > 1.0f/20.0f)
             Game.dt = 1.0f/20.0f;
         
-        DEVELOPMENT_TICK(Game, Graphics);        
+        DEVELOPMENT_TICK(&Game, Graphics);        
         
-        GameCode.Tick(&Game, &Graphics, Global_Platform, DevPointer);                                
-        
-        Graphics.PlatformData = Window;        
-        GraphicsCode.ExecuteRenderCommands(&Graphics, Global_Platform);
+        GameCode.Tick(&Game, Graphics, Global_Platform, DevPointer);                                
+                
+        GraphicsCode.ExecuteRenderCommands(Graphics);
         
         for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 

@@ -68,6 +68,18 @@ void PushBlend(graphics* Graphics, b32 Enable, graphics_blend SrcGraphicsBlend=G
     PushCommand(Graphics, PushCommandBlend);
 }
 
+void PushScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Height)
+{
+    push_command_scissor* PushCommandScissor = PushStruct(push_command_scissor, NoClear, 0);
+    PushCommandScissor->Type = PUSH_COMMAND_SCISSOR;
+    PushCommandScissor->X = X;
+    PushCommandScissor->Y = Y;
+    PushCommandScissor->Width = Width;
+    PushCommandScissor->Height = Height;
+    
+    PushCommand(Graphics, PushCommandScissor);
+}
+
 void PushMatrix(graphics* Graphics, push_command_type Type, m4 Matrix)
 {
     push_command_4x4_matrix* PushCommandMatrix = PushStruct(push_command_4x4_matrix, NoClear, 0);
@@ -99,4 +111,17 @@ void PushDrawShadedColoredMesh(graphics* Graphics, graphics_mesh* Mesh, sqt Tran
     PushCommandDrawShadedColoredMesh->A = Color.a;
     
     PushCommand(Graphics, PushCommandDrawShadedColoredMesh);    
+}
+
+void PushDrawImGuiUI(graphics* Graphics, graphics_mesh* Mesh, graphics_texture* Texture, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    push_command_draw_imgui_ui* PushCommandDrawImGuiUI = PushStruct(push_command_draw_imgui_ui, NoClear, 0);
+    PushCommandDrawImGuiUI->Type = PUSH_COMMAND_DRAW_IMGUI_UI;
+    PushCommandDrawImGuiUI->Mesh = Mesh;
+    PushCommandDrawImGuiUI->Texture = Texture;
+    PushCommandDrawImGuiUI->IndexCount = IndexCount;
+    PushCommandDrawImGuiUI->IndexOffset = IndexOffset;
+    PushCommandDrawImGuiUI->VertexOffset = VertexOffset;
+    
+    PushCommand(Graphics, PushCommandDrawImGuiUI);
 }

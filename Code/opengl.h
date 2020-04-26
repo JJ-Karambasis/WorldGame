@@ -45,7 +45,14 @@ struct standard_phong_shader
     GLint ColorLocation;
 };
 
+struct imgui_shader
+{
+    GLuint Program;
+    GLint ProjectionLocation;
+};
+
 global standard_phong_shader Global_StandardPhongShader;
+global imgui_shader Global_ImGuiShader;
 
 //TODO(JJ): When we are formalizing the asset/resource loading process, it would probably
 //be best to manage the memory of meshes in one VBO|EBO|VAO per vertex format and then use a draw call 
@@ -58,6 +65,10 @@ struct opengl_graphics_mesh : public graphics_mesh
     GLuint VAO;
 };
 
+struct opengl_graphics_texture : public graphics_texture
+{
+    GLuint Handle;
+};
 
 #define LOAD_FUNCTION(type, function) \
 do \

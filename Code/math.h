@@ -147,6 +147,18 @@ inline b32 operator==(v2i Left, v2i Right)
     return Result;
 }
 
+inline b32 operator<(v2i Left, v2i Right)
+{
+    b32 Result = (Left.x < Right.x) && (Left.y < Right.y);
+    return Result;
+}
+
+inline b32 operator>=(v2i Left, i32 Right)
+{
+    b32 Result = (Left.x >= Right) && (Left.y >= Right);
+    return Result;
+}
+
 inline v2i MinimumV2(v2i Left, v2i Right)
 {
     v2i Result;
@@ -1154,6 +1166,20 @@ PerspectiveM4(f32 FieldOfView, f32 AspectRatio, f32 Near, f32 Far)
         0.0f, c,      0.0f,                       0.0f,
         0.0f, 0.0f, -(Far+Near)/(Far-Near),      -1.0f,
         0.0f, 0.0f, -(2.0f*Far*Near)/(Far-Near),  0.0f
+    };
+    
+    return Result;
+}
+
+inline m4
+OrthographicM4(f32 Left, f32 Right, f32 Top, f32 Bottom, f32 Near, f32 Far)
+{
+    m4 Result = 
+    {
+        2.0f/(Right-Left),           0.0f,                       0.0f,                  0.0f,
+        0.0f,                        2.0f/(Top-Bottom),          0.0f,                  0.0f, 
+        0.0f,                        0.0f,                      -2.0f/(Far-Near),       0.0f, 
+        -(Right+Left)/(Right-Left), -(Top+Bottom)/(Top-Bottom), -(Far+Near)/(Far-Near), 1.0f
     };
     
     return Result;

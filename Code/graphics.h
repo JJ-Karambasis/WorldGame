@@ -4,6 +4,12 @@
 #include "common.h"
 #include "platform.h"
 
+struct graphics_rect
+{
+    v2i Min;
+    v2i Max;    
+};
+
 enum graphics_vertex_format
 {
     GRAPHICS_VERTEX_FORMAT_UNKNOWN,
@@ -58,6 +64,24 @@ struct graphics_mesh
     graphics_index_buffer IndexBuffer;
 };
 
+enum graphics_filter
+{
+    GRAPHICS_FILTER_UNKNOWN,
+    GRAPHICS_FILTER_LINEAR
+};
+
+struct graphics_sampler_info
+{
+    graphics_filter MinFilter;
+    graphics_filter MagFilter;
+};
+
+struct graphics_texture
+{
+    void* Data;
+    v2i Dimensions;
+};
+
 enum push_command_type
 {
     PUSH_COMMAND_UNKNOWN,
@@ -66,9 +90,11 @@ enum push_command_type
     PUSH_COMMAND_DEPTH,
     PUSH_COMMAND_CULL,
     PUSH_COMMAND_BLEND,
+    PUSH_COMMAND_SCISSOR,
     PUSH_COMMAND_PROJECTION,
     PUSH_COMMAND_CAMERA_VIEW,
-    PUSH_COMMAND_DRAW_SHADED_COLORED_MESH
+    PUSH_COMMAND_DRAW_SHADED_COLORED_MESH,
+    PUSH_COMMAND_DRAW_IMGUI_UI
 };
 
 struct push_command
@@ -111,6 +137,13 @@ struct push_command_blend : public push_command
     graphics_blend DstGraphicsBlend;
 };
 
+struct push_command_scissor : public push_command
+{
+    b32 Enable;
+    i32 X, Y;
+    i32 Width, Height;
+};
+
 struct push_command_4x4_matrix : public push_command
 {
     m4 Matrix;
@@ -123,6 +156,16 @@ struct push_command_draw_shaded_colored_mesh : public push_command
     f32 R, G, B, A;
 };
 
+struct push_command_draw_imgui_ui : public push_command
+{
+    graphics_mesh* Mesh;
+    graphics_texture* Texture;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
 //CONFIRM(JJ): Is this alright to be fixed sized?
 #define MAX_COMMAND_COUNT 1024
 struct push_command_list
@@ -131,16 +174,24 @@ struct push_command_list
     u32 Count;
 };
 
-#define ALLOCATE_MESH(name) graphics_mesh* name(struct graphics* Graphics, graphics_vertex_buffer VertexBuffer, graphics_index_buffer IndexBuffer)
+struct graphics;
+
+#define ALLOCATE_TEXTURE(name) graphics_texture* name(graphics* Graphics, void* Data, v2i Dimensions, graphics_sampler_info* SamplerInfo)
+typedef ALLOCATE_TEXTURE(allocate_texture);
+
+#define ALLOCATE_MESH(name) graphics_mesh* name(graphics* Graphics, graphics_vertex_buffer VertexBuffer, graphics_index_buffer IndexBuffer)
 typedef ALLOCATE_MESH(allocate_mesh);
 
-#define ALLOCATE_DYNAMIC_MESH(name) graphics_mesh* name(struct graphics* Graphics, graphics_vertex_format VertexFormat, graphics_index_format IndexFormat)
+#define ALLOCATE_DYNAMIC_MESH(name) graphics_mesh* name(graphics* Graphics, graphics_vertex_format VertexFormat, graphics_index_format IndexFormat)
 typedef ALLOCATE_DYNAMIC_MESH(allocate_dynamic_mesh);
 
 #define STREAM_MESH_DATA(name) void name(graphics_mesh* Mesh, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
 typedef STREAM_MESH_DATA(stream_mesh_data);
 
-#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, platform* Platform)
+#define INIT_GRAPHICS(name) graphics* name(platform* Platform, void* PlatformData)
+typedef INIT_GRAPHICS(init_graphics);
+
+#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics)
 typedef EXECUTE_RENDER_COMMANDS(execute_render_commands);
 
 struct graphics
@@ -149,17 +200,16 @@ struct graphics
     
     v2i RenderDim;
     push_command_list CommandList;    
-    void* PlatformData;    
-    b32 Initialized;        
+    void* PlatformData;        
     
+    allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;
     allocate_dynamic_mesh* AllocateDynamicMesh;
     stream_mesh_data* StreamMeshData;
 };
 
-ALLOCATE_MESH(Graphics_AllocateMeshStub)
+INIT_GRAPHICS(Graphics_InitGraphicsStub)
 {
-    INVALID_CODE;
     return NULL;
 }
 
@@ -168,9 +218,18 @@ EXECUTE_RENDER_COMMANDS(Graphics_ExecuteRenderCommandsStub)
     
 }
 
-STREAM_MESH_DATA(Graphics_StreamMeshData)
+inline graphics_rect 
+CreateGraphicsRect(i32 MinX, i32 MinY, i32 MaxX, i32 MaxY)
 {
-    
+    graphics_rect Rect = {{MinX, MinY}, {MaxX, MaxY}};
+    return Rect;
+}
+
+inline graphics_rect 
+CreateGraphicsRect(f32 MinX, f32 MinY, f32 MaxX, f32 MaxY)
+{
+    graphics_rect Rect = CreateGraphicsRect((i32)MinX, (i32)MinY, (i32)MaxX, (i32)MaxY);
+    return Rect;
 }
 
 inline ptr 
@@ -201,6 +260,13 @@ GetIndexSize(graphics_index_format Format)
 {
     ASSERT(Format != GRAPHICS_INDEX_FORMAT_UNKNOWN);    
     ptr Result = (Format == GRAPHICS_INDEX_FORMAT_16_BIT) ? sizeof(u16) : sizeof(u32);
+    return Result;
+}
+
+inline ptr
+GetIndexSize(graphics_mesh* Mesh)
+{
+    ptr Result = GetIndexSize(Mesh->IndexBuffer.Format);
     return Result;
 }
 

@@ -2,6 +2,20 @@
 #include "opengl_shaders.cpp"
 
 inline GLenum
+GetFilterType(graphics_filter Filter)
+{
+    switch(Filter)
+    {
+        case GRAPHICS_FILTER_LINEAR:
+        return GL_LINEAR;                
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (GLenum)-1;
+}
+
+inline GLenum
 GetBlendFactor(graphics_blend Blend)
 {    
     switch(Blend)
@@ -26,11 +40,33 @@ GetIndexType(graphics_mesh* Mesh)
     return IndexType;
 }
 
-extern "C"
-EXPORT ALLOCATE_MESH(AllocateMesh)
+ALLOCATE_TEXTURE(AllocateTexture)
+{
+    opengl_graphics_texture* Result = PushStruct(&Graphics->GraphicsStorage, opengl_graphics_texture, Clear, 0);
+    Result->Data = Data;
+    Result->Dimensions = Dimensions;
+    
+    GLenum MinFilter = GetFilterType(SamplerInfo->MinFilter);
+    GLenum MagFilter = GetFilterType(SamplerInfo->MagFilter);
+    
+    glGenTextures(1, &Result->Handle);
+    glBindTexture(GL_TEXTURE_2D, Result->Handle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, MinFilter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, MagFilter);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Dimensions.width, Dimensions.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Data);
+    
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    return Result;
+}
+
+ALLOCATE_MESH(AllocateMesh)
 {   
     //TODO(JJ): We should allocate this data structure from a pool of opengl graphics meshes later
     opengl_graphics_mesh* Result = PushStruct(&Graphics->GraphicsStorage, opengl_graphics_mesh, Clear, 0);
+    
+    Result->IsDynamic = false;
     
     Result->VertexBuffer = VertexBuffer;
     Result->IndexBuffer = IndexBuffer;
@@ -68,6 +104,60 @@ EXPORT ALLOCATE_MESH(AllocateMesh)
     glBindVertexArray(0);    
     
     return Result;
+}
+
+ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
+{
+    opengl_graphics_mesh* Result = PushStruct(&Graphics->GraphicsStorage, opengl_graphics_mesh, Clear, 0);
+    Result->IsDynamic = true;
+    
+    Result->VertexBuffer.Format = VertexFormat;
+    Result->IndexBuffer.Format = IndexFormat;
+    
+    glGenVertexArrays(1, &Result->VAO);
+    glGenBuffers(1, &Result->VBO);
+    glGenBuffers(1, &Result->EBO);
+    
+    glBindVertexArray(Result->VAO);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, Result->VBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Result->EBO);
+    
+    switch(VertexFormat)
+    {
+        case GRAPHICS_VERTEX_FORMAT_P2_UV_C:
+        {
+            GLuint PAttribute = 0;
+            GLuint UVAttribute = 1;
+            GLuint CAttribute = 2;
+            
+            GLsizei Stride = (GLsizei)GetVertexSize(VertexFormat);
+            
+            glVertexAttribPointer(PAttribute,  2, GL_FLOAT, GL_FALSE, Stride, (void*)0);
+            glVertexAttribPointer(UVAttribute, 2, GL_FLOAT, GL_FALSE, Stride, (void*)(sizeof(v2f)));
+            glVertexAttribPointer(CAttribute,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)(sizeof(v2f)*2));
+            
+            glEnableVertexAttribArray(PAttribute);
+            glEnableVertexAttribArray(UVAttribute);
+            glEnableVertexAttribArray(CAttribute);
+        } break;
+    }
+    
+    glBindVertexArray(0);
+    
+    return Result;
+}
+
+STREAM_MESH_DATA(StreamMeshData)
+{
+    opengl_graphics_mesh* OpenGLMesh = (opengl_graphics_mesh*)Mesh;
+    
+    glBindVertexArray(OpenGLMesh->VAO);
+    
+    glBufferData(GL_ARRAY_BUFFER, VertexSize, VertexData, GL_STREAM_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndexSize, IndexData, GL_STREAM_DRAW);    
+    
+    glBindVertexArray(0);    
 }
 
 GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar** FSCode, u32 FSCodeCount)
@@ -210,40 +300,60 @@ void Platform_SwapBuffers(void* PlatformData)
 #endif
 
 extern "C"
-EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
+EXPORT INIT_GRAPHICS(InitGraphics)
 {
     Global_Platform = Platform;
-    InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);
+    InitMemory(Platform->TempArena, Platform->AllocateMemory, Platform->FreeMemory);
     
-    if(!Graphics->Initialized)
-    {        
-        BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(Graphics->PlatformData), "Failed to initialize the win32 version of opengl.");                
-        
-        LOAD_FUNCTION(PFNGLCREATESHADERPROC, glCreateShader);
-        LOAD_FUNCTION(PFNGLSHADERSOURCEPROC, glShaderSource);
-        LOAD_FUNCTION(PFNGLCOMPILESHADERPROC, glCompileShader);
-        LOAD_FUNCTION(PFNGLGETSHADERIVPROC, glGetShaderiv);
-        LOAD_FUNCTION(PFNGLGETSHADERINFOLOGPROC, glGetShaderInfoLog);
-        LOAD_FUNCTION(PFNGLCREATEPROGRAMPROC, glCreateProgram);
-        LOAD_FUNCTION(PFNGLATTACHSHADERPROC, glAttachShader);
-        LOAD_FUNCTION(PFNGLLINKPROGRAMPROC, glLinkProgram);
-        LOAD_FUNCTION(PFNGLVALIDATEPROGRAMPROC, glValidateProgram);
-        LOAD_FUNCTION(PFNGLGETPROGRAMIVPROC, glGetProgramiv);
-        LOAD_FUNCTION(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog);        
-        LOAD_FUNCTION(PFNGLDETACHSHADERPROC, glDetachShader);
-        LOAD_FUNCTION(PFNGLGENVERTEXARRAYSPROC, glGenVertexArrays);
-        LOAD_FUNCTION(PFNGLGENBUFFERSPROC, glGenBuffers);
-        LOAD_FUNCTION(PFNGLBINDVERTEXARRAYPROC, glBindVertexArray);
-        LOAD_FUNCTION(PFNGLBINDBUFFERPROC, glBindBuffer);
-        LOAD_FUNCTION(PFNGLBUFFERDATAPROC, glBufferData);
-        LOAD_FUNCTION(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer);
-        LOAD_FUNCTION(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray);
-        LOAD_FUNCTION(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation);
-        LOAD_FUNCTION(PFNGLUSEPROGRAMPROC, glUseProgram);
-        LOAD_FUNCTION(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
-        LOAD_FUNCTION(PFNGLUNIFORM4FPROC, glUniform4f);
-        LOAD_FUNCTION(PFNGLDRAWELEMENTSBASEVERTEXPROC, glDrawElementsBaseVertex);
-        
+    arena GraphicsStorage = CreateArena(KILOBYTE(32));    
+    graphics* Graphics = PushStruct(&GraphicsStorage, graphics, Clear, 0);
+    
+    Graphics->GraphicsStorage = GraphicsStorage;
+    Graphics->PlatformData = PlatformData;
+    
+    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(Graphics->PlatformData), "Failed to initialize opengl.");
+    
+    LOAD_FUNCTION(PFNGLCREATESHADERPROC, glCreateShader);
+    LOAD_FUNCTION(PFNGLSHADERSOURCEPROC, glShaderSource);
+    LOAD_FUNCTION(PFNGLCOMPILESHADERPROC, glCompileShader);
+    LOAD_FUNCTION(PFNGLGETSHADERIVPROC, glGetShaderiv);
+    LOAD_FUNCTION(PFNGLGETSHADERINFOLOGPROC, glGetShaderInfoLog);
+    LOAD_FUNCTION(PFNGLCREATEPROGRAMPROC, glCreateProgram);
+    LOAD_FUNCTION(PFNGLATTACHSHADERPROC, glAttachShader);
+    LOAD_FUNCTION(PFNGLLINKPROGRAMPROC, glLinkProgram);
+    LOAD_FUNCTION(PFNGLVALIDATEPROGRAMPROC, glValidateProgram);
+    LOAD_FUNCTION(PFNGLGETPROGRAMIVPROC, glGetProgramiv);
+    LOAD_FUNCTION(PFNGLGETPROGRAMINFOLOGPROC, glGetProgramInfoLog);        
+    LOAD_FUNCTION(PFNGLDETACHSHADERPROC, glDetachShader);
+    LOAD_FUNCTION(PFNGLGENVERTEXARRAYSPROC, glGenVertexArrays);
+    LOAD_FUNCTION(PFNGLGENBUFFERSPROC, glGenBuffers);
+    LOAD_FUNCTION(PFNGLBINDVERTEXARRAYPROC, glBindVertexArray);
+    LOAD_FUNCTION(PFNGLBINDBUFFERPROC, glBindBuffer);
+    LOAD_FUNCTION(PFNGLBUFFERDATAPROC, glBufferData);
+    LOAD_FUNCTION(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer);
+    LOAD_FUNCTION(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray);
+    LOAD_FUNCTION(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation);
+    LOAD_FUNCTION(PFNGLUSEPROGRAMPROC, glUseProgram);
+    LOAD_FUNCTION(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
+    LOAD_FUNCTION(PFNGLUNIFORM4FPROC, glUniform4f);
+    LOAD_FUNCTION(PFNGLDRAWELEMENTSBASEVERTEXPROC, glDrawElementsBaseVertex);
+    
+    Graphics->AllocateTexture = AllocateTexture;
+    Graphics->AllocateMesh = AllocateMesh;
+    Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
+    Graphics->StreamMeshData = StreamMeshData;
+    
+    return Graphics;
+    
+    handle_error:
+    return NULL;
+}
+
+extern "C"
+EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
+{        
+    if(!Global_StandardPhongShader.Program)
+    {
         const GLchar* VertexShader[] = { Shader_Header, VertexShader_StandardWorldSpaceToClipSpace };
         const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_StandardPhongShading };
         
@@ -251,17 +361,24 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         Global_StandardPhongShader.ProjectionLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Projection");
         Global_StandardPhongShader.ViewLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "View");
         Global_StandardPhongShader.ModelLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Model");
-        Global_StandardPhongShader.ColorLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Color");
+        Global_StandardPhongShader.ColorLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Color");        
+    }
+    
+    if(!Global_ImGuiShader.Program)
+    {
+        const GLchar* VertexShader[] = {Shader_Header, VertexShader_ImGui};
+        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_ImGui};
         
-        Graphics->Initialized = true;
-    } 
+        Global_ImGuiShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
+        Global_ImGuiShader.ProjectionLocation = glGetUniformLocation(Global_ImGuiShader.Program, "Projection");
+    }
     
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
+        
+    glViewport(0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
     
     GLuint BoundProgram = (GLuint)-1;
-    
-    glViewport(0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
     
     push_command_list* CommandList = &Graphics->CommandList;        
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
@@ -336,8 +453,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_DRAW_SHADED_COLORED_MESH:
             {
                 push_command_draw_shaded_colored_mesh* DrawShadedColoredMesh = (push_command_draw_shaded_colored_mesh*)Command;
-                                
-                opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawShadedColoredMesh->Mesh;
+                                                
                 if(BoundProgram != Global_StandardPhongShader.Program)
                 {
                     BoundProgram = Global_StandardPhongShader.Program;
@@ -347,27 +463,53 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     glUniformMatrix4fv(Global_StandardPhongShader.ViewLocation, 1, GL_FALSE, CameraView.M);                    
                 }
                 
+                opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawShadedColoredMesh->Mesh;
+                
                 glUniformMatrix4fv(Global_StandardPhongShader.ModelLocation, 1, GL_FALSE, DrawShadedColoredMesh->WorldTransform.M);
                 glUniform4f(Global_StandardPhongShader.ColorLocation, DrawShadedColoredMesh->R, DrawShadedColoredMesh->G, DrawShadedColoredMesh->B, DrawShadedColoredMesh->A);
-                                
-                glBindVertexArray(Mesh->VAO);
+                
+                glBindVertexArray(Mesh->VAO);              
                 
                 GLenum IndexType = GetIndexType(Mesh);                
                 glDrawElementsBaseVertex(GL_TRIANGLES, Mesh->IndexBuffer.IndexCount, IndexType, 0, 0);
                 
             } break;
             
+            case PUSH_COMMAND_DRAW_IMGUI_UI:
+            {
+                push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;
+                if(BoundProgram != Global_ImGuiShader.Program)
+                {
+                    BoundProgram = Global_ImGuiShader.Program;
+                    glUseProgram(BoundProgram);
+                    
+                    glUniformMatrix4fv(Global_ImGuiShader.ProjectionLocation, 1, GL_FALSE, Projection.M);                    
+                }                                
+                
+                opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawImGuiUI->Mesh;
+                ASSERT(Mesh->IsDynamic);
+                
+                opengl_graphics_texture* Texture = (opengl_graphics_texture*)DrawImGuiUI->Texture;
+                
+                glBindVertexArray(Mesh->VAO);              
+                
+                glBindTexture(GL_TEXTURE_2D, Texture->Handle);
+                
+                GLenum IndexType = GetIndexType(Mesh);
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawImGuiUI->IndexCount, IndexType, 
+                                         (void*)(DrawImGuiUI->IndexOffset*GetIndexSize(Mesh)), 
+                                         DrawImGuiUI->VertexOffset);
+                
+            } break;
+            
             INVALID_DEFAULT_CASE;
         }
-    }
+    }    
     
-    Platform_SwapBuffers(Graphics->PlatformData);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     
-    CommandList->Count = 0;
+    CommandList->Count = 0;        
     
-    return;
-    
-    handle_error:
-    //TODO(JJ): Probably a fatal error. Should output an error message and exit gracefully
-    INVALID_CODE;    
+    Platform_SwapBuffers(Graphics->PlatformData);    
 }

@@ -12,18 +12,18 @@ typedef HRESULT WINAPI direct_sound_create(LPGUID lpGuid, LPDIRECTSOUND* ppDS, L
 #define HRESULT_CHECK_AND_HANDLE(check, format, ...) \
 do \
 { \
-if(FAILED(check)) \
-WRITE_AND_HANDLE_ERROR(format, __VA_ARGS__); \
+    if(FAILED(check)) \
+        WRITE_AND_HANDLE_ERROR(format, __VA_ARGS__); \
 } while(0)
 
 #define RELEASE(iunknown) \
 do \
 { \
-if(iunknown) \
-{ \
-iunknown->Release(); \
-iunknown = NULL; \
-} \
+    if(iunknown) \
+    { \
+        iunknown->Release(); \
+        iunknown = NULL; \
+    } \
 } while(0)
 
 struct win32_hot_loaded_library
@@ -42,6 +42,7 @@ struct win32_graphics_code
 {
     win32_hot_loaded_library GraphicsLibrary;
     execute_render_commands* ExecuteRenderCommands;
+    init_graphics* InitGraphics;
 };
 
 struct platform_file_handle
