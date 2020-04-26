@@ -92,9 +92,11 @@ enum push_command_type
     PUSH_COMMAND_BLEND,
     PUSH_COMMAND_SCISSOR,
     PUSH_COMMAND_PROJECTION,
-    PUSH_COMMAND_CAMERA_VIEW,
+    PUSH_COMMAND_CAMERA_VIEW,    
     PUSH_COMMAND_DRAW_SHADED_COLORED_MESH,
-    PUSH_COMMAND_DRAW_IMGUI_UI
+    PUSH_COMMAND_DRAW_LINE_MESH,
+    PUSH_COMMAND_DRAW_IMGUI_UI,
+    PUSH_COMMAND_DRAW_QUAD,    
 };
 
 struct push_command
@@ -156,6 +158,17 @@ struct push_command_draw_shaded_colored_mesh : public push_command
     f32 R, G, B, A;
 };
 
+struct push_command_draw_line_mesh : public push_command
+{
+    graphics_mesh* Mesh;
+    m4 WorldTransform;
+    f32 R, G, B, A;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
 struct push_command_draw_imgui_ui : public push_command
 {
     graphics_mesh* Mesh;
@@ -164,6 +177,17 @@ struct push_command_draw_imgui_ui : public push_command
     u32 IndexCount;
     u32 IndexOffset;
     u32 VertexOffset;
+};
+
+struct push_command_draw_quad : public push_command
+{
+    union
+    {
+        v3f P[4];
+        struct { v3f P0, P1, P2, P3; };
+    };
+    
+    f32 R, G, B, A;
 };
 
 //CONFIRM(JJ): Is this alright to be fixed sized?

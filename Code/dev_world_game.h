@@ -37,13 +37,28 @@ struct dev_input
     f32 Scroll;
 };
 
+struct dev_capsule_mesh
+{    
+    graphics_mesh* Mesh;
+    u32 CapIndexCount;    
+    u32 BodyIndexCount;    
+    u32 BodyVertexOffset;    
+};
+
 struct dev_context
 {
+    arena DevStorage;
     b32 InDevelopmentMode;    
+    b32 UseDevCamera;
+    b32 DrawColliders;
+    b32 DrawBlockers;
+    
     dev_input Input;    
     camera Camera;
     
     graphics_mesh* ImGuiMesh;
+    
+    dev_capsule_mesh CapsuleMesh;
     
     void* PlatformData;
     b32 Initialized;

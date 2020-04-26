@@ -108,10 +108,17 @@ GetEntityOrNull(game* Game, world_entity_id EntityID)
 }
 
 inline world_entity*
+GetPlayerEntity(world* World)
+{    
+    world_entity* Result = GetEntity(World, World->Player.EntityID);
+    return Result;
+}
+
+inline world_entity*
 GetPlayerEntity(game* Game, u32 WorldIndex)
 {
-    world* World = GetWorld(Game, WorldIndex);    
-    world_entity* Result = GetEntity(World, World->Player.EntityID);
+    world* World = GetWorld(Game, WorldIndex);        
+    world_entity* Result = GetPlayerEntity(World);
     return Result;
 }
 
@@ -175,7 +182,8 @@ GetNextEntity(world_entity_pool* Pool, world_entity* Entity)
 }
 
 world_entity_id 
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, void* UserData=NULL)
+
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, graphics_mesh* Mesh, void* UserData=NULL)
 {
     world* World = GetWorld(Game, WorldIndex);
     world_entity* Entity = AllocateEntity(&World->EntityPool);
@@ -185,40 +193,50 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     Entity->Type = Type;    
     Entity->Transform = CreateSQT(Position, Scale, Euler);
     Entity->Color = Color;
-    Entity->UserData = UserData;
+    Entity->Mesh = Mesh;
+    Entity->UserData = UserData;    
     Entity->LinkID = InvalidEntityID();
     
     return Entity->ID;
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh0, graphics_mesh* Mesh1)
 {
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1);    
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh0);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh1);    
 }
 
 inline void
-CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh)
 {
-    world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0);
-    world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1);
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh);    
+}
+
+inline void
+CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1, 
+                         graphics_mesh* Mesh0, graphics_mesh* Mesh1)
+{
+    world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0, Mesh0);
+    world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1, Mesh1);
     
     GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
     GetEntity(&Game->Worlds[1], BID)->LinkID = AID;    
 }
 
 inline void
-CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)                      
+CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh)                      
 {
-    CreateDualLinkedEntities(Game, Type, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);    
+    CreateDualLinkedEntities(Game, Type, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1, Mesh, Mesh);    
 }
 
 inline void
-CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1)
+CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1,
+                           graphics_mesh* Mesh0, graphics_mesh* Mesh1)
 {
-    world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0);
-    world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1);
+    world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0, Mesh0);
+    world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1, Mesh1);
     
     ASSERT((LinkWorldIndex == 0) || (LinkWorldIndex == 1));
     
@@ -229,9 +247,9 @@ CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldInde
 }
 
 inline void
-CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1)
+CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh0, graphics_mesh* Mesh1)
 {
-    CreateSingleLinkedEntities(Game, Type, LinkWorldIndex, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1);        
+    CreateSingleLinkedEntities(Game, Type, LinkWorldIndex, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1, Mesh0, Mesh1);        
 }
 
 void 
@@ -240,7 +258,7 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, c
     player* Player = GetPlayer(Game, WorldIndex);
     Player->Pushing = InitPushingState();
     
-    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Color, Player);
+    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Color, NULL, Player);
     
     world_entity* Entity = GetEntity(Game, Player->EntityID);    
     
@@ -253,13 +271,13 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, c
 world_entity_id 
 CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Dim, c4 Color)
 {
-    world_entity_id Result = CreateEntity(Game, Type, WorldIndex, Position, V3(1.0f), V3(), Color);    
+    world_entity_id Result = CreateEntity(Game, Type, WorldIndex, Position, Dim, V3(), Color, Game->Assets->BoxGraphicsMesh);    
     world_entity* Entity = GetEntity(Game, Result);
     
     Entity->Collider.Type = COLLIDER_TYPE_ALIGNED_BOX;
     Entity->Collider.AlignedBox.CenterP = {};
-    Entity->Collider.AlignedBox.CenterP.z = Dim.z*0.5f;
-    Entity->Collider.AlignedBox.Dim = Dim;    
+    Entity->Collider.AlignedBox.CenterP.z = 0.5f;
+    Entity->Collider.AlignedBox.Dim = V3(1.0f, 1.0f, 1.0f);    
     
     return Result;
 }
@@ -367,6 +385,14 @@ GetWorldSpaceAlignedBox(aligned_box Box, sqt Transform)
     return Result;
 }
 
+aligned_box 
+GetWorldSpaceAlignedBox(world_entity* Entity)
+{
+    ASSERT(Entity->Collider.Type == COLLIDER_TYPE_ALIGNED_BOX);
+    aligned_box Result = GetWorldSpaceAlignedBox(Entity->Collider.AlignedBox, Entity->Transform);
+    return Result;    
+}
+
 world_entity* 
 ClearEntityVelocity(game* Game, world_entity_id ID)
 {
@@ -420,7 +446,7 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
     {
         case COLLIDER_TYPE_ALIGNED_BOX:
         {
-            aligned_box EntityBox = GetWorldSpaceAlignedBox(Entity->Collider.AlignedBox, Entity->Transform);
+            aligned_box EntityBox = GetWorldSpaceAlignedBox(Entity);
             
             v2f TargetPosition = EntityBox.CenterP.xy + MoveDelta;
                         
@@ -446,7 +472,7 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
                     {
                         case COLLIDER_TYPE_ALIGNED_BOX:
                         {
-                            aligned_box TestEntityBox = GetWorldSpaceAlignedBox(TestEntity->Collider.AlignedBox, TestEntity->Transform);
+                            aligned_box TestEntityBox = GetWorldSpaceAlignedBox(TestEntity);
                             
                             f32 TestHalfDimZ = TestEntityBox.Dim.z*0.5f;
                             f32 TestMinZ = TestEntityBox.CenterP.z-HalfDimZ;

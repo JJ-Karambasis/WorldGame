@@ -35,8 +35,9 @@ global PFNGLUSEPROGRAMPROC glUseProgram;
 global PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 global PFNGLUNIFORM4FPROC glUniform4f;
 global PFNGLDRAWELEMENTSBASEVERTEXPROC glDrawElementsBaseVertex;
+global PFNGLUNIFORM3FVPROC glUniform3fv;
 
-struct standard_phong_shader
+struct standard_color_shader
 {
     GLuint Program;
     GLint ProjectionLocation;
@@ -51,8 +52,19 @@ struct imgui_shader
     GLint ProjectionLocation;
 };
 
-global standard_phong_shader Global_StandardPhongShader;
+struct quad_shader
+{
+    GLuint Program;
+    GLint ProjectionLocation;
+    GLint ViewLocation;
+    GLint ColorLocation;
+    GLint PositionLocation;
+};
+
+global standard_color_shader Global_StandardPhongShader;
+global standard_color_shader Global_StandardLineShader;
 global imgui_shader Global_ImGuiShader;
+global quad_shader Global_QuadShader;
 
 //TODO(JJ): When we are formalizing the asset/resource loading process, it would probably
 //be best to manage the memory of meshes in one VBO|EBO|VAO per vertex format and then use a draw call 

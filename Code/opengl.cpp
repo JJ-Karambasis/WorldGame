@@ -85,6 +85,16 @@ ALLOCATE_MESH(AllocateMesh)
     
     switch(VertexBuffer.Format)
     {
+        case GRAPHICS_VERTEX_FORMAT_P3:
+        {
+            GLuint PAttribute = 0;
+            
+            GLsizei Stride = (GLsizei)GetVertexSize(VertexBuffer.Format);
+            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)0);
+            
+            glEnableVertexAttribArray(PAttribute);
+        } break;
+        
         case GRAPHICS_VERTEX_FORMAT_P3_N3:
         {
             GLuint PAttribute = 0;
@@ -99,6 +109,8 @@ ALLOCATE_MESH(AllocateMesh)
             glEnableVertexAttribArray(NAttribute);            
             
         } break;
+        
+        INVALID_DEFAULT_CASE;
     }
     
     glBindVertexArray(0);    
@@ -336,6 +348,7 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     LOAD_FUNCTION(PFNGLUSEPROGRAMPROC, glUseProgram);
     LOAD_FUNCTION(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv);
     LOAD_FUNCTION(PFNGLUNIFORM4FPROC, glUniform4f);
+    LOAD_FUNCTION(PFNGLUNIFORM3FVPROC, glUniform3fv);
     LOAD_FUNCTION(PFNGLDRAWELEMENTSBASEVERTEXPROC, glDrawElementsBaseVertex);
     
     Graphics->AllocateTexture = AllocateTexture;
@@ -354,7 +367,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {        
     if(!Global_StandardPhongShader.Program)
     {
-        const GLchar* VertexShader[] = { Shader_Header, VertexShader_StandardWorldSpaceToClipSpace };
+        const GLchar* VertexShader[] = { Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 1, 0) };
         const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_StandardPhongShading };
         
         Global_StandardPhongShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
@@ -362,6 +375,18 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         Global_StandardPhongShader.ViewLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "View");
         Global_StandardPhongShader.ModelLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Model");
         Global_StandardPhongShader.ColorLocation = glGetUniformLocation(Global_StandardPhongShader.Program, "Color");        
+    }
+    
+    if(!Global_StandardLineShader.Program)
+    {
+        const GLchar* VertexShader[] = { Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 0, 1) };
+        const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_SimpleColor };
+        
+        Global_StandardLineShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
+        Global_StandardLineShader.ProjectionLocation = glGetUniformLocation(Global_StandardLineShader.Program, "Projection");
+        Global_StandardLineShader.ViewLocation = glGetUniformLocation(Global_StandardLineShader.Program, "View");
+        Global_StandardLineShader.ModelLocation = glGetUniformLocation(Global_StandardLineShader.Program, "Model");
+        Global_StandardLineShader.ColorLocation = glGetUniformLocation(Global_StandardLineShader.Program, "Color");        
     }
     
     if(!Global_ImGuiShader.Program)
@@ -373,9 +398,21 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         Global_ImGuiShader.ProjectionLocation = glGetUniformLocation(Global_ImGuiShader.Program, "Projection");
     }
     
+    if(!Global_QuadShader.Program)
+    {
+        const GLchar* VertexShader[] = {Shader_Header, VertexShader_Quad};
+        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_SimpleColor};
+        
+        Global_QuadShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
+        Global_QuadShader.ProjectionLocation = glGetUniformLocation(Global_QuadShader.Program, "Projection");
+        Global_QuadShader.ViewLocation = glGetUniformLocation(Global_QuadShader.Program, "View");
+        Global_QuadShader.ColorLocation = glGetUniformLocation(Global_QuadShader.Program, "Color");
+        Global_QuadShader.PositionLocation = glGetUniformLocation(Global_QuadShader.Program, "Positions");
+    }
+    
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
-        
+    
     glViewport(0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
     
     GLuint BoundProgram = (GLuint)-1;
@@ -453,7 +490,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_DRAW_SHADED_COLORED_MESH:
             {
                 push_command_draw_shaded_colored_mesh* DrawShadedColoredMesh = (push_command_draw_shaded_colored_mesh*)Command;
-                                                
+                
                 if(BoundProgram != Global_StandardPhongShader.Program)
                 {
                     BoundProgram = Global_StandardPhongShader.Program;
@@ -499,6 +536,50 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 glDrawElementsBaseVertex(GL_TRIANGLES, DrawImGuiUI->IndexCount, IndexType, 
                                          (void*)(DrawImGuiUI->IndexOffset*GetIndexSize(Mesh)), 
                                          DrawImGuiUI->VertexOffset);
+                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_QUAD:
+            {
+                push_command_draw_quad* DrawQuad = (push_command_draw_quad*)Command;
+                if(BoundProgram != Global_QuadShader.Program)
+                {
+                    BoundProgram = Global_QuadShader.Program;
+                    glUseProgram(BoundProgram);
+                    
+                    glUniformMatrix4fv(Global_QuadShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
+                    glUniformMatrix4fv(Global_QuadShader.ViewLocation, 1, GL_FALSE, CameraView.M);
+                }
+                
+                glUniform3fv(Global_QuadShader.PositionLocation, 4, (f32*)DrawQuad->P);
+                glUniform4f(Global_QuadShader.ColorLocation, DrawQuad->R, DrawQuad->G, DrawQuad->B, DrawQuad->A);
+                
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_LINE_MESH:
+            {
+                push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;
+                if(BoundProgram != Global_StandardLineShader.Program)
+                {
+                    BoundProgram = Global_StandardLineShader.Program;
+                    glUseProgram(BoundProgram);
+                    
+                    glUniformMatrix4fv(Global_StandardLineShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
+                    glUniformMatrix4fv(Global_StandardLineShader.ViewLocation, 1, GL_FALSE, CameraView.M);
+                }
+                
+                opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawLineMesh->Mesh;
+                
+                glUniformMatrix4fv(Global_StandardLineShader.ModelLocation, 1, GL_FALSE, DrawLineMesh->WorldTransform.M);
+                glUniform4f(Global_StandardLineShader.ColorLocation, DrawLineMesh->R, DrawLineMesh->G, DrawLineMesh->B, DrawLineMesh->A);
+                
+                glBindVertexArray(Mesh->VAO);
+                
+                GLenum IndexType = GetIndexType(Mesh);
+                glDrawElementsBaseVertex(GL_LINES, DrawLineMesh->IndexCount, IndexType, 
+                                         (void*)(DrawLineMesh->IndexOffset*GetIndexSize(Mesh)),
+                                         DrawLineMesh->VertexOffset);
                 
             } break;
             

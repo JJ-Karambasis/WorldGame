@@ -12,15 +12,21 @@ global const char* Shader_Header = R"(
 )";
 
 global const char* VertexShader_StandardWorldSpaceToClipSpace = R"(
-layout (location = 0) in v3f P;
-layout (location = 1) in v3f N;
 
-out v3f ViewP;
-out v3f ViewN;
+#define LIGHT_SHADING %d
+#define POSITION_SHADING %d
+
+layout (location = 0) in v3f P;
 
 uniform m4 Projection;
 uniform m4 View;
 uniform m4 Model;
+
+#if LIGHT_SHADING
+layout (location = 1) in v3f N;
+
+out v3f ViewP;
+out v3f ViewN;
 
 void main()
 {
@@ -28,6 +34,14 @@ void main()
     ViewN = m3(transpose(inverse(View*Model)))*N;
     gl_Position = Projection*v4f(ViewP, 1.0f);
 }
+#endif
+
+#if POSITION_SHADING
+void main()
+{
+    gl_Position = Projection*View*Model*v4f(P, 1.0f);
+}
+#endif
 
 )";
 
@@ -94,6 +108,34 @@ uniform sampler2D Texture;
 void main()
 {
     FinalColor = FragColor * texture(Texture, FragUV.st);
+}
+
+)";
+
+global const char* VertexShader_Quad = R"(
+
+uniform m4 Projection;
+uniform m4 View;
+uniform v3f Positions[4];
+
+int Indices[6] = int[6](0, 1, 2, 0, 2, 3);
+
+void main()
+{
+    gl_Position = Projection*View*v4f(Positions[Indices[gl_VertexID]], 1.0f);
+}
+
+)";
+
+global const char* FragmentShader_SimpleColor = R"(
+
+out c4 FinalColor;
+
+uniform c4 Color;
+
+void main()
+{
+    FinalColor = Color;
 }
 
 )";

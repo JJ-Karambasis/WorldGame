@@ -1052,3 +1052,16 @@ time_result_2D MovingRectangleRectangleIntersectionTime2D(v2f CenterP0, v2f Cent
     return Result;
     
 }
+
+void GetBoxVerticesFromDimAndCenterP(v3f* Vertices, v3f CenterP, v3f Dim)
+{    
+    v3f HalfDim = Dim*0.5f;
+    Vertices[0] = V3(CenterP.xy - HalfDim.xy, CenterP.z + HalfDim.z);
+    Vertices[1] = V3(CenterP.x + HalfDim.x, CenterP.y - HalfDim.y, CenterP.z + HalfDim.z);
+    Vertices[2] = CenterP + HalfDim;
+    Vertices[3] = V3(CenterP.x - HalfDim.x, CenterP.yz + HalfDim.yz);
+    Vertices[4] = V3(CenterP.x + HalfDim.x, CenterP.yz - HalfDim.yz);
+    Vertices[5] = CenterP - HalfDim;
+    Vertices[6] = V3(CenterP.x - HalfDim.x, CenterP.y + HalfDim.y, CenterP.z - HalfDim.z);
+    Vertices[7] = V3(CenterP.xy + HalfDim.xy, CenterP.z - HalfDim.z);            
+}

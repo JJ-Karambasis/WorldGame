@@ -129,6 +129,13 @@ operator-=(v2i& Left, i32 Right)
     return Left;
 }
 
+inline v2i 
+operator/(v2i Left, i32 Right)
+{
+    v2i Result = {Left.x/Right, Left.y/Right};
+    return Result;
+}
+
 inline b32 operator!=(v2i Left, v2i Right)
 {
     b32 Result = (Left.x != Right.x) || (Left.y != Right.y);
@@ -499,13 +506,7 @@ AreEqual(v2f P0, v2f P1, f32 Epsilon)
 struct v3f
 {
     union
-    {
-        struct
-        {
-            v2f xy;
-            f32 __unused_0__;
-        };
-        
+    {        
         struct 
         {
             f32 x;
@@ -526,6 +527,18 @@ struct v3f
             f32 yaw;
             f32 roll;
         };
+        
+        struct
+        {
+            v2f xy;
+            f32 __unused_0__;
+        };
+        
+        struct
+        {
+            f32 __unused_1__;
+            v2f yz;
+        };        
     };
 };
 
@@ -551,9 +564,16 @@ V3(v2f v)
 }
 
 inline v3f 
-V3(v2f v, f32 z)
+V3(v2f xy, f32 z)
 {
-    v3f Result = {v.x, v.y, z};
+    v3f Result = {xy.x, xy.y, z};
+    return Result;
+}
+
+inline v3f 
+V3(f32 x, v2f yz)
+{
+    v3f Result = {x, yz.x, yz.y};
     return Result;
 }
 

@@ -48,7 +48,7 @@ struct world_entity_id
 inline world_entity_id MakeEntityID(i64 ID, u32 WorldIndex) { world_entity_id Result = {ID, WorldIndex}; return Result; }
 inline world_entity_id InvalidEntityID() { return MakeEntityID(-1, (u32)-1); }
 inline b32 IsInvalidEntityID(world_entity_id ID) { return (ID.ID == -1) || ((ID.WorldIndex != 0) && (ID.WorldIndex != 1)); }
-    
+
 struct world_entity
 {
     world_entity_type Type;            
@@ -70,6 +70,8 @@ struct world_entity
     
     world_entity_id ID;
     world_entity_id LinkID;
+    
+    graphics_mesh* Mesh;
     
     void* UserData;
 };

@@ -113,6 +113,29 @@ void PushDrawShadedColoredMesh(graphics* Graphics, graphics_mesh* Mesh, sqt Tran
     PushCommand(Graphics, PushCommandDrawShadedColoredMesh);    
 }
 
+void PushDrawLineMesh(graphics* Graphics, graphics_mesh* Mesh, m4 Transform, c4 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    push_command_draw_line_mesh* PushCommandDrawLineMesh = PushStruct(push_command_draw_line_mesh, NoClear, 0);
+    PushCommandDrawLineMesh->Type = PUSH_COMMAND_DRAW_LINE_MESH;
+    PushCommandDrawLineMesh->Mesh = Mesh;
+    PushCommandDrawLineMesh->WorldTransform = Transform;
+    PushCommandDrawLineMesh->R = Color.r;
+    PushCommandDrawLineMesh->G = Color.g;
+    PushCommandDrawLineMesh->B = Color.b;
+    PushCommandDrawLineMesh->A = Color.a;
+    
+    PushCommandDrawLineMesh->IndexCount = IndexCount;
+    PushCommandDrawLineMesh->IndexOffset = IndexOffset;
+    PushCommandDrawLineMesh->VertexOffset = VertexOffset;
+    
+    PushCommand(Graphics, PushCommandDrawLineMesh);
+}
+
+void PushDrawLineMesh(graphics* Graphics, graphics_mesh* Mesh, sqt Transform, c4 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    PushDrawLineMesh(Graphics, Mesh, TransformM4(Transform), Color, IndexCount, IndexOffset, VertexOffset);
+}
+
 void PushDrawImGuiUI(graphics* Graphics, graphics_mesh* Mesh, graphics_texture* Texture, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_imgui_ui* PushCommandDrawImGuiUI = PushStruct(push_command_draw_imgui_ui, NoClear, 0);
@@ -124,4 +147,49 @@ void PushDrawImGuiUI(graphics* Graphics, graphics_mesh* Mesh, graphics_texture* 
     PushCommandDrawImGuiUI->VertexOffset = VertexOffset;
     
     PushCommand(Graphics, PushCommandDrawImGuiUI);
+}
+
+void PushDrawQuad(graphics* Graphics, v3f P0, v3f P1, v3f P2, v3f P3, f32 R, f32 G, f32 B, f32 A)
+{
+    push_command_draw_quad* PushCommandDrawQuad = PushStruct(push_command_draw_quad, NoClear, 0);
+    PushCommandDrawQuad->Type = PUSH_COMMAND_DRAW_QUAD;
+    PushCommandDrawQuad->P0 = P0;
+    PushCommandDrawQuad->P1 = P1;
+    PushCommandDrawQuad->P2 = P2;
+    PushCommandDrawQuad->P3 = P3;
+    PushCommandDrawQuad->R = R;
+    PushCommandDrawQuad->G = G;
+    PushCommandDrawQuad->B = B;
+    PushCommandDrawQuad->A = A;
+    
+    PushCommand(Graphics, PushCommandDrawQuad);
+}
+
+void PushDrawQuad(graphics* Graphics, v3f P0, v3f P1, v3f P2, v3f P3, c4 Color)
+{
+    PushDrawQuad(Graphics, P0, P1, P2, P3, Color.r, Color.g, Color.b, Color.a);    
+}
+
+void PushDrawQuad(graphics* Graphics, v3f* P, c4 Color)
+{
+    PushDrawQuad(Graphics, P[0], P[1], P[2], P[3], Color.r, Color.g, Color.b, Color.a);    
+}
+
+void RecordGameCommands(game* Game, graphics* Graphics, m4 Projection, m4 View)
+{       
+    PushClearColorAndDepth(Graphics, Black(), 1.0f);            
+    PushDepth(Graphics, true);
+    
+    PushProjection(Graphics, Projection); 
+    PushCameraView(Graphics, View);
+    
+    world* World = GetCurrentWorld(Game);    
+    for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+    {
+        if(Entity->Mesh)
+        {                        
+            PushDrawShadedColoredMesh(Graphics, Entity->Mesh, Entity->Transform, Entity->Color); 
+        }
+    }
+    
 }
