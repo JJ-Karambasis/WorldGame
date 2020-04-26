@@ -661,6 +661,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     void* DevPointer = NULL;
 #if DEVELOPER_BUILD
     dev_context DevContext = {};
+    DevContext.InDevelopmentMode = true;
     DevContext.PlatformData = Window;
     
     DevPointer = &DevContext;
