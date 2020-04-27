@@ -116,8 +116,8 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
 {    
     ImGui::NewFrame();
     
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(Graphics->RenderDim/5), ImGuiCond_FirstUseEver);    
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(Graphics->RenderDim/5));    
     
     local bool open = true;
     ImGui::Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse);    
@@ -137,9 +137,6 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     ImGui::Checkbox("Draw Blockers", (bool*)&DevContext->DrawBlockers);
     
     ImGui::End();    
-    
-    local bool open_demo;
-    ImGui::ShowDemoWindow(&open_demo);        
     
     ImGui::Render();        
 }
