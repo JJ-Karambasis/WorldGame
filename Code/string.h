@@ -9,6 +9,12 @@ ptr LiteralStringLength(char* Data)
     return Result;
 }
 
+ptr LiteralStringLength(const char* Data)
+{
+    ptr Result = LiteralStringLength((char*)Data);
+    return Result;
+}
+
 struct string
 {
     char* Data;
@@ -286,28 +292,18 @@ char* FormatString(char* Format, va_list List)
     return Result;
 }
 
-char* FormatString(char* Format, ...)
+char* FormatString(const char* Format, ...)
 {    
     va_list List;
     va_start(List, Format);    
     
-    char* Result = FormatString(Format, List);
+    char* Result = FormatString((char*)Format, List);
     
     va_end(List);
     
     return Result;
 }
 
-const char* FormatString(const char* Format, ...)
-{    
-    va_list List;
-    va_start(List, Format);    
-    
-    const char* Result = (const char*)FormatString((char*)Format, List);
-    
-    va_end(List);
-    
-    return Result;
-}
+
 
 #endif

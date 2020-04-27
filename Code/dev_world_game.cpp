@@ -231,10 +231,6 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, 
     m4 Orthographic = OrthographicM4(0, (f32)Graphics->RenderDim.width, 0, (f32)Graphics->RenderDim.height, -1.0f, 1.0f);
     PushProjection(Graphics, Orthographic);
     
-    //TODO(JJ): There is a rendering bug with imgui here that we need to fix that is preventing multiple windows from being viewed at once
-    //I think this has to do with imguis clip rects that are probably causing each draw call to override the other (probably what the popup window panel 
-    //bug is causing as well)
-    
     ptr IndexSize = sizeof(ImDrawIdx);    
     ImDrawData* DrawData = ImGui::GetDrawData();        
     
@@ -258,18 +254,12 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, 
             
             ImVec4 ClipRect = Cmd->ClipRect;
             if((ClipRect.x < Graphics->RenderDim.width) && (ClipRect.y < Graphics->RenderDim.height) && (ClipRect.z >= 0.0f) && (ClipRect.w >= 0.0f))
-            {
-#if 0 
-                i32 X = (i32)ClipRect.x;
-                i32 Y = (i32)ClipRect.y;
-                i32 Width = (i32)ClipRect.z;
-                i32 Height = (i32)ClipRect.w;
-#else
+            {                
                 i32 X = (i32)ClipRect.x;
                 i32 Y = (i32)(Graphics->RenderDim.height-ClipRect.w);
                 i32 Width = (i32)(ClipRect.z - ClipRect.x);
                 i32 Height = (i32)(ClipRect.w - ClipRect.y);
-#endif
+                
                 PushScissor(Graphics, X, Y, Width, Height);
                 
                 graphics_texture* Texture = (graphics_texture*)Cmd->TextureId;

@@ -57,6 +57,8 @@
 #define VA_SELECT( NAME, ... ) SELECT( NAME, VA_SIZE(__VA_ARGS__) )(__VA_ARGS__)
 #define ALIGN(value, alignment) ((value+alignment-1) & (-alignment))
 
+#define OFFSET_OF(type, member) ((ptr)&(((type*)0)->member))
+
 #define internal static
 #define local static
 #define global static

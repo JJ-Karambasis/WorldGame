@@ -32,6 +32,30 @@ GetBlendFactor(graphics_blend Blend)
     return (GLenum)-1;
 }
 
+b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
+{    
+    if(*BoundVAO != NewVAO)
+    {
+        *BoundVAO = NewVAO;
+        glBindVertexArray(*BoundVAO);
+        return true;
+    }
+    
+    return false;
+}
+
+b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
+{
+    if(*BoundProgram != NewProgram)
+    {
+        *BoundProgram = NewProgram;
+        glUseProgram(*BoundProgram);
+        return true;
+    }
+    
+    return false;
+}
+
 inline GLenum
 GetIndexType(graphics_mesh* Mesh)
 {    
@@ -90,7 +114,7 @@ ALLOCATE_MESH(AllocateMesh)
             GLuint PAttribute = 0;
             
             GLsizei Stride = (GLsizei)GetVertexSize(VertexBuffer.Format);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)0);
+            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(graphics_vertex_p3, P));
             
             glEnableVertexAttribArray(PAttribute);
         } break;
@@ -101,9 +125,8 @@ ALLOCATE_MESH(AllocateMesh)
             GLuint NAttribute = 1;
             
             GLsizei Stride = (GLsizei)GetVertexSize(VertexBuffer.Format);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)0);
-            glVertexAttribPointer(NAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)(sizeof(v3f)));
-            
+            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(graphics_vertex_p3_n3, P));
+            glVertexAttribPointer(NAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(graphics_vertex_p3_n3, N));            
             
             glEnableVertexAttribArray(PAttribute);
             glEnableVertexAttribArray(NAttribute);            
@@ -145,9 +168,9 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
             
             GLsizei Stride = (GLsizei)GetVertexSize(VertexFormat);
             
-            glVertexAttribPointer(PAttribute,  2, GL_FLOAT, GL_FALSE, Stride, (void*)0);
-            glVertexAttribPointer(UVAttribute, 2, GL_FLOAT, GL_FALSE, Stride, (void*)(sizeof(v2f)));
-            glVertexAttribPointer(CAttribute,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)(sizeof(v2f)*2));
+            glVertexAttribPointer(PAttribute,  2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(graphics_vertex_p2_uv_c, P));
+            glVertexAttribPointer(UVAttribute, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(graphics_vertex_p2_uv_c, UV));
+            glVertexAttribPointer(CAttribute,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)OFFSET_OF(graphics_vertex_p2_uv_c, C));
             
             glEnableVertexAttribArray(PAttribute);
             glEnableVertexAttribArray(UVAttribute);
@@ -270,17 +293,16 @@ b32 Platform_InitOpenGL(void* PlatformData)
     wglMakeCurrent(DeviceContext, TempContext);
     
     int AttribFlags = 0;
-#if DEBUG_BUILD
+#if DEVELOPER_BUILD
     AttribFlags |= WGL_CONTEXT_DEBUG_BIT_ARB;
 #endif
-    
-    int ProfileMask = WGL_CONTEXT_PROFILE_MASK_ARB;
     
     int Attribs[] = 
     {
         WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
         WGL_CONTEXT_MINOR_VERSION_ARB, 3,
-        WGL_CONTEXT_FLAGS_ARB, AttribFlags,                
+        WGL_CONTEXT_FLAGS_ARB, AttribFlags,       
+        WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
         0
     };
     
@@ -317,11 +339,11 @@ void Platform_SwapBuffers(void* PlatformData)
 #if DEVELOPER_BUILD
 
 void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length, const GLchar* Message, void* UserData)
-{        
-    if((ID == 131185) || (ID == 131204))        
+{           
+    if((ID == 131185) || (ID == 131204) || (ID == 131218))        
         return;
     
-    CONSOLE_LOG("GL Debug Message: %s\n", Message);
+    CONSOLE_LOG("GL Debug Message: %s\n", Message);    
     ASSERT(false);
 }
 
@@ -379,8 +401,7 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     glDebugMessageCallback((GLDEBUGPROC)glDebugCallback, NULL);
     glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
     
-#endif
-    
+#endif    
     
     Graphics->AllocateTexture = AllocateTexture;
     Graphics->AllocateMesh = AllocateMesh;
@@ -448,6 +469,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     glEnable(GL_SCISSOR_TEST);
     
     GLuint BoundProgram = (GLuint)-1;
+    GLuint BoundVAO = (GLuint)-1;
     
     push_command_list* CommandList = &Graphics->CommandList;        
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
@@ -527,23 +549,19 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_DRAW_SHADED_COLORED_MESH:
             {
-                push_command_draw_shaded_colored_mesh* DrawShadedColoredMesh = (push_command_draw_shaded_colored_mesh*)Command;
+                push_command_draw_shaded_colored_mesh* DrawShadedColoredMesh = (push_command_draw_shaded_colored_mesh*)Command;                
+                opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawShadedColoredMesh->Mesh;
                 
-                if(BoundProgram != Global_StandardPhongShader.Program)
-                {
-                    BoundProgram = Global_StandardPhongShader.Program;
-                    glUseProgram(BoundProgram);
-                    
+                if(BindProgram(&BoundProgram, Global_StandardPhongShader.Program))
+                {                                        
                     glUniformMatrix4fv(Global_StandardPhongShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
                     glUniformMatrix4fv(Global_StandardPhongShader.ViewLocation, 1, GL_FALSE, CameraView.M);                    
                 }
                 
-                opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawShadedColoredMesh->Mesh;
+                BindVAO(&BoundVAO, Mesh->VAO);
                 
                 glUniformMatrix4fv(Global_StandardPhongShader.ModelLocation, 1, GL_FALSE, DrawShadedColoredMesh->WorldTransform.M);
                 glUniform4f(Global_StandardPhongShader.ColorLocation, DrawShadedColoredMesh->R, DrawShadedColoredMesh->G, DrawShadedColoredMesh->B, DrawShadedColoredMesh->A);
-                
-                glBindVertexArray(Mesh->VAO);              
                 
                 GLenum IndexType = GetIndexType(Mesh);                
                 glDrawElementsBaseVertex(GL_TRIANGLES, Mesh->IndexBuffer.IndexCount, IndexType, 0, 0);
@@ -552,21 +570,15 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_DRAW_IMGUI_UI:
             {
-                push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;
-                if(BoundProgram != Global_ImGuiShader.Program)
-                {
-                    BoundProgram = Global_ImGuiShader.Program;
-                    glUseProgram(BoundProgram);
-                    
-                    glUniformMatrix4fv(Global_ImGuiShader.ProjectionLocation, 1, GL_FALSE, Projection.M);                    
-                }                                
-                
+                push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                
+                opengl_graphics_texture* Texture = (opengl_graphics_texture*)DrawImGuiUI->Texture;                
                 opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawImGuiUI->Mesh;
                 ASSERT(Mesh->IsDynamic);
                 
-                opengl_graphics_texture* Texture = (opengl_graphics_texture*)DrawImGuiUI->Texture;
+                if(BindProgram(&BoundProgram, Global_ImGuiShader.Program))                    
+                    glUniformMatrix4fv(Global_ImGuiShader.ProjectionLocation, 1, GL_FALSE, Projection.M);                                                                    
                 
-                glBindVertexArray(Mesh->VAO);              
+                BindVAO(&BoundVAO, Mesh->VAO);
                 
                 glBindTexture(GL_TEXTURE_2D, Texture->Handle);
                 
@@ -580,11 +592,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_DRAW_QUAD:
             {
                 push_command_draw_quad* DrawQuad = (push_command_draw_quad*)Command;
-                if(BoundProgram != Global_QuadShader.Program)
+                
+                if(BindProgram(&BoundProgram, Global_QuadShader.Program))
                 {
-                    BoundProgram = Global_QuadShader.Program;
-                    glUseProgram(BoundProgram);
-                    
                     glUniformMatrix4fv(Global_QuadShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
                     glUniformMatrix4fv(Global_QuadShader.ViewLocation, 1, GL_FALSE, CameraView.M);
                 }
@@ -598,21 +608,18 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_DRAW_LINE_MESH:
             {
                 push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;
-                if(BoundProgram != Global_StandardLineShader.Program)
-                {
-                    BoundProgram = Global_StandardLineShader.Program;
-                    glUseProgram(BoundProgram);
-                    
+                if(BindProgram(&BoundProgram, Global_StandardLineShader.Program))
+                {                    
                     glUniformMatrix4fv(Global_StandardLineShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
                     glUniformMatrix4fv(Global_StandardLineShader.ViewLocation, 1, GL_FALSE, CameraView.M);
                 }
                 
                 opengl_graphics_mesh* Mesh = (opengl_graphics_mesh*)DrawLineMesh->Mesh;
                 
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
                 glUniformMatrix4fv(Global_StandardLineShader.ModelLocation, 1, GL_FALSE, DrawLineMesh->WorldTransform.M);
                 glUniform4f(Global_StandardLineShader.ColorLocation, DrawLineMesh->R, DrawLineMesh->G, DrawLineMesh->B, DrawLineMesh->A);
-                
-                glBindVertexArray(Mesh->VAO);
                 
                 GLenum IndexType = GetIndexType(Mesh);
                 glDrawElementsBaseVertex(GL_LINES, DrawLineMesh->IndexCount, IndexType, 

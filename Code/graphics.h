@@ -3,7 +3,7 @@
 
 #include "common.h"
 #include "platform.h"
-
+ 
 struct graphics_rect
 {
     v2i Min;
