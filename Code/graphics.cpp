@@ -176,7 +176,9 @@ void PushDrawQuad(graphics* Graphics, v3f* P, c4 Color)
 }
 
 void RecordGameCommands(game* Game, graphics* Graphics, m4 Projection, m4 View)
-{       
+{   
+    PushScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+    
     PushClearColorAndDepth(Graphics, Black(), 1.0f);            
     PushDepth(Graphics, true);
     

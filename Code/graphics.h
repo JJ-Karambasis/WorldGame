@@ -140,8 +140,7 @@ struct push_command_blend : public push_command
 };
 
 struct push_command_scissor : public push_command
-{
-    b32 Enable;
+{    
     i32 X, Y;
     i32 Width, Height;
 };

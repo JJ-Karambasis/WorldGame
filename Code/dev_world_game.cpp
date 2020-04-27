@@ -48,7 +48,7 @@ dev_capsule_mesh CreateDevCapsuleMesh(arena* Storage, graphics* Graphics, u16 Ci
     
     VertexBuffer.Data = PushArray(Storage, VertexBuffer.VertexCount, graphics_vertex_p3, Clear, 0);
     IndexBuffer.Data = PushArray(Storage, IndexBuffer.IndexCount, u16, Clear, 0); 
-        
+    
     graphics_vertex_p3* VertexAt = (graphics_vertex_p3*)VertexBuffer.Data;
     
     f32 Radians;
@@ -116,15 +116,14 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
 {    
     ImGui::NewFrame();
     
-#if 1
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(Graphics->RenderDim/5), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(Graphics->RenderDim/5), ImGuiCond_FirstUseEver);    
     
     local bool open = true;
     ImGui::Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse);    
     
     ImGui::Text("FPS: %f", 1.0f/Game->dt);        
-        
+    
     if(ImGui::Checkbox("Debug Camera", (bool*)&DevContext->UseDevCamera))
     {
         DevContext->Camera.Position = Game->Camera.Position;
@@ -138,10 +137,9 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     ImGui::Checkbox("Draw Blockers", (bool*)&DevContext->DrawBlockers);
     
     ImGui::End();    
-#else    
-    local bool open;
-    ImGui::ShowDemoWindow(&open);    
-#endif
+    
+    local bool open_demo;
+    ImGui::ShowDemoWindow(&open_demo);        
     
     ImGui::Render();        
 }
@@ -241,23 +239,45 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, 
     //bug is causing as well)
     
     ptr IndexSize = sizeof(ImDrawIdx);    
-    ImDrawData* DrawData = ImGui::GetDrawData();
+    ImDrawData* DrawData = ImGui::GetDrawData();        
+    
+    u32 LastImGuiMeshCount = DevContext->ImGuiMeshCount;
+    DevContext->ImGuiMeshCount = DrawData->CmdListsCount;
+    ASSERT(DevContext->ImGuiMeshCount <= MAX_IMGUI_MESHES);        
+    
     for(i32 CmdListIndex = 0; CmdListIndex < DrawData->CmdListsCount; CmdListIndex++)
     {
-        if(!DevContext->ImGuiMesh)
-            DevContext->ImGuiMesh = Graphics->AllocateDynamicMesh(Graphics, GRAPHICS_VERTEX_FORMAT_P2_UV_C, GRAPHICS_INDEX_FORMAT_16_BIT);
+        if(!DevContext->ImGuiMeshes[CmdListIndex])
+            DevContext->ImGuiMeshes[CmdListIndex] = Graphics->AllocateDynamicMesh(Graphics, GRAPHICS_VERTEX_FORMAT_P2_UV_C, GRAPHICS_INDEX_FORMAT_16_BIT);
         
         ImDrawList* CmdList = DrawData->CmdLists[CmdListIndex];        
-        Graphics->StreamMeshData(DevContext->ImGuiMesh, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size*sizeof(graphics_vertex_p2_uv_c), 
-                                 CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size*IndexSize);
+        Graphics->StreamMeshData(DevContext->ImGuiMeshes[CmdListIndex], CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size*sizeof(graphics_vertex_p2_uv_c), 
+                                 CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size*IndexSize);                
         
         for(i32 CmdIndex = 0; CmdIndex < CmdList->CmdBuffer.Size; CmdIndex++)
         {
             ImDrawCmd* Cmd = &CmdList->CmdBuffer[CmdIndex];
             ASSERT(!Cmd->UserCallback);
             
-            graphics_texture* Texture = (graphics_texture*)Cmd->TextureId;
-            PushDrawImGuiUI(Graphics, DevContext->ImGuiMesh, Texture, Cmd->ElemCount, Cmd->IdxOffset, Cmd->VtxOffset);                             
+            ImVec4 ClipRect = Cmd->ClipRect;
+            if((ClipRect.x < Graphics->RenderDim.width) && (ClipRect.y < Graphics->RenderDim.height) && (ClipRect.z >= 0.0f) && (ClipRect.w >= 0.0f))
+            {
+#if 0 
+                i32 X = (i32)ClipRect.x;
+                i32 Y = (i32)ClipRect.y;
+                i32 Width = (i32)ClipRect.z;
+                i32 Height = (i32)ClipRect.w;
+#else
+                i32 X = (i32)ClipRect.x;
+                i32 Y = (i32)(Graphics->RenderDim.height-ClipRect.w);
+                i32 Width = (i32)(ClipRect.z - ClipRect.x);
+                i32 Height = (i32)(ClipRect.w - ClipRect.y);
+#endif
+                PushScissor(Graphics, X, Y, Width, Height);
+                
+                graphics_texture* Texture = (graphics_texture*)Cmd->TextureId;
+                PushDrawImGuiUI(Graphics, DevContext->ImGuiMeshes[CmdListIndex], Texture, Cmd->ElemCount, Cmd->IdxOffset, Cmd->VtxOffset);                             
+            }
         }
     }
     
@@ -275,6 +295,10 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                
         DevContext->CapsuleMesh = CreateDevCapsuleMesh(&DevContext->DevStorage, Graphics, 60);
+        
+        ImGuiIO* IO = &ImGui::GetIO();
+        IO->BackendRendererName = "OpenGL";
+        IO->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
         
         DevContext->Initialized = true;                        
     }

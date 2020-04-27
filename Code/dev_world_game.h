@@ -45,6 +45,7 @@ struct dev_capsule_mesh
     u32 BodyVertexOffset;    
 };
 
+#define MAX_IMGUI_MESHES 32
 struct dev_context
 {
     arena DevStorage;
@@ -56,7 +57,8 @@ struct dev_context
     dev_input Input;    
     camera Camera;
     
-    graphics_mesh* ImGuiMesh;
+    u32 ImGuiMeshCount;
+    graphics_mesh* ImGuiMeshes[MAX_IMGUI_MESHES];
     
     dev_capsule_mesh CapsuleMesh;
     

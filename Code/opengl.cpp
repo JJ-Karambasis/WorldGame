@@ -166,6 +166,9 @@ STREAM_MESH_DATA(StreamMeshData)
     
     glBindVertexArray(OpenGLMesh->VAO);
     
+    glBindBuffer(GL_ARRAY_BUFFER, OpenGLMesh->VBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, OpenGLMesh->EBO);
+    
     glBufferData(GL_ARRAY_BUFFER, VertexSize, VertexData, GL_STREAM_DRAW);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndexSize, IndexData, GL_STREAM_DRAW);    
     
@@ -311,6 +314,19 @@ void Platform_SwapBuffers(void* PlatformData)
 
 #endif
 
+#if DEVELOPER_BUILD
+
+void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length, const GLchar* Message, void* UserData)
+{        
+    if((ID == 131185) || (ID == 131204))        
+        return;
+    
+    CONSOLE_LOG("GL Debug Message: %s\n", Message);
+    ASSERT(false);
+}
+
+#endif
+
 extern "C"
 EXPORT INIT_GRAPHICS(InitGraphics)
 {
@@ -350,6 +366,21 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     LOAD_FUNCTION(PFNGLUNIFORM4FPROC, glUniform4f);
     LOAD_FUNCTION(PFNGLUNIFORM3FVPROC, glUniform3fv);
     LOAD_FUNCTION(PFNGLDRAWELEMENTSBASEVERTEXPROC, glDrawElementsBaseVertex);
+    
+#if DEVELOPER_BUILD
+    
+    PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback = (PFNGLDEBUGMESSAGECALLBACKPROC)Platform_LoadProc("glDebugMessageCallback");
+    PFNGLDEBUGMESSAGECONTROLPROC glDebugMessageControl = (PFNGLDEBUGMESSAGECONTROLPROC)Platform_LoadProc("glDebugMessageControl");
+    
+    ASSERT(glDebugMessageControl && glDebugMessageCallback);
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    
+    glDebugMessageCallback((GLDEBUGPROC)glDebugCallback, NULL);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
+    
+#endif
+    
     
     Graphics->AllocateTexture = AllocateTexture;
     Graphics->AllocateMesh = AllocateMesh;
@@ -413,7 +444,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
     
-    glViewport(0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+    glViewport(0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);    
+    glEnable(GL_SCISSOR_TEST);
     
     GLuint BoundProgram = (GLuint)-1;
     
@@ -475,6 +507,12 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 else
                     glDisable(GL_BLEND);
                 
+            } break;
+            
+            case PUSH_COMMAND_SCISSOR:
+            {
+                push_command_scissor* CommandScissor = (push_command_scissor*)Command;
+                glScissor(CommandScissor->X, CommandScissor->Y, CommandScissor->Width, CommandScissor->Height);                
             } break;
             
             case PUSH_COMMAND_PROJECTION:
