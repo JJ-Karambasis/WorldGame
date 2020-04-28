@@ -417,136 +417,12 @@ b32 IsDegenerateTriangle2D(triangle3D Triangle)
     return Result;
 }
 
-SUPPORT_FUNCTION(AABB3DSupport)
-{
-    aabb3D* AABB = (aabb3D*)Data;
-    
-    v3f CenterPos;
-    v3f Dim;
-    GetAABB3DDimAndCenterPos(&CenterPos, &Dim, *AABB);
-    Dim *= 0.5f;
-    
-    v3f Result = CenterPos + V3(SIGN(Direction.x)*Dim.x, 
-                                SIGN(Direction.y)*Dim.y, 
-                                SIGN(Direction.z)*Dim.z);
-    return Result;
-}
-
 SUPPORT_FUNCTION(Line3DSupport)
 {
     v3f* Line = (v3f*)Data;
     if(Dot(Direction, Line[0]) < Dot(Direction, Line[1]))
         return Line[1];    
     return Line[0];
-}
-
-penetration_result PenetrationTestAABB3D(aabb3D A, aabb3D B)
-{
-    v3f CenterPoint;
-    v3f ADim;
-    GetAABB3DDimAndCenterPos(&CenterPoint, &ADim, A);
-    ADim *= 0.5f;
-    
-    B.Max += ADim;
-    B.Min -= ADim;
-    
-    penetration_result Result;
-    Result.Hit = false;
-    Result.Distance = INFINITY;
-    
-    v3f XNormal = {};    
-    f32 XDistance = 0.0f;
-    {
-        f32 Distance0 = MaximumF32(CenterPoint.x - B.Min.x, 0.0f);        
-        f32 Distance1 = MaximumF32(B.Max.x - CenterPoint.x, 0.0f);
-        
-        if((Distance0 != 0.0f) || (Distance1 != 0.0f))
-        {                        
-            if(Distance0 < Distance1)
-            {
-                XDistance = Distance0;
-                XNormal = V3(1.0f, 0.0f, 0.0f);
-            }
-            else
-            {
-                XDistance = Distance1;
-                XNormal = V3(-1.0f, 0.0f, 0.0f);
-            }
-        }        
-    }
-    
-    v3f YNormal = {};    
-    f32 YDistance = 0.0f;
-    {
-        f32 Distance0 = MaximumF32(CenterPoint.y - B.Min.y, 0.0f);        
-        f32 Distance1 = MaximumF32(B.Max.y - CenterPoint.y, 0.0f);
-        
-        if((Distance0 != 0.0f) || (Distance1 != 0.0f))
-        {                        
-            if(Distance0 < Distance1)
-            {
-                YDistance = Distance0;
-                YNormal = V3(0.0f, 1.0f, 0.0f);
-            }
-            else
-            {
-                YDistance = Distance1;
-                YNormal = V3(0.0f, -1.0f, 0.0f);
-            }
-        }        
-    }
-    
-    v3f ZNormal = {};    
-    f32 ZDistance = 0.0f;
-    {
-        f32 Distance0 = MaximumF32(CenterPoint.z - B.Min.z, 0.0f);        
-        f32 Distance1 = MaximumF32(B.Max.z - CenterPoint.z, 0.0f);
-        
-        if((Distance0 != 0.0f) || (Distance1 != 0.0f))
-        {                        
-            if(Distance0 < Distance1)
-            {
-                ZDistance = Distance0;
-                ZNormal = V3(0.0f, 0.0f, 1.0f);
-            }
-            else
-            {
-                ZDistance = Distance1;
-                ZNormal = V3(0.0f, 0.0f, -1.0f);
-            }
-        }        
-    }
-    
-    if((ZDistance != 0.0f) && (YDistance != 0.0f) && (XDistance != 0.0f))
-    {
-        Result.Hit = true;        
-        
-        if(ZDistance < YDistance)
-        {
-            if(ZDistance < XDistance)
-            {
-                Result.Distance = ZDistance;
-                Result.Normal = ZNormal;
-            }
-            else
-            {
-                Result.Distance = XDistance;
-                Result.Normal = XNormal;
-            }
-        }
-        else if(YDistance < XDistance)
-        {
-            Result.Distance = YDistance;
-            Result.Normal = YNormal;
-        }
-        else
-        {
-            Result.Distance = XDistance;
-            Result.Normal = XNormal;
-        }
-    }
-    
-    return Result;
 }
 
 circle2D CombineCircles(v2f CenterP0, f32 Radius0, v2f CenterP1, f32 Radius1)
@@ -723,17 +599,9 @@ time_result_2D MovingCircleEdgeIntersectionTime2D(v2f P0, v2f P1, f32 Radius, v2
     return Result;
 }
 
-time_result_2D MovingCircleRectangleIntersectionTime2D(v2f CenterP0, v2f CenterP1, f32 Radius, 
-                                                       v2f RectMin, v2f RectMax)
-{            
-    time_result_2D Result = InvalidTimeResult2D();    
-    
-    penetration_result_2D InitialPenetration = CircleRectanglePenetrationResult2D(CenterP0, Radius, RectMin, RectMax);
-    if(InitialPenetration.Hit)
-    {
-        Result = CreateTimeResult(InitialPenetration, CenterP0);        
-        return Result;
-    }
+time_result_2D MovingCircleRectangleIntersectionTimeNoInitialPenetration2D(v2f CenterP0, v2f CenterP1, f32 Radius, v2f RectMin, v2f RectMax)
+{
+    time_result_2D Result = InvalidTimeResult2D();
     
     v2f Edges[4][2] = 
     {
@@ -751,6 +619,47 @@ time_result_2D MovingCircleRectangleIntersectionTime2D(v2f CenterP0, v2f CenterP
             if(TimeResult.Time < Result.Time)            
                 Result = TimeResult;                            
         }        
+    }
+    
+    return Result;
+}
+
+time_result_2D MovingCircleRectangleIntersectionTime2D(v2f CenterP0, v2f CenterP1, f32 Radius, 
+                                                       v2f RectMin, v2f RectMax)
+{            
+    time_result_2D Result = InvalidTimeResult2D();    
+    
+    penetration_result_2D InitialPenetration = CircleRectanglePenetrationResult2D(CenterP0, Radius, RectMin, RectMax);
+    if(InitialPenetration.Hit)
+    {
+        Result = CreateTimeResult(InitialPenetration, CenterP0);        
+        return Result;
+    }
+    
+    Result = MovingCircleRectangleIntersectionTimeNoInitialPenetration2D(CenterP0, CenterP1, Radius, RectMin, RectMax);    
+    return Result;
+}
+
+time_result_2D MovingRectangleCircleIntersectionTime2D(v2f CenterP0, v2f CenterP1, v2f Dim, v2f CircleP, f32 CircleR)
+{    
+    rect2D Rect = CreateRect2DCenterDim(CenterP0, Dim);
+    
+    time_result_2D Result = InvalidTimeResult2D();
+    
+    penetration_result_2D InitialPenetration = CircleRectanglePenetrationResult2D(CircleP, CircleR, Rect.Min, Rect.Max);
+    if(InitialPenetration.Hit)
+    {
+        InitialPenetration.Normal = -InitialPenetration.Normal;
+        Result = CreateTimeResult(InitialPenetration, CenterP0); 
+        return Result;
+    }
+    
+    v2f Delta = CenterP0-CenterP1;    
+    Result = MovingCircleRectangleIntersectionTimeNoInitialPenetration2D(CircleP, CircleP+Delta, CircleR, Rect.Min, Rect.Max);
+    if(!IsInvalidTimeResult2D(Result))
+    {
+        Result.Normal = -Result.Normal;
+        Result.ContactPoint = CenterP0 + Result.Time*(CenterP1-CenterP0);        
     }
     
     return Result;

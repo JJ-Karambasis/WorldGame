@@ -181,8 +181,7 @@ GetNextEntity(world_entity_pool* Pool, world_entity* Entity)
     return NULL;
 }
 
-world_entity_id 
-
+world_entity_id
 CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, graphics_mesh* Mesh, void* UserData=NULL)
 {
     world* World = GetWorld(Game, WorldIndex);
@@ -303,6 +302,16 @@ CreateSingleLinkedBoxEntities(game* Game, world_entity_type Type, u32 LinkWorldI
         GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
 }
 
+void 
+CreateDualLinkedBoxEntities(game* Game, world_entity_type Type, v3f Position, v3f Dim, c4 Color0, c4 Color1)
+{
+    world_entity_id AID = CreateBoxEntity(Game, Type, 0, Position, Dim, Color0);
+    world_entity_id BID = CreateBoxEntity(Game, Type, 1, Position, Dim, Color1);
+    
+    GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
+    GetEntity(&Game->Worlds[1], BID)->LinkID = AID;    
+}
+
 inline blocker*
 CreateBlocker(game* Game, u32 WorldIndex, v3f P0, f32 Height0, v3f P1, f32 Height1)
 {
@@ -374,6 +383,14 @@ GetWorldSpaceVerticalCapsule(vertical_capsule Capsule, sqt Transform)
     return Result;
 }
 
+vertical_capsule 
+GetWorldSpaceVerticalCapsule(world_entity* Entity)
+{
+    ASSERT(Entity->Collider.Type == COLLIDER_TYPE_VERTICAL_CAPSULE);
+    vertical_capsule Result = GetWorldSpaceVerticalCapsule(Entity->Collider.VerticalCapsule, Entity->Transform);
+    return Result;
+}
+
 aligned_box 
 GetWorldSpaceAlignedBox(aligned_box Box, sqt Transform)
 {
@@ -407,6 +424,13 @@ ClearEntityVelocity(game* Game, world_entity_id ID)
     return NULL;
 }
 
+inline f32
+GetCapsuleHeight(vertical_capsule* Capsule)
+{
+    f32 Result = Capsule->P.z+Capsule->Height+(Capsule->Radius*2);
+    return Result;
+}
+
 void 
 OnWorldSwitch(game* Game, u32 LastWorldIndex, u32 CurrentWorldIndex)
 {
@@ -415,26 +439,80 @@ OnWorldSwitch(game* Game, u32 LastWorldIndex, u32 CurrentWorldIndex)
     world_entity* PushingEntity = ClearEntityVelocity(Game, LastPlayer->Pushing.EntityID);
     if(PushingEntity)
         ClearEntityVelocity(Game, PushingEntity->LinkID);
-            
+    
 }
 
 void 
-ResolveImpact(world_entity* Entity, v2f* MoveDelta, time_result_2D TimeResult)
+ResolveImpact(world_entity* Entity, v2f NewPosition, v2f Normal, v2f* MoveDelta)
 {       
     v2f TargetPosition = Entity->Position.xy + *MoveDelta;    
     
-    Entity->Position.xy = TimeResult.ContactPoint;
-    *MoveDelta = TargetPosition - TimeResult.ContactPoint;
+    Entity->Position.xy = NewPosition;
+    *MoveDelta = TargetPosition - NewPosition;
     
-    if(TimeResult.Normal != 0)
+    if(Normal != 0)
     {
-        *MoveDelta -= Dot(*MoveDelta, TimeResult.Normal)*TimeResult.Normal;
-        Entity->Velocity.xy -= Dot(Entity->Velocity.xy, TimeResult.Normal)*TimeResult.Normal;                        
+        *MoveDelta -= Dot(*MoveDelta, Normal)*Normal;
+        Entity->Velocity.xy -= Dot(Entity->Velocity.xy, Normal)*Normal;                        
     }
 }
 
+void 
+ResolveImpact(world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
+{   
+    ResolveImpact(Entity, TimeResult.ContactPoint, TimeResult.Normal, MoveDelta);    
+}
+
+b32 
+ResolveEntity(world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
+{    
+    if(IsInvalidTimeResult2D(TimeResult))
+    {
+        Entity->Position.xy += (*MoveDelta);                                
+        return true;        
+    }
+    
+    ResolveImpact(Entity, TimeResult, MoveDelta);                                                                                                    
+    return false;
+}
+
+b32 ResolvePushableCollision(world_entity* PlayerEntity, world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
+{    
+    ASSERT(PlayerEntity->Type == WORLD_ENTITY_TYPE_PLAYER);
+    v2f OldP = Entity->Position.xy;
+    
+    b32 Result = ResolveEntity(Entity, TimeResult, MoveDelta);    
+    
+    player* Player = (player*)PlayerEntity->UserData;
+    
+    v2f Delta = Entity->Position.xy - OldP;
+    if(AreEqualIDs(Player->Pushing.EntityID, Entity->ID))
+        PlayerEntity->Position.xy += Delta;                            
+    
+    return Result;
+}
+
+void ResolvePushableImpact(world_entity* PlayerEntity, world_entity* Entity, v2f NewPosition, v2f Normal, v2f* MoveDelta)
+{
+    ASSERT(PlayerEntity->Type == WORLD_ENTITY_TYPE_PLAYER);
+    v2f OldP = Entity->Position.xy;
+    
+    ResolveImpact(Entity, NewPosition, Normal, MoveDelta);
+    
+    player* Player = (player*)PlayerEntity->UserData;
+    
+    v2f Delta = Entity->Position.xy - OldP;
+    if(AreEqualIDs(Player->Pushing.EntityID, Entity->ID))
+        PlayerEntity->Position.xy += Delta;                            
+}
+
+void ResolvePushableImpact(world_entity* PlayerEntity, world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
+{
+    ResolvePushableImpact(PlayerEntity, Entity, TimeResult.ContactPoint, TimeResult.Normal, MoveDelta);    
+}
+
 time_of_impact_result 
-FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
+FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
 {    
     time_of_impact_result Result;
     Result.TimeResult = InvalidTimeResult2D();
@@ -449,7 +527,7 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
             aligned_box EntityBox = GetWorldSpaceAlignedBox(Entity);
             
             v2f TargetPosition = EntityBox.CenterP.xy + MoveDelta;
-                        
+            
             f32 HalfDimZ = EntityBox.Dim.z*0.5f;
             f32 MinZ = EntityBox.CenterP.z-HalfDimZ;
             f32 MaxZ = EntityBox.CenterP.z+HalfDimZ;            
@@ -465,9 +543,12 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
             } 
             
             for(world_entity* TestEntity = GetFirstEntity(&World->EntityPool); TestEntity; TestEntity = GetNextEntity(&World->EntityPool, TestEntity))
-            {
+            {                             
                 if((TestEntity->Type != WORLD_ENTITY_TYPE_WALKABLE) && (TestEntity != Entity))
-                {                                        
+                {   
+                    if(AreEqualIDs(TestEntity->ID, CullID))
+                        continue;
+                    
                     switch(TestEntity->Collider.Type)
                     {
                         case COLLIDER_TYPE_ALIGNED_BOX:
@@ -489,7 +570,18 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
                         
                         case COLLIDER_TYPE_VERTICAL_CAPSULE:
                         {
-                            //NOT_IMPLEMENTED;
+                            vertical_capsule TestEntityCapsule = GetWorldSpaceVerticalCapsule(TestEntity);                            
+                            f32 CapsuleHeight = GetCapsuleHeight(&TestEntityCapsule);                            
+                            
+                            if(IsRangeInInterval(MinZ, MaxZ, TestEntityCapsule.P.z, CapsuleHeight))
+                            {
+                                time_result_2D TimeResult = MovingRectangleCircleIntersectionTime2D(EntityBox.CenterP.xy, TargetPosition, EntityBox.Dim.xy, TestEntityCapsule.P.xy, TestEntityCapsule.Radius);
+                                if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))
+                                {                                                                   
+                                    Result.TimeResult = TimeResult;
+                                    Result.HitEntityID = TestEntity->ID;
+                                }
+                            }                            
                         } break;
                         
                         INVALID_DEFAULT_CASE;
@@ -503,7 +595,7 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
             vertical_capsule EntityCapsule = GetWorldSpaceVerticalCapsule(Entity->Collider.VerticalCapsule, Entity->Transform);                                                                
             
             v2f TargetPosition = EntityCapsule.P.xy+MoveDelta;            
-            f32 CapsuleHeight = EntityCapsule.P.z+EntityCapsule.Height+(EntityCapsule.Radius*2);
+            f32 CapsuleHeight = GetCapsuleHeight(&EntityCapsule);
             
             for(blocker* Blocker = World->Blockers.First; Blocker; Blocker = Blocker->Next)
             {
@@ -518,7 +610,10 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
             for(world_entity* TestEntity = GetFirstEntity(&World->EntityPool); TestEntity; TestEntity = GetNextEntity(&World->EntityPool, TestEntity))
             {
                 if((TestEntity->Type != WORLD_ENTITY_TYPE_WALKABLE) && (TestEntity != Entity))
-                {                                        
+                {   
+                    if(AreEqualIDs(TestEntity->ID, CullID))
+                        continue;
+                    
                     switch(TestEntity->Collider.Type)
                     {
                         case COLLIDER_TYPE_ALIGNED_BOX:
@@ -542,6 +637,7 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta)
                         
                         case COLLIDER_TYPE_VERTICAL_CAPSULE:
                         {
+                            //CONFIRM(JJ): Will we even need to support this case?
                             NOT_IMPLEMENTED;
                         } break;
                     }
@@ -621,14 +717,10 @@ UpdateWorld(game* Game)
                     if(SquareMagnitude(MoveDelta) <= MOVE_DELTA_EPSILON)
                         break;
                     
-                    time_of_impact_result TOI = FindTOI(Game, Entity, MoveDelta);
-                    if(IsInvalidTimeResult2D(TOI.TimeResult))
-                    {
-                        Entity->Position.xy += MoveDelta;
-                        break;
-                    }
+                    time_of_impact_result TOI = FindTOI(Game, Entity, MoveDelta, InvalidEntityID());
                     
-                    ResolveImpact(Entity, &MoveDelta, TOI.TimeResult);
+                    if(ResolveEntity(Entity, TOI.TimeResult, &MoveDelta))
+                        break;
                     
                     if((TOI.TimeResult.Normal != 0) && AreEqual(MoveDirection, -TOI.TimeResult.Normal, 1e-4f))
                     {
@@ -654,14 +746,15 @@ UpdateWorld(game* Game)
                     APPLY_VELOCITY(TestEntities[0]);
                     MoveDeltas[0] = TestEntities[0]->Velocity.xy*dt;
                     
+                    b32 DualLinkedEntities = false;
                     if(TestEntities[1])
                     {
                         APPLY_VELOCITY(TestEntities[1]);
-                        MoveDeltas[1] = TestEntities[1]->Velocity.xy*dt;
+                        MoveDeltas[1] = TestEntities[1]->Velocity.xy*dt;                        
+                        DualLinkedEntities = AreEqualIDs(TestEntities[1]->LinkID, TestEntities[0]->ID);
                     }
                     else
-                        StopProcessing[1] = true;
-                    
+                        StopProcessing[1] = true;                                                            
                     
                     for(u32 Iterations = 0; ; Iterations++)
                     {
@@ -674,37 +767,81 @@ UpdateWorld(game* Game)
                             if(StopProcessing[ObjectIndex])
                                 continue;
                             
-                            //TODO(JJ): Need to find someway of pruning out collisions that we don't want to check. In this instance, the player and pushable object
                             if(SquareMagnitude(MoveDeltas[ObjectIndex]) <= MOVE_DELTA_EPSILON)                            
                                 StopProcessing[ObjectIndex] = true;                                                            
                             else                            
-                                TOIs[ObjectIndex] = FindTOI(Game, TestEntities[ObjectIndex], MoveDeltas[ObjectIndex]);
-                        }
-                        
-                        for(u32 ObjectIndex = 0; ObjectIndex < 2; ObjectIndex++)
-                        {
-                            if(StopProcessing[ObjectIndex])
-                                continue;
-                            
-                            v2f Delta = MoveDeltas[ObjectIndex];
-                            
-                            if(IsInvalidTimeResult2D(TOIs[ObjectIndex].TimeResult))
-                            {
-                                TestEntities[ObjectIndex]->Position.xy += MoveDeltas[ObjectIndex];                                
-                                StopProcessing[ObjectIndex] = true;                                
-                            }
-                            else
-                            {                                
-                                Delta = TOIs[ObjectIndex].TimeResult.ContactPoint - TestEntities[ObjectIndex]->Position.xy;                                
-                                ResolveImpact(TestEntities[ObjectIndex], MoveDeltas+ObjectIndex, TOIs[ObjectIndex].TimeResult);                                                                    
-                            }   
-                            
-                            if(AreEqualIDs(Player->Pushing.EntityID, TestEntities[ObjectIndex]->ID))
-                                PlayerEntity->Position.xy += Delta;                            
-                        }
+                                TOIs[ObjectIndex] = FindTOI(Game, TestEntities[ObjectIndex], MoveDeltas[ObjectIndex], PlayerEntity->ID);
+                        }                                                
                         
                         if(StopProcessing[0] && StopProcessing[1])
                             break;
+                        
+                        if(DualLinkedEntities)
+                        {                
+                            u32 Index = 0;
+                            if(IsInvalidTimeResult2D(TOIs[0].TimeResult) && IsInvalidTimeResult2D(TOIs[1].TimeResult))
+                            {
+                                TestEntities[0]->Position.xy += MoveDeltas[0];
+                                TestEntities[1]->Position.xy += MoveDeltas[1];
+                                
+                                if(AreEqualIDs(Player->Pushing.EntityID, TestEntities[0]->ID))
+                                    PlayerEntity->Position.xy += MoveDeltas[0];
+                                else if(AreEqualIDs(Player->Pushing.EntityID, TestEntities[1]->ID))
+                                    PlayerEntity->Position.xy += MoveDeltas[1];                                                                   
+                                StopProcessing[0] = StopProcessing[1] = true;
+                                
+                                Index = 0;
+                            }                            
+                            else if(TOIs[0].TimeResult.Time == 0.0f || TOIs[1].TimeResult.Time == 0.0f)
+                            {                                
+                                if(!StopProcessing[0] && TOIs[0].TimeResult.Time == 0)                                   
+                                    ResolvePushableImpact(PlayerEntity, TestEntities[0], TOIs[0].TimeResult, &MoveDeltas[0]);
+                                else
+                                    StopProcessing[0] = true;
+                                
+                                if(!StopProcessing[1] && TOIs[1].TimeResult.Time == 0)                                    
+                                    ResolvePushableImpact(PlayerEntity, TestEntities[1], TOIs[1].TimeResult, &MoveDeltas[1]);                                                                        
+                                else
+                                    StopProcessing[1] = true;                                
+                                
+                                Index = 1;
+                            }
+                            else
+                            {
+                                u32 SmallestIndex = (TOIs[0].TimeResult.Time <= TOIs[1].TimeResult.Time) ? 0 : 1;
+                                u32 NotSmallestIndex = !SmallestIndex;
+                                f32 SmallestT = TOIs[SmallestIndex].TimeResult.Time;
+                                
+                                v2f ResolveNormal = TOIs[SmallestIndex].TimeResult.Normal;
+                                
+                                if(!StopProcessing[SmallestIndex])
+                                {
+                                    ResolvePushableImpact(PlayerEntity, TestEntities[SmallestIndex], TestEntities[SmallestIndex]->Position.xy + MoveDeltas[SmallestIndex]*SmallestT, 
+                                                          ResolveNormal, &MoveDeltas[SmallestIndex]);
+                                }
+                                
+                                if(!StopProcessing[NotSmallestIndex])
+                                {
+                                    ResolvePushableImpact(PlayerEntity, TestEntities[NotSmallestIndex], TestEntities[NotSmallestIndex]->Position.xy + MoveDeltas[NotSmallestIndex]*SmallestT,
+                                                          ResolveNormal, &MoveDeltas[NotSmallestIndex]);                                                                
+                                }
+                                
+                                Index = 2;
+                            }             
+                            
+                            CONSOLE_LOG("Index %d\n", Index);
+                        }
+                        else
+                        {                            
+                            for(u32 ObjectIndex = 0; ObjectIndex < 2; ObjectIndex++)
+                            {
+                                if(StopProcessing[ObjectIndex])
+                                    continue;
+                                
+                                if(ResolvePushableCollision(PlayerEntity, TestEntities[ObjectIndex], TOIs[ObjectIndex].TimeResult, &MoveDeltas[ObjectIndex]))
+                                    StopProcessing[ObjectIndex] = true;                                                            
+                            }
+                        }                                                
                     }
                     
                     Pushing = Player->Pushing;

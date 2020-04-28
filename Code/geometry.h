@@ -30,6 +30,12 @@ struct rect2D
     v2f Max;
 };
 
+struct rect2D_center_dim
+{
+    v2f CenterP;
+    v2f Dim;
+};
+
 struct triangle2D
 {
     v2f P[3];
@@ -88,11 +94,24 @@ inline circle2D CreateCircle2D(v2f CenterP, f32 Radius)
     return Result;
 }
 
-inline rect2D CreateRect2D(f32 x0, f32 y0, f32 x1, f32 y1)
+inline rect2D CreateRect2D(v2f Min, v2f Max)
 {
     rect2D Result;
-    Result.Min = V2(x0, y0);
-    Result.Max = V2(x1, y1);
+    Result.Min = Min;
+    Result.Max = Max;
+    return Result;
+}
+
+inline rect2D CreateRect2DCenterDim(v2f CenterP, v2f Dim)
+{   
+    v2f HalfDim = Dim*0.5f;
+    rect2D Result = CreateRect2D(CenterP-HalfDim, CenterP+HalfDim);    
+    return Result;
+}
+
+inline rect2D CreateRect2DCenterDim(rect2D_center_dim Rect)
+{        
+    rect2D Result = CreateRect2DCenterDim(Rect.CenterP, Rect.Dim);
     return Result;
 }
 
@@ -147,10 +166,16 @@ struct edge3D
     v3f P[2];
 };
 
-struct aabb3D
+struct rect3D
 {
     v3f Min;
     v3f Max;
+};
+
+struct rect3D_center_dim
+{
+    v3f CenterP;
+    v3f Dim;
 };
 
 struct triangle3D
@@ -174,40 +199,34 @@ inline edge3D CreateEdge3D(v3f P0, v3f P1)
     return Result;
 }
 
-inline aabb3D CreateAABB3D(v3f Min, v3f Max)
+inline rect3D CreateRect3D(v3f Min, v3f Max)
 {
-    aabb3D Result;
+    rect3D Result;
     Result.Min = Min;
     Result.Max = Max;
     return Result;
 }
 
-inline aabb3D CreateAABB3DCenterDim(v3f Center, v3f Dim)
+inline rect3D CreateRect3DCenterDim(v3f Center, v3f Dim)
 {    
     v3f HalfDim = Dim*0.5f;
-    aabb3D Result = CreateAABB3D(Center-HalfDim, Center+HalfDim);
+    rect3D Result = CreateRect3D(Center-HalfDim, Center+HalfDim);
     return Result;
 }
 
-inline v3f GetAABB3DDim(aabb3D AABB)
-{
-    v3f Result = AABB.Max - AABB.Min;
+inline rect3D CreateRect3DCenterDim(rect3D_center_dim Rect)
+{        
+    rect3D Result = CreateRect3D(Rect.CenterP, Rect.Dim);
     return Result;
 }
 
-inline void GetAABB3DDimAndCenterPos(v3f* CenterPos, v3f* Dim, aabb3D AABB)
-{
-    *Dim = AABB.Max-AABB.Min;
-    *CenterPos = AABB.Min + *Dim*0.5f;    
-}
-
-inline aabb3D TransformAABB3D(aabb3D AABB, sqt Transform)
+inline rect3D TransformAABB3D(rect3D Rect, sqt Transform)
 {
     Transform.Orientation = IdentityQuaternion();
     
-    aabb3D Result;
-    Result.Min = TransformV3(AABB.Min, Transform);
-    Result.Max = TransformV3(AABB.Max, Transform);
+    rect3D Result;
+    Result.Min = TransformV3(Rect.Min, Transform);
+    Result.Max = TransformV3(Rect.Max, Transform);
     return Result;    
 }
 

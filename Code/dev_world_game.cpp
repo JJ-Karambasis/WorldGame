@@ -171,14 +171,18 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, 
     v3f BottomPosition = PlayerEntity->Position+ZAxis;
     m4 Model = TransformM4(BottomPosition, M3(XAxis, YAxis, -ZAxis));
     
+    c4 PlayerColor = Blue();
+    if(Game->CurrentWorldIndex == 1)
+        PlayerColor = Red();
+    
     dev_capsule_mesh* CapsuleMesh = &DevContext->CapsuleMesh;
-    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, Blue(), CapsuleMesh->CapIndexCount, 0, 0);
+    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, PlayerColor, CapsuleMesh->CapIndexCount, 0, 0);
     
     Model = TransformM4(BottomPosition + BodyZ, M3(XAxis, YAxis, ZAxis));
-    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, Blue(), CapsuleMesh->CapIndexCount, 0, 0);
+    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, PlayerColor, CapsuleMesh->CapIndexCount, 0, 0);
     
     Model = TransformM4(BottomPosition + (BodyZ*0.5f), M3(XAxis, YAxis, BodyZ));
-    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, Blue(), CapsuleMesh->BodyIndexCount, CapsuleMesh->CapIndexCount, CapsuleMesh->BodyVertexOffset);
+    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, PlayerColor, CapsuleMesh->BodyIndexCount, CapsuleMesh->CapIndexCount, CapsuleMesh->BodyVertexOffset);
     
     if(DevContext->DrawColliders)
     {
