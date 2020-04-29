@@ -1433,4 +1433,22 @@ inline v3f TransformV3(v3f Point, m4 Transform)
     return Result.xyz;
 }
 
+struct vertex_p2_uv_c
+{
+    v2f P;
+    v2f UV;
+    u32 C;
+};
+
+struct vertex_p3
+{
+    v3f P;
+};
+
+struct vertex_p3_n3
+{
+    v3f P;
+    v3f N;
+};
+
 #endif

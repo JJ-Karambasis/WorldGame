@@ -39,7 +39,7 @@ struct dev_input
 
 struct dev_capsule_mesh
 {    
-    graphics_mesh* Mesh;
+    i64 MeshID;       
     u32 CapIndexCount;    
     u32 BodyIndexCount;    
     u32 BodyVertexOffset;    
@@ -55,10 +55,10 @@ struct dev_context
     b32 DrawBlockers;
     
     dev_input Input;    
-    camera Camera;
+    camera Cameras[2];
     
     u32 ImGuiMeshCount;
-    graphics_mesh* ImGuiMeshes[MAX_IMGUI_MESHES];
+    i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
     dev_capsule_mesh CapsuleMesh;
     

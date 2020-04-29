@@ -36,6 +36,13 @@ GetCurrentWorld(game* Game)
     return World;
 }
 
+inline world* 
+GetNotCurrentWorld(game* Game)
+{
+    world* World = GetWorld(Game, !Game->CurrentWorldIndex);
+    return World;
+}
+
 inline b32 
 IsCurrentWorldIndex(game* Game, u32 WorldIndex)
 {
@@ -61,8 +68,7 @@ GetIndex(world_entity_pool* Pool, i64 ID)
 inline world_entity* 
 GetEntity(world_entity_pool* Pool, world_entity_id EntityID)
 {
-    i64 Index = GetIndex(Pool, EntityID.ID);
-    world_entity* Result = Pool->Entities + Index;
+    world_entity* Result = GetByID(Pool, EntityID.ID);    
     return Result;
 }
 
@@ -122,72 +128,15 @@ GetPlayerEntity(game* Game, u32 WorldIndex)
     return Result;
 }
 
-world_entity* 
-AllocateEntity(world_entity_pool* Pool)
-{
-    i32 Index;
-    if(Pool->FreeHead != -1)
-    {
-        Index = Pool->FreeHead;
-    }
-    else
-    {
-        //CONFIRM(JJ): Should we handle a dynamically grow entity pool? Doubt it
-        ASSERT(Pool->MaxUsed < MAX_WORLD_ENTITIES);
-        Index = Pool->MaxUsed++;
-    }
-    
-    world_entity* Result = Pool->Entities + Index;    
-    if(Pool->FreeHead != -1)    
-        Pool->FreeHead = Result->ID.ID & 0xFFFFFFFF;
-    
-    Result->ID.ID = (Pool->NextKey++ << 32) | Index;
-    return Result;
-}
-
-inline b32 
-IsEntityAllocated(world_entity* Entity)
-{
-    b32 Result = (Entity->ID.ID & 0xFFFFFFFF00000000) != 0;
-    return Result;
-}
-
-world_entity* 
-GetFirstEntity(world_entity_pool* Pool)
-{
-    for(u32 Index = 0; Index < MAX_WORLD_ENTITIES; Index++)
-    {
-        world_entity* Result = Pool->Entities + Index;
-        if(IsEntityAllocated(Result))
-            return Result;
-    }
-    
-    return NULL;
-}
-
-world_entity* 
-GetNextEntity(world_entity_pool* Pool, world_entity* Entity)
-{
-    ASSERT(IsEntityAllocated(Entity));    
-    i32 Index = SafeI32(GetIndex(Pool, Entity->ID.ID)+1);
-    
-    for(Index; Index < MAX_WORLD_ENTITIES; Index++)
-    {
-        world_entity* Result = Pool->Entities + Index;
-        if(IsEntityAllocated(Result))
-            return Result;
-    }
-    
-    return NULL;
-}
-
 world_entity_id
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, graphics_mesh* Mesh, void* UserData=NULL)
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, mesh* Mesh, void* UserData=NULL)
 {
     world* World = GetWorld(Game, WorldIndex);
-    world_entity* Entity = AllocateEntity(&World->EntityPool);
     
-    Entity->ID = MakeEntityID(Entity->ID.ID, WorldIndex);
+    i64 EntityID = AllocateFromPool(&World->EntityPool);
+    world_entity* Entity = GetByID(&World->EntityPool, EntityID);
+    
+    Entity->ID = MakeEntityID(EntityID, WorldIndex);
     
     Entity->Type = Type;    
     Entity->Transform = CreateSQT(Position, Scale, Euler);
@@ -200,14 +149,14 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh0, graphics_mesh* Mesh1)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh0, mesh* Mesh1)
 {
     CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh0);
     CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh1);    
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh)
 {
     CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh);
     CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh);    
@@ -215,7 +164,7 @@ CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f S
 
 inline void
 CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1, 
-                         graphics_mesh* Mesh0, graphics_mesh* Mesh1)
+                         mesh* Mesh0, mesh* Mesh1)
 {
     world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0, Mesh0);
     world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1, Mesh1);
@@ -225,14 +174,14 @@ CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position0, v3f 
 }
 
 inline void
-CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh)                      
+CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh)                      
 {
     CreateDualLinkedEntities(Game, Type, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1, Mesh, Mesh);    
 }
 
 inline void
 CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1,
-                           graphics_mesh* Mesh0, graphics_mesh* Mesh1)
+                           mesh* Mesh0, mesh* Mesh1)
 {
     world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0, Mesh0);
     world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1, Mesh1);
@@ -246,7 +195,7 @@ CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldInde
 }
 
 inline void
-CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, graphics_mesh* Mesh0, graphics_mesh* Mesh1)
+CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh0, mesh* Mesh1)
 {
     CreateSingleLinkedEntities(Game, Type, LinkWorldIndex, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1, Mesh0, Mesh1);        
 }
@@ -257,20 +206,20 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, c
     player* Player = GetPlayer(Game, WorldIndex);
     Player->Pushing = InitPushingState();
     
-    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Color, NULL, Player);
+    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(Radius*2, Radius*2, Height), V3(), Color, NULL, Player);
     
     world_entity* Entity = GetEntity(Game, Player->EntityID);    
     
     Entity->Collider.Type = COLLIDER_TYPE_VERTICAL_CAPSULE;
     Entity->Collider.VerticalCapsule.P = {};
-    Entity->Collider.VerticalCapsule.Radius = Radius;
-    Entity->Collider.VerticalCapsule.Height = Height;    
+    Entity->Collider.VerticalCapsule.Radius = 1.0f;
+    Entity->Collider.VerticalCapsule.Height = 1.0f;    
 }
 
 world_entity_id 
 CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Dim, c4 Color)
 {
-    world_entity_id Result = CreateEntity(Game, Type, WorldIndex, Position, Dim, V3(), Color, Game->Assets->BoxGraphicsMesh);    
+    world_entity_id Result = CreateEntity(Game, Type, WorldIndex, Position, Dim, V3(), Color, &Game->Assets->BoxGraphicsMesh);    
     world_entity* Entity = GetEntity(Game, Result);
     
     Entity->Collider.Type = COLLIDER_TYPE_ALIGNED_BOX;
@@ -378,7 +327,7 @@ GetWorldSpaceVerticalCapsule(vertical_capsule Capsule, sqt Transform)
     
     vertical_capsule Result;
     Result.P = TransformV3(Capsule.P, Transform);
-    Result.Radius = Capsule.Radius * MaximumF32(Transform.Scale.x, Transform.Scale.y);
+    Result.Radius = Capsule.Radius * MaximumF32(Transform.Scale.x, Transform.Scale.y)*0.5f;
     Result.Height = Capsule.Height * Transform.Scale.z;
     return Result;
 }
@@ -416,7 +365,7 @@ ClearEntityVelocity(game* Game, world_entity_id ID)
     if(!IsInvalidEntityID(ID))
     {        
         world_entity* Entity = GetEntity(Game, ID);
-        ASSERT(IsEntityAllocated(Entity));                        
+        ASSERT(IsAllocatedID(ID.ID));
         Entity->Velocity = {};                        
         return Entity;
     }
@@ -542,7 +491,8 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
                 }                                    
             } 
             
-            for(world_entity* TestEntity = GetFirstEntity(&World->EntityPool); TestEntity; TestEntity = GetNextEntity(&World->EntityPool, TestEntity))
+            pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);                                    
+            for(world_entity* TestEntity = GetFirst(&Iter); TestEntity; TestEntity = GetNext(&Iter))
             {                             
                 if((TestEntity->Type != WORLD_ENTITY_TYPE_WALKABLE) && (TestEntity != Entity))
                 {   
@@ -607,7 +557,8 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
                 }                                    
             }
             
-            for(world_entity* TestEntity = GetFirstEntity(&World->EntityPool); TestEntity; TestEntity = GetNextEntity(&World->EntityPool, TestEntity))
+            pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
+            for(world_entity* TestEntity = GetFirst(&Iter); TestEntity; TestEntity = GetNext(&Iter))
             {
                 if((TestEntity->Type != WORLD_ENTITY_TYPE_WALKABLE) && (TestEntity != Entity))
                 {   
@@ -687,8 +638,10 @@ UpdateWorld(game* Game)
         
     #define MOVE_DELTA_EPSILON 1e-6f
     
-    world* World = GetWorld(Game, Game->CurrentWorldIndex);        
-    for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+    world* World = GetWorld(Game, Game->CurrentWorldIndex);     
+    
+    pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
+    for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
     {        
         switch(Entity->Type)
         {
@@ -862,7 +815,8 @@ UpdateWorld(game* Game)
     f32 BestPointZ = -FLT_MAX;
     triangle3D BestTriangle = InvalidTriangle3D();          
     
-    for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+    Iter = BeginIter(&World->EntityPool);
+    for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
     {
         if(Entity->Type == WORLD_ENTITY_TYPE_WALKABLE)
         {            
@@ -891,5 +845,12 @@ UpdateWorld(game* Game)
     
     ASSERT(BestPointZ != -FLT_MAX);    
     PlayerEntity->Position.z = BestPointZ;                        
+            
+    camera* Camera = &World->Camera;
+    
+    Camera->Position = PlayerEntity->Position;
+    Camera->FocalPoint = PlayerEntity->Position;
+    Camera->Position.z += 6.0f;
+    Camera->Orientation = IdentityM3();    
 }
 

@@ -61,25 +61,43 @@ struct quad_shader
     GLint PositionLocation;
 };
 
-global standard_color_shader Global_StandardPhongShader;
-global standard_color_shader Global_StandardLineShader;
-global imgui_shader Global_ImGuiShader;
-global quad_shader Global_QuadShader;
-
 //TODO(JJ): When we are formalizing the asset/resource loading process, it would probably
 //be best to manage the memory of meshes in one VBO|EBO|VAO per vertex format and then use a draw call 
 //that can specify a vertex and index offset into the buffer. For now we will just have each mesh
 //hold one of each
-struct opengl_graphics_mesh : public graphics_mesh
+struct opengl_mesh
 {
-    GLuint VBO;
-    GLuint EBO;
+    b32 IsDynamic;
+    
+    GLenum IndexType;
+    union
+    {
+        GLuint Buffers[2];
+        struct { GLuint VBO, EBO; };
+    };
     GLuint VAO;
 };
 
-struct opengl_graphics_texture : public graphics_texture
+struct opengl_texture
 {
     GLuint Handle;
+};
+
+typedef pool<opengl_mesh> opengl_mesh_pool; 
+typedef pool<opengl_texture> opengl_texture_pool;
+
+struct opengl_context
+{
+    graphics Graphics;
+    
+    arena Storage;    
+    opengl_mesh_pool MeshPool;
+    opengl_texture_pool TexturePool;        
+    
+    standard_color_shader StandardPhongShader;
+    standard_color_shader StandardLineShader;
+    imgui_shader ImGuiShader;
+    quad_shader QuadShader;    
 };
 
 #define LOAD_FUNCTION(type, function) \

@@ -756,10 +756,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         if(Game.dt > 1.0f/20.0f)
             Game.dt = 1.0f/20.0f;
         
-        DEVELOPMENT_TICK(&Game, Graphics);        
-        
         GameCode.Tick(&Game, Graphics, Global_Platform, DevPointer);                                
-                
+        
+        DEVELOPMENT_TICK(&Game, Graphics);                
+        
         GraphicsCode.ExecuteRenderCommands(Graphics);
         
         for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        

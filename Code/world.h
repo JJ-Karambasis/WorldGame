@@ -71,19 +71,12 @@ struct world_entity
     world_entity_id ID;
     world_entity_id LinkID;
     
-    graphics_mesh* Mesh;
+    mesh* Mesh;
     
     void* UserData;
 };
 
-#define MAX_WORLD_ENTITIES 512
-struct world_entity_pool
-{
-    world_entity Entities[MAX_WORLD_ENTITIES];
-    i32 MaxUsed;
-    i64 NextKey;
-    i32 FreeHead;    
-};
+typedef pool<world_entity> world_entity_pool;
 
 #define MOVE_ACCELERATION 20.0f
 #define MOVE_DAMPING 5.0f
@@ -134,6 +127,7 @@ struct blocker_list
 struct world
 {    
     world_entity_pool EntityPool;
+    camera Camera;
     player Player;    
     blocker_list Blockers;
 };

@@ -15,12 +15,22 @@ struct audio
     i16* Samples;
 };
 
+struct mesh
+{
+    vertex_p3_n3* Vertices;
+    u32* Indices;
+    u32 VertexCount;
+    u32 IndexCount;    
+    i64 GDIHandle;
+};
+
 struct assets
 {
     arena Arena;
     graphics* Graphics;
     
-    graphics_mesh* BoxGraphicsMesh;    
+    mesh BoxGraphicsMesh;
+        
     triangle3D_mesh BoxTriangleMesh;
     audio TestAudio;
 };

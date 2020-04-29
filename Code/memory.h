@@ -20,6 +20,16 @@ inline void ClearMemory(void* Dest, ptr Size)
         *DestAt++ = 0;
 }
 
+inline void SetMemoryI64(void* Dest, i64 Value, ptr Size)
+{
+    ASSERT((Size % 8) == 0);
+    
+    i64* At = (i64*)Dest;    
+    ptr LoopCount = Size / 8;
+    while(LoopCount--)
+        *At++ = Value;
+}
+
 enum clear_flag
 {
     __ClearFlagClear__,

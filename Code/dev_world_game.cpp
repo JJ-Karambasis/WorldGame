@@ -4,6 +4,29 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
+void DrawVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, vertical_capsule Capsule, c4 Color)
+{
+    v3f BottomPosition = V3(Capsule.P.xy, Capsule.P.z + Capsule.Radius);
+    m4 Model = IdentityM4();
+    
+    Model.XAxis.xyz *= Capsule.Radius;
+    Model.YAxis.xyz *= Capsule.Radius;
+    Model.ZAxis.xyz *= Capsule.Radius;
+    
+    Model.Translation.xyz = BottomPosition;
+    Model.ZAxis.xyz = -Model.ZAxis.xyz;
+    
+    PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->CapIndexCount, 0, 0);
+    
+    Model.ZAxis.xyz = -Model.ZAxis.xyz;
+    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + Capsule.Height);
+    PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->CapIndexCount, 0, 0);
+    
+    Model.ZAxis.xyz = V3(0.0f, 0.0f, Capsule.Height);
+    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + (Capsule.Height*0.5f));
+    PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->BodyIndexCount, CapsuleMesh->CapIndexCount, CapsuleMesh->BodyVertexOffset);
+}
+
 void PopulateCircleIndices(u16** Indices, u16 StartSampleIndex, u16 CircleSampleCount)
 {
     u16* IndicesAt = *Indices;    
@@ -24,16 +47,9 @@ void PopulateCircleIndices(u16** Indices, u16 StartSampleIndex, u16 CircleSample
     *Indices = IndicesAt;
 } 
 
-dev_capsule_mesh CreateDevCapsuleMesh(arena* Storage, graphics* Graphics, u16 CircleSampleCount)
+dev_capsule_mesh CreateDevCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
 {
-    dev_capsule_mesh Result = {};
-    
-    graphics_vertex_buffer VertexBuffer = {};
-    graphics_index_buffer IndexBuffer = {};
-    
-    VertexBuffer.Format = GRAPHICS_VERTEX_FORMAT_P3;
-    IndexBuffer.Format = GRAPHICS_INDEX_FORMAT_16_BIT;
-    
+    dev_capsule_mesh Result = {};    
     
     u16 HalfCircleSampleCountPlusOne = (CircleSampleCount/2)+1;
     f32 CircleSampleIncrement = (2.0f*PI)/(f32)CircleSampleCount;            
@@ -43,13 +59,13 @@ dev_capsule_mesh CreateDevCapsuleMesh(arena* Storage, graphics* Graphics, u16 Ci
     Result.CapIndexCount = CapVertexCount*2;    
     Result.BodyIndexCount = 8;    
     
-    VertexBuffer.VertexCount = CapVertexCount+8;
-    IndexBuffer.IndexCount = Result.CapIndexCount+Result.BodyIndexCount;
+    u32 VertexCount = CapVertexCount+8;
+    u32 IndexCount = Result.CapIndexCount+Result.BodyIndexCount;
     
-    VertexBuffer.Data = PushArray(Storage, VertexBuffer.VertexCount, graphics_vertex_p3, Clear, 0);
-    IndexBuffer.Data = PushArray(Storage, IndexBuffer.IndexCount, u16, Clear, 0); 
+    vertex_p3* VertexData = PushArray(VertexCount, vertex_p3, Clear, 0);
+    u16* IndexData = PushArray(IndexCount, u16, Clear, 0); 
     
-    graphics_vertex_p3* VertexAt = (graphics_vertex_p3*)VertexBuffer.Data;
+    vertex_p3* VertexAt = (vertex_p3*)VertexData;
     
     f32 Radians;
     Radians = 0.0f;        
@@ -64,7 +80,7 @@ dev_capsule_mesh CreateDevCapsuleMesh(arena* Storage, graphics* Graphics, u16 Ci
     for(u32 SampleIndex = 0; SampleIndex < HalfCircleSampleCountPlusOne; SampleIndex++, Radians += CircleSampleIncrement)
         *VertexAt++ = {V3(Cos(Radians), 0.0f, Sin(Radians))};        
     
-    u16* IndicesAt = (u16*)IndexBuffer.Data;
+    u16* IndicesAt = (u16*)IndexData;
     PopulateCircleIndices(&IndicesAt, 0, CircleSampleCount);
     PopulateCircleIndices(&IndicesAt, CircleSampleCount, HalfCircleSampleCountPlusOne);
     PopulateCircleIndices(&IndicesAt, CircleSampleCount+HalfCircleSampleCountPlusOne, HalfCircleSampleCountPlusOne);
@@ -90,12 +106,13 @@ dev_capsule_mesh CreateDevCapsuleMesh(arena* Storage, graphics* Graphics, u16 Ci
     *IndicesAt++ = 6;
     *IndicesAt++ = 7;
     
-    Result.Mesh = Graphics->AllocateMesh(Graphics, VertexBuffer, IndexBuffer);
+    Result.MeshID = Graphics->AllocateMesh(Graphics, VertexData, VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
+                                           IndexData, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
     
     return Result;
 }
 
-graphics_texture* AllocateImGuiFont(graphics* Graphics)
+i64 AllocateImGuiFont(graphics* Graphics)
 {    
     ImGuiIO* IO = &ImGui::GetIO();
     void* ImGuiFontData;
@@ -107,7 +124,7 @@ graphics_texture* AllocateImGuiFont(graphics* Graphics)
     SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
     SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
     
-    graphics_texture* FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, &SamplerInfo);        
+    i64 FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, &SamplerInfo);        
     IO->Fonts->TexID = (ImTextureID)FontTexture;    
     return FontTexture;
 }
@@ -126,11 +143,17 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     
     if(ImGui::Checkbox("Debug Camera", (bool*)&DevContext->UseDevCamera))
     {
-        DevContext->Camera.Position = Game->Camera.Position;
-        DevContext->Camera.AngularVelocity = {};
-        DevContext->Camera.Orientation = IdentityM3();
-        DevContext->Camera.FocalPoint = Game->Camera.FocalPoint;
-        DevContext->Camera.Distance = Magnitude(DevContext->Camera.FocalPoint-DevContext->Camera.Position);
+        for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {                    
+            camera* Camera = &Game->Worlds[WorldIndex].Camera;
+            camera* DevCamera = &DevContext->Cameras[WorldIndex];
+            
+            DevCamera->Position = Camera->Position;
+            DevCamera->AngularVelocity = {};
+            DevCamera->Orientation = IdentityM3();
+            DevCamera->FocalPoint = Camera->FocalPoint;
+            DevCamera->Distance = Magnitude(DevCamera->FocalPoint-DevCamera->Position);
+        }
     }    
     
     ImGui::Checkbox("Draw Colliders", (bool*)&DevContext->DrawColliders);
@@ -141,53 +164,24 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     ImGui::Render();        
 }
 
-void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, camera* Camera)
+void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graphics, world* World, camera* Camera)
 {    
-    if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
-        return;
+    PushWorldCommands(Graphics, World, Camera);            
+    world_entity* PlayerEntity = GetPlayerEntity(World);
     
-    DevelopmentImGui(DevContext, Game, Graphics);
+    c4 PlayerColor = Blue();    
+    if(World == &Game->Worlds[1])
+        PlayerColor = Red();
     
-    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
-    m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
-    
-    RecordGameCommands(Game, Graphics, Perspective, CameraView);
+    vertical_capsule VerticalCapsule = GetWorldSpaceVerticalCapsule(PlayerEntity);    
+    DrawVerticalCapsule(Graphics, &DevContext->CapsuleMesh, VerticalCapsule, PlayerColor);        
     
     PushCull(Graphics, false);
     
-    world* World = GetCurrentWorld(Game);
-    world_entity* PlayerEntity = GetPlayerEntity(World);
-    
-    v3f PlayerZ = V3(0.0f, 0.0f, 1.0f);
-    v3f PlayerY = V3(0.0f, 1.0f, 0.0f);
-    v3f PlayerX = Cross(PlayerY, PlayerZ);
-    
-    v3f BodyZ = PlayerZ*Game->PlayerHeight;
-    
-    v3f XAxis = PlayerX*Game->PlayerRadius;
-    v3f YAxis = PlayerY*Game->PlayerRadius;
-    v3f ZAxis = PlayerZ*Game->PlayerRadius;    
-    
-    v3f BottomPosition = PlayerEntity->Position+ZAxis;
-    m4 Model = TransformM4(BottomPosition, M3(XAxis, YAxis, -ZAxis));
-    
-    c4 PlayerColor = Blue();
-    if(Game->CurrentWorldIndex == 1)
-        PlayerColor = Red();
-    
-    dev_capsule_mesh* CapsuleMesh = &DevContext->CapsuleMesh;
-    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, PlayerColor, CapsuleMesh->CapIndexCount, 0, 0);
-    
-    Model = TransformM4(BottomPosition + BodyZ, M3(XAxis, YAxis, ZAxis));
-    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, PlayerColor, CapsuleMesh->CapIndexCount, 0, 0);
-    
-    Model = TransformM4(BottomPosition + (BodyZ*0.5f), M3(XAxis, YAxis, BodyZ));
-    PushDrawLineMesh(Graphics, CapsuleMesh->Mesh, Model, PlayerColor, CapsuleMesh->BodyIndexCount, CapsuleMesh->CapIndexCount, CapsuleMesh->BodyVertexOffset);
-    
     if(DevContext->DrawColliders)
     {
-        
-        for(world_entity* Entity = GetFirstEntity(&World->EntityPool); Entity; Entity = GetNextEntity(&World->EntityPool, Entity))
+        pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
+        for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
         {            
             
             switch(Entity->Collider.Type)
@@ -227,10 +221,94 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, 
             
             PushDrawQuad(Graphics, P, Red());            
         }            
-    }    
+    }        
     
+    PushCull(Graphics, true);
+}
+
+void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
+{    
+    if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
+        return;
+    
+    DevelopmentImGui(DevContext, Game, Graphics);        
+    
+    dev_input* Input = &DevContext->Input;
+    
+    world* World = GetCurrentWorld(Game);
+    camera* Camera = &World->Camera;
+    if(DevContext->UseDevCamera)
+    {
+        Camera = &DevContext->Cameras[Game->CurrentWorldIndex];
+        
+        if(IsDown(Input->Alt))
+        {                                    
+            if(IsDown(Input->LMB))
+            {
+                Camera->AngularVelocity.x += (Input->MouseDelta.y*Game->dt*CAMERA_ANGULAR_ACCELERATION);
+                Camera->AngularVelocity.y += (Input->MouseDelta.x*Game->dt*CAMERA_ANGULAR_ACCELERATION);                                        
+            }
+            
+            if(IsDown(Input->MMB))
+            {
+                Camera->Velocity.x += (Input->MouseDelta.x*Game->dt*CAMERA_LINEAR_ACCELERATION);
+                Camera->Velocity.y += (Input->MouseDelta.y*Game->dt*CAMERA_LINEAR_ACCELERATION);                                        
+            }
+            
+            if(Abs(Input->Scroll) > 0.0f)            
+                Camera->Velocity.z -= Input->Scroll*Game->dt*CAMERA_SCROLL_ACCELERATION;                                            
+        }                
+        
+        Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
+        v3f Eulers = (Camera->AngularVelocity*Game->dt);            
+        
+        quaternion Orientation = Normalize(RotQuat(Camera->Orientation.XAxis, Eulers.pitch)*RotQuat(Camera->Orientation.YAxis, Eulers.yaw));
+        Camera->Orientation *= ToMatrix3(Orientation);
+        
+        Camera->Velocity.xy *= (1.0f /  (1.0f+Game->dt*CAMERA_LINEAR_DAMPING));            
+        v2f Vel = Camera->Velocity.xy*Game->dt;
+        v3f Delta = Vel.x*Camera->Orientation.XAxis - Vel.y*Camera->Orientation.YAxis;
+        
+        Camera->FocalPoint += Delta;
+        Camera->Position += Delta;
+        
+        Camera->Velocity.z *= (1.0f/ (1.0f+Game->dt*CAMERA_SCROLL_DAMPING));            
+        Camera->Distance += Camera->Velocity.z*Game->dt;            
+        
+        if(Camera->Distance < CAMERA_MIN_DISTANCE)
+            Camera->Distance = CAMERA_MIN_DISTANCE;
+        
+        Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
+    }
+    
+    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+    
+    PushClearColorAndDepth(Graphics, Black(), 1.0f);
+    PushDepth(Graphics, true);
+    
+    ///////////////////
+    
+    DevelopmentRenderWorld(DevContext, Game, Graphics, World, Camera);
+    
+    i32 OtherWidth = Graphics->RenderDim.width/4;
+    i32 OtherHeight = Graphics->RenderDim.height/4;
+    
+    PushViewportAndScissor(Graphics, Graphics->RenderDim.width-OtherWidth, Graphics->RenderDim.height-OtherHeight, 
+                           OtherWidth, OtherHeight);
+        
+    world* OtherWorld = GetNotCurrentWorld(Game);
+    camera* OtherCamera = &OtherWorld->Camera;
+    if(DevContext->UseDevCamera)
+        OtherCamera = &DevContext->Cameras[!Game->CurrentWorldIndex];
+    DevelopmentRenderWorld(DevContext, Game, Graphics, OtherWorld, OtherCamera);
+    
+    /////////////
+    
+    PushCull(Graphics, false);
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);        
     PushDepth(Graphics, false);        
+    
+    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
     
     m4 Orthographic = OrthographicM4(0, (f32)Graphics->RenderDim.width, 0, (f32)Graphics->RenderDim.height, -1.0f, 1.0f);
     PushProjection(Graphics, Orthographic);
@@ -244,11 +322,12 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, 
     
     for(i32 CmdListIndex = 0; CmdListIndex < DrawData->CmdListsCount; CmdListIndex++)
     {
-        if(!DevContext->ImGuiMeshes[CmdListIndex])
+        if(DevContext->ImGuiMeshes[CmdListIndex] == -1)
             DevContext->ImGuiMeshes[CmdListIndex] = Graphics->AllocateDynamicMesh(Graphics, GRAPHICS_VERTEX_FORMAT_P2_UV_C, GRAPHICS_INDEX_FORMAT_16_BIT);
         
         ImDrawList* CmdList = DrawData->CmdLists[CmdListIndex];        
-        Graphics->StreamMeshData(DevContext->ImGuiMeshes[CmdListIndex], CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size*sizeof(graphics_vertex_p2_uv_c), 
+        Graphics->StreamMeshData(Graphics, DevContext->ImGuiMeshes[CmdListIndex], 
+                                 CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size*sizeof(vertex_p2_uv_c), 
                                  CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size*IndexSize);                
         
         for(i32 CmdIndex = 0; CmdIndex < CmdList->CmdBuffer.Size; CmdIndex++)
@@ -266,8 +345,8 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics, 
                 
                 PushScissor(Graphics, X, Y, Width, Height);
                 
-                graphics_texture* Texture = (graphics_texture*)Cmd->TextureId;
-                PushDrawImGuiUI(Graphics, DevContext->ImGuiMeshes[CmdListIndex], Texture, Cmd->ElemCount, Cmd->IdxOffset, Cmd->VtxOffset);                             
+                i64 TextureID = (i64)Cmd->TextureId;
+                PushDrawImGuiUI(Graphics, DevContext->ImGuiMeshes[CmdListIndex], TextureID, Cmd->ElemCount, Cmd->IdxOffset, Cmd->VtxOffset);                             
             }
         }
     }
@@ -285,7 +364,9 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                
-        DevContext->CapsuleMesh = CreateDevCapsuleMesh(&DevContext->DevStorage, Graphics, 60);
+        DevContext->CapsuleMesh = CreateDevCapsuleMesh(Graphics, 60);
+        
+        SetMemoryI64(DevContext->ImGuiMeshes, -1, sizeof(DevContext->ImGuiMeshes));
         
         ImGuiIO* IO = &ImGui::GetIO();
         IO->BackendRendererName = "OpenGL";
@@ -297,57 +378,11 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     dev_input* Input = &DevContext->Input;    
     
     if(IsPressed(Input->ToggleDevState)) DevContext->InDevelopmentMode = !DevContext->InDevelopmentMode;
-
+    
     if(IsInDevelopmentMode(DevContext))
     {        
-        Platform_DevUpdate(DevContext->PlatformData, Graphics->RenderDim, Game->dt);
-        
-        camera* Camera = &Game->Camera;
-        if(DevContext->UseDevCamera)
-        {
-            Camera = &DevContext->Camera;
-            
-            if(IsDown(Input->Alt))
-            {                                    
-                if(IsDown(Input->LMB))
-                {
-                    Camera->AngularVelocity.x += (Input->MouseDelta.y*Game->dt*CAMERA_ANGULAR_ACCELERATION);
-                    Camera->AngularVelocity.y += (Input->MouseDelta.x*Game->dt*CAMERA_ANGULAR_ACCELERATION);                                        
-                }
-                
-                if(IsDown(Input->MMB))
-                {
-                    Camera->Velocity.x += (Input->MouseDelta.x*Game->dt*CAMERA_LINEAR_ACCELERATION);
-                    Camera->Velocity.y += (Input->MouseDelta.y*Game->dt*CAMERA_LINEAR_ACCELERATION);                                        
-                }
-                
-                if(Abs(Input->Scroll) > 0.0f)            
-                    Camera->Velocity.z -= Input->Scroll*Game->dt*CAMERA_SCROLL_ACCELERATION;                                            
-            }                
-            
-            Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
-            v3f Eulers = (Camera->AngularVelocity*Game->dt);            
-            
-            quaternion Orientation = Normalize(RotQuat(Camera->Orientation.XAxis, Eulers.pitch)*RotQuat(Camera->Orientation.YAxis, Eulers.yaw));
-            Camera->Orientation *= ToMatrix3(Orientation);
-            
-            Camera->Velocity.xy *= (1.0f /  (1.0f+Game->dt*CAMERA_LINEAR_DAMPING));            
-            v2f Vel = Camera->Velocity.xy*Game->dt;
-            v3f Delta = Vel.x*Camera->Orientation.XAxis - Vel.y*Camera->Orientation.YAxis;
-            
-            Camera->FocalPoint += Delta;
-            Camera->Position += Delta;
-            
-            Camera->Velocity.z *= (1.0f/ (1.0f+Game->dt*CAMERA_SCROLL_DAMPING));            
-            Camera->Distance += Camera->Velocity.z*Game->dt;            
-            
-            if(Camera->Distance < CAMERA_MIN_DISTANCE)
-                Camera->Distance = CAMERA_MIN_DISTANCE;
-            
-            Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
-        }
-        
-        DevelopmentRender(DevContext, Game, Graphics, Camera);        
+        Platform_DevUpdate(DevContext->PlatformData, Graphics->RenderDim, Game->dt);        
+        DevelopmentRender(DevContext, Game, Graphics);        
     }
     
     Input->MouseDelta = {};
