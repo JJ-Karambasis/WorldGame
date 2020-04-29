@@ -1,7 +1,7 @@
 //TODO(JJ): Should actually be changed into the actual game name
 #define GAME_NAME "WorldGame"
 
-#include "common.h"
+#include "AKCommon/common.h"
 
 #include "platform.h"
 #include "input.h"

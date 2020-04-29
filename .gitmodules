@@ -1,0 +1,3 @@
+[submodule "Code/AKCommon"]
+	path = Code/AKCommon
+	url = https://github.com/JJ-Karambasis/AKCommon.git

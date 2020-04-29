@@ -1,7 +1,7 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-#include "common.h"
+#include "AKCommon/common.h"
 #include "platform.h"
 
 enum graphics_vertex_format
