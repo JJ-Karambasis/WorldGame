@@ -827,71 +827,31 @@ time_result_2D MovingRectangleEdgeIntersectionTime2D(v2f CenterP0, v2f CenterP1,
 
 penetration_result_2D PenetrationTestAABB2D(v2f CenterA, v2f DimA, v2f CenterB, v2f DimB)
 {
-    v2f Dim = (DimA+DimB)*0.5f;
-    
-    v2f Min = CenterB - Dim;
-    v2f Max = CenterB + Dim;
-    
-    penetration_result_2D Result;
-    Result.Hit = false;
-    Result.Distance = INFINITY;
-    
-    v2f XNormal = {};    
     f32 XDistance = INFINITY;
-    {
-        f32 Distance0 = CenterA.x - Min.x;        
-        f32 Distance1 = Max.x - CenterA.x;
-        
-        if((Distance0 > 0.0f) && (Distance1 > 0.0f))
-        {                           
-            if(Distance0 < Distance1)
-            {
-                XDistance = Distance0;
-                XNormal = V2(-1.0f, 0.0f);
-            }
-            else
-            {
-                XDistance = Distance1;
-                XNormal = V2(1.0f, 0.0f);
-            }
-        }        
-    }
-    
-    v2f YNormal = {};    
     f32 YDistance = INFINITY;
-    {
-        f32 Distance0 = CenterA.y - Min.y;        
-        f32 Distance1 = Max.y - CenterA.y;
-        
-        if((Distance0 > 0.0f) && (Distance1 > 0.0f))
-        {                        
-            if(Distance0 < Distance1)
-            {
-                YDistance = Distance0;
-                YNormal = V2(0.0f, -1.0f);
-            }
-            else
-            {
-                YDistance = Distance1;
-                YNormal = V2(0.0f,  1.0f);
-            }
-        }        
-    }
     
-    if((YDistance != INFINITY) && (XDistance != INFINITY))
-    {
-        Result.Hit = true;        
-        
-        if(YDistance < XDistance)
+    v2f T = CenterB-CenterA;
+    
+    v2f HalfDimA = DimA*0.5f;
+    v2f HalfDimB = DimB*0.5f;
+    
+    f32 XOverlap = (HalfDimA.x + HalfDimB.x) - Abs(T.x);
+    f32 YOverlap = (HalfDimA.y + HalfDimB.y) - Abs(T.y);
+    
+    penetration_result_2D Result = {};        
+    Result.Hit = (XOverlap > 0) && (YOverlap > 0);
+    if(Result.Hit)
+    {        
+        if(XOverlap < YOverlap)
         {
-            Result.Distance = YDistance;
-            Result.Normal = YNormal;
+            Result.Distance = XOverlap;
+            Result.Normal = T.x < 0 ? V2(1, 0) : V2(-1, 0);                
         }
         else
         {
-            Result.Distance = XDistance;
-            Result.Normal = XNormal;
-        }        
+            Result.Distance = YOverlap;
+            Result.Normal = T.y < 0 ? V2(0, 1) : V2(0, -1);
+        }
     }
     
     return Result;

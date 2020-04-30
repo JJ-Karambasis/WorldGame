@@ -112,6 +112,44 @@ dev_capsule_mesh CreateDevCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
     return Result;
 }
 
+i64 CreateDevBoxMesh(graphics* Graphics)
+{    
+    vertex_p3 VertexData[] = 
+    {
+        {V3(-0.5f, -0.5f, 1.0f)},
+        {V3( 0.5f, -0.5f, 1.0f)},
+        {V3( 0.5f,  0.5f, 1.0f)},
+        {V3(-0.5f,  0.5f, 1.0f)},
+        
+        {V3( 0.5f, -0.5f, 0.0f)},
+        {V3(-0.5f, -0.5f, 0.0f)},
+        {V3(-0.5f,  0.5f, 0.0f)},
+        {V3( 0.5f,  0.5f, 0.0f)}
+    };
+    
+    u16 IndexData[] = 
+    {
+        0, 1, 
+        1, 2, 
+        2, 3, 
+        3, 0,
+        
+        4, 5, 
+        5, 6, 
+        6, 7, 
+        7, 4, 
+        
+        0, 5, 
+        3, 6, 
+        1, 4, 
+        2, 7
+    };
+    
+    i64 Result = Graphics->AllocateMesh(Graphics, VertexData, sizeof(VertexData), GRAPHICS_VERTEX_FORMAT_P3, 
+                                        IndexData, sizeof(IndexData), GRAPHICS_INDEX_FORMAT_16_BIT);
+    return Result;
+}
+
 i64 AllocateImGuiFont(graphics* Graphics)
 {    
     ImGuiIO* IO = &ImGui::GetIO();
@@ -174,7 +212,11 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
         PlayerColor = Red();
     
     vertical_capsule VerticalCapsule = GetWorldSpaceVerticalCapsule(PlayerEntity);    
-    DrawVerticalCapsule(Graphics, &DevContext->CapsuleMesh, VerticalCapsule, PlayerColor);        
+    //DrawVerticalCapsule(Graphics, &DevContext->CapsuleMesh, VerticalCapsule, PlayerColor);        
+    
+    m4 Model = TransformM4(VerticalCapsule.P, V3(V2(VerticalCapsule.Radius, VerticalCapsule.Radius)*2.0f, VerticalCapsule.Height));
+    PushDrawLineMesh(Graphics, DevContext->BoxMesh, Model, PlayerColor, 24, 0, 0);
+    
     
     PushCull(Graphics, false);
     
@@ -365,6 +407,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                
         DevContext->CapsuleMesh = CreateDevCapsuleMesh(Graphics, 60);
+        DevContext->BoxMesh = CreateDevBoxMesh(Graphics);
         
         SetMemoryI64(DevContext->ImGuiMeshes, -1, sizeof(DevContext->ImGuiMeshes));
         

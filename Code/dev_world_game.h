@@ -14,7 +14,7 @@
 
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
-#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations)
+#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) 
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
 
 #include "imgui/imgui.h"
@@ -61,6 +61,7 @@ struct dev_context
     i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
     dev_capsule_mesh CapsuleMesh;
+    i64 BoxMesh;
     
     void* PlatformData;
     b32 Initialized;

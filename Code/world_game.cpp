@@ -29,6 +29,14 @@ EXPORT GAME_TICK(Tick)
             world* World = GetWorld(Game, WorldIndex);
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
             CreatePlayer(Game, WorldIndex, V3(0.0f, 0.0f, 1.0f), PLAYER_RADIUS, PLAYER_HEIGHT, Blue());            
+            
+            world_entity* PlayerEntity = GetPlayerEntity(World);
+            camera* Camera = &World->Camera;
+            
+            Camera->Position = PlayerEntity->Position;
+            Camera->FocalPoint = PlayerEntity->Position;
+            Camera->Position.z += 6.0f;
+            Camera->Orientation = IdentityM3();    
         }
         
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                
@@ -40,11 +48,16 @@ EXPORT GAME_TICK(Tick)
         CreateBlockersInBothWorlds(Game, V3( 5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f, -5.0f, 1.0f), 1.0f);                
         
         CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3(0.0f, -2.5f, 1.0f), V3(5.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
+                
+        CreateBoxEntity(Game, WORLD_ENTITY_TYPE_PUSHABLE, 0, V3(2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f));                
         
+        //CreateBlocker(Game, 0, V3(-2.0f, -2.0f, 1.0f), 1.0f, V3(-2.0f, 2.0f, 1.0f), 1.0f);
+        CreateBoxEntity(Game, WORLD_ENTITY_TYPE_STATIC, 0, V3(-2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.7f, 0.35f, 1.0f));
+        //CreateSingleLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, 1, V3(-2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.7f, 0.35f, 1.0f), RGBA(0.65f, 0.9f, 0.65f, 1.0f));                
 #if 1
-        CreateDualLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));                
+        
 #else
-        CreateSingleLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, 1, V3(0.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));                
+        
 #endif
     }            
     
