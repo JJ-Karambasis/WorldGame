@@ -12,9 +12,11 @@
 #define CAMERA_SCROLL_DAMPING 7.5f
 #define CAMERA_MIN_DISTANCE 0.1f        
 
-#define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
+global struct dev_context* __Internal_Dev_Context__;
+#define SET_DEVELOPER_CONTEXT(context) __Internal_Dev_Context__ = (dev_context*)context
+#define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxGJKIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxGJKIterations, Iterations))
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
-#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) 
+#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
 
 #include "imgui/imgui.h"
@@ -45,14 +47,23 @@ struct dev_capsule_mesh
     u32 BodyVertexOffset;    
 };
 
+struct game_information
+{
+    u64 MaxTimeIterations;
+    u64 MaxGJKIterations;
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
     arena DevStorage;
     b32 InDevelopmentMode;    
     b32 UseDevCamera;
+    b32 DrawOtherWorld;
     b32 DrawColliders;
-    b32 DrawBlockers;
+    b32 DrawBlockers;    
+    
+    game_information GameInformation;
     
     dev_input Input;    
     camera Cameras[2];
@@ -79,6 +90,7 @@ inline b32 IsInDevelopmentMode(dev_context* Context)
 
 #else
 
+#define SET_DEVELOPER_CONTEXT(context)
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations)

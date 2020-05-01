@@ -396,6 +396,8 @@ ResolveImpact(world_entity* Entity, v2f NewPosition, v2f Normal, v2f* MoveDelta)
 {       
     v2f TargetPosition = Entity->Position.xy + *MoveDelta;    
     
+    NewPosition += Normal*0.00001f;
+    
     Entity->Position.xy = NewPosition;
     *MoveDelta = TargetPosition - NewPosition;
     
@@ -404,41 +406,6 @@ ResolveImpact(world_entity* Entity, v2f NewPosition, v2f Normal, v2f* MoveDelta)
         *MoveDelta -= Dot(*MoveDelta, Normal)*Normal;
         Entity->Velocity.xy -= Dot(Entity->Velocity.xy, Normal)*Normal;                        
     }
-}
-
-void 
-ResolveImpact(world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
-{   
-    ResolveImpact(Entity, TimeResult.ContactPoint, TimeResult.Normal, MoveDelta);    
-}
-
-b32 
-ResolveEntity(world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
-{    
-    if(IsInvalidTimeResult2D(TimeResult))
-    {
-        Entity->Position.xy += (*MoveDelta);                                
-        return true;        
-    }
-    
-    ResolveImpact(Entity, TimeResult, MoveDelta);                                                                                                    
-    return false;
-}
-
-b32 ResolvePushableCollision(world_entity* PlayerEntity, world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
-{    
-    ASSERT(PlayerEntity->Type == WORLD_ENTITY_TYPE_PLAYER);
-    v2f OldP = Entity->Position.xy;
-    
-    b32 Result = ResolveEntity(Entity, TimeResult, MoveDelta);    
-    
-    player* Player = (player*)PlayerEntity->UserData;
-    
-    v2f Delta = Entity->Position.xy - OldP;
-    if(AreEqualIDs(Player->Pushing.EntityID, Entity->ID))
-        PlayerEntity->Position.xy += Delta;                            
-    
-    return Result;
 }
 
 void ResolvePushableImpact(world_entity* PlayerEntity, world_entity* Entity, v2f NewPosition, v2f Normal, v2f* MoveDelta)
@@ -455,9 +422,33 @@ void ResolvePushableImpact(world_entity* PlayerEntity, world_entity* Entity, v2f
         PlayerEntity->Position.xy += Delta;                            
 }
 
-void ResolvePushableImpact(world_entity* PlayerEntity, world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
-{
-    ResolvePushableImpact(PlayerEntity, Entity, TimeResult.ContactPoint, TimeResult.Normal, MoveDelta);    
+b32 
+ResolveEntity(world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
+{    
+    if(IsInvalidTimeResult2D(TimeResult))
+    {
+        Entity->Position.xy += (*MoveDelta);                                
+        return true;        
+    }
+    
+    ResolveImpact(Entity, TimeResult.ContactPoint, TimeResult.Normal, MoveDelta);                                                                                                    
+    return false;
+}
+
+b32 ResolvePushableEntity(world_entity* PlayerEntity, world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
+{    
+    ASSERT(PlayerEntity->Type == WORLD_ENTITY_TYPE_PLAYER);
+    v2f OldP = Entity->Position.xy;
+    
+    b32 Result = ResolveEntity(Entity, TimeResult, MoveDelta);    
+    
+    player* Player = (player*)PlayerEntity->UserData;
+    
+    v2f Delta = Entity->Position.xy - OldP;
+    if(AreEqualIDs(Player->Pushing.EntityID, Entity->ID))
+        PlayerEntity->Position.xy += Delta;                            
+    
+    return Result;
 }
 
 time_of_impact_result 
@@ -550,10 +541,10 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
             for(blocker* Blocker = World->Blockers.First; Blocker; Blocker = Blocker->Next)
             {
                 if(IsInRangeOfBlockerZ(Blocker, EntityCapsule.P.z, CapsuleHeight))
-                {
-                    time_result_2D TimeResult = MovingCircleEdgeIntersectionTime2D(EntityCapsule.P.xy, TargetPosition, EntityCapsule.Radius, Blocker->P0.xy, Blocker->P1.xy);
-                    if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))
-                        Result.TimeResult = TimeResult;
+                {                    
+                    time_result_2D TimeResult = MovingCircleEdgeIntersectionTime2D(EntityCapsule.P.xy, TargetPosition, EntityCapsule.Radius, Blocker->P0.xy, Blocker->P1.xy);                    
+                    if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))                    
+                        Result.TimeResult = TimeResult;                                                                    
                 }                                    
             }
             
@@ -576,13 +567,8 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
                             v3f Max = TestEntityBox.CenterP+HalfDim;
                             
                             if(IsRangeInInterval(Min.z, Max.z, EntityCapsule.P.z, CapsuleHeight))
-                            {   
-#if 0                                 
-                                time_result_2D TimeResult = MovingCircleRectangleIntersectionTime2D(EntityCapsule.P.xy, TargetPosition, EntityCapsule.Radius, Min.xy, Max.xy);
-#else
-                                time_result_2D TimeResult = MovingRectangleRectangleIntersectionTime2D(EntityCapsule.P.xy, TargetPosition, V2(EntityCapsule.Radius, EntityCapsule.Radius)*2, 
-                                                                                                       TestEntityBox.CenterP.xy, TestEntityBox.Dim.xy);
-#endif
+                            {                                   
+                                time_result_2D TimeResult = MovingCircleRectangleIntersectionTime2D(EntityCapsule.P.xy, TargetPosition, EntityCapsule.Radius, Min.xy, Max.xy);                                
                                 if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))
                                 {
                                     Result.TimeResult = TimeResult;
@@ -641,8 +627,7 @@ UpdateWorld(game* Game)
     Entity->Velocity.xy += MoveAcceleration*dt; \
     Entity->Velocity.xy *= VelocityDamping
         
-    #define MOVE_DELTA_EPSILON 1e-4f
-    #define MAX_TIME_ITERATIONS 100
+    #define MOVE_DELTA_EPSILON 1e-4f    
     
     world* World = GetWorld(Game, Game->CurrentWorldIndex);         
     
@@ -665,9 +650,9 @@ UpdateWorld(game* Game)
                 
                 APPLY_VELOCITY(Entity);                
                 
-                v2f MoveDelta = Entity->Velocity.xy*dt;
+                v2f MoveDelta = Entity->Velocity.xy*dt;                                
                 
-                for(u32 Iterations = 0; Iterations < MAX_TIME_ITERATIONS; Iterations++)
+                for(u32 Iterations = 0; ; Iterations++)
                 {
                     DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
                     
@@ -712,7 +697,7 @@ UpdateWorld(game* Game)
                     
                     if(DualLinkedEntities)
                     {
-                        for(u32 Iterations = 0; Iterations < MAX_TIME_ITERATIONS; Iterations++)
+                        for(u32 Iterations = 0; ; Iterations++)
                         {
                             DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
                             
@@ -740,10 +725,10 @@ UpdateWorld(game* Game)
                             else if(TOIs[0].TimeResult.Time == 0.0f || TOIs[1].TimeResult.Time == 0.0f)
                             {   
                                 if(TOIs[0].TimeResult.Time == 0)
-                                    ResolvePushableImpact(PlayerEntity, TestEntities[0], TOIs[0].TimeResult, &MoveDeltas[0]);
+                                    ResolvePushableImpact(PlayerEntity, TestEntities[0], TOIs[0].TimeResult.ContactPoint, TOIs[0].TimeResult.Normal, &MoveDeltas[0]);
                                 
                                 if(TOIs[1].TimeResult.Time == 0)
-                                    ResolvePushableImpact(PlayerEntity, TestEntities[1], TOIs[1].TimeResult, &MoveDeltas[1]);                                                                
+                                    ResolvePushableImpact(PlayerEntity, TestEntities[1], TOIs[1].TimeResult.ContactPoint, TOIs[1].TimeResult.Normal, &MoveDeltas[1]);                                                                
                             }
                             else
                             {
@@ -766,7 +751,7 @@ UpdateWorld(game* Game)
                         b32 StopProcessing[2] = {};
                         if(!TestEntities[1]) StopProcessing[1] = true;
                         
-                        for(u32 Iterations = 0; Iterations < MAX_TIME_ITERATIONS; Iterations++)
+                        for(u32 Iterations = 0; ; Iterations++)
                         {
                             DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
                             
@@ -788,7 +773,7 @@ UpdateWorld(game* Game)
                                 if(StopProcessing[ObjectIndex])
                                     continue;
                                 
-                                if(ResolvePushableCollision(PlayerEntity, TestEntities[ObjectIndex], TOIs[ObjectIndex].TimeResult, &MoveDeltas[ObjectIndex]))
+                                if(ResolvePushableEntity(PlayerEntity, TestEntities[ObjectIndex], TOIs[ObjectIndex].TimeResult, &MoveDeltas[ObjectIndex]))
                                     StopProcessing[ObjectIndex] = true;                                                            
                             }
                                                         

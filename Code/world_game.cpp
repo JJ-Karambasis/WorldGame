@@ -10,7 +10,9 @@
 
 extern "C"
 EXPORT GAME_TICK(Tick)
-{       
+{   
+    SET_DEVELOPER_CONTEXT(DevContext);
+    
     Global_Platform = Platform;        
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     
@@ -49,16 +51,8 @@ EXPORT GAME_TICK(Tick)
         
         CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3(0.0f, -2.5f, 1.0f), V3(5.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
                 
-        CreateBoxEntity(Game, WORLD_ENTITY_TYPE_PUSHABLE, 0, V3(2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f));                
-        
-        //CreateBlocker(Game, 0, V3(-2.0f, -2.0f, 1.0f), 1.0f, V3(-2.0f, 2.0f, 1.0f), 1.0f);
-        CreateBoxEntity(Game, WORLD_ENTITY_TYPE_STATIC, 0, V3(-2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.7f, 0.35f, 1.0f));
-        //CreateSingleLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, 1, V3(-2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.7f, 0.35f, 1.0f), RGBA(0.65f, 0.9f, 0.65f, 1.0f));                
-#if 1
-        
-#else
-        
-#endif
+        CreateDualLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, V3(2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f));
+        CreateSingleLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, 1, V3(-2.0f, 3.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.7f, 0.35f, 1.0f), RGBA(0.65f, 0.9f, 0.65f, 1.0f));                
     }            
     
     if(IsPressed(Game->Input->SwitchWorld))

@@ -4,14 +4,21 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
-void DrawVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, vertical_capsule Capsule, c4 Color)
+#define DEBUG_BOX_INDICES_COUNT 24
+void DrawBox(graphics* Graphics, i64 BoxMesh, v3f P, v3f Dim, c4 Color)
+{    
+    m4 Model = TransformM4(P, Dim);
+    PushDrawLineMesh(Graphics, BoxMesh, Model, Color, DEBUG_BOX_INDICES_COUNT, 0, 0);        
+}
+
+void DrawVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, v3f P, f32 Radius, f32 Height, c4 Color)
 {
-    v3f BottomPosition = V3(Capsule.P.xy, Capsule.P.z + Capsule.Radius);
+    v3f BottomPosition = V3(P.xy, P.z + Radius);
     m4 Model = IdentityM4();
     
-    Model.XAxis.xyz *= Capsule.Radius;
-    Model.YAxis.xyz *= Capsule.Radius;
-    Model.ZAxis.xyz *= Capsule.Radius;
+    Model.XAxis.xyz *= Radius;
+    Model.YAxis.xyz *= Radius;
+    Model.ZAxis.xyz *= Radius;
     
     Model.Translation.xyz = BottomPosition;
     Model.ZAxis.xyz = -Model.ZAxis.xyz;
@@ -19,11 +26,11 @@ void DrawVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, vert
     PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->CapIndexCount, 0, 0);
     
     Model.ZAxis.xyz = -Model.ZAxis.xyz;
-    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + Capsule.Height);
+    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + Height);
     PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->CapIndexCount, 0, 0);
     
-    Model.ZAxis.xyz = V3(0.0f, 0.0f, Capsule.Height);
-    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + (Capsule.Height*0.5f));
+    Model.ZAxis.xyz = V3(0.0f, 0.0f, Height);
+    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + (Height*0.5f));
     PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->BodyIndexCount, CapsuleMesh->CapIndexCount, CapsuleMesh->BodyVertexOffset);
 }
 
@@ -114,7 +121,7 @@ dev_capsule_mesh CreateDevCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
 
 i64 CreateDevBoxMesh(graphics* Graphics)
 {    
-    vertex_p3 VertexData[] = 
+    vertex_p3 VertexData[8] = 
     {
         {V3(-0.5f, -0.5f, 1.0f)},
         {V3( 0.5f, -0.5f, 1.0f)},
@@ -127,7 +134,7 @@ i64 CreateDevBoxMesh(graphics* Graphics)
         {V3( 0.5f,  0.5f, 0.0f)}
     };
     
-    u16 IndexData[] = 
+    u16 IndexData[DEBUG_BOX_INDICES_COUNT] = 
     {
         0, 1, 
         1, 2, 
@@ -171,8 +178,11 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
 {    
     ImGui::NewFrame();
     
+    //local bool demo_window;
+    //ImGui::ShowDemoWindow(&demo_window);
+    
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(Graphics->RenderDim/5));    
+    ImGui::SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/5.0f, (f32)Graphics->RenderDim.y));    
     
     local bool open = true;
     ImGui::Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse);    
@@ -194,8 +204,16 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
         }
     }    
     
+    ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);
     ImGui::Checkbox("Draw Colliders", (bool*)&DevContext->DrawColliders);
     ImGui::Checkbox("Draw Blockers", (bool*)&DevContext->DrawBlockers);
+    
+    if(ImGui::CollapsingHeader("Game Information"))
+    {
+        game_information* GameInformation = &DevContext->GameInformation;
+        ImGui::Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
+        ImGui::Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
+    }
     
     ImGui::End();    
     
@@ -212,11 +230,7 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
         PlayerColor = Red();
     
     vertical_capsule VerticalCapsule = GetWorldSpaceVerticalCapsule(PlayerEntity);    
-    //DrawVerticalCapsule(Graphics, &DevContext->CapsuleMesh, VerticalCapsule, PlayerColor);        
-    
-    m4 Model = TransformM4(VerticalCapsule.P, V3(V2(VerticalCapsule.Radius, VerticalCapsule.Radius)*2.0f, VerticalCapsule.Height));
-    PushDrawLineMesh(Graphics, DevContext->BoxMesh, Model, PlayerColor, 24, 0, 0);
-    
+    DrawVerticalCapsule(Graphics, &DevContext->CapsuleMesh, VerticalCapsule.P, VerticalCapsule.Radius, VerticalCapsule.Height, PlayerColor);        
     
     PushCull(Graphics, false);
     
@@ -335,16 +349,17 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
     i32 OtherWidth = Graphics->RenderDim.width/4;
     i32 OtherHeight = Graphics->RenderDim.height/4;
     
-    PushViewportAndScissor(Graphics, Graphics->RenderDim.width-OtherWidth, Graphics->RenderDim.height-OtherHeight, 
-                           OtherWidth, OtherHeight);
+    if(DevContext->DrawOtherWorld)
+    {        
+        PushViewportAndScissor(Graphics, Graphics->RenderDim.width-OtherWidth, Graphics->RenderDim.height-OtherHeight, 
+                               OtherWidth, OtherHeight);
         
-    world* OtherWorld = GetNotCurrentWorld(Game);
-    camera* OtherCamera = &OtherWorld->Camera;
-    if(DevContext->UseDevCamera)
-        OtherCamera = &DevContext->Cameras[!Game->CurrentWorldIndex];
-    DevelopmentRenderWorld(DevContext, Game, Graphics, OtherWorld, OtherCamera);
-    
-    /////////////
+        world* OtherWorld = GetNotCurrentWorld(Game);
+        camera* OtherCamera = &OtherWorld->Camera;
+        if(DevContext->UseDevCamera)
+            OtherCamera = &DevContext->Cameras[!Game->CurrentWorldIndex];
+        DevelopmentRenderWorld(DevContext, Game, Graphics, OtherWorld, OtherCamera);
+    }
     
     PushCull(Graphics, false);
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);        

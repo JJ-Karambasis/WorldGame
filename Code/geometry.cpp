@@ -127,7 +127,7 @@ b32 EdgeIntersections2D(v2f P0, v2f P1, v2f P2, v2f P3, f32* t, f32* u)
     if(!LineIntersections2D(P0, P1, P2, P3, &t0, &u0))
         return false;
     
-    if((t0 > 0.0f) && (t0 < 1.0f) && (u0 > 0.0f) && (u0 < 1.0f))
+    if((t0 >= 0.0f) && (t0 <= 1.0f) && (u0 >= 0.0f) && (u0 <= 1.0f))
     {
         if(t) *t = t0;
         if(u) *u = u0;
