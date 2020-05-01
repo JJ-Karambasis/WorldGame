@@ -8,6 +8,28 @@
 #define PLAYER_RADIUS 0.35f
 #define PLAYER_HEIGHT 1.0f
 
+PUZZLE_COMPLETE_CALLBACK(DespawnWallCompleteCallback)
+{
+    world_entity_id* IDs = (world_entity_id*)UserData;
+    
+    FreeEntity(Game, IDs[0]);
+    FreeEntity(Game, IDs[1]);
+}
+
+inline goal_rect 
+CreateGoalRect(v3f RectMin, v3f RectMax, u32 WorldIndex)
+{
+    goal_rect Result = {WorldIndex, CreateRect3D(RectMin, RectMax)};
+    return Result;
+}
+
+inline goal_rect 
+CreateGoalRect(v3f RectMin, v3f RectMax, u32 WorldIndex, f32 Padding)
+{
+    goal_rect Result = CreateGoalRect(RectMin-Padding, RectMax+Padding, WorldIndex);
+    return Result;
+}
+
 extern "C"
 EXPORT GAME_TICK(Tick)
 {   
@@ -41,18 +63,31 @@ EXPORT GAME_TICK(Tick)
             Camera->Orientation = IdentityM3();    
         }
         
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 10.0f), V3(10.0f, 10.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                
+        world_entity_id* DespawnWalls = PushArray(&Game->GameStorage, 2, world_entity_id, Clear, 0);
         
-        CreateBlockersInBothWorlds(Game, V3(-5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f,  5.0f, 1.0f), 1.0f);
-        CreateBlockersInBothWorlds(Game, V3(-5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f,  5.0f, 1.0f), 1.0f);
-        CreateBlockersInBothWorlds(Game, V3( 5.0f,  5.0f, 1.0f), 1.0f, V3( 5.0f, -5.0f, 1.0f), 1.0f);
-        CreateBlockersInBothWorlds(Game, V3( 5.0f, -5.0f, 1.0f), 1.0f, V3(-5.0f, -5.0f, 1.0f), 1.0f);                
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(100.0f, 100.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
+        CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3(-5.0f,  0.0f, 1.0f), V3(1.0f, 10.0f, 1.0f), RGBA(0.6f, 0.6f, 0.6f, 1.0f));
+        CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3( 0.0f, -5.0f, 1.0f), V3(10.0f, 1.0f, 1.0f), RGBA(0.6f, 0.6f, 0.6f, 1.0f));
+        CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3( 5.0f,  0.0f, 1.0f), V3(1.0f, 10.0f, 1.0f), RGBA(0.6f, 0.6f, 0.6f, 1.0f));
+        CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3( 0.0f,  5.0f, 1.0f), V3(10.0f, 1.0f, 1.0f), RGBA(0.6f, 0.6f, 0.6f, 1.0f), DespawnWalls);
         
-        CreateBoxEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3(0.0f, -2.5f, 1.0f), V3(5.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.65f, 0.0f, 0.65f, 1.0f));
-                
-        CreateDualLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, V3(2.0f, 2.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f), RGBA(0.35f, 0.0f, 0.35f, 1.0f));
-        CreateSingleLinkedBoxEntities(Game, WORLD_ENTITY_TYPE_PUSHABLE, 1, V3(-2.0f, 3.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.35f, 0.7f, 0.35f, 1.0f), RGBA(0.65f, 0.9f, 0.65f, 1.0f));                
+        Game->TestPuzzle.GoalRectCount = 3;
+        Game->TestPuzzle.GoalRects = PushArray(&Game->GameStorage, Game->TestPuzzle.GoalRectCount, goal_rect, Clear, 0);        
+        
+        f32 Padding = 0.15f;
+        Game->TestPuzzle.GoalRects[0] = CreateGoalRect(V3(-2.5f, 2.0f, 1.0f), V3(-1.5f, 3.0f, 2.0f), 0, Padding);
+        Game->TestPuzzle.GoalRects[1] = CreateGoalRect(V3(-0.5f, 2.0f, 1.0f), V3( 0.5f, 3.0f, 2.0f), 0, Padding);
+        Game->TestPuzzle.GoalRects[2] = CreateGoalRect(V3( 1.5f, 2.0f, 1.0f), V3( 2.5f, 3.0f, 2.0f), 0, Padding);   
+        
+        Game->TestPuzzle.BlockEntityCount = 3;
+        Game->TestPuzzle.BlockEntities = PushArray(&Game->GameStorage, Game->TestPuzzle.BlockEntityCount, world_entity_id, Clear, 0);
+        
+        Game->TestPuzzle.BlockEntities[0] = CreateBoxEntity(Game, WORLD_ENTITY_TYPE_PUSHABLE, 0, V3(-2.0f,  0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.2f, 0.0f, 0.0f, 1.0f));        
+        Game->TestPuzzle.BlockEntities[1] = CreateBoxEntity(Game, WORLD_ENTITY_TYPE_PUSHABLE, 0, V3( 2.0f,  0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.2f, 0.0f, 0.0f, 1.0f));        
+        Game->TestPuzzle.BlockEntities[2] = CreateBoxEntity(Game, WORLD_ENTITY_TYPE_PUSHABLE, 0, V3( 0.0f, -2.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), RGBA(0.2f, 0.0f, 0.0f, 1.0f));                        
+        
+        Game->TestPuzzle.CompleteData = DespawnWalls;
+        Game->TestPuzzle.CompleteCallback = DespawnWallCompleteCallback;
     }            
     
     if(IsPressed(Game->Input->SwitchWorld))
@@ -66,38 +101,44 @@ EXPORT GAME_TICK(Tick)
     
     block_puzzle* Puzzle = &Game->TestPuzzle;
     
-    b32 GoalMet = Puzzle->GoalRectCount > 0;    
-    for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
-    {
-        rect3D_center_dim GoalRect = Puzzle->GoalRects[GoalIndex];
-        
-        b32 IsContained = false;
-        for(u32 BlockEntityIndex = 0; BlockEntityIndex < Puzzle->BlockEntityCount; BlockEntityIndex++)
+    if(!Puzzle->IsComplete)
+    {        
+        Puzzle->IsComplete = true;
+        for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
         {
-            world_entity_id EntityID = Puzzle->BlockEntities[BlockEntityIndex];
-            world_entity* Entity = GetEntity(Game, EntityID);
+            goal_rect* GoalRect = Puzzle->GoalRects + GoalIndex;        
             
-            ASSERT(Entity->Collider.Type == COLLIDER_TYPE_ALIGNED_BOX);
-            
-            aligned_box AlignedBox = GetWorldSpaceAlignedBox(Entity);
-            
-            if(IsRectFullyContainedInRect3D(AlignedBox.CenterP, AlignedBox.Dim, GoalRect.CenterP, GoalRect.Dim))
+            b32 GoalIsMet = false;
+            for(u32 BlockEntityIndex = 0; BlockEntityIndex < Puzzle->BlockEntityCount; BlockEntityIndex++)
             {
-                IsContained = true;                
-                break;
+                world_entity_id EntityID = Puzzle->BlockEntities[BlockEntityIndex];
+                if(EntityID.WorldIndex == GoalRect->WorldIndex)
+                {
+                    world_entity* Entity = GetEntity(Game, EntityID);
+                    
+                    ASSERT(Entity->Collider.Type == COLLIDER_TYPE_ALIGNED_BOX);
+                    
+                    aligned_box AlignedBox = GetWorldSpaceAlignedBox(Entity);
+                    rect3D Rect = CreateRect3DCenterDim(AlignedBox.CenterP, AlignedBox.Dim);
+                    
+                    if(IsRectFullyContainedInRect3D(Rect.Min, Rect.Max, GoalRect->Rect.Min, GoalRect->Rect.Max))
+                    {
+                        GoalIsMet = true;                    
+                        break;
+                    }
+                }
             }
-        }
-        
-        if(!IsContained)
+            
+            GoalRect->GoalIsMet = GoalIsMet;        
+            
+            if(!GoalRect->GoalIsMet)
+                Puzzle->IsComplete = false;
+        }   
+                
+        if(Puzzle->IsComplete)
         {
-            GoalMet = false;        
-            break;
+            Puzzle->CompleteCallback(Game, Puzzle->CompleteData);        
         }
-    }    
-    
-    if(GoalMet)
-    {
-        ASSERT(false);
     }
     
     

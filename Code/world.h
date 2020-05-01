@@ -41,13 +41,13 @@ struct collider
 
 struct world_entity_id
 {
-    i64 ID;
+    u64 ID;
     u32 WorldIndex;
 };
 
-inline world_entity_id MakeEntityID(i64 ID, u32 WorldIndex) { world_entity_id Result = {ID, WorldIndex}; return Result; }
-inline world_entity_id InvalidEntityID() { return MakeEntityID(-1, (u32)-1); }
-inline b32 IsInvalidEntityID(world_entity_id ID) { return (ID.ID == -1) || ((ID.WorldIndex != 0) && (ID.WorldIndex != 1)); }
+inline world_entity_id MakeEntityID(u64 ID, u32 WorldIndex) { world_entity_id Result = {ID, WorldIndex}; return Result; }
+inline world_entity_id InvalidEntityID() { return MakeEntityID(0, (u32)-1); }
+inline b32 IsInvalidEntityID(world_entity_id ID) { return (ID.ID == 0) || ((ID.WorldIndex != 0) && (ID.WorldIndex != 1)); }
 
 struct world_entity
 {

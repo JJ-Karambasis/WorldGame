@@ -128,6 +128,12 @@ GetPlayerEntity(game* Game, u32 WorldIndex)
     return Result;
 }
 
+void FreeEntity(game* Game, world_entity_id ID)
+{
+    world* World = GetWorld(Game, ID);
+    FreeFromPool(&World->EntityPool, ID.ID);
+}
+
 world_entity_id
 CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, mesh* Mesh, void* UserData=NULL)
 {
@@ -231,10 +237,22 @@ CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position
 }
 
 void 
-CreateBoxEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Dim, c4 Color0, c4 Color1)
+CreateBoxEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Dim, c4 Color0, c4 Color1, world_entity_id* IDs=NULL)
 {    
-    CreateBoxEntity(Game, Type, 0, Position, Dim, Color0);
-    CreateBoxEntity(Game, Type, 1, Position, Dim, Color1); 
+    world_entity_id A = CreateBoxEntity(Game, Type, 0, Position, Dim, Color0);
+    world_entity_id B = CreateBoxEntity(Game, Type, 1, Position, Dim, Color1); 
+    
+    if(IDs)
+    {
+        IDs[0] = A;
+        IDs[1] = B;
+    }
+}
+
+void 
+CreateBoxEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Dim, c4 Color, world_entity_id* IDs=NULL)
+{    
+    CreateBoxEntityInBothWorlds(Game, Type, Position, Dim, Color, Color, IDs);    
 }
 
 void 

@@ -11,6 +11,14 @@ void DrawBox(graphics* Graphics, i64 BoxMesh, v3f P, v3f Dim, c4 Color)
     PushDrawLineMesh(Graphics, BoxMesh, Model, Color, DEBUG_BOX_INDICES_COUNT, 0, 0);        
 }
 
+#define DEBUG_BOX_INDICES_COUNT 24
+void DrawBoxMinMax(graphics* Graphics, i64 BoxMesh, v3f Min, v3f Max, c4 Color)
+{   
+    v3f Dim = Max-Min;
+    v3f P = V3(Min.xy + Dim.xy*0.5f, Min.z);
+    DrawBox(Graphics, BoxMesh, P, Dim, Color);    
+}
+
 void DrawVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, v3f P, f32 Radius, f32 Height, c4 Color)
 {
     v3f BottomPosition = V3(P.xy, P.z + Radius);
@@ -348,6 +356,19 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
     
     i32 OtherWidth = Graphics->RenderDim.width/4;
     i32 OtherHeight = Graphics->RenderDim.height/4;
+    
+    block_puzzle* Puzzle = &Game->TestPuzzle;
+    
+    for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
+    {
+        goal_rect* GoalRect = Puzzle->GoalRects + GoalIndex;
+        
+        c4 Color = Blue();
+        if(GoalRect->GoalIsMet)
+            Color = Red();
+        
+        DrawBoxMinMax(Graphics, DevContext->BoxMesh, GoalRect->Rect.Min, GoalRect->Rect.Max, Color);
+    }   
     
     if(DevContext->DrawOtherWorld)
     {        

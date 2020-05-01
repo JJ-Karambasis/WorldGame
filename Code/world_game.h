@@ -12,17 +12,27 @@
 #include "camera.h"
 #include "world.h"
 
-struct block_puzzle_goal
+struct goal_rect
 {
-    
+    u32 WorldIndex;
+    rect3D Rect;
+    b32 GoalIsMet;
 };
+
+#define PUZZLE_COMPLETE_CALLBACK(name) void name(struct game* Game, void* UserData)
+typedef PUZZLE_COMPLETE_CALLBACK(puzzle_complete_callback);
 
 struct block_puzzle
 {
     u32 GoalRectCount;
     u32 BlockEntityCount;
-    rect3D_center_dim* GoalRects;
-    world_entity_id* BlockEntities;
+    goal_rect* GoalRects;    
+    world_entity_id* BlockEntities;                
+    
+    b32 IsComplete;
+    
+    void* CompleteData;
+    puzzle_complete_callback* CompleteCallback;    
 };
 
 struct game
