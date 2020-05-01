@@ -12,6 +12,19 @@
 #include "camera.h"
 #include "world.h"
 
+struct block_puzzle_goal
+{
+    
+};
+
+struct block_puzzle
+{
+    u32 GoalRectCount;
+    u32 BlockEntityCount;
+    rect3D_center_dim* GoalRects;
+    world_entity_id* BlockEntities;
+};
+
 struct game
 {
     b32 Initialized;
@@ -27,6 +40,8 @@ struct game
     world Worlds[2];        
     f32 PlayerRadius;
     f32 PlayerHeight;
+    
+    block_puzzle TestPuzzle;
 };
 
 #define GAME_TICK(name) void name(game* Game, graphics* Graphics, platform* Platform, void* DevContext)

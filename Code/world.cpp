@@ -74,7 +74,7 @@ GetEntity(world_entity_pool* Pool, world_entity_id EntityID)
 
 inline world_entity* 
 GetEntity(world* World, world_entity_id EntityID)
-{    
+{        
     world_entity* Result = GetEntity(&World->EntityPool, EntityID);
     return Result;
 }
@@ -830,7 +830,7 @@ UpdateWorld(game* Game)
     
     ASSERT(BestPointZ != -FLT_MAX);    
     PlayerEntity->Position.z = BestPointZ;                        
-            
+    
     camera* Camera = &World->Camera;
     
     Camera->Position = PlayerEntity->Position;

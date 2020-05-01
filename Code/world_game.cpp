@@ -64,6 +64,43 @@ EXPORT GAME_TICK(Tick)
     
     UpdateWorld(Game);            
     
+    block_puzzle* Puzzle = &Game->TestPuzzle;
+    
+    b32 GoalMet = Puzzle->GoalRectCount > 0;    
+    for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
+    {
+        rect3D_center_dim GoalRect = Puzzle->GoalRects[GoalIndex];
+        
+        b32 IsContained = false;
+        for(u32 BlockEntityIndex = 0; BlockEntityIndex < Puzzle->BlockEntityCount; BlockEntityIndex++)
+        {
+            world_entity_id EntityID = Puzzle->BlockEntities[BlockEntityIndex];
+            world_entity* Entity = GetEntity(Game, EntityID);
+            
+            ASSERT(Entity->Collider.Type == COLLIDER_TYPE_ALIGNED_BOX);
+            
+            aligned_box AlignedBox = GetWorldSpaceAlignedBox(Entity);
+            
+            if(IsRectFullyContainedInRect3D(AlignedBox.CenterP, AlignedBox.Dim, GoalRect.CenterP, GoalRect.Dim))
+            {
+                IsContained = true;                
+                break;
+            }
+        }
+        
+        if(!IsContained)
+        {
+            GoalMet = false;        
+            break;
+        }
+    }    
+    
+    if(GoalMet)
+    {
+        ASSERT(false);
+    }
+    
+    
     if(NOT_IN_DEVELOPMENT_MODE())
     {           
         PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);        
