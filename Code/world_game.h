@@ -11,6 +11,7 @@
 #include "audio.h"
 #include "camera.h"
 #include "world.h"
+#include "fbx.h"
 
 struct goal_rect
 {

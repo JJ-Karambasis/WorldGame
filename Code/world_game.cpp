@@ -4,6 +4,7 @@
 #include "world.cpp"
 #include "assets.cpp"
 #include "graphics.cpp"
+#include "fbx.cpp"
 
 #define PLAYER_RADIUS 0.35f
 #define PLAYER_HEIGHT 1.0f
@@ -47,6 +48,8 @@ EXPORT GAME_TICK(Tick)
         Game->PlayerHeight = 1.0f;        
         
         Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box2.obj");
+        
+        Game->Assets->FBXBoxMesh = FBX_LoadFirstMesh("Box.fbx");
         
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {
