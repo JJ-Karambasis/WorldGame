@@ -46,7 +46,7 @@ EXPORT GAME_TICK(Tick)
         Game->PlayerRadius = 0.35f;
         Game->PlayerHeight = 1.0f;        
         
-        Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.obj");
+        Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box2.obj");
         
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {

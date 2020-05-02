@@ -24,6 +24,19 @@ struct mesh
     i64 GDIHandle;
 };
 
+struct skeleton_mesh
+{
+    vertex_p3_n3_weights* Vertices;
+    u32* Indices;
+    u32 VertexCount;
+    u32 IndexCount;
+    i64 GDIHandle;
+};
+
+struct skeleton
+{
+};
+
 struct assets
 {
     arena Arena;

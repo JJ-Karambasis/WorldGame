@@ -938,6 +938,6 @@ void GetBoxVerticesFromDimAndCenterP(v3f* Vertices, v3f CenterP, v3f Dim)
 //NOTE(EVERYONE): Is RectA fully contained in RectB
 b32 IsRectFullyContainedInRect3D(v3f MinA, v3f MaxA, v3f MinB, v3f MaxB)
 {    
-    b32 Result = (MinB <= MinA) && (MaxB >= MinA);
+    b32 Result = (MinA >= MinB) && (MaxB >= MaxA);
     return Result;    
 }

@@ -9,12 +9,15 @@ global const char* Shader_Header = R"(
 #define c3 v3f
 #define f32 float
 #define f64 double
+
+
 )";
 
 global const char* VertexShader_StandardWorldSpaceToClipSpace = R"(
 
 #define LIGHT_SHADING %d
 #define POSITION_SHADING %d
+#define SKELETON_LIGHT_SHADING %d
 
 layout (location = 0) in v3f P;
 
@@ -22,16 +25,54 @@ uniform m4 Projection;
 uniform m4 View;
 uniform m4 Model;
 
-#if LIGHT_SHADING
+#if SKELETON_LIGHTING_SHADING || LIGHT_SHADING
 layout (location = 1) in v3f N;
+#endif
 
+#if SKELETON_LIGHTING_SHADING
+layout (location = 2) in u32 JointI;
+layout (location = 3) in v4f JointW;
+#endif
+
+#if LIGHT_SHADING | SKELETON_LIGHTING_SHADING
 out v3f ViewP;
 out v3f ViewN;
 
 void main()
 {
-    ViewP = v3f(View*Model*v4f(P, 1.0f));
-    ViewN = m3(transpose(inverse(View*Model)))*N;
+    v4f VertexP = v4f(P, 1.0f);
+    v3f VertexN = N;
+
+    #if SKELETON_LIGHTING_SHADING
+
+    u32 I0 = (JointI >> 0)  & 0xFF;
+    u32 I1 = (JointI >> 8)  & 0xFF;
+    u32 I2 = (JointI >> 16) & 0xFF;
+    u32 I3 = (JointI >> 24) & 0xFF;
+
+    f32 W0 = JointW[0];
+    f32 W1 = JointW[1];
+    f32 W2 = JointW[2];
+    f32 W3 = JointW[3];
+
+    VertexP = v4f(0);
+    VertexP += W0*(Bones[I0]*P);
+    VertexP += W1*(Bones[I1]*P);
+    VertexP += W2*(Bones[I2]*P);
+    VertexP += W3*(Bones[I3]*P);
+
+    VertexN = v3f(0);
+    VertexN += W0*(m3(Bones[I0])*N);
+    VertexN += W1*(m3(Bones[I1])*N);
+    VertexN += W2*(m3(Bones[I2])*N);
+    VertexN += W3*(m3(Bones[I3])*N);
+
+    #endif
+
+
+    m4 ViewModel = View*Model;
+    ViewP = v3f(ViewModel*VertexP);
+    ViewN = m3(transpose(inverse(ViewModel)))*VertexN;
     gl_Position = Projection*v4f(ViewP, 1.0f);
 }
 #endif
