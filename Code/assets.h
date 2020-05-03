@@ -26,6 +26,7 @@ struct mesh
     i64 GDIHandle;
 };
 
+#define NO_PARENT_JOINT (u8)-1
 struct joint
 {
     u8 ParentIndex; //No parent is 255 or (u8)-1
@@ -38,8 +39,23 @@ struct skeleton
     u32 JointCount;
 };
 
-struct animation_clip
+struct joint_pose
 {
+    quaternion Orientation;
+    v3f Translation;
+};
+
+struct animation_frame
+{
+    joint_pose* JointPoses;
+};
+
+#define ANIMATION_FPS 30
+struct animation_clip
+{    
+    u32 JointCount; 
+    u32 FrameCount;
+    animation_frame* Frames;        
 };
 
 struct assets
@@ -51,8 +67,10 @@ struct assets
     mesh TestSkeletonMesh;
     skeleton TestSkeleton;
     
-    animation_clip IdleAnimation;
-    animation_clip MovingAnimation;
+    animation_clip TestAnimation;
+    
+    //animation_clip IdleAnimation;
+    //animation_clip MovingAnimation;
     
     triangle3D_mesh BoxTriangleMesh;
     audio TestAudio;

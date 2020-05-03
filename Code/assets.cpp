@@ -21,6 +21,15 @@ skeleton LoadSkeleton(assets* Assets, char* File)
     return Result;
 }
 
+animation_clip LoadAnimation(assets* Assets, char* File)
+{
+    ASSERT(StringEquals(GetFileExtension(File), "fbx"));
+    
+    fbx_context FBX = FBX_LoadFile(File);
+    animation_clip Result = FBX_LoadFirstAnimation(&FBX, &Assets->Storage);
+    return Result;
+}
+
 triangle3D_mesh CreateBoxTriangleMesh(arena* Storage)
 {
     triangle3D_mesh Result = {};

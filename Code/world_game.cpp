@@ -52,6 +52,7 @@ EXPORT GAME_TICK(Tick)
         
         Game->Assets->TestSkeletonMesh = LoadGraphicsMesh(Game->Assets, "TestSkeleton.fbx");
         Game->Assets->TestSkeleton = LoadSkeleton(Game->Assets, "TestSkeleton.fbx");
+        Game->Assets->TestAnimation = LoadAnimation(Game->Assets, "TestAnimation.fbx");
         
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {

@@ -794,7 +794,7 @@ UpdateWorld(game* Game)
                                 if(ResolvePushableEntity(PlayerEntity, TestEntities[ObjectIndex], TOIs[ObjectIndex].TimeResult, &MoveDeltas[ObjectIndex]))
                                     StopProcessing[ObjectIndex] = true;                                                            
                             }
-                                                        
+                            
                             if(StopProcessing[0] && StopProcessing[1])
                                 break;                            
                         }
@@ -845,12 +845,13 @@ UpdateWorld(game* Game)
             }
         }
     }
-#if 0 
-    if(SquareMagnitude(PlayerEntity->Velocity.xy) > MOVE_DELTA_EPSILON)
-        PlayAnimation(&World->Player.Pose, &Game->Assets->MovingAnimation);
-    else
-        PlayAnimation(&World->Player.Pose, &Game->Assets->IdleAnimation);
-#endif
+    
+    local u32 frame_animation = 0;        
+    SetAnimationFrame(&World->Player.Pose, &Game->Assets->TestAnimation, frame_animation++);
+    
+    if(frame_animation == 60)
+        frame_animation = 0;
+    
     ASSERT(BestPointZ != -FLT_MAX);    
     PlayerEntity->Position.z = BestPointZ;                        
     

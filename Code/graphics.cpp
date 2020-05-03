@@ -233,18 +233,12 @@ void PushWorldCommands(graphics* Graphics, world* World, camera* Camera)
         {                        
             if(Entity->Type == WORLD_ENTITY_TYPE_PLAYER)
             {
-                local m4 I[6] =
-                {
-                    IdentityM4(),
-                    IdentityM4(),
-                    IdentityM4(),                                        
-                    IdentityM4(),
-                    TransformM4(V3(1.3f, 0.0f, 0.0f)),
-                    TransformM4(V3(1.3f, 0.0f, 0.0f)),
-                };                                    
+                player* Player = (player*)Entity->UserData;
+                pose* Pose = &Player->Pose;
                 
-                PushDrawShadedColoredSkinningMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0, I, 6);
-                                                  
+                PushDrawShadedColoredSkinningMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0, 
+                                                  Pose->GlobalPoses, Pose->Skeleton->JointCount);
+                
             }
             else
             {

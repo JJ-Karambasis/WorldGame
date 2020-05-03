@@ -34,6 +34,7 @@ struct fbx_skeleton
 
 struct fbx_context
 {
+    FbxScene* Scene;
     node_list MeshNodes;
     skeleton_list Skeletons;
 };

@@ -96,6 +96,7 @@ fbx_context FBX_LoadFile(const char* Path)
     Importer->Destroy();
     
     fbx_context Result = {};
+    Result.Scene = Scene;
     
     node_list SkeletonNodes = {};
     
@@ -334,6 +335,8 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
 
 skeleton FBX_LoadFirstSkeleton(fbx_context* Context, arena* Storage)
 {
+    BOOL_CHECK_AND_HANDLE(Context->Skeletons.Count > 0, "No skeletons associated with the fbx file.");
+    
     if(Context->Skeletons.Count == 0)
         return {};
     
@@ -355,6 +358,62 @@ skeleton FBX_LoadFirstSkeleton(fbx_context* Context, arena* Storage)
         if(Parent)        
             Joint->ParentIndex = FBX_FindJoint(FBXSkeleton, Parent->GetName());        
     }
-    
+        
     return Result;
+    
+    handle_error:
+    return {};
+}
+
+animation_clip FBX_LoadSkeletonAnimation(fbx_context* Context, fbx_skeleton* Skeleton, arena* Storage)
+{
+    FbxScene* Scene = Context->Scene;
+    FbxAnimStack* AnimStack = Scene->GetSrcObject<FbxAnimStack>();
+    BOOL_CHECK_AND_HANDLE(AnimStack, "No animation associated with the fbx file.");
+    
+    animation_clip Clip;
+    Clip.JointCount = Skeleton->JointCount;
+    
+    FbxTakeInfo* TakeInfo = Scene->GetTakeInfo(AnimStack->GetName());
+    FbxTime Start = TakeInfo->mLocalTimeSpan.GetStart();
+    FbxTime End = TakeInfo->mLocalTimeSpan.GetStop();            
+    
+    Clip.FrameCount = (u32)(End.GetFrameCount(FbxTime::eFrames30) - Start.GetFrameCount(FbxTime::eFrames30) + 1);    
+    Clip.Frames = PushArray(Storage, Clip.FrameCount, animation_frame, Clear, 0);
+    
+    animation_frame* FrameAt = Clip.Frames;
+    
+    for(FbxLongLong FrameIndex = Start.GetFrameCount(FbxTime::eFrames30); FrameIndex <= End.GetFrameCount(FbxTime::eFrames30); FrameIndex++)
+    {
+        FbxTime CurrentTime;
+        CurrentTime.SetFrame(FrameIndex, FbxTime::eFrames30);
+        
+        animation_frame* Frame = FrameAt++;
+        Frame->JointPoses = PushArray(Storage, Clip.JointCount, joint_pose, Clear, 0);
+        
+        for(u32 JointIndex = 0; JointIndex < Clip.JointCount; JointIndex++)
+        {
+            m4 Transform = M4(Skeleton->Joints[JointIndex]->EvaluateLocalTransform(CurrentTime));
+            sqt SQT = CreateSQT(Transform);
+            
+            Frame->JointPoses[JointIndex].Translation = SQT.Position;
+            Frame->JointPoses[JointIndex].Orientation = SQT.Orientation;
+        }
+    }
+    
+    return Clip;
+    
+    handle_error:
+    return {};
+}
+
+animation_clip FBX_LoadFirstAnimation(fbx_context* Context, arena* Storage)
+{
+    BOOL_CHECK_AND_HANDLE(Context->Skeletons.Count > 0, "No skeletons associated with the fbx file. Cannot load it's animations");
+    
+    animation_clip Result = FBX_LoadSkeletonAnimation(Context, Context->Skeletons.Ptr[0], Storage);
+    return Result;
+    
+    handle_error:
+    return {};
 }
