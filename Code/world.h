@@ -103,7 +103,8 @@ struct player
 {
     world_entity_id EntityID;    
     player_state State;
-    pushing_state Pushing;
+    pushing_state Pushing;    
+    pose Pose; 
 };
 
 struct blocker

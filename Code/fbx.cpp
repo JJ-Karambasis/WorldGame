@@ -1,21 +1,3 @@
-struct vertex_p3_n3_index
-{
-    vertex_p3_n3 Vertex;
-    u32 Index;
-};
-
-inline u64 Hash(vertex_p3_n3_index Data, u64 TableSize)
-{
-    u64 Result = Hash(Data.Vertex, TableSize);    
-    return Result;
-}
-
-inline b32 operator!=(vertex_p3_n3_index Left, vertex_p3_n3_index Right)
-{
-    b32 Result = Left.Vertex != Right.Vertex;    
-    return Result;
-}
-
 inline void 
 FBX_AddNode(node_list* List, FbxNode* Node)
 {
@@ -348,4 +330,31 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     
     handle_error:
     return {};
+}
+
+skeleton FBX_LoadFirstSkeleton(fbx_context* Context, arena* Storage)
+{
+    if(Context->Skeletons.Count == 0)
+        return {};
+    
+    fbx_skeleton* FBXSkeleton = Context->Skeletons.Ptr[0];
+    skeleton Result = {};
+    Result.JointCount = FBXSkeleton->JointCount;
+    Result.Joints = PushArray(Storage, Result.JointCount, joint, Clear, 0);
+    
+    for(u32 JointIndex = 0; JointIndex < Result.JointCount; JointIndex++)
+    {
+        FbxNode* JointNode = FBXSkeleton->Joints[JointIndex];
+        joint* Joint = Result.Joints + JointIndex;
+        
+        m4 JointToModel = M4(JointNode->EvaluateGlobalTransform());
+        Joint->ModelToJoint = InverseTransformM4(JointToModel);                
+        Joint->ParentIndex = (u8)-1;
+        
+        FbxNode* Parent = JointNode->GetParent();
+        if(Parent)        
+            Joint->ParentIndex = FBX_FindJoint(FBXSkeleton, Parent->GetName());        
+    }
+    
+    return Result;
 }

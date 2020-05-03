@@ -10,6 +10,7 @@
 #include "assets.h"
 #include "audio.h"
 #include "camera.h"
+#include "animation.h"
 #include "world.h"
 #include "fbx.h"
 

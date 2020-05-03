@@ -211,7 +211,7 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, c
 {    
     player* Player = GetPlayer(Game, WorldIndex);
     Player->Pushing = InitPushingState();
-    
+    Player->Pose = CreatePose(&Game->GameStorage, &Game->Assets->TestSkeleton);    
     Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(Radius*2, Radius*2, Height), V3(), Color, &Game->Assets->TestSkeletonMesh, Player);
     
     world_entity* Entity = GetEntity(Game, Player->EntityID);    
@@ -845,7 +845,12 @@ UpdateWorld(game* Game)
             }
         }
     }
-    
+#if 0 
+    if(SquareMagnitude(PlayerEntity->Velocity.xy) > MOVE_DELTA_EPSILON)
+        PlayAnimation(&World->Player.Pose, &Game->Assets->MovingAnimation);
+    else
+        PlayAnimation(&World->Player.Pose, &Game->Assets->IdleAnimation);
+#endif
     ASSERT(BestPointZ != -FLT_MAX);    
     PlayerEntity->Position.z = BestPointZ;                        
     

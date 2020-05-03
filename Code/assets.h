@@ -26,14 +26,34 @@ struct mesh
     i64 GDIHandle;
 };
 
+struct joint
+{
+    u8 ParentIndex; //No parent is 255 or (u8)-1
+    m4 ModelToJoint;
+};
+
+struct skeleton
+{    
+    joint* Joints;
+    u32 JointCount;
+};
+
+struct animation_clip
+{
+};
+
 struct assets
 {
     arena Storage;
     graphics* Graphics;
-        
+    
     mesh BoxGraphicsMesh;
     mesh TestSkeletonMesh;
-        
+    skeleton TestSkeleton;
+    
+    animation_clip IdleAnimation;
+    animation_clip MovingAnimation;
+    
     triangle3D_mesh BoxTriangleMesh;
     audio TestAudio;
 };

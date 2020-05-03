@@ -3,6 +3,7 @@
 #include "geometry.cpp"
 #include "fbx.cpp"
 #include "assets.cpp"
+#include "animation.cpp"
 #include "world.cpp"
 
 #include "graphics.cpp"

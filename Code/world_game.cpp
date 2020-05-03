@@ -1,6 +1,7 @@
 #include "world_game.h"
 #include "geometry.cpp"
 #include "audio.cpp"
+#include "animation.cpp"
 #include "world.cpp"
 #include "fbx.cpp"
 #include "assets.cpp"
@@ -48,7 +49,9 @@ EXPORT GAME_TICK(Tick)
         Game->PlayerHeight = 1.0f;        
         
         Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
+        
         Game->Assets->TestSkeletonMesh = LoadGraphicsMesh(Game->Assets, "TestSkeleton.fbx");
+        Game->Assets->TestSkeleton = LoadSkeleton(Game->Assets, "TestSkeleton.fbx");
         
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {
@@ -62,7 +65,7 @@ EXPORT GAME_TICK(Tick)
             Camera->Position = PlayerEntity->Position;
             Camera->FocalPoint = PlayerEntity->Position;
             Camera->Position.z += 6.0f;
-            Camera->Orientation = IdentityM3();    
+            Camera->Orientation = IdentityM3();                
         }
         
         world_entity_id* DespawnWalls = PushArray(&Game->GameStorage, 2, world_entity_id, Clear, 0);

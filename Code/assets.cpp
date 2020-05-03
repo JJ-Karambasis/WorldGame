@@ -12,6 +12,15 @@ mesh LoadGraphicsMesh(assets* Assets, char* File)
     return Result;
 }
 
+skeleton LoadSkeleton(assets* Assets, char* File)
+{
+    ASSERT(StringEquals(GetFileExtension(File), "fbx"));
+    
+    fbx_context FBX = FBX_LoadFile(File);
+    skeleton Result = FBX_LoadFirstSkeleton(&FBX, &Assets->Storage);
+    return Result;
+}
+
 triangle3D_mesh CreateBoxTriangleMesh(arena* Storage)
 {
     triangle3D_mesh Result = {};
