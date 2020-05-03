@@ -36,6 +36,11 @@ global PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 global PFNGLUNIFORM4FPROC glUniform4f;
 global PFNGLDRAWELEMENTSBASEVERTEXPROC glDrawElementsBaseVertex;
 global PFNGLUNIFORM3FVPROC glUniform3fv;
+global PFNGLGETUNIFORMBLOCKINDEXPROC glGetUniformBlockIndex;
+global PFNGLUNIFORMBLOCKBINDINGPROC glUniformBlockBinding;
+global PFNGLBINDBUFFERBASEPROC glBindBufferBase;
+global PFNGLBUFFERSUBDATAPROC glBufferSubData;
+global PFNGLVERTEXATTRIBIPOINTERPROC glVertexAttribIPointer;
 
 struct standard_color_shader
 {
@@ -44,6 +49,16 @@ struct standard_color_shader
     GLint ViewLocation;
     GLint ModelLocation;
     GLint ColorLocation;
+};
+
+struct standard_color_skinning_shader
+{
+    GLuint Program;
+    GLint ProjectionLocation;
+    GLint ViewLocation;
+    GLint ModelLocation;
+    GLint ColorLocation;    
+    GLint SkinningIndex;
 };
 
 struct imgui_shader
@@ -86,6 +101,13 @@ struct opengl_texture
 typedef pool<opengl_mesh> opengl_mesh_pool; 
 typedef pool<opengl_texture> opengl_texture_pool;
 
+struct opengl_buffer_list
+{    
+    u32 Capacity;
+    u32 Count;
+    GLuint* Ptr;
+};
+
 struct opengl_context
 {
     graphics Graphics;
@@ -94,10 +116,13 @@ struct opengl_context
     opengl_mesh_pool MeshPool;
     opengl_texture_pool TexturePool;        
     
-    standard_color_shader StandardPhongShader;
+    standard_color_shader StandardPhongShader;        
     standard_color_shader StandardLineShader;
     imgui_shader ImGuiShader;
-    quad_shader QuadShader;    
+    quad_shader QuadShader;        
+    standard_color_skinning_shader StandardSkinningPhongShader;
+    
+    opengl_buffer_list SkinningBuffers;    
 };
 
 #define LOAD_FUNCTION(type, function) \

@@ -128,6 +128,28 @@ void PushDrawShadedColoredMesh(graphics* Graphics, i64 MeshID, sqt Transform, c4
     PushCommand(Graphics, PushCommandDrawShadedColoredMesh);    
 }
 
+//NOTE(EVERYONE): Joints does not get copied over, make sure the pointer is alive until you have executed the push commands (like storing in a frame allocator)
+void PushDrawShadedColoredSkinningMesh(graphics* Graphics, i64 MeshID, sqt Transform, c4 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset, m4* Joints, u32 JointCount)
+{
+    push_command_draw_shaded_colored_skinning_mesh* PushCommandDrawShadedColoredSkinningMesh = PushStruct(push_command_draw_shaded_colored_skinning_mesh, NoClear, 0);
+    PushCommandDrawShadedColoredSkinningMesh->Type = PUSH_COMMAND_DRAW_SHADED_COLORED_SKINNING_MESH;
+    PushCommandDrawShadedColoredSkinningMesh->MeshID = MeshID;
+    PushCommandDrawShadedColoredSkinningMesh->WorldTransform = TransformM4(Transform);
+    PushCommandDrawShadedColoredSkinningMesh->R = Color.r;
+    PushCommandDrawShadedColoredSkinningMesh->G = Color.g;
+    PushCommandDrawShadedColoredSkinningMesh->B = Color.b;
+    PushCommandDrawShadedColoredSkinningMesh->A = Color.a;
+    
+    PushCommandDrawShadedColoredSkinningMesh->IndexCount = IndexCount;
+    PushCommandDrawShadedColoredSkinningMesh->IndexOffset = IndexOffset;
+    PushCommandDrawShadedColoredSkinningMesh->VertexOffset = VertexOffset;
+    
+    PushCommandDrawShadedColoredSkinningMesh->Joints = Joints;
+    PushCommandDrawShadedColoredSkinningMesh->JointCount = JointCount;
+    
+    PushCommand(Graphics, PushCommandDrawShadedColoredSkinningMesh);
+}
+
 void PushDrawLineMesh(graphics* Graphics, i64 MeshID, m4 Transform, c4 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_line_mesh* PushCommandDrawLineMesh = PushStruct(push_command_draw_line_mesh, NoClear, 0);
@@ -209,7 +231,25 @@ void PushWorldCommands(graphics* Graphics, world* World, camera* Camera)
     {
         if(Entity->Mesh)
         {                        
-            PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
+            if(Entity->Type == WORLD_ENTITY_TYPE_PLAYER)
+            {
+                local m4 I[6] =
+                {
+                    IdentityM4(),
+                    IdentityM4(),
+                    IdentityM4(),                                        
+                    IdentityM4(),
+                    TransformM4(V3(1.3f, 0.0f, 0.0f)),
+                    TransformM4(V3(1.3f, 0.0f, 0.0f)),
+                };                                    
+                
+                PushDrawShadedColoredSkinningMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0, I, 6);
+                                                  
+            }
+            else
+            {
+                PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
+            }
         }
     }    
 }

@@ -9,6 +9,8 @@ global const char* Shader_Header = R"(
 #define c3 v3f
 #define f32 float
 #define f64 double
+#define u32 uint
+#define i32 int
 
 
 )";
@@ -25,16 +27,24 @@ uniform m4 Projection;
 uniform m4 View;
 uniform m4 Model;
 
-#if SKELETON_LIGHTING_SHADING || LIGHT_SHADING
+#if SKELETON_LIGHT_SHADING || LIGHT_SHADING
 layout (location = 1) in v3f N;
 #endif
 
-#if SKELETON_LIGHTING_SHADING
+#if SKELETON_LIGHT_SHADING
 layout (location = 2) in u32 JointI;
 layout (location = 3) in v4f JointW;
+
+#define MAX_JOINT_COUNT %d
+
+layout (std140) uniform SkinningBuffer
+{
+    m4 Joints[MAX_JOINT_COUNT];    
+};
+
 #endif
 
-#if LIGHT_SHADING | SKELETON_LIGHTING_SHADING
+#if LIGHT_SHADING || SKELETON_LIGHT_SHADING
 out v3f ViewP;
 out v3f ViewN;
 
@@ -43,12 +53,12 @@ void main()
     v4f VertexP = v4f(P, 1.0f);
     v3f VertexN = N;
 
-    #if SKELETON_LIGHTING_SHADING
+    #if SKELETON_LIGHT_SHADING
 
-    u32 I0 = (JointI >> 0)  & 0xFF;
-    u32 I1 = (JointI >> 8)  & 0xFF;
-    u32 I2 = (JointI >> 16) & 0xFF;
-    u32 I3 = (JointI >> 24) & 0xFF;
+    u32 I0 = (JointI >> 0)  & u32(0x000000FF);
+    u32 I1 = (JointI >> 8)  & u32(0x000000FF);
+    u32 I2 = (JointI >> 16) & u32(0x000000FF);
+    u32 I3 = (JointI >> 24) & u32(0x000000FF);
 
     f32 W0 = JointW[0];
     f32 W1 = JointW[1];
@@ -56,16 +66,16 @@ void main()
     f32 W3 = JointW[3];
 
     VertexP = v4f(0);
-    VertexP += W0*(Bones[I0]*P);
-    VertexP += W1*(Bones[I1]*P);
-    VertexP += W2*(Bones[I2]*P);
-    VertexP += W3*(Bones[I3]*P);
+    VertexP += W0*(Joints[I0]*v4f(P, 1.0f));
+    VertexP += W1*(Joints[I1]*v4f(P, 1.0f));
+    VertexP += W2*(Joints[I2]*v4f(P, 1.0f));
+    VertexP += W3*(Joints[I3]*v4f(P, 1.0f));
 
     VertexN = v3f(0);
-    VertexN += W0*(m3(Bones[I0])*N);
-    VertexN += W1*(m3(Bones[I1])*N);
-    VertexN += W2*(m3(Bones[I2])*N);
-    VertexN += W3*(m3(Bones[I3])*N);
+    VertexN += W0*(m3(Joints[I0])*N);
+    VertexN += W1*(m3(Joints[I1])*N);
+    VertexN += W2*(m3(Joints[I2])*N);
+    VertexN += W3*(m3(Joints[I3])*N);
 
     #endif
 
@@ -102,7 +112,7 @@ void main()
     v3f V = -ViewP;
     v3f N = normalize(ViewN);    
     v3f H = normalize(L+V);
-    int SpecularStrength = 8;
+    i32 SpecularStrength = 8;
     
     f32 NDotL = max(dot(N, L), 0.0f);
     f32 NDotH = max(dot(N, H), 0.0f);
@@ -159,7 +169,7 @@ uniform m4 Projection;
 uniform m4 View;
 uniform v3f Positions[4];
 
-int Indices[6] = int[6](0, 1, 2, 0, 2, 3);
+u32 Indices[6] = u32[6](0, 1, 2, 0, 2, 3);
 
 void main()
 {

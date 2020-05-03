@@ -17,8 +17,10 @@ struct audio
 
 struct mesh
 {
-    vertex_p3_n3* Vertices;
-    u32* Indices;
+    void* Vertices;
+    void* Indices;
+    graphics_vertex_format VertexFormat;
+    graphics_index_format IndexFormat;    
     u32 VertexCount;
     u32 IndexCount;    
     i64 GDIHandle;
@@ -26,11 +28,11 @@ struct mesh
 
 struct assets
 {
-    arena Arena;
+    arena Storage;
     graphics* Graphics;
-    
-    mesh FBXBoxMesh;
+        
     mesh BoxGraphicsMesh;
+    mesh TestSkeletonMesh;
         
     triangle3D_mesh BoxTriangleMesh;
     audio TestAudio;

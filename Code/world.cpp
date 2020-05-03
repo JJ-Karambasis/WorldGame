@@ -212,7 +212,7 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, c
     player* Player = GetPlayer(Game, WorldIndex);
     Player->Pushing = InitPushingState();
     
-    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(Radius*2, Radius*2, Height), V3(), Color, NULL, Player);
+    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(Radius*2, Radius*2, Height), V3(), Color, &Game->Assets->TestSkeletonMesh, Player);
     
     world_entity* Entity = GetEntity(Game, Player->EntityID);    
     

@@ -4,12 +4,15 @@
 #include "AKCommon/common.h"
 #include "platform.h"
 
+#define MAX_JOINT_COUNT 256
+
 enum graphics_vertex_format
 {
     GRAPHICS_VERTEX_FORMAT_UNKNOWN,
     GRAPHICS_VERTEX_FORMAT_P2_UV_C,
     GRAPHICS_VERTEX_FORMAT_P3,
     GRAPHICS_VERTEX_FORMAT_P3_N3,    
+    GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS
 };
 
 enum graphics_index_format
@@ -44,6 +47,7 @@ enum push_command_type
     PUSH_COMMAND_PROJECTION,
     PUSH_COMMAND_CAMERA_VIEW,    
     PUSH_COMMAND_DRAW_SHADED_COLORED_MESH,
+    PUSH_COMMAND_DRAW_SHADED_COLORED_SKINNING_MESH,
     PUSH_COMMAND_DRAW_LINE_MESH,
     PUSH_COMMAND_DRAW_IMGUI_UI,
     PUSH_COMMAND_DRAW_QUAD,    
@@ -109,6 +113,20 @@ struct push_command_draw_shaded_colored_mesh : public push_command
     u32 IndexCount;
     u32 IndexOffset;
     u32 VertexOffset;
+};
+
+struct push_command_draw_shaded_colored_skinning_mesh : public push_command
+{
+    m4 WorldTransform;    
+    f32 R, G, B, A;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+    
+    m4* Joints;
+    u32 JointCount;
 };
 
 struct push_command_draw_line_mesh : public push_command
@@ -203,9 +221,17 @@ GetVertexStride(graphics_vertex_format Format)
         case GRAPHICS_VERTEX_FORMAT_P2_UV_C: { Result = sizeof(vertex_p2_uv_c); } break;        
         case GRAPHICS_VERTEX_FORMAT_P3: { Result = sizeof(vertex_p3); } break;        
         case GRAPHICS_VERTEX_FORMAT_P3_N3: { Result = sizeof(vertex_p3_n3); } break;        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS: { Result = sizeof(vertex_p3_n3_weights); } break;
         INVALID_DEFAULT_CASE;
     }
     
+    return Result;
+}
+
+inline ptr
+GetVertexBufferSize(graphics_vertex_format Format, u32 VertexCount)
+{
+    ptr Result = GetVertexStride(Format)*VertexCount;
     return Result;
 }
 

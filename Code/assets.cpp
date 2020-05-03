@@ -1,84 +1,14 @@
-#define TINYOBJ_LOADER_C_IMPLEMENTATION
-#include "tinyobj_loader_c.h"
-
-struct indices_uint_pair
-{
-    uint_pair Pair;
-    u32 VertexIndex;
-};
-
-inline u64 Hash(indices_uint_pair Pair, u64 TableSize)
-{
-    u64 Result = Hash(Pair.Pair, TableSize);    
-    return Result;
-}
-
-inline b32 operator!=(indices_uint_pair Left, indices_uint_pair Right)
-{
-    b32 Result = Left.Pair != Right.Pair;    
-    return Result;
-}
-
 mesh LoadGraphicsMesh(assets* Assets, char* File)
 {
-    buffer Buffer = Global_Platform->ReadEntireFile(File);
+    ASSERT(StringEquals(GetFileExtension(File), "fbx"));
     
-    tinyobj_attrib_t Attributes;
-    tinyobj_shape_t* Shapes;
-    size_t ShapeCount;
-    tinyobj_material_t* Materials;
-    size_t MaterialCount;
-    int Code = tinyobj_parse_obj(&Attributes, &Shapes, &ShapeCount, &Materials, &MaterialCount, (const char*)Buffer.Data, Buffer.Size, TINYOBJ_FLAG_TRIANGULATE);
-    
-    ASSERT(Code == TINYOBJ_SUCCESS);
-    
-    hash_table<indices_uint_pair> HashTable = CreateHashTable<indices_uint_pair>(8096);     
-    
-    mesh Result = {};
-    Result.IndexCount = Attributes.num_face_num_verts*3;
-    Result.Indices = PushArray(&Assets->Arena, Result.IndexCount, u32, Clear, 0);
-    
-    vertex_p3_n3* VertexData = PushArray(Result.IndexCount, vertex_p3_n3, Clear, 0);
-    
-    u32* Indices = (u32*)Result.Indices;
-    
-    u32 NextIndex = 0;
-    for(u32 FaceIndex = 0; FaceIndex < Attributes.num_face_num_verts; FaceIndex++)
-    {
-        tinyobj_vertex_index_t* Face = Attributes.faces + (FaceIndex*3);
-        ASSERT(Attributes.face_num_verts[FaceIndex] == 3);
-        
-        for(u32 FaceVertexIndex = 0; FaceVertexIndex < 3; FaceVertexIndex++)
-        {   
-            u32 VertexIndex = (FaceIndex*3)+FaceVertexIndex;
-            
-            u32 Index = Result.VertexCount;
-            indices_uint_pair Pair = {{(u32)Face->v_idx, (u32)Face->vn_idx}, Index};
-            if(HashTable[Pair])
-            {
-                Indices[VertexIndex] = HashTable.Table[HashTable.GetHashIndex(Pair)].Key.VertexIndex;
-            }
-            else
-            {                
-                VertexData[Index] = 
-                {
-                    V3(Attributes.vertices+(Face->v_idx*3)),
-                    V3(Attributes.normals+(Face->vn_idx*3))
-                };
-                
-                Result.VertexCount++;
-                Indices[VertexIndex] = Index;                
-            }
-            
-            Face++;
-        }
-    }
-    
-    Result.Vertices = PushWriteArray(&Assets->Arena, VertexData, Result.VertexCount, vertex_p3_n3, 0);
-    Result.GDIHandle = Assets->Graphics->AllocateMesh(Assets->Graphics, Result.Vertices, Result.VertexCount*sizeof(vertex_p3_n3), GRAPHICS_VERTEX_FORMAT_P3_N3, 
-                                                      Result.Indices, Result.IndexCount*sizeof(u32), GRAPHICS_INDEX_FORMAT_32_BIT);    
-    ASSERT(Result.GDIHandle);
-    
+    fbx_context FBX = FBX_LoadFile(File);
+    mesh Result = FBX_LoadFirstMesh(&FBX, &Assets->Storage);    
+    if(Result.Vertices && Result.Indices)
+    {        
+        Result.GDIHandle = Assets->Graphics->AllocateMesh(Assets->Graphics, Result.Vertices, GetVertexBufferSize(Result.VertexFormat, Result.VertexCount), Result.VertexFormat,
+                                                          Result.Indices, GetIndexBufferSize(Result.IndexFormat, Result.IndexCount), Result.IndexFormat);
+    }    
     return Result;
 }
 
