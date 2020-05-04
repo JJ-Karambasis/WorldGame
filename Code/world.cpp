@@ -211,7 +211,8 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, c
 {    
     player* Player = GetPlayer(Game, WorldIndex);
     Player->Pushing = InitPushingState();
-    Player->Pose = CreatePose(&Game->GameStorage, &Game->Assets->TestSkeleton);    
+    Player->AnimationController = CreateAnimationController(&Game->GameStorage, &Game->Assets->TestSkeleton);    
+    Player->AnimationController.PlayingAnimation.Clip = &Game->Assets->TestAnimation;
     Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(Radius*2, Radius*2, Height), V3(), Color, &Game->Assets->TestSkeletonMesh, Player);
     
     world_entity* Entity = GetEntity(Game, Player->EntityID);    
@@ -846,11 +847,38 @@ UpdateWorld(game* Game)
         }
     }
     
-    local u32 frame_animation = 0;        
-    SetAnimationFrame(&World->Player.Pose, &Game->Assets->TestAnimation, frame_animation++);
+    player* Player = (player*)PlayerEntity->UserData;
     
-    if(frame_animation == 60)
-        frame_animation = 0;
+    animation_controller* Controller = &Player->AnimationController;
+    playing_animation* PlayingAnimation = &Controller->PlayingAnimation;    
+    skeleton* Skeleton = Controller->Skeleton;
+    
+    u32 PrevFrameIndex = FloorU32(PlayingAnimation->t*ANIMATION_FPS);
+    u32 NextFrameIndex = PrevFrameIndex+1;
+    
+    f32 PrevFrameT = PrevFrameIndex*ANIMATION_HZ;
+    f32 NextFrameT = NextFrameIndex*ANIMATION_HZ;
+    
+    f32 BlendFactor = (PlayingAnimation->t-PrevFrameT)/(NextFrameT-PrevFrameT);
+    
+    ASSERT((BlendFactor >= 0) && (BlendFactor <= 1));
+    
+    animation_frame* PrevFrame = PlayingAnimation->Clip->Frames + PrevFrameIndex;
+    
+    if(NextFrameIndex == PlayingAnimation->Clip->FrameCount)
+        NextFrameIndex = 0;
+    animation_frame* NextFrame = PlayingAnimation->Clip->Frames + NextFrameIndex;        
+    
+    for(u32 JointIndex = 0; JointIndex < Skeleton->JointCount; JointIndex++)
+    {
+        Controller->JointPoses[JointIndex] = InterpolatePose(PrevFrame->JointPoses[JointIndex], BlendFactor, NextFrame->JointPoses[JointIndex]);                        
+    }
+    
+    PlayingAnimation->t += Game->dt;    
+    if(PlayingAnimation->t >= GetClipDuration(PlayingAnimation->Clip))
+        PlayingAnimation->t = 0.0;    
+    
+    GenerateGlobalPoses(Controller);
     
     ASSERT(BestPointZ != -FLT_MAX);    
     PlayerEntity->Position.z = BestPointZ;                        

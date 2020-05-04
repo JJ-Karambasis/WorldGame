@@ -50,6 +50,7 @@ struct animation_frame
     joint_pose* JointPoses;
 };
 
+#define ANIMATION_HZ 0.03333333333333f
 #define ANIMATION_FPS 30
 struct animation_clip
 {    

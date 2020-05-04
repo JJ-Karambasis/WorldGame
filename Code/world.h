@@ -69,7 +69,7 @@ struct world_entity
     collider Collider;
     
     world_entity_id ID;
-    world_entity_id LinkID;
+    world_entity_id LinkID;        
     
     mesh* Mesh;
     
@@ -103,8 +103,8 @@ struct player
 {
     world_entity_id EntityID;    
     player_state State;
-    pushing_state Pushing;    
-    pose Pose; 
+    pushing_state Pushing;        
+    animation_controller AnimationController;    
 };
 
 struct blocker
