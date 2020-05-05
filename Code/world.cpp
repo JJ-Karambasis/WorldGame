@@ -211,16 +211,16 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, c
 {    
     player* Player = GetPlayer(Game, WorldIndex);
     Player->Pushing = InitPushingState();
-    Player->AnimationController = CreateAnimationController(&Game->GameStorage, &Game->Assets->TestSkeleton);    
-    Player->AnimationController.PlayingAnimation.Clip = &Game->Assets->TestAnimation;
-    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(Radius*2, Radius*2, Height), V3(), Color, &Game->Assets->TestSkeletonMesh, Player);
+    //Player->AnimationController = CreateAnimationController(&Game->GameStorage, &Game->Assets->TestSkeleton);    
+    //Player->AnimationController.PlayingAnimation.Clip = &Game->Assets->TestAnimation;
+    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Color, &Game->Assets->PlayerMesh, Player);
     
     world_entity* Entity = GetEntity(Game, Player->EntityID);    
     
     Entity->Collider.Type = COLLIDER_TYPE_VERTICAL_CAPSULE;
     Entity->Collider.VerticalCapsule.P = {};
-    Entity->Collider.VerticalCapsule.Radius = 1.0f;
-    Entity->Collider.VerticalCapsule.Height = 1.0f;    
+    Entity->Collider.VerticalCapsule.Radius = Radius;
+    Entity->Collider.VerticalCapsule.Height = Height;    
 }
 
 world_entity_id 
@@ -346,7 +346,7 @@ GetWorldSpaceVerticalCapsule(vertical_capsule Capsule, sqt Transform)
     
     vertical_capsule Result;
     Result.P = TransformV3(Capsule.P, Transform);
-    Result.Radius = Capsule.Radius * MaximumF32(Transform.Scale.x, Transform.Scale.y)*0.5f;
+    Result.Radius = Capsule.Radius * MaximumF32(Transform.Scale.x, Transform.Scale.y);
     Result.Height = Capsule.Height * Transform.Scale.z;
     return Result;
 }
@@ -849,6 +849,7 @@ UpdateWorld(game* Game)
     
     player* Player = (player*)PlayerEntity->UserData;
     
+#if 0 
     animation_controller* Controller = &Player->AnimationController;
     playing_animation* PlayingAnimation = &Controller->PlayingAnimation;    
     skeleton* Skeleton = Controller->Skeleton;
@@ -879,7 +880,7 @@ UpdateWorld(game* Game)
         PlayingAnimation->t = 0.0;    
     
     GenerateGlobalPoses(Controller);
-    
+#endif
     ASSERT(BestPointZ != -FLT_MAX);    
     PlayerEntity->Position.z = BestPointZ;                        
     

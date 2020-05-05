@@ -7,7 +7,7 @@
 #include "assets.cpp"
 #include "graphics.cpp"
 
-#define PLAYER_RADIUS 0.35f
+#define PLAYER_RADIUS 0.3f
 #define PLAYER_HEIGHT 1.0f
 
 PUZZLE_COMPLETE_CALLBACK(DespawnWallCompleteCallback)
@@ -39,6 +39,7 @@ EXPORT GAME_TICK(Tick)
     
     Global_Platform = Platform;        
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
+    SetGlobalErrorStream(Global_Platform->ErrorStream);
     
     if(!Game->Initialized)
     {        
@@ -49,16 +50,18 @@ EXPORT GAME_TICK(Tick)
         Game->PlayerHeight = 1.0f;        
         
         Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
+        Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "TestPlayerMesh.fbx");
         
+#if 0 
         Game->Assets->TestSkeletonMesh = LoadGraphicsMesh(Game->Assets, "TestSkeleton.fbx");
         Game->Assets->TestSkeleton = LoadSkeleton(Game->Assets, "TestSkeleton.fbx");
         Game->Assets->TestAnimation = LoadAnimation(Game->Assets, "TestAnimation.fbx");
-        
+#endif
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {
             world* World = GetWorld(Game, WorldIndex);
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
-            CreatePlayer(Game, WorldIndex, V3(0.0f, 0.0f, 1.0f), PLAYER_RADIUS, PLAYER_HEIGHT, Blue());            
+            CreatePlayer(Game, WorldIndex, V3(0.0f, 0.0f, 1.0f), PLAYER_RADIUS, PLAYER_HEIGHT, WorldIndex == 0 ? Blue() : Red());            
             
             world_entity* PlayerEntity = GetPlayerEntity(World);
             camera* Camera = &World->Camera;

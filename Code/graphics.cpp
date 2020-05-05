@@ -233,10 +233,14 @@ void PushWorldCommands(graphics* Graphics, world* World, camera* Camera)
         {                        
             if(Entity->Type == WORLD_ENTITY_TYPE_PLAYER)
             {
+#if 0 
                 player* Player = (player*)Entity->UserData;
                 animation_controller* AnimationController = &Player->AnimationController;                
                 PushDrawShadedColoredSkinningMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0, 
                                                   AnimationController->GlobalPoses, AnimationController->Skeleton->JointCount);
+#else
+                PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
+#endif
                 
             }
             else

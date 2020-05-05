@@ -229,13 +229,17 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
 }
 
 void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graphics, world* World, camera* Camera)
-{    
+{   
+    PushDepth(Graphics, true);    
+    
     PushWorldCommands(Graphics, World, Camera);            
     world_entity* PlayerEntity = GetPlayerEntity(World);
     
     c4 PlayerColor = Blue();    
     if(World == &Game->Worlds[1])
         PlayerColor = Red();
+    
+    PushDepth(Graphics, false);
     
     vertical_capsule VerticalCapsule = GetWorldSpaceVerticalCapsule(PlayerEntity);    
     DrawVerticalCapsule(Graphics, &DevContext->CapsuleMesh, VerticalCapsule.P, VerticalCapsule.Radius, VerticalCapsule.Height, PlayerColor);        
@@ -347,9 +351,7 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
     
     PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
     
-    PushClearColorAndDepth(Graphics, Black(), 1.0f);
-    PushDepth(Graphics, true);
-    
+    PushClearColorAndDepth(Graphics, Black(), 1.0f);    
     ///////////////////
     
     DevelopmentRenderWorld(DevContext, Game, Graphics, World, Camera);

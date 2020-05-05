@@ -155,8 +155,9 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     FbxGeometryElementNormal* ElementNormals = Mesh->GetElementNormal(0);
     BOOL_CHECK_AND_HANDLE(ElementNormals, "Mesh did not have any normals.");                        
     
-    BOOL_CHECK_AND_HANDLE(ElementNormals->GetMappingMode() == FbxGeometryElement::eByPolygonVertex,
-                          "Mapping mode for normals is not supported. Must be by polygon vertex.");                                                                              
+    FbxLayerElement::EMappingMode MappingMode = ElementNormals->GetMappingMode();
+    BOOL_CHECK_AND_HANDLE((MappingMode == FbxGeometryElement::eByPolygonVertex) || (MappingMode == FbxGeometryElement::eByControlPoint),
+                          "Mapping mode for normals is not supported. Must be by polygon vertex or control point.");                                                                              
     
     FbxLayerElement::EReferenceMode ReferenceMode = ElementNormals->GetReferenceMode();
     BOOL_CHECK_AND_HANDLE((ReferenceMode == FbxGeometryElement::eDirect) || (ReferenceMode == FbxGeometryElement::eIndexToDirect),
@@ -255,13 +256,22 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
             i32 ControlPointIndex = Mesh->GetPolygonVertex(PolygonIndex, VertexIndex);
             i32 NormalIndex = -1;
             
-            if(ReferenceMode == FbxGeometryElement::eDirect)
-            {                    
-                NormalIndex = VertexId;
-            }
-            else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)
+            if(MappingMode == FbxGeometryElement::eByPolygonVertex)
             {
-                NormalIndex = ElementNormals->GetIndexArray().GetAt(VertexId);
+                if(ReferenceMode == FbxGeometryElement::eDirect)                    
+                    NormalIndex = VertexId;                
+                else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)                
+                    NormalIndex = ElementNormals->GetIndexArray().GetAt(VertexId);                
+                INVALID_ELSE;
+            }
+            else if(MappingMode == FbxGeometryElement::eByControlPoint)
+            {
+                if(ReferenceMode == FbxGeometryElement::eDirect)
+                    NormalIndex = ControlPointIndex;
+                else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)
+                    NormalIndex = ElementNormals->GetIndexArray().GetAt(ControlPointIndex);
+                INVALID_ELSE;
+                    
             }
             INVALID_ELSE;
             
@@ -276,7 +286,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
             {
                 IndexData[VertexId] = HashTable.Table[HashTable.GetHashIndex(Entry)].Key.Index;
             }
-            else
+            else                
             {
                 if(JointsData)
                 {

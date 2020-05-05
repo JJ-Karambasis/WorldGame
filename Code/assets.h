@@ -63,13 +63,15 @@ struct assets
 {
     arena Storage;
     graphics* Graphics;
-    
+        
     mesh BoxGraphicsMesh;
+    mesh PlayerMesh;
+    
+#if 0 
     mesh TestSkeletonMesh;
-    skeleton TestSkeleton;
-    
+    skeleton TestSkeleton;    
     animation_clip TestAnimation;
-    
+#endif
     //animation_clip IdleAnimation;
     //animation_clip MovingAnimation;
     
