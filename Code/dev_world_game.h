@@ -53,6 +53,12 @@ struct game_information
     u64 MaxGJKIterations;
 };
 
+struct dev_mesh
+{
+    i64 MeshID;
+    u32 IndexCount;
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -73,6 +79,8 @@ struct dev_context
     
     dev_capsule_mesh CapsuleMesh;
     i64 BoxMesh;
+    
+    dev_mesh SphereMesh;
     
     void* PlatformData;
     b32 Initialized;

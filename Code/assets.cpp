@@ -9,61 +9,36 @@ mesh LoadGraphicsMesh(assets* Assets, char* File)
         Result.GDIHandle = Assets->Graphics->AllocateMesh(Assets->Graphics, Result.Vertices, GetVertexBufferSize(Result.VertexFormat, Result.VertexCount), Result.VertexFormat,
                                                           Result.Indices, GetIndexBufferSize(Result.IndexFormat, Result.IndexCount), Result.IndexFormat);
     }    
+    
+    ASSERT(IsAssetValid(&Result));
+    return Result;
+}
+
+walkable_mesh LoadWalkableMesh(assets* Assets, char* File)
+{
+    ASSERT(StringEquals(GetFileExtension(File), "fbx"));    
+    fbx_context FBX = FBX_LoadFile(File);
+    walkable_mesh Result = FBX_LoadFirstWalkableMesh(&FBX, &Assets->Storage);    
+    ASSERT(IsAssetValid(&Result));
     return Result;
 }
 
 skeleton LoadSkeleton(assets* Assets, char* File)
 {
-    ASSERT(StringEquals(GetFileExtension(File), "fbx"));
-    
+    ASSERT(StringEquals(GetFileExtension(File), "fbx"));    
     fbx_context FBX = FBX_LoadFile(File);
-    skeleton Result = FBX_LoadFirstSkeleton(&FBX, &Assets->Storage);
+    skeleton Result = FBX_LoadFirstSkeleton(&FBX, &Assets->Storage);    
+    ASSERT(IsAssetValid(&Result));
     return Result;
 }
 
 animation_clip LoadAnimation(assets* Assets, char* File)
 {
-    ASSERT(StringEquals(GetFileExtension(File), "fbx"));
-    
+    ASSERT(StringEquals(GetFileExtension(File), "fbx"));    
     fbx_context FBX = FBX_LoadFile(File);
-    animation_clip Result = FBX_LoadFirstAnimation(&FBX, &Assets->Storage);
+    animation_clip Result = FBX_LoadFirstAnimation(&FBX, &Assets->Storage);    
+    ASSERT(IsAssetValid(&Result));
     return Result;
-}
-
-triangle3D_mesh CreateBoxTriangleMesh(arena* Storage)
-{
-    triangle3D_mesh Result = {};
-    
-    Result.TriangleCount = 12;
-    Result.Triangles = PushArray(Storage, 12, triangle3D, Clear, 0);
-    
-    v3f Vertices[8] = 
-    {
-        V3(-0.5f, -0.5f, 1.0f),    
-        V3( 0.5f, -0.5f, 1.0f),
-        V3( 0.5f,  0.5f, 1.0f),
-        V3(-0.5f,  0.5f, 1.0f),
-        
-        V3( 0.5f, -0.5f, 0.0f),
-        V3(-0.5f, -0.5f, 0.0f),
-        V3(-0.5f,  0.5f, 0.0f),
-        V3( 0.5f,  0.5f, 0.0f)
-    };
-    
-    Result.Triangles[0]  = CreateTriangle3D(Vertices[0], Vertices[1], Vertices[2]);
-    Result.Triangles[1]  = CreateTriangle3D(Vertices[0], Vertices[2], Vertices[3]);
-    Result.Triangles[2]  = CreateTriangle3D(Vertices[1], Vertices[4], Vertices[7]);
-    Result.Triangles[3]  = CreateTriangle3D(Vertices[1], Vertices[7], Vertices[2]);
-    Result.Triangles[4]  = CreateTriangle3D(Vertices[4], Vertices[5], Vertices[6]);
-    Result.Triangles[5]  = CreateTriangle3D(Vertices[4], Vertices[6], Vertices[7]);
-    Result.Triangles[6]  = CreateTriangle3D(Vertices[5], Vertices[0], Vertices[3]);
-    Result.Triangles[7]  = CreateTriangle3D(Vertices[5], Vertices[3], Vertices[6]);
-    Result.Triangles[8]  = CreateTriangle3D(Vertices[3], Vertices[2], Vertices[7]);
-    Result.Triangles[9]  = CreateTriangle3D(Vertices[3], Vertices[7], Vertices[6]);
-    Result.Triangles[10] = CreateTriangle3D(Vertices[4], Vertices[1], Vertices[0]);
-    Result.Triangles[11] = CreateTriangle3D(Vertices[4], Vertices[0], Vertices[5]);
-    
-    return Result;    
 }
 
 audio 

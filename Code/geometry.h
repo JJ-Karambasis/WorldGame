@@ -183,10 +183,16 @@ struct triangle3D
     v3f P[3];        
 };
 
-struct triangle3D_mesh
+struct ellipsoid3D
 {
-    u32 TriangleCount;
-    triangle3D* Triangles;
+    v3f CenterP;
+    v3f Radius;
+};
+
+struct plane3D
+{        
+    v3f Normal;
+    f32 D;
 };
 
 //NOTE(EVERYONE): Inline 3D functions
@@ -236,6 +242,20 @@ inline triangle3D CreateTriangle3D(v3f P0, v3f P1, v3f P2)
     Result.P[0] = P0;
     Result.P[1] = P1;
     Result.P[2] = P2;
+    return Result;
+}
+
+inline plane3D CreatePlane3D(v3f P0, v3f P1, v3f P2)
+{
+    plane3D Result;    
+    Result.Normal = Normalize(Cross(P1-P0, P2-P0));    
+    Result.D = -(Result.Normal.x*P0.x + Result.Normal.y*P0.y + Result.Normal.z*P0.z);
+    return Result;
+}
+
+inline plane3D CreatePlane3D(v3f* P)
+{
+    plane3D Result = CreatePlane3D(P[0], P[1], P[2]);        
     return Result;
 }
 

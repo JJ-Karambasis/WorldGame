@@ -1,3 +1,5 @@
+#include "fbx.h"
+
 inline void 
 FBX_AddNode(node_list* List, FbxNode* Node)
 {
@@ -249,6 +251,8 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     {
         BOOL_CHECK_AND_HANDLE(Mesh->GetPolygonSize(PolygonIndex) == 3, "Mesh had a polygon that did not have 3 vertices. All polygons must be triangles.");
         
+        
+        v3f TriangleP[3];                           
         for(u32 VertexIndex = 0; VertexIndex < 3; VertexIndex++)
         {
             u32 VertexId = (PolygonIndex*3) + VertexIndex;
@@ -275,9 +279,10 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
             }
             INVALID_ELSE;
             
+            TriangleP[VertexIndex] = V3(ControlPoints[ControlPointIndex].Buffer());
             vertex_p3_n3 Vertex = 
             {
-                V3(ControlPoints[ControlPointIndex].Buffer()),
+                TriangleP[VertexIndex],
                 V3(ElementNormals->GetDirectArray().GetAt(NormalIndex).Buffer())
             };
             
@@ -306,7 +311,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
                 IndexData[VertexId] = VertexCount;                                    
                 VertexCount++;                                    
             }                                
-        }                            
+        }                                            
     }                                                
     
     Result.VertexCount = VertexCount;    
@@ -336,6 +341,44 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
         Result.IndexFormat = GRAPHICS_INDEX_FORMAT_32_BIT;
         Result.Indices = PushWriteArray(Storage, IndexData, IndexCount, u32, 0);
     }
+    
+    return Result;  
+    
+    handle_error:
+    return {};
+}
+
+walkable_mesh FBX_LoadFirstWalkableMesh(fbx_context* Context, arena* Storage)
+{
+    if(Context->MeshNodes.Count == 0)
+        return {};
+    
+    FbxNode* Node = Context->MeshNodes.Ptr[0];
+    
+    m4 Transform = M4(Node->EvaluateGlobalTransform());        
+    FbxMesh* Mesh = Node->GetMesh();
+    
+    u32 ControlPointCount = Mesh->GetControlPointsCount();
+    FbxVector4* ControlPoints = Mesh->GetControlPoints();                            
+    
+    walkable_mesh Result = {};    
+    
+    u32 PolygonCount = Mesh->GetPolygonCount();    
+    Result.TriangleCount = PolygonCount;
+    Result.Triangles = PushArray(Storage, PolygonCount, triangle3D, Clear, 0);
+    
+    for(u32 TriangleIndex = 0; TriangleIndex < Result.TriangleCount; TriangleIndex++)
+    {
+        BOOL_CHECK_AND_HANDLE(Mesh->GetPolygonSize(TriangleIndex) == 3, "Mesh had a polygon that did not have 3 vertices. All polygons must be triangles.");
+        
+        triangle3D* Triangle = Result.Triangles + TriangleIndex;
+        for(u32 VertexIndex = 0; VertexIndex < 3; VertexIndex++)
+        {
+            u32 VertexId = (TriangleIndex*3) + VertexIndex;           
+            i32 ControlPointIndex = Mesh->GetPolygonVertex(TriangleIndex, VertexIndex);            
+            Triangle->P[VertexIndex] = V3(V4(V3(ControlPoints[ControlPointIndex].Buffer()), 1.0f)*Transform);            
+        }                                    
+    }                                                
     
     return Result;  
     

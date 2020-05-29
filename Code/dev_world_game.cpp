@@ -19,6 +19,17 @@ void DrawBoxMinMax(graphics* Graphics, i64 BoxMesh, v3f Min, v3f Max, c4 Color)
     DrawBox(Graphics, BoxMesh, P, Dim, Color);    
 }
 
+void DrawEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, v3f CenterP, v3f Radius, c4 Color)
+{
+    m4 Model = TransformM4(CenterP, Radius);
+    PushDrawLineMesh(Graphics, SphereMesh->MeshID, Model, Color, SphereMesh->IndexCount, 0, 0); 
+}
+
+void DrawEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, ellipsoid3D Ellipsoid, c4 Color)
+{
+    DrawEllipsoid(Graphics, SphereMesh, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
+}
+
 void DrawVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, v3f P, f32 Radius, f32 Height, c4 Color)
 {
     v3f BottomPosition = V3(P.xy, P.z + Radius);
@@ -80,7 +91,7 @@ dev_capsule_mesh CreateDevCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
     vertex_p3* VertexData = PushArray(VertexCount, vertex_p3, Clear, 0);
     u16* IndexData = PushArray(IndexCount, u16, Clear, 0); 
     
-    vertex_p3* VertexAt = (vertex_p3*)VertexData;
+    vertex_p3* VertexAt = VertexData;
     
     f32 Radians;
     Radians = 0.0f;        
@@ -124,6 +135,43 @@ dev_capsule_mesh CreateDevCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
     Result.MeshID = Graphics->AllocateMesh(Graphics, VertexData, VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
                                            IndexData, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
     
+    return Result;
+}
+
+dev_mesh CreateDevSphereMesh(graphics* Graphics, u16 CircleSampleCount)
+{
+    dev_mesh Result = {};
+    
+    u32 VertexCount = CircleSampleCount*3;
+    u32 IndexCount = VertexCount*2;
+    f32 CircleSampleIncrement = (2.0f*PI)/(f32)CircleSampleCount;            
+    
+    vertex_p3* VertexData = PushArray(VertexCount, vertex_p3, Clear, 0);
+    u16* IndexData = PushArray(IndexCount, u16, Clear, 0);
+    
+    vertex_p3* VertexAt = VertexData;
+    
+    f32 Radians;
+    Radians = 0.0f;        
+    for(u32 SampleIndex = 0; SampleIndex < CircleSampleCount; SampleIndex++, Radians += CircleSampleIncrement)
+        *VertexAt++ = {V3(Cos(Radians), Sin(Radians), 0.0f)};
+    
+    Radians = 0.0;
+    for(u32 SampleIndex = 0; SampleIndex < CircleSampleCount; SampleIndex++, Radians += CircleSampleIncrement)                
+        *VertexAt++ = {V3(0.0f, Cos(Radians), Sin(Radians))};
+    
+    Radians = 0.0f;
+    for(u32 SampleIndex = 0; SampleIndex < CircleSampleCount; SampleIndex++, Radians += CircleSampleIncrement)
+        *VertexAt++ = {V3(Cos(Radians), 0.0f, Sin(Radians))};        
+    
+    u16* IndicesAt = IndexData;
+    PopulateCircleIndices(&IndicesAt, 0, CircleSampleCount);
+    PopulateCircleIndices(&IndicesAt, CircleSampleCount, CircleSampleCount);
+    PopulateCircleIndices(&IndicesAt, CircleSampleCount*2, CircleSampleCount);
+    
+    Result.MeshID = Graphics->AllocateMesh(Graphics, VertexData, VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
+                                           IndexData, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
+    Result.IndexCount = IndexCount;
     return Result;
 }
 
@@ -190,7 +238,7 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     //ImGui::ShowDemoWindow(&demo_window);
     
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/5.0f, (f32)Graphics->RenderDim.y));    
+    ImGui::SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/4.0f, (f32)Graphics->RenderDim.y));    
     
     local bool open = true;
     ImGui::Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse);    
@@ -219,6 +267,12 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     if(ImGui::CollapsingHeader("Game Information"))
     {
         game_information* GameInformation = &DevContext->GameInformation;
+        
+        v3f PlayerPosition0 = GetPlayerPosition(Game, &Game->Worlds[0].Player);
+        v3f PlayerPosition1 = GetPlayerPosition(Game, &Game->Worlds[1].Player);
+        
+        ImGui::Text("Player 0 Position: (%.2f, %.2f, %.2f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
+        ImGui::Text("Player 1 Position: (%.2f, %.2f, %.2f)", PlayerPosition1.x, PlayerPosition1.y, PlayerPosition1.z);
         ImGui::Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
         ImGui::Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
     }
@@ -232,8 +286,9 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
 {   
     PushDepth(Graphics, true);    
     
-    PushWorldCommands(Graphics, World, Camera);            
+    PushWorldCommands(Graphics, World, Camera);                
     world_entity* PlayerEntity = GetPlayerEntity(World);
+    player* Player = (player*)PlayerEntity->UserData;
     
     c4 PlayerColor = Blue();    
     if(World == &Game->Worlds[1])
@@ -241,8 +296,8 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     
     PushDepth(Graphics, false);
     
-    vertical_capsule VerticalCapsule = GetWorldSpaceVerticalCapsule(PlayerEntity);    
-    DrawVerticalCapsule(Graphics, &DevContext->CapsuleMesh, VerticalCapsule.P, VerticalCapsule.Radius, VerticalCapsule.Height, PlayerColor);        
+    ellipsoid3D Ellipsoid = GetPlayerEllipsoid(Game, Player);
+    DrawEllipsoid(Graphics, &DevContext->SphereMesh, Ellipsoid, PlayerColor);
     
     PushCull(Graphics, false);
     
@@ -446,6 +501,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         AllocateImGuiFont(Graphics);                
         DevContext->CapsuleMesh = CreateDevCapsuleMesh(Graphics, 60);
         DevContext->BoxMesh = CreateDevBoxMesh(Graphics);
+        DevContext->SphereMesh = CreateDevSphereMesh(Graphics, 60);
         
         SetMemoryI64(DevContext->ImGuiMeshes, -1, sizeof(DevContext->ImGuiMeshes));
         

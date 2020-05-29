@@ -1,8 +1,6 @@
 #include "win32_world_game.h"
 #include "audio.cpp"
 #include "geometry.cpp"
-#include "fbx.cpp"
-#include "assets.cpp"
 #include "animation.cpp"
 #include "world.cpp"
 
@@ -599,8 +597,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     
     assets Assets = {};
     Assets.Storage = CreateArena(MEGABYTE(64));
-    
-    Assets.BoxTriangleMesh = CreateBoxTriangleMesh(&Assets.Storage);    
     
     string EXEFilePathName = Win32_GetExePathWithName();
     string EXEFilePath = GetFilePath(EXEFilePathName);    

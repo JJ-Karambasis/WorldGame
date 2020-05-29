@@ -1,12 +1,49 @@
 #include "gjk.cpp"
 
-b32 IsTriangle2DClockwise(v2f P0, v2f P1, v2f P2)
+f32 SignedDistance(v3f P, plane3D Plane)
 {
-    f32 Det = P0.x*(P1.y-P2.y) - P0.y*(P1.x-P2.x) + (P1.x*P2.y - P1.y*P2.x);
-    ASSERT(Det != 0.0f);
-    
+    f32 Result = Dot(P, Plane.Normal) + Plane.D;
+    return Result;
+}
+
+b32 IsTriangle2DCW(v2f P0, v2f P1, v2f P2)
+{
+    f32 Det = P0.x*(P1.y-P2.y) - P0.y*(P1.x-P2.x) + (P1.x*P2.y - P1.y*P2.x);        
     b32 Result = Det < 0.0f;
     return Result;    
+}
+
+b32 IsTriangle2DCCW(v2f P0, v2f P1, v2f P2)
+{
+    f32 Det = P0.x*(P1.y-P2.y) - P0.y*(P1.x-P2.x) + (P1.x*P2.y - P1.y*P2.x);        
+    b32 Result = Det > 0.0f;
+    return Result;    
+}
+
+b32 IsTriangle3DCW(v3f P0, v3f P1, v3f P2)
+{
+    f32 Det = Determinant(P0, P1, P2);
+    b32 Result = Det < 0.0f;
+    return Result;
+}
+
+b32 IsTriangle3DCCW(v3f P0, v3f P1, v3f P2)
+{
+    f32 Det = Determinant(P0, P1, P2);
+    b32 Result = Det > 0.0f;
+    return Result;
+}
+
+b32 IsTriangle3DCW(v3f* P)
+{
+    b32 Result = IsTriangle3DCW(P[0], P[1], P[2]);    
+    return Result;
+}
+
+b32 IsTriangle3DCCW(v3f* P)
+{
+    b32 Result = IsTriangle3DCCW(P[0], P[1], P[2]);    
+    return Result;
 }
 
 f32 GetTriangleArea2D(v2f P0, v2f P1, v2f P2)
@@ -42,6 +79,48 @@ b32 IsPointInTriangle2D(triangle2D Triangle, v2f P)
 b32 IsPointInTriangle2D(triangle3D Triangle, v2f P)
 {
     b32 Result = IsPointInTriangle2D(Triangle.P[0].xy, Triangle.P[1].xy, Triangle.P[2].xy, P);
+    return Result;
+}
+
+b32 IsPointProjectedInTriangle3D(v3f P0, v3f P1, v3f P2, v3f P)
+{
+    //NOTE(EVERYONE): Got this weird ass function from https://www.peroxide.dk/papers/collision/collision.pdf in Appendix C
+    
+#define WEIRD_DEFINE(a) ((u32&)a)
+    
+    v3f E1 = P1-P0;
+    v3f E2 = P2-P0;
+    
+    f32 a = SquareMagnitude(E1);
+    f32 b = Dot(E1, E2);
+    f32 c = SquareMagnitude(E2);
+    
+    f32 ac_bb = (a*c)-(b*b);
+    
+    v3f V = V3(P.x-P0.x, P.y-P0.y, P.z-P0.z);
+    
+    f32 d = Dot(V, E1);
+    f32 e = Dot(V, E2);
+    
+    f32 x = (d*c)-(e*b);
+    f32 y = (e*a)-(d*b);
+    f32 z = x+y - ac_bb;
+    
+    b32 Result = ((WEIRD_DEFINE(z)& ~(WEIRD_DEFINE(x)|WEIRD_DEFINE(y))) & 0x80000000);
+    return Result;
+    
+#undef WEIRD_DEFINE
+}
+
+b32 IsPointProjectedInTriangle3D(v3f* Triangle, v3f P)
+{
+    b32 Result = IsPointProjectedInTriangle3D(Triangle[0], Triangle[1], Triangle[2], P);
+    return Result;
+}
+
+b32 IsPointProjectedInTriangle3D(triangle3D Triangle, v3f P)
+{
+    b32 Result = IsPointProjectedInTriangle3D(Triangle.P, P);
     return Result;
 }
 

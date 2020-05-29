@@ -12,7 +12,6 @@
 #include "camera.h"
 #include "animation.h"
 #include "world.h"
-#include "fbx.h"
 
 struct goal_rect
 {
@@ -49,10 +48,7 @@ struct game
     f32 dt;
     u32 CurrentWorldIndex;
     
-    world Worlds[2];        
-    f32 PlayerRadius;
-    f32 PlayerHeight;
-    
+    world Worlds[2];                
     block_puzzle TestPuzzle;
 };
 

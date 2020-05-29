@@ -26,6 +26,27 @@ struct mesh
     i64 GDIHandle;
 };
 
+inline b32 IsAssetValid(mesh* Mesh)
+{
+    b32 Result = (Mesh->Vertices && Mesh->Indices && 
+                  (Mesh->VertexFormat != GRAPHICS_VERTEX_FORMAT_UNKNOWN) && 
+                  (Mesh->IndexFormat != GRAPHICS_INDEX_FORMAT_UNKNOWN) &&
+                  Mesh->VertexCount && Mesh->IndexCount);
+    return Result;
+}
+
+struct walkable_mesh
+{
+    u32 TriangleCount;
+    triangle3D* Triangles;
+};
+
+inline b32 IsAssetValid(walkable_mesh* Mesh)
+{
+    b32 Result = (Mesh->TriangleCount && Mesh->Triangles);
+    return Result;
+}
+
 #define NO_PARENT_JOINT (u8)-1
 struct joint
 {
@@ -38,6 +59,12 @@ struct skeleton
     joint* Joints;
     u32 JointCount;
 };
+
+inline b32 IsAssetValid(skeleton* Skeleton)
+{
+    b32 Result = (Skeleton->JointCount && Skeleton->Joints);
+    return Result;
+}
 
 struct joint_pose
 {
@@ -59,12 +86,20 @@ struct animation_clip
     animation_frame* Frames;        
 };
 
+inline b32 IsAssetValid(animation_clip* Clip)
+{
+    b32 Result = (Clip->JointCount && Clip->FrameCount && Clip->Frames);
+    return Result;
+}
+
 struct assets
 {
     arena Storage;
     graphics* Graphics;
-        
+    
     mesh BoxGraphicsMesh;
+    walkable_mesh BoxWalkableMesh;
+    
     mesh PlayerMesh;
     
 #if 0 
@@ -74,8 +109,7 @@ struct assets
 #endif
     //animation_clip IdleAnimation;
     //animation_clip MovingAnimation;
-    
-    triangle3D_mesh BoxTriangleMesh;
+        
     audio TestAudio;
 };
 

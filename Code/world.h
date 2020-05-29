@@ -100,11 +100,12 @@ struct pushing_state
 };
 
 struct player
-{
-    world_entity_id EntityID;    
+{    
+    world_entity_id EntityID;
+    v3f Radius;
     player_state State;
     pushing_state Pushing;        
-    animation_controller AnimationController;    
+    animation_controller AnimationController;        
 };
 
 struct blocker
