@@ -236,6 +236,13 @@ GetPlayerEllipsoid(game* Game, player* Player)
     return Result;
 }
 
+void SetPlayerEllipsoidP(game* Game, player* Player, v3f CenterP)
+{
+    world_entity* PlayerEntity = GetEntity(Game, Player->EntityID);
+    f32 ZDim = Player->Radius.z * PlayerEntity->Scale.z;    
+    PlayerEntity->Position = V3(CenterP.xy, CenterP.z - ZDim);    
+}
+
 world_entity_id 
 CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Dim, c4 Color)
 {
@@ -626,6 +633,264 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
     return Result;
 }
 
+struct time_result
+{    
+    v3f ContactPoint;    
+    f32 t;
+    v3f Normal;    
+    b32 Intersected;    
+};
+
+b32 SolveSphereSweepRoot(f32 a, f32 b, f32 c, f32 tCurrent, f32* tOut)
+{    
+    quadratic_equation_result RootSolver = SolveQuadraticEquation(a, b, c);
+    if(RootSolver.RootCount > 0)
+    {
+        if((RootSolver.RootCount == 1))
+        {
+            if((RootSolver.Roots[0] > 0.0f) && (RootSolver.Roots[0] < tCurrent))                                                
+            {
+                *tOut = RootSolver.Roots[0];
+                return true;
+            }
+        }
+        else
+        {
+            if(RootSolver.Roots[0] > RootSolver.Roots[1])
+                SWAP(RootSolver.Roots[0], RootSolver.Roots[1]);
+            
+            if((RootSolver.Roots[0] > 0) && (RootSolver.Roots[0] < tCurrent))
+            {
+                *tOut = RootSolver.Roots[0];
+                return true;
+            }
+            
+            if((RootSolver.Roots[1] > 0) && (RootSolver.Roots[1] < tCurrent))
+            {
+                *tOut = RootSolver.Roots[1];                                            
+                return true;
+            }
+        }                                                                                
+    }
+    
+    return false;
+}
+
+time_result HandleEllipsoidCollisions(world* World, assets* Assets, ellipsoid3D Ellipsoid, v3f MoveDelta)
+{   
+    time_result Result = {};
+    
+    v3f InvRadius = 1.0f/Ellipsoid.Radius;
+    
+    v3f ESpacePosition = Ellipsoid.CenterP*InvRadius;    
+    v3f ESpaceDelta = MoveDelta*InvRadius;    
+    
+    f32 tMin = INFINITY;
+    v3f ESpaceContactPoint = InvalidV3();
+    
+    triangle3D BestTriangle = {};
+    
+    FOR_EACH(TestEntity, &World->EntityPool)
+    {
+        if(TestEntity->Type == WORLD_ENTITY_TYPE_WALKABLE)
+        {
+            walkable_mesh* TriangleMesh = &Assets->BoxWalkableMesh;
+            
+            for(u32 TriangleIndex = 0; TriangleIndex < TriangleMesh->TriangleCount; TriangleIndex++)
+            {   
+                //NOTE(EVERYONE): Please see https://www.peroxide.dk/papers/collision/collision.pdf for the algorithm
+                triangle3D Triangle = TransformTriangle3D(TriangleMesh->Triangles[TriangleIndex], TestEntity->Transform);
+                
+                v3f ESpaceTriangle[3] = 
+                {
+                    Triangle.P[0]*InvRadius, 
+                    Triangle.P[1]*InvRadius,
+                    Triangle.P[2]*InvRadius
+                };
+                
+                plane3D ESpaceTrianglePlane = CreatePlane3D(ESpaceTriangle);    
+                
+                if(Dot(ESpaceTrianglePlane.Normal, Normalize(ESpaceDelta)) <= 0.0f)
+                {                                        
+                    f32 Denominator = Dot(ESpaceTrianglePlane.Normal, ESpaceDelta);                            
+                    f32 SignedDistanceToPlane = SignedDistance(ESpacePosition, ESpaceTrianglePlane);
+                    
+                    f32 t0, t1;
+                    
+                    b32 IsEmbedded = false;
+                    if(Denominator == 0)
+                    {
+                        if(Abs(SignedDistanceToPlane) >= 1.0f)
+                            continue;                                                                
+                        
+                        t0 = 0.0f;
+                        t1 = 1.0f;
+                        IsEmbedded = true;
+                    }
+                    else
+                    {
+                        f32 InvDenominator = 1.0f/Denominator;
+                        t0 =  ( 1.0f - SignedDistanceToPlane)*InvDenominator;
+                        t1 =  (-1.0f - SignedDistanceToPlane)*InvDenominator;                                            
+                        
+                        if(t0 > t1) SWAP(t0, t1);                                            
+                        
+                        if(t0 > 1.0f || t1 < 0.0f)
+                            continue;                                            
+                        
+                        t0 = SaturateF32(t0);
+                        t1 = SaturateF32(t1);                                                                                        
+                    }
+                    
+                    b32 FoundCollision = false;
+                    
+                    b32 HasIntersected = false;
+                    v3f IntersectionPoint = InvalidV3();
+                    f32 t = 1.0f;
+                    
+                    if(!IsEmbedded)
+                    {
+                        v3f PlaneIntersectionPoint = (ESpacePosition - ESpaceTrianglePlane.Normal) + t0*ESpaceDelta;
+                        if(IsPointProjectedInTriangle3D(ESpaceTriangle, PlaneIntersectionPoint))
+                        {
+                            IntersectionPoint = PlaneIntersectionPoint;
+                            t = t0;
+                            HasIntersected = true;
+                        }
+                    }
+                    
+                    if(!HasIntersected)
+                    {
+                        f32 ESpaceDeltaSqrLength = SquareMagnitude(ESpaceDelta);
+                        
+                        //NOTE(EVERYONE): Perform a sphere sweep test against the vertices
+                        {
+                            f32 tVertex;                                        
+                            f32 a = ESpaceDeltaSqrLength;
+                            
+                            f32 b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[0]));
+                            f32 c = SquareMagnitude(ESpaceTriangle[0]-ESpacePosition) - 1.0f;                                                                        
+                            if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
+                            {
+                                IntersectionPoint = ESpaceTriangle[0];
+                                t = tVertex;                                        
+                                HasIntersected = true;
+                            }
+                            
+                            b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[1]));
+                            c = SquareMagnitude(ESpaceTriangle[1]-ESpacePosition) - 1.0f;
+                            if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
+                            {
+                                IntersectionPoint = ESpaceTriangle[1];
+                                t = tVertex;
+                                HasIntersected = true;
+                            }
+                            
+                            b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[2]));
+                            c = SquareMagnitude(ESpaceTriangle[2]-ESpacePosition)-1.0f;
+                            if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
+                            {
+                                IntersectionPoint = ESpaceTriangle[2];
+                                t = tVertex;
+                                HasIntersected = true;
+                            }
+                        }                                    
+                        
+                        //NOTE(EVERYONE): Perform a sphere sweep test against the edges
+                        {
+                            f32 tEdge;
+                            
+                            v3f Edge = ESpaceTriangle[1]-ESpaceTriangle[0];
+                            v3f BaseToVertex = ESpaceTriangle[0] - ESpacePosition;
+                            
+                            f32 EdgeSqrLength = SquareMagnitude(Edge);
+                            f32 EdgeDotVelocity = Dot(Edge, ESpaceDelta);
+                            f32 EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
+                            
+                            f32 a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
+                            f32 b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
+                            f32 c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);
+                            
+                            if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
+                            {
+                                f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
+                                if((f >= 0.0f) && (f <= 1.0f))
+                                {
+                                    IntersectionPoint = ESpaceTriangle[0] + f*Edge;
+                                    t = tEdge;
+                                    HasIntersected = true;
+                                }
+                            }
+                            
+                            Edge = ESpaceTriangle[2] - ESpaceTriangle[1];
+                            BaseToVertex = ESpaceTriangle[1] - ESpacePosition;
+                            
+                            EdgeSqrLength = SquareMagnitude(Edge);
+                            EdgeDotVelocity = Dot(Edge, ESpaceDelta);
+                            EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
+                            
+                            a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
+                            b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
+                            c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
+                            
+                            if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
+                            {
+                                f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
+                                if((f >= 0.0f) && (f <= 1.0f))
+                                {
+                                    IntersectionPoint = ESpaceTriangle[1] + f*Edge;
+                                    t = tEdge;
+                                    HasIntersected = true;
+                                }
+                            }
+                            
+                            Edge = ESpaceTriangle[0] - ESpaceTriangle[2];
+                            BaseToVertex = ESpaceTriangle[2] - ESpacePosition;
+                            
+                            EdgeSqrLength = SquareMagnitude(Edge);
+                            EdgeDotVelocity = Dot(Edge, ESpaceDelta);
+                            EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
+                            
+                            a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
+                            b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
+                            c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
+                            
+                            if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
+                            {
+                                f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
+                                if((f >= 0.0f) && (f <= 1.0f))
+                                {
+                                    IntersectionPoint = ESpaceTriangle[2] + f*Edge;
+                                    t = tEdge;
+                                    HasIntersected = true;
+                                }
+                            }                                            
+                        }
+                    }
+                    
+                    if(HasIntersected && (tMin > t))
+                    {
+                        Result.Intersected = true;                                                
+                        tMin = t;
+                        ESpaceContactPoint = IntersectionPoint;
+                        BestTriangle = Triangle;
+                    }    
+                }                                                                
+            }
+        }                                        
+    }               
+    
+    if(Result.Intersected)
+    {
+        plane3D Plane = CreatePlane3D(BestTriangle);
+        Result.t = tMin;
+        Result.ContactPoint = ESpaceContactPoint*Ellipsoid.Radius;        
+        Result.Normal = Normalize(((ESpacePosition+ESpaceDelta*tMin) - ESpaceContactPoint)*InvRadius);        
+    }
+    
+    return Result;
+}
+
 #define APPLY_VELOCITY(Entity) \
 Entity->Velocity.xy += MoveAcceleration*dt; \
 Entity->Velocity.xy *= VelocityDamping
@@ -660,7 +925,7 @@ UpdateWorld(game* Game)
     player_state PlayerState = {};
     pushing_state Pushing = InitPushingState();
     
-    #define MOVE_DELTA_EPSILON 1e-4f    
+#define MOVE_DELTA_EPSILON 1e-4f    
     
     world* World = GetWorld(Game, Game->CurrentWorldIndex);         
     
@@ -907,41 +1172,6 @@ UpdateWorld(game* Game)
 }
 #endif
 
-b32 SolveSphereSweepRoot(f32 a, f32 b, f32 c, f32 tCurrent, f32* tOut)
-{    
-    quadratic_equation_result RootSolver = SolveQuadraticEquation(a, b, c);
-    if(RootSolver.RootCount > 0)
-    {
-        if((RootSolver.RootCount == 1))
-        {
-            if((RootSolver.Roots[0] > 0.0f) && (RootSolver.Roots[0] < tCurrent))                                                
-            {
-                *tOut = RootSolver.Roots[0];
-                return true;
-            }
-        }
-        else
-        {
-            if(RootSolver.Roots[0] > RootSolver.Roots[1])
-                SWAP(RootSolver.Roots[0], RootSolver.Roots[1]);
-            
-            if((RootSolver.Roots[0] > 0) && (RootSolver.Roots[0] < tCurrent))
-            {
-                *tOut = RootSolver.Roots[0];
-                return true;
-            }
-            
-            if((RootSolver.Roots[1] > 0) && (RootSolver.Roots[1] < tCurrent))
-            {
-                *tOut = RootSolver.Roots[1];                                            
-                return true;
-            }
-        }                                                                                
-    }
-    
-    return false;
-}
-
 void 
 UpdateWorld(game* Game)
 {        
@@ -971,10 +1201,8 @@ UpdateWorld(game* Game)
     player_state PlayerState = {};
     pushing_state Pushing = InitPushingState();
     
-#define MOVE_DELTA_EPSILON 1e-4f    
-    
     world* World = GetWorld(Game, Game->CurrentWorldIndex);         
-        
+    
     FOR_EACH(Entity, &World->EntityPool)
     {        
         switch(Entity->Type)
@@ -985,201 +1213,38 @@ UpdateWorld(game* Game)
                 player* Player = (player*)Entity->UserData;
                 
                 Entity->Velocity.xy += MoveAcceleration*dt; 
-                Entity->Velocity.xy *= VelocityDamping;
-                
+                Entity->Velocity *= VelocityDamping;                
                 v3f MoveDelta = Entity->Velocity*dt;   
-                if(SquareMagnitude(MoveDelta) > MOVE_DELTA_EPSILON)
-                {                    
-                    ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);
-                    v3f InvRadius = 1.0f/PlayerEllipsoid.Radius;
-                    
-                    for(u32 Iterations = 0; Iterations < 1; Iterations++)
-                    {                        
-                        f32 tMin = INFINITY;
-                        v3f ContactPoint = InvalidV3();
-                        
-                        FOR_EACH(TestEntity, &World->EntityPool)
-                        {
-                            if((TestEntity->Type == WORLD_ENTITY_TYPE_WALKABLE) && (TestEntity != Entity))
-                            {
-                                walkable_mesh* TriangleMesh = &Game->Assets->BoxWalkableMesh;
+                
+                ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);                
                                 
-                                for(u32 TriangleIndex = 0; TriangleIndex < TriangleMesh->TriangleCount; TriangleIndex++)
-                                {   
-                                    //NOTE(EVERYONE): Please see https://www.peroxide.dk/papers/collision/collision.pdf for the algorithm
-                                    triangle3D Triangle = TransformTriangle3D(TriangleMesh->Triangles[TriangleIndex], TestEntity->Transform);
-                                    
-                                    v3f ESpaceTriangle[3] = 
-                                    {
-                                        Triangle.P[0]*InvRadius, 
-                                        Triangle.P[1]*InvRadius,
-                                        Triangle.P[2]*InvRadius
-                                    };
-                                    
-                                    plane3D TrianglePlane = CreatePlane3D(ESpaceTriangle);    
-                                    
-                                    if(Dot(TrianglePlane.Normal, Normalize(MoveDelta)) <= 0.0f)
-                                    {                                        
-                                        f32 Denominator = Dot(TrianglePlane.Normal, MoveDelta);                            
-                                        f32 SignedDistanceToPlane = SignedDistance(PlayerEllipsoid.CenterP, TrianglePlane);
-                                        
-                                        f32 t0, t1;
-                                        
-                                        b32 IsEmbedded = false;
-                                        if(Denominator == 0)
-                                        {
-                                            if(Abs(SignedDistanceToPlane) >= 1.0f)
-                                                continue;                                                                
-                                            
-                                            t0 = 0.0f;
-                                            t1 = 1.0f;
-                                            IsEmbedded = true;
-                                        }
-                                        else
-                                        {
-                                            f32 InvDenominator = 1.0f/Denominator;
-                                            t0 =  ( 1.0f - SignedDistanceToPlane)*InvDenominator;
-                                            t1 =  (-1.0f - SignedDistanceToPlane)*InvDenominator;
-                                        }
-                                        
-                                        if(!IsRangeInInterval(0.0f, 1.0f, t0, t1))
-                                            continue;
-                                        
-                                        ASSERT(t0 < t1);
-                                        ASSERT(t0 >= 0.0f);
-                                        ASSERT(t1 <= 1.0f);                                
-                                        
-                                        b32 FoundCollision = false;
-                                        
-                                        v3f IntersectionPoint = InvalidV3();
-                                        f32 t = INFINITY;
-                                        
-                                        if(!IsEmbedded)
-                                        {
-                                            v3f PlaneIntersectionPoint = (PlayerEllipsoid.CenterP - TrianglePlane.Normal) + t0*MoveDelta;
-                                            if(IsPointProjectedInTriangle3D(ESpaceTriangle, PlaneIntersectionPoint))
-                                            {
-                                                IntersectionPoint = PlaneIntersectionPoint;
-                                                t = t0;
-                                            }
-                                        }
-                                        
-                                        if(t == INFINITY)
-                                        {
-                                            f32 MoveDeltaSqrLength = SquareMagnitude(MoveDelta);
-                                            
-                                            //NOTE(EVERYONE): Perform a sphere sweep test against the vertices
-                                            {
-                                                f32 tVertex;                                        
-                                                f32 a = MoveDeltaSqrLength;
-                                                
-                                                f32 b = 2.0f*(Dot(MoveDelta, PlayerEllipsoid.CenterP-ESpaceTriangle[0]));
-                                                f32 c = SquareMagnitude(ESpaceTriangle[0]-PlayerEllipsoid.CenterP) - 1.0f;                                                                        
-                                                if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                                                {
-                                                    IntersectionPoint = ESpaceTriangle[0];
-                                                    t = tVertex;                                        
-                                                }
-                                                
-                                                b = 2.0f*(Dot(MoveDelta, PlayerEllipsoid.CenterP-ESpaceTriangle[1]));
-                                                c = SquareMagnitude(ESpaceTriangle[1]-PlayerEllipsoid.CenterP) - 1.0f;
-                                                if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                                                {
-                                                    IntersectionPoint = ESpaceTriangle[1];
-                                                    t = tVertex;
-                                                }
-                                                
-                                                b = 2.0f*(Dot(MoveDelta, PlayerEllipsoid.CenterP-ESpaceTriangle[2]));
-                                                c = SquareMagnitude(ESpaceTriangle[2]-PlayerEllipsoid.CenterP)-1.0f;
-                                                if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                                                {
-                                                    IntersectionPoint = ESpaceTriangle[2];
-                                                    t = tVertex;
-                                                }
-                                            }                                    
-                                            
-                                            //NOTE(EVERYONE): Perform a sphere sweep test against the edges
-                                            {
-                                                f32 tEdge;
-                                                
-                                                v3f Edge = ESpaceTriangle[1]-ESpaceTriangle[0];
-                                                v3f BaseToVertex = ESpaceTriangle[0] - PlayerEllipsoid.CenterP;
-                                                
-                                                f32 EdgeSqrLength = SquareMagnitude(Edge);
-                                                f32 EdgeDotVelocity = Dot(Edge, MoveDelta);
-                                                f32 EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                                                
-                                                f32 a = (EdgeSqrLength * -MoveDeltaSqrLength) + Square(EdgeDotVelocity);
-                                                f32 b = (EdgeSqrLength * 2*Dot(MoveDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                                                f32 c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);
-                                                
-                                                if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                                                {
-                                                    f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                                                    if((f >= 0.0f) && (f <= 1.0f))
-                                                    {
-                                                        IntersectionPoint = ESpaceTriangle[0] + f*Edge;
-                                                        t = tEdge;
-                                                    }
-                                                }
-                                                
-                                                Edge = ESpaceTriangle[2] - ESpaceTriangle[1];
-                                                BaseToVertex = ESpaceTriangle[1] - PlayerEllipsoid.CenterP;
-                                                
-                                                EdgeSqrLength = SquareMagnitude(Edge);
-                                                EdgeDotVelocity = Dot(Edge, MoveDelta);
-                                                EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                                                
-                                                a = (EdgeSqrLength * -MoveDeltaSqrLength) + Square(EdgeDotVelocity);
-                                                b = (EdgeSqrLength * 2*Dot(MoveDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                                                c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
-                                                
-                                                if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                                                {
-                                                    f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                                                    if((f >= 0.0f) && (f <= 1.0f))
-                                                    {
-                                                        IntersectionPoint = ESpaceTriangle[1] + f*Edge;
-                                                        t = tEdge;
-                                                    }
-                                                }
-                                                
-                                                Edge = ESpaceTriangle[0] - ESpaceTriangle[2];
-                                                BaseToVertex = ESpaceTriangle[2] - PlayerEllipsoid.CenterP;
-                                                
-                                                EdgeSqrLength = SquareMagnitude(Edge);
-                                                EdgeDotVelocity = Dot(Edge, MoveDelta);
-                                                EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                                                
-                                                a = (EdgeSqrLength * -MoveDeltaSqrLength) + Square(EdgeDotVelocity);
-                                                b = (EdgeSqrLength * 2*Dot(MoveDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                                                c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
-                                                
-                                                if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                                                {
-                                                    f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                                                    if((f >= 0.0f) && (f <= 1.0f))
-                                                    {
-                                                        IntersectionPoint = ESpaceTriangle[1] + f*Edge;
-                                                        t = tEdge;
-                                                    }
-                                                }                                            
-                                            }
-                                        }
-                                                                                
-                                        if(tMin > t)
-                                        {
-                                            tMin = t;
-                                            ContactPoint = IntersectionPoint;
-                                        }    
-                                    }                                                                
-                                }
-                            }                                        
-                        }   
+                for(u32 Iterations = 0; Iterations < 4; Iterations++)
+                {   
+                    DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
+                    
+#define MOVE_DELTA_EPSILON 1e-4f                        
+                    if(SquareMagnitude(MoveDelta) <= MOVE_DELTA_EPSILON)
+                        break;                                                            
+                    
+                    time_result CollisionResult = HandleEllipsoidCollisions(World, Game->Assets, PlayerEllipsoid, MoveDelta);
+                    if(CollisionResult.Intersected)
+                    {
+                        v3f TargetPosition = PlayerEllipsoid.CenterP + MoveDelta;
                         
-                        Entity->Position += MoveDelta;
-                    }                    
+                        PlayerEllipsoid.CenterP += (MoveDelta*CollisionResult.t);
+                        PlayerEllipsoid.CenterP += (CollisionResult.Normal*1e-5f);
+                        MoveDelta = TargetPosition - PlayerEllipsoid.CenterP;
+                        MoveDelta -= Dot(MoveDelta, CollisionResult.Normal)*CollisionResult.Normal;
+                        Entity->Velocity -= Dot(Entity->Velocity, CollisionResult.Normal)*CollisionResult.Normal;
+                    }
+                    else
+                    {
+                        PlayerEllipsoid.CenterP += MoveDelta;
+                        break;                                                            
+                    }
                 }
+                
+                SetPlayerEllipsoidP(Game, Player, PlayerEllipsoid.CenterP);                
             } break;                        
         }                        
     }    

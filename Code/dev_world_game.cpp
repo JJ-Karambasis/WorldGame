@@ -11,6 +11,11 @@ void DrawBox(graphics* Graphics, i64 BoxMesh, v3f P, v3f Dim, c4 Color)
     PushDrawLineMesh(Graphics, BoxMesh, Model, Color, DEBUG_BOX_INDICES_COUNT, 0, 0);        
 }
 
+void DrawPoint(graphics* Graphics, i64 BoxMesh, v3f P, c4 Color)
+{
+    DrawBox(Graphics, BoxMesh, P, V3(0.05f), Color);
+}
+
 #define DEBUG_BOX_INDICES_COUNT 24
 void DrawBoxMinMax(graphics* Graphics, i64 BoxMesh, v3f Min, v3f Max, c4 Color)
 {   
@@ -298,6 +303,13 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     
     ellipsoid3D Ellipsoid = GetPlayerEllipsoid(Game, Player);
     DrawEllipsoid(Graphics, &DevContext->SphereMesh, Ellipsoid, PlayerColor);
+    
+    for(u32 PointIndex = 0; PointIndex < DevContext->DebugPointCount; PointIndex++)
+    {
+        debug_point* Point = DevContext->DebugPoints + PointIndex;
+        DrawPoint(Graphics, DevContext->BoxMesh, Point->P, Point->Color);
+    }
+    DevContext->DebugPointCount = 0;
     
     PushCull(Graphics, false);
     

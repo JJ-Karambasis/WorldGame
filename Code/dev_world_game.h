@@ -18,6 +18,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
+#define DEBUG_DRAW_POINT(position, color) ASSERT(__Internal_Dev_Context__->DebugPointCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugPoints)); __Internal_Dev_Context__->DebugPoints[__Internal_Dev_Context__->DebugPointCount++] = {position, color}
 
 #include "imgui/imgui.h"
 
@@ -59,6 +60,12 @@ struct dev_mesh
     u32 IndexCount;
 };
 
+struct debug_point
+{
+    v3f P;
+    c4 Color;
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -79,6 +86,9 @@ struct dev_context
     
     dev_capsule_mesh CapsuleMesh;
     i64 BoxMesh;
+    
+    u32 DebugPointCount;
+    debug_point DebugPoints[2048];
     
     dev_mesh SphereMesh;
     
@@ -103,6 +113,7 @@ inline b32 IsInDevelopmentMode(dev_context* Context)
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations)
 #define NOT_IN_DEVELOPMENT_MODE() true
+#define DEBUG_DRAW_POINT(position, color)
 
 #endif
 

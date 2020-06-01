@@ -259,6 +259,12 @@ inline plane3D CreatePlane3D(v3f* P)
     return Result;
 }
 
+inline plane3D CreatePlane3D(triangle3D Triangle)
+{
+    plane3D Result = CreatePlane3D(Triangle.P);        
+    return Result;
+}
+
 inline triangle3D InvalidTriangle3D()
 {
     triangle3D Result;

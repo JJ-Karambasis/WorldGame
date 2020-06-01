@@ -1,6 +1,6 @@
 @echo off
 
-set SharedCommon=-DDEVELOPER_BUILD=1 -Od -FC -Z7 -Oi
+set SharedCommon=-DDEVELOPER_BUILD=1 -Od -FC -Zi
 set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533
 set Common=%SharedCommon% %Warnings% -nologo -EHsc-
 set Compiler=cl
