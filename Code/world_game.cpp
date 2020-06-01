@@ -69,9 +69,9 @@ EXPORT GAME_TICK(Tick)
         
         world_entity_id* DespawnWalls = PushArray(&Game->GameStorage, 2, world_entity_id, Clear, 0);
         
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(100.0f, 100.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
+        //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(100.0f, 100.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.0f, 0.25f, 1.0f), RGBA(0.45f, 0.0f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(2.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.0f, 0.25f, 1.0f), RGBA(0.45f, 0.0f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
+        //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(2.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.0f, 0.25f, 1.0f), RGBA(0.45f, 0.0f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f, 0.0f, 0.0f), V3(1.0f, 10.0f, 1.0f), V3(PI*0.2f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(2.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                
     }            
@@ -135,6 +135,6 @@ EXPORT GAME_TICK(Tick)
         PushClearColorAndDepth(Graphics, Black(), 1.0f);
         PushDepth(Graphics, true);
         
-        PushWorldCommands(Graphics, GetCurrentWorld(Game));        
+        PushWorldCommands(Graphics, GetCurrentWorld(Game), Game->Assets);        
     }    
 }

@@ -49,6 +49,7 @@ enum push_command_type
     PUSH_COMMAND_DRAW_SHADED_COLORED_MESH,
     PUSH_COMMAND_DRAW_SHADED_COLORED_SKINNING_MESH,
     PUSH_COMMAND_DRAW_LINE_MESH,
+    PUSH_COMMAND_DRAW_FILLED_MESH, 
     PUSH_COMMAND_DRAW_IMGUI_UI,
     PUSH_COMMAND_DRAW_QUAD,    
 };
@@ -140,6 +141,17 @@ struct push_command_draw_line_mesh : public push_command
     u32 VertexOffset;
 };
 
+struct push_command_draw_filled_mesh : public push_command
+{
+    m4 WorldTransform;
+    f32 R, G, B, A;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
 struct push_command_draw_imgui_ui : public push_command
 {
     i64 MeshID;
@@ -193,7 +205,7 @@ struct graphics
 {       
     v2i RenderDim;
     push_command_list CommandList;    
-    void* PlatformData;                
+    void* PlatformData;                        
     
     allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;

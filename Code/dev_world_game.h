@@ -19,6 +19,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
 #define DEBUG_DRAW_POINT(position, color) ASSERT(__Internal_Dev_Context__->DebugPointCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugPoints)); __Internal_Dev_Context__->DebugPoints[__Internal_Dev_Context__->DebugPointCount++] = {position, color}
+#define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color) ASSERT(__Internal_Dev_Context__->DebugDirectionVectorsCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugDirectionVectors)); __Internal_Dev_Context__->DebugDirectionVectors[__Internal_Dev_Context__->DebugDirectionVectorsCount++] = {origin, direction, color}
 
 #include "imgui/imgui.h"
 
@@ -66,6 +67,13 @@ struct debug_point
     c4 Color;
 };
 
+struct debug_direction_vector
+{
+    v3f Origin;
+    v3f Direction;
+    c4 Color;
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -84,13 +92,18 @@ struct dev_context
     u32 ImGuiMeshCount;
     i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
-    dev_capsule_mesh CapsuleMesh;
-    i64 BoxMesh;
+    dev_capsule_mesh LineCapsuleMesh;
+    i64 LineBoxMesh;    
+    dev_mesh LineSphereMesh;
+    
+    i64 FilledBoxMesh;
+    dev_mesh FilledDirectionVectorMesh;
     
     u32 DebugPointCount;
     debug_point DebugPoints[2048];
     
-    dev_mesh SphereMesh;
+    u32 DebugDirectionVectorsCount;
+    debug_direction_vector DebugDirectionVectors[2048];
     
     void* PlatformData;
     b32 Initialized;

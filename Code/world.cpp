@@ -886,6 +886,14 @@ time_result HandleEllipsoidCollisions(world* World, assets* Assets, ellipsoid3D 
         Result.t = tMin;
         Result.ContactPoint = ESpaceContactPoint*Ellipsoid.Radius;        
         Result.Normal = Normalize(((ESpacePosition+ESpaceDelta*tMin) - ESpaceContactPoint)*InvRadius);        
+        
+        DEBUG_DRAW_POINT(Result.ContactPoint, Yellow());
+        
+        CONSOLE_LOG("Intersected\n");
+    }
+    else
+    {
+        CONSOLE_LOG("Not Intersected\n");
     }
     
     return Result;
@@ -1218,7 +1226,7 @@ UpdateWorld(game* Game)
                 
                 ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);                
                                 
-                for(u32 Iterations = 0; Iterations < 4; Iterations++)
+                for(u32 Iterations = 0; ; Iterations++)
                 {   
                     DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
                     

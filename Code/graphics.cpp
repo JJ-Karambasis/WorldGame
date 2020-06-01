@@ -173,6 +173,29 @@ void PushDrawLineMesh(graphics* Graphics, i64 MeshID, sqt Transform, c4 Color, u
     PushDrawLineMesh(Graphics, MeshID, TransformM4(Transform), Color, IndexCount, IndexOffset, VertexOffset);
 }
 
+void PushDrawFilledMesh(graphics* Graphics, i64 MeshID, m4 Transform, c4 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    push_command_draw_filled_mesh* PushCommandDrawFilledMesh = PushStruct(push_command_draw_filled_mesh, NoClear, 0);
+    PushCommandDrawFilledMesh->Type = PUSH_COMMAND_DRAW_FILLED_MESH;
+    PushCommandDrawFilledMesh->MeshID = MeshID;
+    PushCommandDrawFilledMesh->WorldTransform = Transform;
+    PushCommandDrawFilledMesh->R = Color.r;
+    PushCommandDrawFilledMesh->G = Color.g;
+    PushCommandDrawFilledMesh->B = Color.b;
+    PushCommandDrawFilledMesh->A = Color.a;
+    
+    PushCommandDrawFilledMesh->IndexCount   = IndexCount;
+    PushCommandDrawFilledMesh->IndexOffset  = IndexOffset;
+    PushCommandDrawFilledMesh->VertexOffset = VertexOffset;
+    
+    PushCommand(Graphics, PushCommandDrawFilledMesh);
+}
+
+void PushDrawFilledMesh(graphics* Graphics, i64 MeshID, sqt Transform, c4 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    PushDrawFilledMesh(Graphics, MeshID, TransformM4(Transform), Color, IndexCount, IndexOffset, VertexOffset);
+}
+
 void PushDrawImGuiUI(graphics* Graphics, i64 MeshID, i64 TextureID, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_imgui_ui* PushCommandDrawImGuiUI = PushStruct(push_command_draw_imgui_ui, NoClear, 0);
@@ -218,7 +241,7 @@ void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Hei
     PushScissor(Graphics, X, Y, Width, Height);
 }
 
-void PushWorldCommands(graphics* Graphics, world* World, camera* Camera)
+void PushWorldCommands(graphics* Graphics, world* World, camera* Camera, assets* Assets)
 {            
     m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
     m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
@@ -251,7 +274,7 @@ void PushWorldCommands(graphics* Graphics, world* World, camera* Camera)
     }    
 }
 
-void PushWorldCommands(graphics* Graphics, world* World)
+void PushWorldCommands(graphics* Graphics, world* World, assets* Assets)
 {            
-    PushWorldCommands(Graphics, World, &World->Camera);        
+    PushWorldCommands(Graphics, World, &World->Camera, Assets);        
 }

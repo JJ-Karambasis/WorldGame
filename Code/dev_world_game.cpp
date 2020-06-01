@@ -4,11 +4,11 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
-#define DEBUG_BOX_INDICES_COUNT 24
+#define DEBUG_FILLED_BOX_INDICES_COUNT 36
 void DrawBox(graphics* Graphics, i64 BoxMesh, v3f P, v3f Dim, c4 Color)
-{    
+{
     m4 Model = TransformM4(P, Dim);
-    PushDrawLineMesh(Graphics, BoxMesh, Model, Color, DEBUG_BOX_INDICES_COUNT, 0, 0);        
+    PushDrawFilledMesh(Graphics, BoxMesh, Model, Color, DEBUG_FILLED_BOX_INDICES_COUNT, 0, 0);
 }
 
 void DrawPoint(graphics* Graphics, i64 BoxMesh, v3f P, c4 Color)
@@ -16,26 +16,32 @@ void DrawPoint(graphics* Graphics, i64 BoxMesh, v3f P, c4 Color)
     DrawBox(Graphics, BoxMesh, P, V3(0.05f), Color);
 }
 
-#define DEBUG_BOX_INDICES_COUNT 24
-void DrawBoxMinMax(graphics* Graphics, i64 BoxMesh, v3f Min, v3f Max, c4 Color)
+#define DEBUG_LINE_BOX_INDICES_COUNT 24
+void DrawLineBox(graphics* Graphics, i64 BoxMesh, v3f P, v3f Dim, c4 Color)
+{    
+    m4 Model = TransformM4(P, Dim);
+    PushDrawLineMesh(Graphics, BoxMesh, Model, Color, DEBUG_LINE_BOX_INDICES_COUNT, 0, 0);        
+}
+
+void DrawLineBoxMinMax(graphics* Graphics, i64 BoxMesh, v3f Min, v3f Max, c4 Color)
 {   
     v3f Dim = Max-Min;
     v3f P = V3(Min.xy + Dim.xy*0.5f, Min.z);
-    DrawBox(Graphics, BoxMesh, P, Dim, Color);    
+    DrawLineBox(Graphics, BoxMesh, P, Dim, Color);    
 }
 
-void DrawEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, v3f CenterP, v3f Radius, c4 Color)
+void DrawLineEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, v3f CenterP, v3f Radius, c4 Color)
 {
     m4 Model = TransformM4(CenterP, Radius);
     PushDrawLineMesh(Graphics, SphereMesh->MeshID, Model, Color, SphereMesh->IndexCount, 0, 0); 
 }
 
-void DrawEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, ellipsoid3D Ellipsoid, c4 Color)
+void DrawLineEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, ellipsoid3D Ellipsoid, c4 Color)
 {
-    DrawEllipsoid(Graphics, SphereMesh, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
+    DrawLineEllipsoid(Graphics, SphereMesh, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
 }
 
-void DrawVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, v3f P, f32 Radius, f32 Height, c4 Color)
+void DrawLineVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, v3f P, f32 Radius, f32 Height, c4 Color)
 {
     v3f BottomPosition = V3(P.xy, P.z + Radius);
     m4 Model = IdentityM4();
@@ -78,7 +84,7 @@ void PopulateCircleIndices(u16** Indices, u16 StartSampleIndex, u16 CircleSample
     *Indices = IndicesAt;
 } 
 
-dev_capsule_mesh CreateDevCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
+dev_capsule_mesh CreateDevLineCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
 {
     dev_capsule_mesh Result = {};    
     
@@ -143,7 +149,7 @@ dev_capsule_mesh CreateDevCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
     return Result;
 }
 
-dev_mesh CreateDevSphereMesh(graphics* Graphics, u16 CircleSampleCount)
+dev_mesh CreateDevLineSphereMesh(graphics* Graphics, u16 CircleSampleCount)
 {
     dev_mesh Result = {};
     
@@ -180,7 +186,7 @@ dev_mesh CreateDevSphereMesh(graphics* Graphics, u16 CircleSampleCount)
     return Result;
 }
 
-i64 CreateDevBoxMesh(graphics* Graphics)
+i64 CreateDevLineBoxMesh(graphics* Graphics)
 {    
     vertex_p3 VertexData[8] = 
     {
@@ -195,7 +201,7 @@ i64 CreateDevBoxMesh(graphics* Graphics)
         {V3( 0.5f,  0.5f, 0.0f)}
     };
     
-    u16 IndexData[DEBUG_BOX_INDICES_COUNT] = 
+    u16 IndexData[DEBUG_LINE_BOX_INDICES_COUNT] = 
     {
         0, 1, 
         1, 2, 
@@ -211,6 +217,47 @@ i64 CreateDevBoxMesh(graphics* Graphics)
         3, 6, 
         1, 4, 
         2, 7
+    };
+    
+    i64 Result = Graphics->AllocateMesh(Graphics, VertexData, sizeof(VertexData), GRAPHICS_VERTEX_FORMAT_P3, 
+                                        IndexData, sizeof(IndexData), GRAPHICS_INDEX_FORMAT_16_BIT);
+    return Result;
+}
+
+i64 CreateDevFilledBoxMesh(graphics* Graphics)
+{
+    vertex_p3 VertexData[8] = 
+    {
+        {V3(-0.5f, -0.5f, 1.0f)},
+        {V3( 0.5f, -0.5f, 1.0f)},
+        {V3( 0.5f,  0.5f, 1.0f)},
+        {V3(-0.5f,  0.5f, 1.0f)},
+        
+        {V3( 0.5f, -0.5f, 0.0f)},
+        {V3(-0.5f, -0.5f, 0.0f)},
+        {V3(-0.5f,  0.5f, 0.0f)},
+        {V3( 0.5f,  0.5f, 0.0f)}
+    };
+    
+    u16 IndexData[DEBUG_FILLED_BOX_INDICES_COUNT] = 
+    {
+        0, 1, 2,
+        0, 2, 3, 
+        
+        1, 4, 7,
+        1, 7, 2,
+        
+        4, 5, 6, 
+        4, 6, 7, 
+        
+        5, 0, 3, 
+        5, 3, 6, 
+        
+        3, 2, 7,
+        3, 7, 6,
+        
+        5, 4, 1, 
+        5, 1, 0
     };
     
     i64 Result = Graphics->AllocateMesh(Graphics, VertexData, sizeof(VertexData), GRAPHICS_VERTEX_FORMAT_P3, 
@@ -291,7 +338,7 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
 {   
     PushDepth(Graphics, true);    
     
-    PushWorldCommands(Graphics, World, Camera);                
+    PushWorldCommands(Graphics, World, Camera, Game->Assets);                
     world_entity* PlayerEntity = GetPlayerEntity(World);
     player* Player = (player*)PlayerEntity->UserData;
     
@@ -302,12 +349,12 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     PushDepth(Graphics, false);
     
     ellipsoid3D Ellipsoid = GetPlayerEllipsoid(Game, Player);
-    DrawEllipsoid(Graphics, &DevContext->SphereMesh, Ellipsoid, PlayerColor);
+    DrawLineEllipsoid(Graphics, &DevContext->LineSphereMesh, Ellipsoid, PlayerColor);
     
     for(u32 PointIndex = 0; PointIndex < DevContext->DebugPointCount; PointIndex++)
     {
         debug_point* Point = DevContext->DebugPoints + PointIndex;
-        DrawPoint(Graphics, DevContext->BoxMesh, Point->P, Point->Color);
+        DrawPoint(Graphics, DevContext->FilledBoxMesh, Point->P, Point->Color);
     }
     DevContext->DebugPointCount = 0;
     
@@ -436,7 +483,7 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
         if(GoalRect->GoalIsMet)
             Color = Red();
         
-        DrawBoxMinMax(Graphics, DevContext->BoxMesh, GoalRect->Rect.Min, GoalRect->Rect.Max, Color);
+        DrawLineBoxMinMax(Graphics, DevContext->LineBoxMesh, GoalRect->Rect.Min, GoalRect->Rect.Max, Color);
     }   
     
     if(DevContext->DrawOtherWorld)
@@ -511,9 +558,11 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                
-        DevContext->CapsuleMesh = CreateDevCapsuleMesh(Graphics, 60);
-        DevContext->BoxMesh = CreateDevBoxMesh(Graphics);
-        DevContext->SphereMesh = CreateDevSphereMesh(Graphics, 60);
+        DevContext->LineCapsuleMesh = CreateDevLineCapsuleMesh(Graphics, 60);
+        DevContext->LineBoxMesh = CreateDevLineBoxMesh(Graphics);
+        DevContext->LineSphereMesh = CreateDevLineSphereMesh(Graphics, 60);
+        
+        DevContext->FilledBoxMesh = CreateDevFilledBoxMesh(Graphics);
         
         SetMemoryI64(DevContext->ImGuiMeshes, -1, sizeof(DevContext->ImGuiMeshes));
         

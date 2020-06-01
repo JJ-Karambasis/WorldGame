@@ -117,7 +117,7 @@ struct opengl_context
     opengl_texture_pool TexturePool;        
     
     standard_color_shader StandardPhongShader;        
-    standard_color_shader StandardLineShader;
+    standard_color_shader StandardColorShader;
     imgui_shader ImGuiShader;
     quad_shader QuadShader;        
     standard_color_skinning_shader StandardSkinningPhongShader;
