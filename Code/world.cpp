@@ -646,7 +646,7 @@ b32 SolveSphereSweepRoot(f32 a, f32 b, f32 c, f32 tCurrent, f32* tOut)
     quadratic_equation_result RootSolver = SolveQuadraticEquation(a, b, c);
     if(RootSolver.RootCount > 0)
     {
-        if((RootSolver.RootCount == 1))
+        if(RootSolver.RootCount == 1)
         {
             if((RootSolver.Roots[0] > 0.0f) && (RootSolver.Roots[0] < tCurrent))                                                
             {
@@ -688,8 +688,6 @@ time_result HandleEllipsoidCollisions(world* World, assets* Assets, ellipsoid3D 
     f32 tMin = INFINITY;
     v3f ESpaceContactPoint = InvalidV3();
     
-    triangle3D BestTriangle = {};
-    
     FOR_EACH(TestEntity, &World->EntityPool)
     {
         if(TestEntity->Type == WORLD_ENTITY_TYPE_WALKABLE)
@@ -710,191 +708,179 @@ time_result HandleEllipsoidCollisions(world* World, assets* Assets, ellipsoid3D 
                 
                 plane3D ESpaceTrianglePlane = CreatePlane3D(ESpaceTriangle);    
                 
-                if(Dot(ESpaceTrianglePlane.Normal, Normalize(ESpaceDelta)) <= 0.0f)
-                {                                        
-                    f32 Denominator = Dot(ESpaceTrianglePlane.Normal, ESpaceDelta);                            
-                    f32 SignedDistanceToPlane = SignedDistance(ESpacePosition, ESpaceTrianglePlane);
+                f32 Denominator = Dot(ESpaceTrianglePlane.Normal, ESpaceDelta);                            
+                f32 SignedDistanceToPlane = SignedDistance(ESpacePosition, ESpaceTrianglePlane);
+                
+                f32 t0, t1;
+                
+                b32 IsEmbedded = false;
+                if(Denominator == 0)
+                {
+                    if(Abs(SignedDistanceToPlane) >= 1.0f)
+                        continue;                                                                
                     
-                    f32 t0, t1;
+                    t0 = 0.0f;
+                    t1 = 1.0f;
+                    IsEmbedded = true;
+                }
+                else
+                {
+                    f32 InvDenominator = 1.0f/Denominator;
+                    t0 =  ( 1.0f - SignedDistanceToPlane)*InvDenominator;
+                    t1 =  (-1.0f - SignedDistanceToPlane)*InvDenominator;                                            
                     
-                    b32 IsEmbedded = false;
-                    if(Denominator == 0)
+                    if(t0 > t1) SWAP(t0, t1);                                            
+                    
+                    if(t0 > 1.0f || t1 < 0.0f)
+                        continue;                                            
+                    
+                    t0 = SaturateF32(t0);
+                    t1 = SaturateF32(t1);                                                                                        
+                }
+                
+                b32 FoundCollision = false;
+                
+                b32 HasIntersected = false;
+                v3f IntersectionPoint = InvalidV3();
+                f32 t = 1.0f;
+                
+                if(!IsEmbedded)
+                {
+                    v3f PlaneIntersectionPoint = (ESpacePosition - ESpaceTrianglePlane.Normal) + t0*ESpaceDelta;
+                    if(IsPointProjectedInTriangle3D(ESpaceTriangle, PlaneIntersectionPoint))
                     {
-                        if(Abs(SignedDistanceToPlane) >= 1.0f)
-                            continue;                                                                
-                        
-                        t0 = 0.0f;
-                        t1 = 1.0f;
-                        IsEmbedded = true;
+                        IntersectionPoint = PlaneIntersectionPoint;
+                        t = t0;
+                        HasIntersected = true;
                     }
-                    else
+                }
+                
+                if(!HasIntersected)
+                {
+                    f32 ESpaceDeltaSqrLength = SquareMagnitude(ESpaceDelta);
+                    
+                    //NOTE(EVERYONE): Perform a sphere sweep test against the vertices
                     {
-                        f32 InvDenominator = 1.0f/Denominator;
-                        t0 =  ( 1.0f - SignedDistanceToPlane)*InvDenominator;
-                        t1 =  (-1.0f - SignedDistanceToPlane)*InvDenominator;                                            
+                        f32 tVertex;                                        
+                        f32 a = ESpaceDeltaSqrLength;
                         
-                        if(t0 > t1) SWAP(t0, t1);                                            
-                        
-                        if(t0 > 1.0f || t1 < 0.0f)
-                            continue;                                            
-                        
-                        t0 = SaturateF32(t0);
-                        t1 = SaturateF32(t1);                                                                                        
-                    }
-                    
-                    b32 FoundCollision = false;
-                    
-                    b32 HasIntersected = false;
-                    v3f IntersectionPoint = InvalidV3();
-                    f32 t = 1.0f;
-                    
-                    if(!IsEmbedded)
-                    {
-                        v3f PlaneIntersectionPoint = (ESpacePosition - ESpaceTrianglePlane.Normal) + t0*ESpaceDelta;
-                        if(IsPointProjectedInTriangle3D(ESpaceTriangle, PlaneIntersectionPoint))
+                        f32 b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[0]));
+                        f32 c = SquareMagnitude(ESpaceTriangle[0]-ESpacePosition) - 1.0f;                                                                        
+                        if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
                         {
-                            IntersectionPoint = PlaneIntersectionPoint;
-                            t = t0;
+                            IntersectionPoint = ESpaceTriangle[0];
+                            t = tVertex;                                        
                             HasIntersected = true;
                         }
-                    }
-                    
-                    if(!HasIntersected)
-                    {
-                        f32 ESpaceDeltaSqrLength = SquareMagnitude(ESpaceDelta);
                         
-                        //NOTE(EVERYONE): Perform a sphere sweep test against the vertices
+                        b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[1]));
+                        c = SquareMagnitude(ESpaceTriangle[1]-ESpacePosition) - 1.0f;
+                        if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
                         {
-                            f32 tVertex;                                        
-                            f32 a = ESpaceDeltaSqrLength;
-                            
-                            f32 b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[0]));
-                            f32 c = SquareMagnitude(ESpaceTriangle[0]-ESpacePosition) - 1.0f;                                                                        
-                            if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                            {
-                                IntersectionPoint = ESpaceTriangle[0];
-                                t = tVertex;                                        
-                                HasIntersected = true;
-                            }
-                            
-                            b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[1]));
-                            c = SquareMagnitude(ESpaceTriangle[1]-ESpacePosition) - 1.0f;
-                            if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                            {
-                                IntersectionPoint = ESpaceTriangle[1];
-                                t = tVertex;
-                                HasIntersected = true;
-                            }
-                            
-                            b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[2]));
-                            c = SquareMagnitude(ESpaceTriangle[2]-ESpacePosition)-1.0f;
-                            if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                            {
-                                IntersectionPoint = ESpaceTriangle[2];
-                                t = tVertex;
-                                HasIntersected = true;
-                            }
-                        }                                    
-                        
-                        //NOTE(EVERYONE): Perform a sphere sweep test against the edges
-                        {
-                            f32 tEdge;
-                            
-                            v3f Edge = ESpaceTriangle[1]-ESpaceTriangle[0];
-                            v3f BaseToVertex = ESpaceTriangle[0] - ESpacePosition;
-                            
-                            f32 EdgeSqrLength = SquareMagnitude(Edge);
-                            f32 EdgeDotVelocity = Dot(Edge, ESpaceDelta);
-                            f32 EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                            
-                            f32 a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
-                            f32 b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                            f32 c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);
-                            
-                            if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                            {
-                                f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                                if((f >= 0.0f) && (f <= 1.0f))
-                                {
-                                    IntersectionPoint = ESpaceTriangle[0] + f*Edge;
-                                    t = tEdge;
-                                    HasIntersected = true;
-                                }
-                            }
-                            
-                            Edge = ESpaceTriangle[2] - ESpaceTriangle[1];
-                            BaseToVertex = ESpaceTriangle[1] - ESpacePosition;
-                            
-                            EdgeSqrLength = SquareMagnitude(Edge);
-                            EdgeDotVelocity = Dot(Edge, ESpaceDelta);
-                            EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                            
-                            a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
-                            b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                            c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
-                            
-                            if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                            {
-                                f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                                if((f >= 0.0f) && (f <= 1.0f))
-                                {
-                                    IntersectionPoint = ESpaceTriangle[1] + f*Edge;
-                                    t = tEdge;
-                                    HasIntersected = true;
-                                }
-                            }
-                            
-                            Edge = ESpaceTriangle[0] - ESpaceTriangle[2];
-                            BaseToVertex = ESpaceTriangle[2] - ESpacePosition;
-                            
-                            EdgeSqrLength = SquareMagnitude(Edge);
-                            EdgeDotVelocity = Dot(Edge, ESpaceDelta);
-                            EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                            
-                            a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
-                            b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                            c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
-                            
-                            if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                            {
-                                f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                                if((f >= 0.0f) && (f <= 1.0f))
-                                {
-                                    IntersectionPoint = ESpaceTriangle[2] + f*Edge;
-                                    t = tEdge;
-                                    HasIntersected = true;
-                                }
-                            }                                            
+                            IntersectionPoint = ESpaceTriangle[1];
+                            t = tVertex;
+                            HasIntersected = true;
                         }
-                    }
+                        
+                        b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[2]));
+                        c = SquareMagnitude(ESpaceTriangle[2]-ESpacePosition)-1.0f;
+                        if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
+                        {
+                            IntersectionPoint = ESpaceTriangle[2];
+                            t = tVertex;
+                            HasIntersected = true;
+                        }
+                    }                                    
                     
-                    if(HasIntersected && (tMin > t))
+                    //NOTE(EVERYONE): Perform a sphere sweep test against the edges
                     {
-                        Result.Intersected = true;                                                
-                        tMin = t;
-                        ESpaceContactPoint = IntersectionPoint;
-                        BestTriangle = Triangle;
-                    }    
-                }                                                                
+                        f32 tEdge;
+                        
+                        v3f Edge = ESpaceTriangle[1]-ESpaceTriangle[0];
+                        v3f BaseToVertex = ESpaceTriangle[0] - ESpacePosition;
+                        
+                        f32 EdgeSqrLength = SquareMagnitude(Edge);
+                        f32 EdgeDotVelocity = Dot(Edge, ESpaceDelta);
+                        f32 EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
+                        
+                        f32 a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
+                        f32 b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
+                        f32 c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);
+                        
+                        if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
+                        {
+                            f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
+                            if((f >= 0.0f) && (f <= 1.0f))
+                            {
+                                IntersectionPoint = ESpaceTriangle[0] + f*Edge;
+                                t = tEdge;
+                                HasIntersected = true;
+                            }
+                        }
+                        
+                        Edge = ESpaceTriangle[2] - ESpaceTriangle[1];
+                        BaseToVertex = ESpaceTriangle[1] - ESpacePosition;
+                        
+                        EdgeSqrLength = SquareMagnitude(Edge);
+                        EdgeDotVelocity = Dot(Edge, ESpaceDelta);
+                        EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
+                        
+                        a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
+                        b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
+                        c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
+                        
+                        if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
+                        {
+                            f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
+                            if((f >= 0.0f) && (f <= 1.0f))
+                            {
+                                IntersectionPoint = ESpaceTriangle[1] + f*Edge;
+                                t = tEdge;
+                                HasIntersected = true;
+                            }
+                        }
+                        
+                        Edge = ESpaceTriangle[0] - ESpaceTriangle[2];
+                        BaseToVertex = ESpaceTriangle[2] - ESpacePosition;
+                        
+                        EdgeSqrLength = SquareMagnitude(Edge);
+                        EdgeDotVelocity = Dot(Edge, ESpaceDelta);
+                        EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
+                        
+                        a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
+                        b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
+                        c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
+                        
+                        if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
+                        {
+                            f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
+                            if((f >= 0.0f) && (f <= 1.0f))
+                            {
+                                IntersectionPoint = ESpaceTriangle[2] + f*Edge;
+                                t = tEdge;
+                                HasIntersected = true;
+                            }
+                        }                                            
+                    }
+                }
+                
+                if(HasIntersected && (tMin > t))
+                {
+                    Result.Intersected = true;                                                
+                    tMin = t;
+                    ESpaceContactPoint = IntersectionPoint;                    
+                }    
+                
             }
         }                                        
     }               
     
     if(Result.Intersected)
-    {
-        plane3D Plane = CreatePlane3D(BestTriangle);
+    {        
         Result.t = tMin;
         Result.ContactPoint = ESpaceContactPoint*Ellipsoid.Radius;        
-        Result.Normal = Normalize(((ESpacePosition+ESpaceDelta*tMin) - ESpaceContactPoint)*InvRadius);        
-        
-        DEBUG_DRAW_POINT(Result.ContactPoint, Yellow());
-        
-        CONSOLE_LOG("Intersected\n");
-    }
-    else
-    {
-        CONSOLE_LOG("Not Intersected\n");
-    }
+        Result.Normal = Normalize(((ESpacePosition+ESpaceDelta*tMin) - ESpaceContactPoint)*InvRadius);                        
+    }    
     
     return Result;
 }

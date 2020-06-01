@@ -41,14 +41,6 @@ struct dev_input
     f32 Scroll;
 };
 
-struct dev_capsule_mesh
-{    
-    i64 MeshID;       
-    u32 CapIndexCount;    
-    u32 BodyIndexCount;    
-    u32 BodyVertexOffset;    
-};
-
 struct game_information
 {
     u64 MaxTimeIterations;
@@ -77,6 +69,9 @@ struct debug_direction_vector
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
+    game* Game;
+    graphics* Graphics;
+    
     arena DevStorage;
     b32 InDevelopmentMode;    
     b32 UseDevCamera;
@@ -91,19 +86,17 @@ struct dev_context
     
     u32 ImGuiMeshCount;
     i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
-    
-    dev_capsule_mesh LineCapsuleMesh;
-    i64 LineBoxMesh;    
+        
+    dev_mesh LineBoxMesh;
     dev_mesh LineSphereMesh;
     
-    i64 FilledBoxMesh;
-    dev_mesh FilledDirectionVectorMesh;
+    dev_mesh TriangleBoxMesh;    
     
     u32 DebugPointCount;
     debug_point DebugPoints[2048];
     
     u32 DebugDirectionVectorsCount;
-    debug_direction_vector DebugDirectionVectors[2048];
+    debug_direction_vector DebugDirectionVectors[2048];        
     
     void* PlatformData;
     b32 Initialized;

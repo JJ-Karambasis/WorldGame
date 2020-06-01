@@ -5,264 +5,67 @@
 #include "imgui/imgui_demo.cpp"
 
 #define DEBUG_FILLED_BOX_INDICES_COUNT 36
-void DrawBox(graphics* Graphics, i64 BoxMesh, v3f P, v3f Dim, c4 Color)
+void DrawBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
 {
     m4 Model = TransformM4(P, Dim);
-    PushDrawFilledMesh(Graphics, BoxMesh, Model, Color, DEBUG_FILLED_BOX_INDICES_COUNT, 0, 0);
+    PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, Color, DevContext->TriangleBoxMesh.IndexCount, 0, 0);
 }
 
-void DrawPoint(graphics* Graphics, i64 BoxMesh, v3f P, c4 Color)
+void DrawPoint(dev_context* DevContext, v3f P, c4 Color)
 {
-    DrawBox(Graphics, BoxMesh, P, V3(0.05f), Color);
+    DrawBox(DevContext, P, V3(0.05f), Color);
 }
 
-#define DEBUG_LINE_BOX_INDICES_COUNT 24
-void DrawLineBox(graphics* Graphics, i64 BoxMesh, v3f P, v3f Dim, c4 Color)
+void DrawLineBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
 {    
     m4 Model = TransformM4(P, Dim);
-    PushDrawLineMesh(Graphics, BoxMesh, Model, Color, DEBUG_LINE_BOX_INDICES_COUNT, 0, 0);        
+    PushDrawLineMesh(DevContext->Graphics, DevContext->LineBoxMesh.MeshID, Model, Color, DevContext->LineBoxMesh.IndexCount, 0, 0);        
 }
 
-void DrawLineBoxMinMax(graphics* Graphics, i64 BoxMesh, v3f Min, v3f Max, c4 Color)
+void DrawLineBoxMinMax(dev_context* DevContext, v3f Min, v3f Max, c4 Color)
 {   
     v3f Dim = Max-Min;
     v3f P = V3(Min.xy + Dim.xy*0.5f, Min.z);
-    DrawLineBox(Graphics, BoxMesh, P, Dim, Color);    
+    DrawLineBox(DevContext, P, Dim, Color);    
 }
 
-void DrawLineEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, v3f CenterP, v3f Radius, c4 Color)
+void DrawLineEllipsoid(dev_context* DevContext, v3f CenterP, v3f Radius, c4 Color)
 {
     m4 Model = TransformM4(CenterP, Radius);
-    PushDrawLineMesh(Graphics, SphereMesh->MeshID, Model, Color, SphereMesh->IndexCount, 0, 0); 
+    PushDrawLineMesh(DevContext->Graphics, DevContext->LineSphereMesh.MeshID, Model, Color, DevContext->LineSphereMesh.IndexCount, 0, 0); 
 }
 
-void DrawLineEllipsoid(graphics* Graphics, dev_mesh* SphereMesh, ellipsoid3D Ellipsoid, c4 Color)
+void DrawLineEllipsoid(dev_context* DevContext, ellipsoid3D Ellipsoid, c4 Color)
 {
-    DrawLineEllipsoid(Graphics, SphereMesh, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
+    DrawLineEllipsoid(DevContext, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
 }
 
-void DrawLineVerticalCapsule(graphics* Graphics, dev_capsule_mesh* CapsuleMesh, v3f P, f32 Radius, f32 Height, c4 Color)
+i64 AllocateMesh(graphics* Graphics, mesh_generation_result* Mesh)
 {
-    v3f BottomPosition = V3(P.xy, P.z + Radius);
-    m4 Model = IdentityM4();
-    
-    Model.XAxis.xyz *= Radius;
-    Model.YAxis.xyz *= Radius;
-    Model.ZAxis.xyz *= Radius;
-    
-    Model.Translation.xyz = BottomPosition;
-    Model.ZAxis.xyz = -Model.ZAxis.xyz;
-    
-    PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->CapIndexCount, 0, 0);
-    
-    Model.ZAxis.xyz = -Model.ZAxis.xyz;
-    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + Height);
-    PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->CapIndexCount, 0, 0);
-    
-    Model.ZAxis.xyz = V3(0.0f, 0.0f, Height);
-    Model.Translation.xyz = V3(BottomPosition.xy, BottomPosition.z + (Height*0.5f));
-    PushDrawLineMesh(Graphics, CapsuleMesh->MeshID, Model, Color, CapsuleMesh->BodyIndexCount, CapsuleMesh->CapIndexCount, CapsuleMesh->BodyVertexOffset);
-}
-
-void PopulateCircleIndices(u16** Indices, u16 StartSampleIndex, u16 CircleSampleCount)
-{
-    u16* IndicesAt = *Indices;    
-    u16 TotalSampleCount = StartSampleIndex+CircleSampleCount;
-    for(u16 SampleIndex = StartSampleIndex; SampleIndex < TotalSampleCount; SampleIndex++)
-    {
-        if(SampleIndex == (TotalSampleCount-1))
-        {
-            *IndicesAt++ = SampleIndex;
-            *IndicesAt++ = SampleIndex - (CircleSampleCount-1);
-        }
-        else
-        {
-            *IndicesAt++ = SampleIndex;
-            *IndicesAt++ = SampleIndex+1;
-        }
-    }            
-    *Indices = IndicesAt;
-} 
-
-dev_capsule_mesh CreateDevLineCapsuleMesh(graphics* Graphics, u16 CircleSampleCount)
-{
-    dev_capsule_mesh Result = {};    
-    
-    u16 HalfCircleSampleCountPlusOne = (CircleSampleCount/2)+1;
-    f32 CircleSampleIncrement = (2.0f*PI)/(f32)CircleSampleCount;            
-    
-    u32 CapVertexCount = CircleSampleCount+(HalfCircleSampleCountPlusOne*2);
-    Result.BodyVertexOffset = CapVertexCount;    
-    Result.CapIndexCount = CapVertexCount*2;    
-    Result.BodyIndexCount = 8;    
-    
-    u32 VertexCount = CapVertexCount+8;
-    u32 IndexCount = Result.CapIndexCount+Result.BodyIndexCount;
-    
-    vertex_p3* VertexData = PushArray(VertexCount, vertex_p3, Clear, 0);
-    u16* IndexData = PushArray(IndexCount, u16, Clear, 0); 
-    
-    vertex_p3* VertexAt = VertexData;
-    
-    f32 Radians;
-    Radians = 0.0f;        
-    for(u32 SampleIndex = 0; SampleIndex < CircleSampleCount; SampleIndex++, Radians += CircleSampleIncrement)
-        *VertexAt++ = {V3(Cos(Radians), Sin(Radians), 0.0f)};
-    
-    Radians = 0.0;
-    for(u32 SampleIndex = 0; SampleIndex < HalfCircleSampleCountPlusOne; SampleIndex++, Radians += CircleSampleIncrement)                
-        *VertexAt++ = {V3(0.0f, Cos(Radians), Sin(Radians))};
-    
-    Radians = 0.0f;
-    for(u32 SampleIndex = 0; SampleIndex < HalfCircleSampleCountPlusOne; SampleIndex++, Radians += CircleSampleIncrement)
-        *VertexAt++ = {V3(Cos(Radians), 0.0f, Sin(Radians))};        
-    
-    u16* IndicesAt = (u16*)IndexData;
-    PopulateCircleIndices(&IndicesAt, 0, CircleSampleCount);
-    PopulateCircleIndices(&IndicesAt, CircleSampleCount, HalfCircleSampleCountPlusOne);
-    PopulateCircleIndices(&IndicesAt, CircleSampleCount+HalfCircleSampleCountPlusOne, HalfCircleSampleCountPlusOne);
-    
-    *VertexAt++ = {V3( 1.0f,  0.0f, -0.5f)};
-    *VertexAt++ = {V3( 1.0f,  0.0f,  0.5f)};
-    
-    *VertexAt++ = {V3( 0.0f,  1.0f, -0.5f)};
-    *VertexAt++ = {V3( 0.0f,  1.0f,  0.5f)};
-    
-    *VertexAt++ = {V3(-1.0f,  0.0f, -0.5f)};
-    *VertexAt++ = {V3(-1.0f,  0.0f,  0.5f)};
-    
-    *VertexAt++ = {V3( 0.0f, -1.0f, -0.5f)};
-    *VertexAt++ = {V3( 0.0f, -1.0f,  0.5f)};
-    
-    *IndicesAt++ = 0;
-    *IndicesAt++ = 1;
-    *IndicesAt++ = 2;
-    *IndicesAt++ = 3;
-    *IndicesAt++ = 4;
-    *IndicesAt++ = 5;
-    *IndicesAt++ = 6;
-    *IndicesAt++ = 7;
-    
-    Result.MeshID = Graphics->AllocateMesh(Graphics, VertexData, VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
-                                           IndexData, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
-    
+    i64 Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
+                                        Mesh->Indices, Mesh->IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
     return Result;
 }
 
-dev_mesh CreateDevLineSphereMesh(graphics* Graphics, u16 CircleSampleCount)
+void CreateDevLineSphereMesh(dev_context* DevContext, u16 CircleSampleCount)
 {
-    dev_mesh Result = {};
-    
-    u32 VertexCount = CircleSampleCount*3;
-    u32 IndexCount = VertexCount*2;
-    f32 CircleSampleIncrement = (2.0f*PI)/(f32)CircleSampleCount;            
-    
-    vertex_p3* VertexData = PushArray(VertexCount, vertex_p3, Clear, 0);
-    u16* IndexData = PushArray(IndexCount, u16, Clear, 0);
-    
-    vertex_p3* VertexAt = VertexData;
-    
-    f32 Radians;
-    Radians = 0.0f;        
-    for(u32 SampleIndex = 0; SampleIndex < CircleSampleCount; SampleIndex++, Radians += CircleSampleIncrement)
-        *VertexAt++ = {V3(Cos(Radians), Sin(Radians), 0.0f)};
-    
-    Radians = 0.0;
-    for(u32 SampleIndex = 0; SampleIndex < CircleSampleCount; SampleIndex++, Radians += CircleSampleIncrement)                
-        *VertexAt++ = {V3(0.0f, Cos(Radians), Sin(Radians))};
-    
-    Radians = 0.0f;
-    for(u32 SampleIndex = 0; SampleIndex < CircleSampleCount; SampleIndex++, Radians += CircleSampleIncrement)
-        *VertexAt++ = {V3(Cos(Radians), 0.0f, Sin(Radians))};        
-    
-    u16* IndicesAt = IndexData;
-    PopulateCircleIndices(&IndicesAt, 0, CircleSampleCount);
-    PopulateCircleIndices(&IndicesAt, CircleSampleCount, CircleSampleCount);
-    PopulateCircleIndices(&IndicesAt, CircleSampleCount*2, CircleSampleCount);
-    
-    Result.MeshID = Graphics->AllocateMesh(Graphics, VertexData, VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
-                                           IndexData, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
-    Result.IndexCount = IndexCount;
-    return Result;
+    mesh_generation_result MeshGenerationResult = GenerateLineSphere(GetDefaultArena(), 1.0f, CircleSampleCount);        
+    DevContext->LineSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->LineSphereMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);        
 }
 
-i64 CreateDevLineBoxMesh(graphics* Graphics)
-{    
-    vertex_p3 VertexData[8] = 
-    {
-        {V3(-0.5f, -0.5f, 1.0f)},
-        {V3( 0.5f, -0.5f, 1.0f)},
-        {V3( 0.5f,  0.5f, 1.0f)},
-        {V3(-0.5f,  0.5f, 1.0f)},
-        
-        {V3( 0.5f, -0.5f, 0.0f)},
-        {V3(-0.5f, -0.5f, 0.0f)},
-        {V3(-0.5f,  0.5f, 0.0f)},
-        {V3( 0.5f,  0.5f, 0.0f)}
-    };
-    
-    u16 IndexData[DEBUG_LINE_BOX_INDICES_COUNT] = 
-    {
-        0, 1, 
-        1, 2, 
-        2, 3, 
-        3, 0,
-        
-        4, 5, 
-        5, 6, 
-        6, 7, 
-        7, 4, 
-        
-        0, 5, 
-        3, 6, 
-        1, 4, 
-        2, 7
-    };
-    
-    i64 Result = Graphics->AllocateMesh(Graphics, VertexData, sizeof(VertexData), GRAPHICS_VERTEX_FORMAT_P3, 
-                                        IndexData, sizeof(IndexData), GRAPHICS_INDEX_FORMAT_16_BIT);
-    return Result;
+void CreateDevLineBoxMesh(dev_context* DevContext)
+{
+    mesh_generation_result MeshGenerationResult = GenerateLineBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));    
+    DevContext->LineBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->LineBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
 }
 
-i64 CreateDevFilledBoxMesh(graphics* Graphics)
+void CreateDevTriangleBoxMesh(dev_context* DevContext)
 {
-    vertex_p3 VertexData[8] = 
-    {
-        {V3(-0.5f, -0.5f, 1.0f)},
-        {V3( 0.5f, -0.5f, 1.0f)},
-        {V3( 0.5f,  0.5f, 1.0f)},
-        {V3(-0.5f,  0.5f, 1.0f)},
-        
-        {V3( 0.5f, -0.5f, 0.0f)},
-        {V3(-0.5f, -0.5f, 0.0f)},
-        {V3(-0.5f,  0.5f, 0.0f)},
-        {V3( 0.5f,  0.5f, 0.0f)}
-    };
-    
-    u16 IndexData[DEBUG_FILLED_BOX_INDICES_COUNT] = 
-    {
-        0, 1, 2,
-        0, 2, 3, 
-        
-        1, 4, 7,
-        1, 7, 2,
-        
-        4, 5, 6, 
-        4, 6, 7, 
-        
-        5, 0, 3, 
-        5, 3, 6, 
-        
-        3, 2, 7,
-        3, 7, 6,
-        
-        5, 4, 1, 
-        5, 1, 0
-    };
-    
-    i64 Result = Graphics->AllocateMesh(Graphics, VertexData, sizeof(VertexData), GRAPHICS_VERTEX_FORMAT_P3, 
-                                        IndexData, sizeof(IndexData), GRAPHICS_INDEX_FORMAT_16_BIT);
-    return Result;
+    mesh_generation_result MeshGenerationResult = GenerateTriangleBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));       
+    DevContext->TriangleBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
 }
 
 i64 AllocateImGuiFont(graphics* Graphics)
@@ -349,12 +152,12 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     PushDepth(Graphics, false);
     
     ellipsoid3D Ellipsoid = GetPlayerEllipsoid(Game, Player);
-    DrawLineEllipsoid(Graphics, &DevContext->LineSphereMesh, Ellipsoid, PlayerColor);
+    DrawLineEllipsoid(DevContext, Ellipsoid, PlayerColor);
     
     for(u32 PointIndex = 0; PointIndex < DevContext->DebugPointCount; PointIndex++)
     {
         debug_point* Point = DevContext->DebugPoints + PointIndex;
-        DrawPoint(Graphics, DevContext->FilledBoxMesh, Point->P, Point->Color);
+        DrawPoint(DevContext, Point->P, Point->Color);
     }
     DevContext->DebugPointCount = 0;
     
@@ -483,7 +286,7 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
         if(GoalRect->GoalIsMet)
             Color = Red();
         
-        DrawLineBoxMinMax(Graphics, DevContext->LineBoxMesh, GoalRect->Rect.Min, GoalRect->Rect.Max, Color);
+        DrawLineBoxMinMax(DevContext, GoalRect->Rect.Min, GoalRect->Rect.Max, Color);
     }   
     
     if(DevContext->DrawOtherWorld)
@@ -552,17 +355,19 @@ void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
 
 void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
 {
+    DevContext->Game = Game;
+    DevContext->Graphics = Graphics;
+    
     if(!DevContext->Initialized)
     {
         DevContext->DevStorage = CreateArena(KILOBYTE(32));
         
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                
-        DevContext->LineCapsuleMesh = CreateDevLineCapsuleMesh(Graphics, 60);
-        DevContext->LineBoxMesh = CreateDevLineBoxMesh(Graphics);
-        DevContext->LineSphereMesh = CreateDevLineSphereMesh(Graphics, 60);
         
-        DevContext->FilledBoxMesh = CreateDevFilledBoxMesh(Graphics);
+        CreateDevLineBoxMesh(DevContext);
+        CreateDevLineSphereMesh(DevContext, 60);
+        CreateDevTriangleBoxMesh(DevContext);
         
         SetMemoryI64(DevContext->ImGuiMeshes, -1, sizeof(DevContext->ImGuiMeshes));
         
