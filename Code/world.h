@@ -66,6 +66,7 @@ struct world_entity
     c4 Color;
     v3f Velocity;        
     
+    v3f CollidedNormal;
     collider Collider;
     
     world_entity_id ID;

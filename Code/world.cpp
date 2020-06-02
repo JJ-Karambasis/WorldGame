@@ -135,6 +135,13 @@ GetPlayerPosition(game* Game, player* Player)
     return Result;
 }
 
+inline v3f
+GetPlayerVelocity(game* Game, player* Player)
+{
+    v3f Result = GetEntity(Game, Player->EntityID)->Velocity;
+    return Result;
+}
+
 void FreeEntity(game* Game, world_entity_id ID)
 {
     world* World = GetWorld(Game, ID);
@@ -1207,37 +1214,87 @@ UpdateWorld(game* Game)
                 player* Player = (player*)Entity->UserData;
                 
                 Entity->Velocity.xy += MoveAcceleration*dt; 
-                Entity->Velocity *= VelocityDamping;                
+                Entity->Velocity *= VelocityDamping;
+                                
                 v3f MoveDelta = Entity->Velocity*dt;   
                 
                 ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);                
-                                
-                for(u32 Iterations = 0; ; Iterations++)
-                {   
-                    DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
-                    
-#define MOVE_DELTA_EPSILON 1e-4f                        
-                    if(SquareMagnitude(MoveDelta) <= MOVE_DELTA_EPSILON)
-                        break;                                                            
-                    
-                    time_result CollisionResult = HandleEllipsoidCollisions(World, Game->Assets, PlayerEllipsoid, MoveDelta);
-                    if(CollisionResult.Intersected)
-                    {
-                        v3f TargetPosition = PlayerEllipsoid.CenterP + MoveDelta;
+                
+#define MOVE_DELTA_EPSILON 1e-5f
+                
+                if(SquareMagnitude(MoveDelta) > MOVE_DELTA_EPSILON)
+                {                                                                                
+                    Entity->CollidedNormal = {};
+                    for(u32 Iterations = 0; Iterations < 32; Iterations++)
+                    {                           
+                        DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
                         
-                        PlayerEllipsoid.CenterP += (MoveDelta*CollisionResult.t);
-                        PlayerEllipsoid.CenterP += (CollisionResult.Normal*1e-5f);
-                        MoveDelta = TargetPosition - PlayerEllipsoid.CenterP;
-                        MoveDelta -= Dot(MoveDelta, CollisionResult.Normal)*CollisionResult.Normal;
-                        Entity->Velocity -= Dot(Entity->Velocity, CollisionResult.Normal)*CollisionResult.Normal;
-                    }
-                    else
-                    {
-                        PlayerEllipsoid.CenterP += MoveDelta;
-                        break;                                                            
+                        if(SquareMagnitude(MoveDelta) <= MOVE_DELTA_EPSILON)
+                            break;                                                            
+                        
+                        time_result CollisionResult = HandleEllipsoidCollisions(World, Game->Assets, PlayerEllipsoid, MoveDelta);
+                        if(CollisionResult.Intersected)
+                        {
+                            v3f TargetPosition = PlayerEllipsoid.CenterP + MoveDelta;
+                                                        
+                            Entity->CollidedNormal = CollisionResult.Normal;
+                            v3f Normal = CollisionResult.Normal;                            
+#if 1
+                            if(Abs(Dot(CollisionResult.Normal, V3(0.0f, 0.0f, 1.0f))) < 0.85f)                                                            
+                                Normal = Normalize(V3(CollisionResult.Normal.xy));                                                                                                                    
+#endif
+                            
+                            PlayerEllipsoid.CenterP += (MoveDelta*CollisionResult.t);
+                            PlayerEllipsoid.CenterP += (Normal*1e-5f);
+                            MoveDelta = TargetPosition - PlayerEllipsoid.CenterP;
+                            MoveDelta -= Dot(MoveDelta, Normal)*Normal;
+                            
+                            Entity->Velocity -= Dot(Entity->Velocity, Normal)*Normal;                                                                                                                                                                            
+                        }
+                        else
+                        {
+                            PlayerEllipsoid.CenterP += MoveDelta;
+                            break;                                                            
+                        }                                        
                     }
                 }
                 
+#if 1
+                if(Abs(Dot(Entity->CollidedNormal, V3(0.0f, 0.0f, 1.0f))) < 0.85f)
+                {       
+                    v3f GravityDelta = V3(0.0f, 0.0f, -4.5f*dt);
+                    for(u32 Iterations = 0; Iterations < 32; Iterations++)
+                    {   
+                        DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
+                        
+                        if(SquareMagnitude(GravityDelta) <= MOVE_DELTA_EPSILON)
+                            break;                                                            
+                        
+                        time_result CollisionResult = HandleEllipsoidCollisions(World, Game->Assets, PlayerEllipsoid, GravityDelta);                        
+                        if(CollisionResult.Intersected)
+                        {
+                            if(Abs(Dot(CollisionResult.Normal, V3(0.0f, 0.0f, 1.0f))) < 0.85f)
+                            {                                
+                                v3f TargetPosition = PlayerEllipsoid.CenterP + GravityDelta;
+                                
+                                PlayerEllipsoid.CenterP += (GravityDelta*CollisionResult.t);
+                                PlayerEllipsoid.CenterP += (CollisionResult.Normal*1e-5f);
+                                GravityDelta = TargetPosition - PlayerEllipsoid.CenterP;
+                                GravityDelta -= Dot(GravityDelta, CollisionResult.Normal)*CollisionResult.Normal;                                                        
+                                
+                                Entity->CollidedNormal = CollisionResult.Normal;
+                            }
+                            else
+                                break;
+                        }
+                        else
+                        {
+                            PlayerEllipsoid.CenterP += GravityDelta;
+                            break;                                                            
+                        }                                        
+                    }
+                }
+#endif
                 SetPlayerEllipsoidP(Game, Player, PlayerEllipsoid.CenterP);                
             } break;                        
         }                        

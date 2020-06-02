@@ -123,11 +123,24 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
     {
         game_information* GameInformation = &DevContext->GameInformation;
         
-        v3f PlayerPosition0 = GetPlayerPosition(Game, &Game->Worlds[0].Player);
-        v3f PlayerPosition1 = GetPlayerPosition(Game, &Game->Worlds[1].Player);
+        world_entity* PlayerEntity0 = GetPlayerEntity(&Game->Worlds[0]);
+        world_entity* PlayerEntity1 = GetPlayerEntity(&Game->Worlds[1]);
+        
+        v3f PlayerPosition0 = PlayerEntity0->Position;
+        v3f PlayerPosition1 = PlayerEntity1->Position;
+        
+        v3f PlayerVelocity0 = PlayerEntity0->Velocity;
+        v3f PlayerVelocity1 = PlayerEntity1->Velocity;
+        
+        v3f CollisionNormal = PlayerEntity0->CollidedNormal;
         
         ImGui::Text("Player 0 Position: (%.2f, %.2f, %.2f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
+        ImGui::Text("Player 0 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity0.x, PlayerVelocity0.y, PlayerVelocity0.z);
+        ImGui::Text("Collided Normal: (%.2f, %.2f, %.2f)", CollisionNormal.x, CollisionNormal.y, CollisionNormal.z);
+        
         ImGui::Text("Player 1 Position: (%.2f, %.2f, %.2f)", PlayerPosition1.x, PlayerPosition1.y, PlayerPosition1.z);
+        ImGui::Text("Player 1 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity1.x, PlayerVelocity1.y, PlayerVelocity1.z);
+        
         ImGui::Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
         ImGui::Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
     }

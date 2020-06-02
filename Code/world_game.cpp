@@ -56,7 +56,7 @@ EXPORT GAME_TICK(Tick)
         {
             world* World = GetWorld(Game, WorldIndex);
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
-            CreatePlayer(Game, WorldIndex, V3(0.0f, 0.0f, 1.0f), V3(0.35f, 0.35f, 1.0f), WorldIndex == 0 ? Blue() : Red());            
+            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 1.0f), V3(0.35f, 0.35f, 1.0f), WorldIndex == 0 ? Blue() : Red());            
             
             world_entity* PlayerEntity = GetPlayerEntity(World);
             camera* Camera = &World->Camera;
@@ -71,8 +71,8 @@ EXPORT GAME_TICK(Tick)
         
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(100.0f, 100.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.0f, 0.25f, 1.0f), RGBA(0.45f, 0.0f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f, 0.0f, 0.0f), V3(1.5f, 10.0f, 1.0f), V3(PI*0.2f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 2.0f, 0.0f, 0.0f), V3(1.5f, 10.0f, 1.0f), V3(PI*0.1f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 0.5f, 0.0f, 0.0f), V3(1.5f, 10.0f, 1.0f), V3(PI*0.2f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 2.0f, -5.0f, 0.0f), V3(1.5f, 160.0f, 1.0f), V3(PI*0.1f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                        
     }            
     
     if(IsPressed(Game->Input->SwitchWorld))
