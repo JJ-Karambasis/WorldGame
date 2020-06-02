@@ -310,13 +310,11 @@ CreateDualLinkedBoxEntities(game* Game, world_entity_type Type, v3f Position, v3
 inline blocker*
 CreateBlocker(game* Game, u32 WorldIndex, v3f P0, f32 Height0, v3f P1, f32 Height1)
 {
-    blocker* Blocker = PushStruct(&Game->GameStorage, blocker, Clear, 0);
+    blocker* Blocker = AllocateListEntry(&GetWorld(Game, WorldIndex)->Blockers, &Game->GameStorage);
     Blocker->P0 = P0;
     Blocker->P1 = P1;
     Blocker->Height0 = Height0;
     Blocker->Height1 = Height1;
-    
-    AddToList(&Game->Worlds[WorldIndex].Blockers, Blocker);
     
     return Blocker;
 }
@@ -497,6 +495,7 @@ b32 ResolvePushableEntity(world_entity* PlayerEntity, world_entity* Entity, time
     return Result;
 }
 
+#if 0 
 time_of_impact_result 
 FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
 {    
@@ -639,6 +638,7 @@ FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
     
     return Result;
 }
+#endif
 
 struct time_result
 {    

@@ -66,6 +66,26 @@ struct debug_direction_vector
     c4 Color;
 };
 
+struct frame
+{
+    f32 dt;
+    input Input;    
+    v3f PlayerPosition;
+    v3f PlayerVelocity;
+    v3f CollidedNormal;
+};
+
+struct frame_recording
+{
+    string_storage RecordingPath;
+    buffer RecordingBuffer;
+    b32 IsRecording;
+    b32 IsPlaying;    
+    
+    u32 TotalFrames;    
+    free_list<frame> Frames;    
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -74,10 +94,11 @@ struct dev_context
     
     arena DevStorage;
     b32 InDevelopmentMode;    
-    b32 UseDevCamera;
-    b32 DrawOtherWorld;
-    b32 DrawColliders;
-    b32 DrawBlockers;    
+    b32 UseDevCamera;        
+    b32 DrawOtherWorld;                
+    
+    frame_recording FrameRecording;
+    
     
     game_information GameInformation;
     
@@ -86,7 +107,7 @@ struct dev_context
     
     u32 ImGuiMeshCount;
     i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
-        
+    
     dev_mesh LineBoxMesh;
     dev_mesh LineSphereMesh;
     
@@ -104,6 +125,8 @@ struct dev_context
 
 void Platform_InitImGui(void* PlatformData);
 void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt);
+string Platform_OpenFileDialog(char* Extension);
+string Platform_FindNewFrameRecordingPath();
 
 inline b32 IsInDevelopmentMode(dev_context* Context)
 {

@@ -115,9 +115,72 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
         }
     }    
     
-    ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);
-    ImGui::Checkbox("Draw Colliders", (bool*)&DevContext->DrawColliders);
-    ImGui::Checkbox("Draw Blockers", (bool*)&DevContext->DrawBlockers);
+    frame_recording* FrameRecording = &DevContext->FrameRecording;
+    {
+        char* RecordingText = (FrameRecording->IsRecording) ? "Stop Recording" : "Start Recording";
+        
+        b32 PrevIsRecording = FrameRecording->IsRecording;
+        if(ImGui::Button(RecordingText)) FrameRecording->IsRecording = !FrameRecording->IsRecording;
+        
+        if(!FrameRecording->IsRecording)
+        {
+            if(ImGui::Button("Load Recording"))
+            {
+                string RecordingPath = Platform_OpenFileDialog("arc_recording");
+                if(!IsInvalidString(RecordingPath))
+                {
+                    if(!IsInvalidBuffer(FrameRecording->RecordingBuffer))
+                        Global_Platform->FreeFileMemory(&FrameRecording->RecordingBuffer);            
+                    
+                    FrameRecording->RecordingBuffer = Global_Platform->ReadEntireFile(RecordingPath.Data);
+                    CopyToStorage(&FrameRecording->RecordingPath, RecordingPath);
+                }
+            }
+            
+            if(!IsInvalidBuffer(FrameRecording->RecordingBuffer) && !IsInvalidString(FrameRecording->RecordingPath.String))
+            {
+                ImGui::SameLine();
+                ImGui::Text("Recording File: %s\n", FrameRecording->RecordingPath.String.Data);
+            }
+            
+            char* PlayRecordingText = (FrameRecording->IsPlaying) ? "Stop Playing" : "Start Playing";
+            if(ImGui::Button(PlayRecordingText)) 
+            {
+                if(!FrameRecording->IsPlaying && !IsInvalidBuffer(FrameRecording->RecordingBuffer))
+                {            
+                    FrameRecording->IsPlaying = true;                
+                }
+                else
+                {
+                    FrameRecording->IsPlaying = false;
+                }
+            }
+        }
+        else
+        {
+            ImGui::SameLine();
+            ImGui::Text("Recording File: %s\n", FrameRecording->RecordingPath.String.Data);
+        }
+        
+        if(PrevIsRecording != FrameRecording->IsRecording)
+        {
+            if(FrameRecording->IsRecording)
+            {
+                string RecordingPath = Platform_FindNewFrameRecordingPath();
+                if(!IsInvalidString(RecordingPath))
+                {
+                    CopyToStorage(&FrameRecording->RecordingPath, RecordingPath);
+                }
+                //NOTE(EVERYONE): Just started recording
+            }
+            else
+            {
+                //NOTE(EVERYONE): Just stopped recording
+            }
+        }
+    }
+    
+    ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
     
     if(ImGui::CollapsingHeader("Game Information"))
     {
@@ -172,56 +235,7 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
         debug_point* Point = DevContext->DebugPoints + PointIndex;
         DrawPoint(DevContext, Point->P, Point->Color);
     }
-    DevContext->DebugPointCount = 0;
-    
-    PushCull(Graphics, false);
-    
-    if(DevContext->DrawColliders)
-    {
-        pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
-        for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
-        {            
-            
-            switch(Entity->Collider.Type)
-            {
-                case COLLIDER_TYPE_ALIGNED_BOX:
-                {
-                    aligned_box Box = GetWorldSpaceAlignedBox(Entity);
-                    
-                    v3f Vertices[8];
-                    GetBoxVerticesFromDimAndCenterP(Vertices, Box.CenterP, Box.Dim);
-                    
-#define PUSH_QUAD(i0, i1, i2, i3) PushDrawQuad(Graphics, Vertices[i0], Vertices[i1], Vertices[i2], Vertices[i3], Red())
-                    
-                    PUSH_QUAD(5, 0, 3, 6);
-                    PUSH_QUAD(4, 5, 0, 1);
-                    PUSH_QUAD(1, 4, 7, 2);
-                    PUSH_QUAD(3, 2, 7, 6);
-                    
-#undef PUSH_QUAD
-                    
-                } break;
-            }        
-        }
-    }
-    
-    if(DevContext->DrawBlockers)
-    {
-        for(blocker* Blocker = World->Blockers.First; Blocker; Blocker = Blocker->Next)
-        {
-            v3f P[4] = 
-            {
-                Blocker->P0,
-                Blocker->P1,
-                V3(Blocker->P1.xy, Blocker->P1.z+Blocker->Height1),
-                V3(Blocker->P0.xy, Blocker->P0.z+Blocker->Height0)                
-            };
-            
-            PushDrawQuad(Graphics, P, Red());            
-        }            
-    }        
-    
-    PushCull(Graphics, true);
+    DevContext->DebugPointCount = 0;    
 }
 
 void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
@@ -373,7 +387,8 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     
     if(!DevContext->Initialized)
     {
-        DevContext->DevStorage = CreateArena(KILOBYTE(32));
+        DevContext->DevStorage = CreateArena(KILOBYTE(32));                
+        DevContext->FrameRecording.RecordingPath = AllocateStringStorage(&DevContext->DevStorage, 8092);
         
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                
@@ -405,4 +420,14 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     Input->Scroll = 0.0f;
     for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input->Buttons); ButtonIndex++)
         Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
+}
+
+void DevelopmentRecordFrame(dev_context* DevContext, game* Game)
+{
+    frame_recording* Recording = &DevContext->FrameRecording;
+    if(Recording->IsRecording)
+    {
+        
+        
+    }
 }

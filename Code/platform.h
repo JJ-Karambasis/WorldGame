@@ -17,6 +17,7 @@ typedef u64 platform_time;
 #define PLATFORM_LOG(name) void name(char* Format, ...)
 #define PLATFORM_READ_ENTIRE_FILE(name) buffer name(char* Path)
 #define PLATFORM_WRITE_ENTIRE_FILE(name) void name(char* Path, void* Data, u32 Length)
+#define PLATFORM_FREE_FILE_MEMORY(name) void name(buffer* Buffer)
 #define PLATFORM_OPEN_FILE(name) platform_file_handle* name(char* Path, platform_file_attributes Attributes)
 #define PLATFORM_READ_FILE(name) b32 name(platform_file_handle* File, void* Data, u32 ReadSize, u64 Offset)
 #define PLATFORM_WRITE_FILE(name) b32 name(platform_file_handle* File, void* Data, u32 WriteSize, u64 Offset)
@@ -28,6 +29,7 @@ typedef u64 platform_time;
 typedef PLATFORM_LOG(platform_log);
 typedef PLATFORM_READ_ENTIRE_FILE(platform_read_entire_file);
 typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
+typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
 typedef PLATFORM_OPEN_FILE(platform_open_file);
 typedef PLATFORM_READ_FILE(platform_read_file);
 typedef PLATFORM_WRITE_FILE(platform_write_file);
@@ -45,6 +47,7 @@ struct platform
     free_memory* FreeMemory;        
     platform_read_entire_file* ReadEntireFile;
     platform_write_entire_file* WriteEntireFile;    
+    platform_free_file_memory* FreeFileMemory;
     platform_open_file* OpenFile;
     platform_read_file* ReadFile;
     platform_write_file* WriteFile;

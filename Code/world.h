@@ -132,7 +132,8 @@ struct world
     world_entity_pool EntityPool;
     camera Camera;
     player Player;    
-    blocker_list Blockers;
+    
+    list<blocker> Blockers;    
 };
 
 #endif

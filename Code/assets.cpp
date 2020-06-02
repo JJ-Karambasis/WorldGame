@@ -45,7 +45,6 @@ audio
 DEBUGLoadWAVFile(char* Path)
 {
     audio Result = {};
-    temp_arena Temp = BeginTemporaryMemory();
     
     buffer FileBuffer = Global_Platform->ReadEntireFile(Path);
     BOOL_CHECK_AND_HANDLE(FileBuffer.Data, "Failed to read the wav file: %s\n", Path);
@@ -97,6 +96,6 @@ DEBUGLoadWAVFile(char* Path)
     }
     
     handle_error:
-    EndTemporaryMemory(&Temp);
+    Global_Platform->FreeFileMemory(FileBuffer);
     return Result;
 }

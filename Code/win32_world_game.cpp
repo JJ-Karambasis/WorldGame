@@ -15,6 +15,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse(&DevContext, RawMouse)
 #define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard(&DevContext, RawKeyboard)
 #define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(&DevContext, Game, Graphics)
+#define DEVELOPMENT_RECORD_FRAME(Game) DevelopmentRecordFrame(&DevContext, Game)
 #else
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) false
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) 
@@ -243,7 +244,7 @@ PLATFORM_READ_ENTIRE_FILE(Win32_ReadEntireFile)
         return Result;
     }
     
-    void* Data = PushSize(FileSize, Clear, 0);
+    void* Data = Global_Platform->AllocateMemory(FileSize);
     DWORD BytesRead;
     if(!ReadFile(FileHandle, Data, FileSize, &BytesRead, NULL) || (BytesRead != FileSize)) 
     { 
@@ -255,7 +256,7 @@ PLATFORM_READ_ENTIRE_FILE(Win32_ReadEntireFile)
     CloseHandle(FileHandle);    
     
     Result.Data = (u8*)Data;
-    Result.Size = FileSize;
+    Result.Size = FileSize;    
     return Result;
 }
 
@@ -281,6 +282,16 @@ PLATFORM_WRITE_ENTIRE_FILE(Win32_WriteEntireFile)
         WRITE_ERROR("Was unable to write the entire file.");           
     
     CloseHandle(FileHandle);    
+}
+
+PLATFORM_FREE_FILE_MEMORY(Win32_FreeFileMemory)
+{
+    if(!IsInvalidBuffer(*Buffer))
+    {
+        Global_Platform->FreeMemory(Buffer->Data);        
+        Buffer->Size = 0;
+        Buffer->Data = NULL;        
+    }
 }
 
 PLATFORM_OPEN_FILE(Win32_OpenFile)
@@ -442,6 +453,7 @@ platform* Win32_GetPlatformStruct()
     Result.FreeMemory      = Win32_FreeMemory;   
     Result.ReadEntireFile  = Win32_ReadEntireFile;
     Result.WriteEntireFile = Win32_WriteEntireFile;    
+    Result.FreeFileMemory  = Win32_FreeFileMemory;
     Result.OpenFile        = Win32_OpenFile;
     Result.ReadFile        = Win32_ReadFile;
     Result.WriteFile       = Win32_WriteFile;
@@ -626,7 +638,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!RegisterClassEx(&WindowClass))    
         WRITE_AND_HANDLE_ERROR("Failed to register window class.");                    
     
-    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
+    //HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
+    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1920, 1080));
     if(!Window)    
         WRITE_AND_HANDLE_ERROR("Failed to create game window."); 
     
@@ -754,6 +767,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         if(Game.dt > 1.0f/20.0f)
             Game.dt = 1.0f/20.0f;
         
+        DEVELOPMENT_RECORD_FRAME(&Game);
+        
         GameCode.Tick(&Game, Graphics, Global_Platform, DevPointer);                                
         
         DEVELOPMENT_TICK(&Game, Graphics);                
@@ -779,6 +794,25 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 } 
 
 #if DEVELOPER_BUILD
+#include <shobjidl_core.h>
+
+wchar_t* Win32_ConvertToWide(char* String)
+{
+    int StringSize = (int)LiteralStringLength(String);
+    wchar_t* Result = PushArray(StringSize, wchar_t, Clear, 0);
+    MultiByteToWideChar(CP_ACP, 0, String, -1, Result, StringSize);
+    return Result;
+}
+
+char* Win32_ConvertToStandard(wchar_t* String)
+{
+    //CONFIRM(JJ): Do we want to actually support wide strings in string.h? If so can we remove these wide string functions 
+    //from the c runtime libary?
+    int StringSize = (int)wcslen(String);
+    char* Result = PushArray(StringSize, char, Clear, 0);
+    WideCharToMultiByte(CP_ACP, 0, String, StringSize, Result, StringSize, NULL, NULL);
+    return Result;
+}
 
 void Platform_InitImGui(void* PlatformData)
 {    
@@ -842,6 +876,59 @@ void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt)
                 IO->MousePos = ImVec2((f32)MousePosition.x, (f32)MousePosition.y);                
         }
     }      
+}
+
+global IFileOpenDialog* Global_OpenFileDialog;
+string Platform_OpenFileDialog(char* Extension)
+{
+    string Result = InvalidString();
+    
+    IFileOpenDialog* FileDialog = NULL;
+    if(SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, (void**)&FileDialog)))
+    {
+        DWORD FileFlags;
+        if(SUCCEEDED(FileDialog->GetOptions(&FileFlags)))
+        {
+            if(SUCCEEDED(FileDialog->SetOptions(FileFlags | FOS_FORCEFILESYSTEM)))
+            {
+                string StringExtension = Concat("*.", Extension); 
+                COMDLG_FILTERSPEC Filter = {L"File", Win32_ConvertToWide(StringExtension.Data)};
+                if(SUCCEEDED(FileDialog->SetFileTypes(1, &Filter)))
+                {
+                    if(SUCCEEDED(FileDialog->SetFileTypeIndex(0)))
+                    {
+                        if(SUCCEEDED(FileDialog->SetDefaultExtension(Win32_ConvertToWide(Extension))))
+                        {
+                            if(SUCCEEDED(FileDialog->Show(NULL)))
+                            {
+                                IShellItem* Item;
+                                if(SUCCEEDED(FileDialog->GetResult(&Item)))
+                                {
+                                    PWSTR FilePath = NULL;
+                                    if(SUCCEEDED(Item->GetDisplayName(SIGDN_FILESYSPATH, &FilePath)))
+                                    {
+                                        Result = PushLiteralString(Win32_ConvertToStandard(FilePath));
+                                        CoTaskMemFree(FilePath);
+                                    }                                    
+                                    RELEASE(Item);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        RELEASE(FileDialog);        
+    }
+    
+    return Result;        
+}
+
+string Platform_FindNewFrameRecordingPath()
+{
+    string Result = InvalidString();
+    return Result;
 }
 
 b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
