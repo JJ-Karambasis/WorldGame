@@ -144,7 +144,7 @@ void DevelopmentFrameRecording(dev_context* DevContext)
                 {
                     FrameRecording->CurrentFrameIndex++;                    
                     if(FrameRecording->CurrentFrameIndex == FrameRecording->TotalLoadedFrames)
-                        FrameRecording->CurrentFrameIndex = FrameRecording->TotalLoadedFrames;
+                        FrameRecording->CurrentFrameIndex = FrameRecording->TotalLoadedFrames-1;
                 }
             }
         }                
