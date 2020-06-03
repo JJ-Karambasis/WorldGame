@@ -96,6 +96,6 @@ DEBUGLoadWAVFile(char* Path)
     }
     
     handle_error:
-    Global_Platform->FreeFileMemory(FileBuffer);
+    Global_Platform->FreeFileMemory(&FileBuffer);
     return Result;
 }

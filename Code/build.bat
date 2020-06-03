@@ -7,12 +7,13 @@ set Compiler=cl
 
 IF NOT EXIST ..\din mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data
+IF NOT EXIST ..\data\frame_recordings mkdir ..\data\frame_recordings
 
 set FBXPath=-I..\code\fbxsdk
 
 set COMPILE_PLATFORM=1
-set COMPILE_GRAPHICS=0
-set COMPILE_GAME=0
+set COMPILE_GRAPHICS=1
+set COMPILE_GAME=1
 
 pushd ..\Bin
 del *.pdb > NUL 2> NUL

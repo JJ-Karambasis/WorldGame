@@ -16,13 +16,19 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard(&DevContext, RawKeyboard)
 #define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(&DevContext, Game, Graphics)
 #define DEVELOPMENT_RECORD_FRAME(Game) DevelopmentRecordFrame(&DevContext, Game)
+#define DEVELOPMENT_PLAY_FRAME(Game) DevelopmentPlayFrame(&DevContext, Game)
 #else
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) false
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) 
 #define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) 
 #define DEVELOPMENT_TICK(Game, Graphics)
+#define DEVELOPMENT_RECORD_FRAME(Game)
+#define DEVELOPMENT_PLAY_FRAME(Game)
 #endif
 
+global string Global_EXEFilePath;
+global arena __Global_PlatformArena__;
+global arena* Global_PlatformArena = &__Global_PlatformArena__;
 global LARGE_INTEGER Global_Frequency;
 
 PLATFORM_CLOCK(Win32_Clock)
@@ -104,7 +110,7 @@ string Win32_GetExePathWithName()
     //TODO(JJ): We need to test and handle the case when our file path is larger than MAX_PATH
     char EXEPathWithName[MAX_PATH+1];
     ptr Size = GetModuleFileName(NULL, EXEPathWithName, MAX_PATH+1);
-    string Result = PushLiteralString(EXEPathWithName, Size);
+    string Result = PushLiteralString(EXEPathWithName, Size, Global_PlatformArena);
     return Result;
 }
 
@@ -606,16 +612,18 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     InitMemory(&DefaultArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);    
     Global_Platform->TempArena = &DefaultArena;
     Global_Platform->ErrorStream = &ErrorStream;
-    
+        
     assets Assets = {};
     Assets.Storage = CreateArena(MEGABYTE(64));
     
+    *Global_PlatformArena = CreateArena(MEGABYTE(1));
+    
     string EXEFilePathName = Win32_GetExePathWithName();
-    string EXEFilePath = GetFilePath(EXEFilePathName);    
-    string GameDLLPathName = Concat(EXEFilePath, "World_Game.dll");
-    string TempDLLPathName = Concat(EXEFilePath, "World_Game_Temp.dll");    
-    string OpenGLGraphicsDLLPathName = Concat(EXEFilePath, "OpenGL.dll");
-    string OpenGLGraphicsTempDLLPathName = Concat(EXEFilePath, "OpenGL_Temp.dll");    
+    Global_EXEFilePath = GetFilePath(EXEFilePathName);    
+    string GameDLLPathName = Concat(Global_EXEFilePath, "World_Game.dll", Global_PlatformArena);
+    string TempDLLPathName = Concat(Global_EXEFilePath, "World_Game_Temp.dll", Global_PlatformArena);    
+    string OpenGLGraphicsDLLPathName = Concat(Global_EXEFilePath, "OpenGL.dll", Global_PlatformArena);
+    string OpenGLGraphicsTempDLLPathName = Concat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);    
     
     u16 KeyboardUsage = 6;
     u16 MouseUsage = 2;
@@ -768,6 +776,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             Game.dt = 1.0f/20.0f;
         
         DEVELOPMENT_RECORD_FRAME(&Game);
+        DEVELOPMENT_PLAY_FRAME(&Game);
         
         GameCode.Tick(&Game, Graphics, Global_Platform, DevPointer);                                
         
@@ -925,9 +934,37 @@ string Platform_OpenFileDialog(char* Extension)
     return Result;        
 }
 
+const global char Global_FrameRecordingPrefix[] = "FrameRecording_";
+global char* Global_DataPath;
+global i32 Global_FrameRecordingIndex = 1;
 string Platform_FindNewFrameRecordingPath()
 {
     string Result = InvalidString();
+    
+    if(!Global_DataPath)
+    {
+        Global_DataPath = PushArray(Global_PlatformArena, Global_EXEFilePath.Length*2, char, Clear, 0);
+        DWORD ReadSize = GetCurrentDirectory((DWORD)Global_EXEFilePath.Length*2, Global_DataPath);
+        ASSERT(ReadSize <= Global_EXEFilePath.Length*2);
+    }
+    
+    WIN32_FIND_DATAA FindData;
+    HANDLE FileHandle = FindFirstFile("frame_recordings\\*", &FindData);        
+    
+    while(FileHandle != INVALID_HANDLE_VALUE)
+    {                
+        if(BeginsWith(FindData.cFileName, Global_FrameRecordingPrefix))
+        {            
+            i32 IndexValue = ToInt(&FindData.cFileName[sizeof(Global_FrameRecordingPrefix)-1]);
+            if(IndexValue >= Global_FrameRecordingIndex)
+                Global_FrameRecordingIndex = IndexValue+1;
+        }
+        
+        if(!FindNextFile(FileHandle, &FindData))
+            break;
+    }        
+        
+    Result = PushLiteralString(FormatString("%s\\frame_recordings\\FrameRecording_%d.arc_recording", Global_DataPath, Global_FrameRecordingIndex));    
     return Result;
 }
 

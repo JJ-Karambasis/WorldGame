@@ -85,15 +85,22 @@ i64 AllocateImGuiFont(graphics* Graphics)
     return FontTexture;
 }
 
-void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
-{    
+void DevelopmentImGui(dev_context* DevContext)
+{   
+    graphics* Graphics = DevContext->Graphics;
+    game* Game = DevContext->Game;
+    
     ImGui::NewFrame();
     
-    //local bool demo_window;
-    //ImGui::ShowDemoWindow(&demo_window);
+    //IMPORTANT(EVERYONE): If you need help figuring out how to use IMGUI you can always switch this to 1 and look at the imgui demo window
+    //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start
+#if 0 
+    local bool demo_window;
+    ImGui::ShowDemoWindow(&demo_window);
+#endif
     
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/4.0f, (f32)Graphics->RenderDim.y));    
+    ImGui::SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/3.0f, (f32)Graphics->RenderDim.y));    
     
     local bool open = true;
     ImGui::Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse);    
@@ -115,70 +122,7 @@ void DevelopmentImGui(dev_context* DevContext, game* Game, graphics* Graphics)
         }
     }    
     
-    frame_recording* FrameRecording = &DevContext->FrameRecording;
-    {
-        char* RecordingText = (FrameRecording->IsRecording) ? "Stop Recording" : "Start Recording";
-        
-        b32 PrevIsRecording = FrameRecording->IsRecording;
-        if(ImGui::Button(RecordingText)) FrameRecording->IsRecording = !FrameRecording->IsRecording;
-        
-        if(!FrameRecording->IsRecording)
-        {
-            if(ImGui::Button("Load Recording"))
-            {
-                string RecordingPath = Platform_OpenFileDialog("arc_recording");
-                if(!IsInvalidString(RecordingPath))
-                {
-                    if(!IsInvalidBuffer(FrameRecording->RecordingBuffer))
-                        Global_Platform->FreeFileMemory(&FrameRecording->RecordingBuffer);            
-                    
-                    FrameRecording->RecordingBuffer = Global_Platform->ReadEntireFile(RecordingPath.Data);
-                    CopyToStorage(&FrameRecording->RecordingPath, RecordingPath);
-                }
-            }
-            
-            if(!IsInvalidBuffer(FrameRecording->RecordingBuffer) && !IsInvalidString(FrameRecording->RecordingPath.String))
-            {
-                ImGui::SameLine();
-                ImGui::Text("Recording File: %s\n", FrameRecording->RecordingPath.String.Data);
-            }
-            
-            char* PlayRecordingText = (FrameRecording->IsPlaying) ? "Stop Playing" : "Start Playing";
-            if(ImGui::Button(PlayRecordingText)) 
-            {
-                if(!FrameRecording->IsPlaying && !IsInvalidBuffer(FrameRecording->RecordingBuffer))
-                {            
-                    FrameRecording->IsPlaying = true;                
-                }
-                else
-                {
-                    FrameRecording->IsPlaying = false;
-                }
-            }
-        }
-        else
-        {
-            ImGui::SameLine();
-            ImGui::Text("Recording File: %s\n", FrameRecording->RecordingPath.String.Data);
-        }
-        
-        if(PrevIsRecording != FrameRecording->IsRecording)
-        {
-            if(FrameRecording->IsRecording)
-            {
-                string RecordingPath = Platform_FindNewFrameRecordingPath();
-                if(!IsInvalidString(RecordingPath))
-                {
-                    CopyToStorage(&FrameRecording->RecordingPath, RecordingPath);
-                }
-                //NOTE(EVERYONE): Just started recording
-            }
-            else
-            {
-                //NOTE(EVERYONE): Just stopped recording
-            }
-        }
-    }
+    DevelopmentFrameRecording(DevContext);
     
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
     
@@ -238,12 +182,15 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     DevContext->DebugPointCount = 0;    
 }
 
-void DevelopmentRender(dev_context* DevContext, game* Game, graphics* Graphics)
-{    
+void DevelopmentRender(dev_context* DevContext)
+{   
+    graphics* Graphics = DevContext->Graphics;
+    game* Game = DevContext->Game;
+    
     if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
         return;
     
-    DevelopmentImGui(DevContext, Game, Graphics);        
+    DevelopmentImGui(DevContext);        
     
     dev_input* Input = &DevContext->Input;
     
@@ -389,6 +336,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     {
         DevContext->DevStorage = CreateArena(KILOBYTE(32));                
         DevContext->FrameRecording.RecordingPath = AllocateStringStorage(&DevContext->DevStorage, 8092);
+        DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);
         
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                
@@ -413,7 +361,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     if(IsInDevelopmentMode(DevContext))
     {        
         Platform_DevUpdate(DevContext->PlatformData, Graphics->RenderDim, Game->dt);        
-        DevelopmentRender(DevContext, Game, Graphics);        
+        DevelopmentRender(DevContext);        
     }
     
     Input->MouseDelta = {};
@@ -422,12 +370,4 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
 }
 
-void DevelopmentRecordFrame(dev_context* DevContext, game* Game)
-{
-    frame_recording* Recording = &DevContext->FrameRecording;
-    if(Recording->IsRecording)
-    {
-        
-        
-    }
-}
+#include "dev_frame_recording.cpp"

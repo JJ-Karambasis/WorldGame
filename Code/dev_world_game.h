@@ -22,6 +22,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color) ASSERT(__Internal_Dev_Context__->DebugDirectionVectorsCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugDirectionVectors)); __Internal_Dev_Context__->DebugDirectionVectors[__Internal_Dev_Context__->DebugDirectionVectorsCount++] = {origin, direction, color}
 
 #include "imgui/imgui.h"
+#include "dev_frame_recording.h"
 
 struct dev_input
 {
@@ -64,26 +65,6 @@ struct debug_direction_vector
     v3f Origin;
     v3f Direction;
     c4 Color;
-};
-
-struct frame
-{
-    f32 dt;
-    input Input;    
-    v3f PlayerPosition;
-    v3f PlayerVelocity;
-    v3f CollidedNormal;
-};
-
-struct frame_recording
-{
-    string_storage RecordingPath;
-    buffer RecordingBuffer;
-    b32 IsRecording;
-    b32 IsPlaying;    
-    
-    u32 TotalFrames;    
-    free_list<frame> Frames;    
 };
 
 #define MAX_IMGUI_MESHES 32
