@@ -76,7 +76,8 @@ struct dev_context
     arena DevStorage;
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
-    b32 DrawOtherWorld;                
+    b32 DrawOtherWorld;
+    b32 SelectObjects;
     
     frame_recording FrameRecording;
     
@@ -102,6 +103,7 @@ struct dev_context
     
     void* PlatformData;
     b32 Initialized;
+    world_entity* SelectedObject;
 };
 
 void Platform_InitImGui(void* PlatformData);

@@ -124,7 +124,8 @@ void DevelopmentImGui(dev_context* DevContext)
     
     DevelopmentFrameRecording(DevContext);
     
-    ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
+    ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);
+    ImGui::Checkbox("Inspect Objects", (bool*)&DevContext->SelectObjects);
     
     if(ImGui::CollapsingHeader("Game Information"))
     {
@@ -150,6 +151,23 @@ void DevelopmentImGui(dev_context* DevContext)
         
         ImGui::Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
         ImGui::Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
+    }
+
+    if(ImGui::CollapsingHeader("SelectedObject"))
+    {
+        game_information* GameInformation = &DevContext->GameInformation;
+        if(DevContext->SelectedObject != nullptr)
+        {
+            v3f ObjectPosition = DevContext->SelectedObject->Position;
+            v3f ObjectVelocity = DevContext->SelectedObject->Velocity;
+            
+            ImGui::Text("Selected Object Position: (%.2f, %.2f, %.2f)", ObjectPosition.x, ObjectPosition.y, ObjectPosition.z);
+            ImGui::Text("Selected Object Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
+        }
+        else
+        {
+            ImGui::Text("No object selected");
+        }
     }
     
     ImGui::End();    
@@ -216,7 +234,7 @@ void DevelopmentRender(dev_context* DevContext)
             
             if(Abs(Input->Scroll) > 0.0f)            
                 Camera->Velocity.z -= Input->Scroll*Game->dt*CAMERA_SCROLL_ACCELERATION;                                            
-        }                
+        }            
         
         Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
         v3f Eulers = (Camera->AngularVelocity*Game->dt);            
@@ -239,6 +257,18 @@ void DevelopmentRender(dev_context* DevContext)
         
         Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
     }
+    
+    if(DevContext->SelectObjects)
+    {
+        if(!IsDown(Input->Alt))
+        {
+            if(IsPressed(Input->LMB))
+            {
+                //For not just getting the player entity. need to change to cast the ray and get the intersected object
+                DevContext->SelectedObject = GetPlayerEntity(World);
+            }
+        }    
+    }    
     
     PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
     
