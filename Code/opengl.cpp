@@ -580,6 +580,15 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     glDisable(GL_CULL_FACE);
             } break;
             
+            case PUSH_COMMAND_WIREFRAME:
+            {
+                push_command_wireframe* CommandWireframe = (push_command_wireframe*)Command;
+                if(CommandWireframe->Enable)
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                else
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            } break;
+            
             case PUSH_COMMAND_BLEND:
             {
                 push_command_blend* CommandBlend = (push_command_blend*)Command;

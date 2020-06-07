@@ -149,7 +149,9 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     
     FbxNode* Node = Context->MeshNodes.Ptr[0];
     
+    v3f GeometricTranslation = V3(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
     m4 Transform = M4(Node->EvaluateGlobalTransform());
+    Transform.Translation.xyz -= GeometricTranslation;
     m3 NormalTransform = M3(Transpose(InverseTransformM4(Transform)));
         
     FbxMesh* Mesh = Node->GetMesh();
@@ -355,7 +357,9 @@ walkable_mesh FBX_LoadFirstWalkableMesh(fbx_context* Context, arena* Storage)
     
     FbxNode* Node = Context->MeshNodes.Ptr[0];
     
+    v3f GeometricTranslation = V3(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
     m4 Transform = M4(Node->EvaluateGlobalTransform());        
+    Transform.Translation.xyz -= GeometricTranslation;
     FbxMesh* Mesh = Node->GetMesh();
     
     u32 ControlPointCount = Mesh->GetControlPointsCount();

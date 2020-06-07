@@ -57,6 +57,15 @@ void PushCull(graphics* Graphics, b32 Enable)
     PushCommand(Graphics, PushCommandCull);
 }
 
+void PushWireframe(graphics* Graphics, b32 Enable)
+{
+    push_command_wireframe* PushCommandWireframe = PushStruct(push_command_wireframe, NoClear, 0);
+    PushCommandWireframe->Type = PUSH_COMMAND_WIREFRAME;
+    PushCommandWireframe->Enable = Enable;
+    
+    PushCommand(Graphics, PushCommandWireframe);
+}
+
 void PushBlend(graphics* Graphics, b32 Enable, graphics_blend SrcGraphicsBlend=GRAPHICS_BLEND_UNKNOWN, graphics_blend DstGraphicsBlend=GRAPHICS_BLEND_UNKNOWN)
 {
     push_command_blend* PushCommandBlend = PushStruct(push_command_blend, NoClear, 0);
@@ -262,7 +271,7 @@ void PushWorldCommands(graphics* Graphics, world* World, camera* Camera, assets*
                 PushDrawShadedColoredSkinningMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0, 
                                                   AnimationController->GlobalPoses, AnimationController->Skeleton->JointCount);
 #else
-                PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
+                //PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
 #endif
                 
             }

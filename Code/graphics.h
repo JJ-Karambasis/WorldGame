@@ -41,6 +41,7 @@ enum push_command_type
     PUSH_COMMAND_CLEAR_COLOR_AND_DEPTH,
     PUSH_COMMAND_DEPTH,
     PUSH_COMMAND_CULL,
+    PUSH_COMMAND_WIREFRAME,
     PUSH_COMMAND_BLEND,
     PUSH_COMMAND_SCISSOR,    
     PUSH_COMMAND_VIEWPORT,
@@ -76,6 +77,11 @@ struct push_command_depth : public push_command
 };
 
 struct push_command_cull : public push_command
+{
+    b32 Enable;
+};
+
+struct push_command_wireframe : public push_command
 {
     b32 Enable;
 };

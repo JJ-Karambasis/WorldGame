@@ -149,7 +149,7 @@ void FreeEntity(game* Game, world_entity_id ID)
 }
 
 world_entity_id
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, mesh* Mesh, void* UserData=NULL)
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, mesh* Mesh, walkable_mesh* WalkableMesh = NULL, void* UserData=NULL)
 {
     world* World = GetWorld(Game, WorldIndex);
     
@@ -162,6 +162,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     Entity->Transform = CreateSQT(Position, Scale, Euler);
     Entity->Color = Color;
     Entity->Mesh = Mesh;
+    Entity->WalkableMesh = WalkableMesh;
     Entity->UserData = UserData;    
     Entity->LinkID = InvalidEntityID();
     
@@ -169,55 +170,24 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh0, mesh* Mesh1)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh0, mesh* Mesh1, walkable_mesh* WalkableMesh0=NULL, walkable_mesh* WalkableMesh1=NULL)
 {
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh0);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh1);    
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh0, WalkableMesh0);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh1, WalkableMesh1);    
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
 {
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh);    
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh, WalkableMesh);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh, WalkableMesh);    
 }
 
 inline void
-CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1, 
-                         mesh* Mesh0, mesh* Mesh1)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
 {
-    world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0, Mesh0);
-    world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1, Mesh1);
-    
-    GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
-    GetEntity(&Game->Worlds[1], BID)->LinkID = AID;    
-}
-
-inline void
-CreateDualLinkedEntities(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh)                      
-{
-    CreateDualLinkedEntities(Game, Type, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1, Mesh, Mesh);    
-}
-
-inline void
-CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position0, v3f Position1, v3f Scale0, v3f Scale1, v3f Euler0, v3f Euler1, c4 Color0, c4 Color1,
-                           mesh* Mesh0, mesh* Mesh1)
-{
-    world_entity_id AID = CreateEntity(Game, Type, 0, Position0, Scale0, Euler0, Color0, Mesh0);
-    world_entity_id BID = CreateEntity(Game, Type, 1, Position1, Scale1, Euler1, Color1, Mesh1);
-    
-    ASSERT((LinkWorldIndex == 0) || (LinkWorldIndex == 1));
-    
-    if(LinkWorldIndex == 0)
-        GetEntity(&Game->Worlds[1], BID)->LinkID = AID;
-    else
-        GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
-}
-
-inline void
-CreateSingleLinkedEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh0, mesh* Mesh1)
-{
-    CreateSingleLinkedEntities(Game, Type, LinkWorldIndex, Position, Position, Scale, Scale, Euler, Euler, Color0, Color1, Mesh0, Mesh1);        
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color, Mesh, WalkableMesh);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color, Mesh, WalkableMesh);    
 }
 
 void 
@@ -227,7 +197,7 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, v3f Radius, c4 Color)
     Player->Pushing = InitPushingState();
     //Player->AnimationController = CreateAnimationController(&Game->GameStorage, &Game->Assets->TestSkeleton);    
     //Player->AnimationController.PlayingAnimation.Clip = &Game->Assets->TestAnimation;
-    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Color, &Game->Assets->PlayerMesh, Player);
+    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Color, &Game->Assets->PlayerMesh, NULL, Player);
     
     Player->Radius = Radius;    
 }
@@ -264,49 +234,6 @@ CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position
     return Result;
 }
 
-void 
-CreateBoxEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Dim, c4 Color0, c4 Color1, world_entity_id* IDs=NULL)
-{    
-    world_entity_id A = CreateBoxEntity(Game, Type, 0, Position, Dim, Color0);
-    world_entity_id B = CreateBoxEntity(Game, Type, 1, Position, Dim, Color1); 
-    
-    if(IDs)
-    {
-        IDs[0] = A;
-        IDs[1] = B;
-    }
-}
-
-void 
-CreateBoxEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Dim, c4 Color, world_entity_id* IDs=NULL)
-{    
-    CreateBoxEntityInBothWorlds(Game, Type, Position, Dim, Color, Color, IDs);    
-}
-
-void 
-CreateSingleLinkedBoxEntities(game* Game, world_entity_type Type, u32 LinkWorldIndex, v3f Position, v3f Dim, c4 Color0, c4 Color1)
-{
-    world_entity_id AID = CreateBoxEntity(Game, Type, 0, Position, Dim, Color0);
-    world_entity_id BID = CreateBoxEntity(Game, Type, 1, Position, Dim, Color1);
-    
-    ASSERT((LinkWorldIndex == 0) || (LinkWorldIndex == 1));
-    
-    if(LinkWorldIndex == 0)
-        GetEntity(&Game->Worlds[1], BID)->LinkID = AID;
-    else
-        GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
-}
-
-void 
-CreateDualLinkedBoxEntities(game* Game, world_entity_type Type, v3f Position, v3f Dim, c4 Color0, c4 Color1)
-{
-    world_entity_id AID = CreateBoxEntity(Game, Type, 0, Position, Dim, Color0);
-    world_entity_id BID = CreateBoxEntity(Game, Type, 1, Position, Dim, Color1);
-    
-    GetEntity(&Game->Worlds[0], AID)->LinkID = BID;
-    GetEntity(&Game->Worlds[1], BID)->LinkID = AID;    
-}
-
 inline blocker*
 CreateBlocker(game* Game, u32 WorldIndex, v3f P0, f32 Height0, v3f P1, f32 Height1)
 {
@@ -333,76 +260,6 @@ TrueHeight(f32 Height, f32 Radius)
     return Result;
 }
 
-inline world_entity* 
-IsPlayerPushingObject(game* Game, player* Player, v2f MoveDirection)
-{
-    f32 Epsilon = 1e-4f;
-    
-    if((Player->State == PLAYER_STATE_PUSHING) && 
-       !IsInvalidEntityID(Player->Pushing.EntityID) && 
-       AreEqual(Player->Pushing.Direction, MoveDirection, Epsilon))
-    {        
-        world_entity* Entity = GetEntity(Game, Player->Pushing.EntityID);                        
-        b32 Result = (Entity->Type == WORLD_ENTITY_TYPE_PUSHABLE);
-        if(Result)        
-            return Entity;                
-    }
-    
-    return NULL;        
-}
-
-inline b32 
-IsInRangeOfBlockerZ(blocker* Blocker, f32 BottomZ, f32 TopZ)
-{
-    f32 BlockerZ0 = Blocker->P0.z;
-    f32 BlockerHeight0 = BlockerZ0 + Blocker->Height0;
-    f32 BlockerZ1 = Blocker->P1.z;
-    f32 BlockerHeight1 = BlockerZ1 + Blocker->Height1;
-    
-    b32 Result = (IsRangeInInterval(BlockerZ0, BlockerHeight0, BottomZ, TopZ) ||
-                  IsRangeInInterval(BlockerZ1, BlockerHeight1, BottomZ, TopZ));
-    return Result;
-}
-
-vertical_capsule 
-GetWorldSpaceVerticalCapsule(vertical_capsule Capsule, sqt Transform)
-{
-    Transform.Orientation = IdentityQuaternion();
-    
-    vertical_capsule Result;
-    Result.P = TransformV3(Capsule.P, Transform);
-    Result.Radius = Capsule.Radius * MaximumF32(Transform.Scale.x, Transform.Scale.y);
-    Result.Height = Capsule.Height * Transform.Scale.z;
-    return Result;
-}
-
-vertical_capsule 
-GetWorldSpaceVerticalCapsule(world_entity* Entity)
-{
-    ASSERT(Entity->Collider.Type == COLLIDER_TYPE_VERTICAL_CAPSULE);
-    vertical_capsule Result = GetWorldSpaceVerticalCapsule(Entity->Collider.VerticalCapsule, Entity->Transform);
-    return Result;
-}
-
-aligned_box 
-GetWorldSpaceAlignedBox(aligned_box Box, sqt Transform)
-{
-    Transform.Orientation = IdentityQuaternion();
-    
-    aligned_box Result;
-    Result.CenterP = TransformV3(Box.CenterP, Transform);
-    Result.Dim = Box.Dim*Transform.Scale;
-    return Result;
-}
-
-aligned_box 
-GetWorldSpaceAlignedBox(world_entity* Entity)
-{
-    ASSERT(Entity->Collider.Type == COLLIDER_TYPE_ALIGNED_BOX);
-    aligned_box Result = GetWorldSpaceAlignedBox(Entity->Collider.AlignedBox, Entity->Transform);
-    return Result;    
-}
-
 world_entity* 
 ClearEntityVelocity(game* Game, world_entity_id ID)
 {
@@ -417,13 +274,6 @@ ClearEntityVelocity(game* Game, world_entity_id ID)
     return NULL;
 }
 
-inline f32
-GetCapsuleHeight(vertical_capsule* Capsule)
-{
-    f32 Result = Capsule->P.z+Capsule->Height+(Capsule->Radius*2);
-    return Result;
-}
-
 void 
 OnWorldSwitch(game* Game, u32 LastWorldIndex, u32 CurrentWorldIndex)
 {
@@ -435,743 +285,214 @@ OnWorldSwitch(game* Game, u32 LastWorldIndex, u32 CurrentWorldIndex)
     
 }
 
-void 
-ResolveImpact(world_entity* Entity, v2f NewPosition, v2f Normal, v2f* MoveDelta)
-{       
-    v2f TargetPosition = Entity->Position.xy + *MoveDelta;    
-    
-    NewPosition += Normal*0.00001f;
-    
-    Entity->Position.xy = NewPosition;
-    *MoveDelta = TargetPosition - NewPosition;
-    
-    if(Normal != 0)
-    {
-        *MoveDelta -= Dot(*MoveDelta, Normal)*Normal;
-        Entity->Velocity.xy -= Dot(Entity->Velocity.xy, Normal)*Normal;                        
-    }
-}
-
-void ResolvePushableImpact(world_entity* PlayerEntity, world_entity* Entity, v2f NewPosition, v2f Normal, v2f* MoveDelta)
+b32 GetLowestRoot(f32 a, f32 b, f32 c, f32 MinRoot, f32* t)
 {
-    ASSERT(PlayerEntity->Type == WORLD_ENTITY_TYPE_PLAYER);
-    v2f OldP = Entity->Position.xy;
+    f32 Epsilon = 0.0f;
     
-    ResolveImpact(Entity, NewPosition, Normal, MoveDelta);
-    
-    player* Player = (player*)PlayerEntity->UserData;
-    
-    v2f Delta = Entity->Position.xy - OldP;
-    if(AreEqualIDs(Player->Pushing.EntityID, Entity->ID))
-        PlayerEntity->Position.xy += Delta;                            
-}
-
-b32 
-ResolveEntity(world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
-{    
-    if(IsInvalidTimeResult2D(TimeResult))
+    quadratic_equation_result Result = SolveQuadraticEquation(a, b, c);
+    if(Result.RootCount > 0)
     {
-        Entity->Position.xy += (*MoveDelta);                                
-        return true;        
-    }
-    
-    ResolveImpact(Entity, TimeResult.ContactPoint, TimeResult.Normal, MoveDelta);                                                                                                    
-    return false;
-}
-
-b32 ResolvePushableEntity(world_entity* PlayerEntity, world_entity* Entity, time_result_2D TimeResult, v2f* MoveDelta)
-{    
-    ASSERT(PlayerEntity->Type == WORLD_ENTITY_TYPE_PLAYER);
-    v2f OldP = Entity->Position.xy;
-    
-    b32 Result = ResolveEntity(Entity, TimeResult, MoveDelta);    
-    
-    player* Player = (player*)PlayerEntity->UserData;
-    
-    v2f Delta = Entity->Position.xy - OldP;
-    if(AreEqualIDs(Player->Pushing.EntityID, Entity->ID))
-        PlayerEntity->Position.xy += Delta;                            
-    
-    return Result;
-}
-
-#if 0 
-time_of_impact_result 
-FindTOI(game* Game, world_entity* Entity, v2f MoveDelta, world_entity_id CullID)
-{    
-    time_of_impact_result Result;
-    Result.TimeResult = InvalidTimeResult2D();
-    Result.HitEntityID = InvalidEntityID();    
-    
-    world* World = GetWorld(Game, Entity->ID);
-    
-    switch(Entity->Collider.Type)
-    {
-        case COLLIDER_TYPE_ALIGNED_BOX:
+        if(Result.RootCount == 1)
         {
-            aligned_box EntityBox = GetWorldSpaceAlignedBox(Entity);
-            
-            v2f TargetPosition = EntityBox.CenterP.xy + MoveDelta;
-            
-            f32 HalfDimZ = EntityBox.Dim.z*0.5f;
-            f32 MinZ = EntityBox.CenterP.z-HalfDimZ;
-            f32 MaxZ = EntityBox.CenterP.z+HalfDimZ;            
-            
-            for(blocker* Blocker = World->Blockers.First; Blocker; Blocker = Blocker->Next)
+            if(Result.Roots[0] > 0 && Result.Roots[0] < MinRoot)
             {
-                if(IsInRangeOfBlockerZ(Blocker, MinZ, MaxZ))
-                {
-                    time_result_2D TimeResult = MovingRectangleEdgeIntersectionTime2D(EntityBox.CenterP.xy, TargetPosition, EntityBox.Dim.xy, Blocker->P0.xy, Blocker->P1.xy);
-                    if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))
-                        Result.TimeResult = TimeResult;
-                }                                    
-            } 
-            
-            pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);                                    
-            for(world_entity* TestEntity = GetFirst(&Iter); TestEntity; TestEntity = GetNext(&Iter))
-            {                             
-                if((TestEntity->Type != WORLD_ENTITY_TYPE_WALKABLE) && (TestEntity != Entity))
-                {   
-                    if(AreEqualIDs(TestEntity->ID, CullID))
-                        continue;
-                    
-                    switch(TestEntity->Collider.Type)
-                    {
-                        case COLLIDER_TYPE_ALIGNED_BOX:
-                        {
-                            aligned_box TestEntityBox = GetWorldSpaceAlignedBox(TestEntity);
-                            
-                            f32 TestHalfDimZ = TestEntityBox.Dim.z*0.5f;
-                            f32 TestMinZ = TestEntityBox.CenterP.z-HalfDimZ;
-                            f32 TestMaxZ = TestEntityBox.CenterP.z+HalfDimZ;
-                            
-                            if(IsRangeInInterval(TestMinZ, TestMaxZ, MinZ, MaxZ))
-                            {
-                                time_result_2D TimeResult = MovingRectangleRectangleIntersectionTime2D(EntityBox.CenterP.xy, TargetPosition, EntityBox.Dim.xy, 
-                                                                                                       TestEntityBox.CenterP.xy, TestEntityBox.Dim.xy);
-                                if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))
-                                    Result.TimeResult = TimeResult;
-                            }                            
-                        } break;
-                        
-                        case COLLIDER_TYPE_VERTICAL_CAPSULE:
-                        {
-                            vertical_capsule TestEntityCapsule = GetWorldSpaceVerticalCapsule(TestEntity);                            
-                            f32 CapsuleHeight = GetCapsuleHeight(&TestEntityCapsule);                            
-                            
-                            if(IsRangeInInterval(MinZ, MaxZ, TestEntityCapsule.P.z, CapsuleHeight))
-                            {
-                                time_result_2D TimeResult = MovingRectangleCircleIntersectionTime2D(EntityBox.CenterP.xy, TargetPosition, EntityBox.Dim.xy, TestEntityCapsule.P.xy, TestEntityCapsule.Radius);
-                                if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))
-                                {                                                                   
-                                    Result.TimeResult = TimeResult;
-                                    Result.HitEntityID = TestEntity->ID;
-                                }
-                            }                            
-                        } break;
-                        
-                        INVALID_DEFAULT_CASE;
-                    }
-                }
-            }            
-        } break;
-        
-        case COLLIDER_TYPE_VERTICAL_CAPSULE:
-        {
-            vertical_capsule EntityCapsule = GetWorldSpaceVerticalCapsule(Entity->Collider.VerticalCapsule, Entity->Transform);                                                                
-            
-            v2f TargetPosition = EntityCapsule.P.xy+MoveDelta;            
-            f32 CapsuleHeight = GetCapsuleHeight(&EntityCapsule);
-            
-            for(blocker* Blocker = World->Blockers.First; Blocker; Blocker = Blocker->Next)
-            {
-                if(IsInRangeOfBlockerZ(Blocker, EntityCapsule.P.z, CapsuleHeight))
-                {                    
-                    time_result_2D TimeResult = MovingCircleEdgeIntersectionTime2D(EntityCapsule.P.xy, TargetPosition, EntityCapsule.Radius, Blocker->P0.xy, Blocker->P1.xy);                    
-                    if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))                    
-                        Result.TimeResult = TimeResult;                                                                    
-                }                                    
-            }
-            
-            pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
-            for(world_entity* TestEntity = GetFirst(&Iter); TestEntity; TestEntity = GetNext(&Iter))
-            {
-                if((TestEntity->Type != WORLD_ENTITY_TYPE_WALKABLE) && (TestEntity != Entity))
-                {   
-                    if(AreEqualIDs(TestEntity->ID, CullID))
-                        continue;
-                    
-                    switch(TestEntity->Collider.Type)
-                    {
-                        case COLLIDER_TYPE_ALIGNED_BOX:
-                        {
-                            aligned_box TestEntityBox = GetWorldSpaceAlignedBox(TestEntity->Collider.AlignedBox, TestEntity->Transform);
-                            
-                            v3f HalfDim = TestEntityBox.Dim*0.5f;
-                            v3f Min = TestEntityBox.CenterP-HalfDim;
-                            v3f Max = TestEntityBox.CenterP+HalfDim;
-                            
-                            if(IsRangeInInterval(Min.z, Max.z, EntityCapsule.P.z, CapsuleHeight))
-                            {                                   
-                                time_result_2D TimeResult = MovingCircleRectangleIntersectionTime2D(EntityCapsule.P.xy, TargetPosition, EntityCapsule.Radius, Min.xy, Max.xy);                                
-                                if(!IsInvalidTimeResult2D(TimeResult) && (Result.TimeResult.Time > TimeResult.Time))
-                                {
-                                    Result.TimeResult = TimeResult;
-                                    Result.HitEntityID = TestEntity->ID;                                    
-                                }
-                            }
-                        } break;
-                        
-                        case COLLIDER_TYPE_VERTICAL_CAPSULE:
-                        {
-                            //CONFIRM(JJ): Will we even need to support this case?
-                            NOT_IMPLEMENTED;
-                        } break;
-                    }
-                }                                    
-            }
-            
-        } break;
-        
-        INVALID_DEFAULT_CASE;
-    }      
-    
-    return Result;
-}
-#endif
-
-struct time_result
-{    
-    v3f ContactPoint;    
-    f32 t;
-    v3f Normal;    
-    b32 Intersected;    
-};
-
-b32 SolveSphereSweepRoot(f32 a, f32 b, f32 c, f32 tCurrent, f32* tOut)
-{    
-    quadratic_equation_result RootSolver = SolveQuadraticEquation(a, b, c);
-    if(RootSolver.RootCount > 0)
-    {
-        if(RootSolver.RootCount == 1)
-        {
-            if((RootSolver.Roots[0] > 0.0f) && (RootSolver.Roots[0] < tCurrent))                                                
-            {
-                *tOut = RootSolver.Roots[0];
+                *t = Result.Roots[0];
                 return true;
             }
         }
         else
-        {
-            if(RootSolver.Roots[0] > RootSolver.Roots[1])
-                SWAP(RootSolver.Roots[0], RootSolver.Roots[1]);
+        {                           
+            if(Result.Roots[0] > Result.Roots[1])
+                SWAP(Result.Roots[0], Result.Roots[1]);            
             
-            if((RootSolver.Roots[0] > 0) && (RootSolver.Roots[0] < tCurrent))
+            if((Result.Roots[0]+Epsilon) > 0 && Result.Roots[0] < MinRoot)
             {
-                *tOut = RootSolver.Roots[0];
+                *t = MaximumF32(Result.Roots[0], 0.0f);
                 return true;
             }
             
-            if((RootSolver.Roots[1] > 0) && (RootSolver.Roots[1] < tCurrent))
+            if((Result.Roots[1]+Epsilon) > 0 && Result.Roots[1] < MinRoot)
             {
-                *tOut = RootSolver.Roots[1];                                            
+                *t = MaximumF32(Result.Roots[1], 0.0f);
                 return true;
-            }
-        }                                                                                
-    }
-    
+            }                        
+        }
+    }    
     return false;
 }
 
-time_result HandleEllipsoidCollisions(world* World, assets* Assets, ellipsoid3D Ellipsoid, v3f MoveDelta)
-{   
-    time_result Result = {};
+b32
+SphereVertexSweepTest(v3f Vertex, v3f BasePoint, v3f Delta, f32 DeltaSquare, f32* t, v3f* ContactPoint)
+{
+    f32 a = DeltaSquare;
+    f32 b = 2*(Dot(Delta, BasePoint-Vertex));
+    f32 c = SquareMagnitude(Vertex-BasePoint) - 1;    
     
-    v3f InvRadius = 1.0f/Ellipsoid.Radius;
-    
-    v3f ESpacePosition = Ellipsoid.CenterP*InvRadius;    
-    v3f ESpaceDelta = MoveDelta*InvRadius;    
-    
-    f32 tMin = INFINITY;
-    v3f ESpaceContactPoint = InvalidV3();
-    
-    FOR_EACH(TestEntity, &World->EntityPool)
+    f32 tVertex;
+    b32 Result = GetLowestRoot(a, b, c, *t, &tVertex);
+    if(Result)
     {
-        if(TestEntity->Type == WORLD_ENTITY_TYPE_WALKABLE)
-        {
-            walkable_mesh* TriangleMesh = &Assets->BoxWalkableMesh;
-            
-            for(u32 TriangleIndex = 0; TriangleIndex < TriangleMesh->TriangleCount; TriangleIndex++)
-            {   
-                //NOTE(EVERYONE): Please see https://www.peroxide.dk/papers/collision/collision.pdf for the algorithm
-                triangle3D Triangle = TransformTriangle3D(TriangleMesh->Triangles[TriangleIndex], TestEntity->Transform);
-                
-                v3f ESpaceTriangle[3] = 
-                {
-                    Triangle.P[0]*InvRadius, 
-                    Triangle.P[1]*InvRadius,
-                    Triangle.P[2]*InvRadius
-                };
-                
-                plane3D ESpaceTrianglePlane = CreatePlane3D(ESpaceTriangle);    
-                
-                f32 Denominator = Dot(ESpaceTrianglePlane.Normal, ESpaceDelta);                            
-                f32 SignedDistanceToPlane = SignedDistance(ESpacePosition, ESpaceTrianglePlane);
-                
-                f32 t0, t1;
-                
-                b32 IsEmbedded = false;
-                if(Denominator == 0)
-                {
-                    if(Abs(SignedDistanceToPlane) >= 1.0f)
-                        continue;                                                                
-                    
-                    t0 = 0.0f;
-                    t1 = 1.0f;
-                    IsEmbedded = true;
-                }
-                else
-                {
-                    f32 InvDenominator = 1.0f/Denominator;
-                    t0 =  ( 1.0f - SignedDistanceToPlane)*InvDenominator;
-                    t1 =  (-1.0f - SignedDistanceToPlane)*InvDenominator;                                            
-                    
-                    if(t0 > t1) SWAP(t0, t1);                                            
-                    
-                    if(t0 > 1.0f || t1 < 0.0f)
-                        continue;                                            
-                    
-                    t0 = SaturateF32(t0);
-                    t1 = SaturateF32(t1);                                                                                        
-                }
-                
-                b32 FoundCollision = false;
-                
-                b32 HasIntersected = false;
-                v3f IntersectionPoint = InvalidV3();
-                f32 t = 1.0f;
-                
-                if(!IsEmbedded)
-                {
-                    v3f PlaneIntersectionPoint = (ESpacePosition - ESpaceTrianglePlane.Normal) + t0*ESpaceDelta;
-                    if(IsPointProjectedInTriangle3D(ESpaceTriangle, PlaneIntersectionPoint))
-                    {
-                        IntersectionPoint = PlaneIntersectionPoint;
-                        t = t0;
-                        HasIntersected = true;
-                    }
-                }
-                
-                if(!HasIntersected)
-                {
-                    f32 ESpaceDeltaSqrLength = SquareMagnitude(ESpaceDelta);
-                    
-                    //NOTE(EVERYONE): Perform a sphere sweep test against the vertices
-                    {
-                        f32 tVertex;                                        
-                        f32 a = ESpaceDeltaSqrLength;
-                        
-                        f32 b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[0]));
-                        f32 c = SquareMagnitude(ESpaceTriangle[0]-ESpacePosition) - 1.0f;                                                                        
-                        if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                        {
-                            IntersectionPoint = ESpaceTriangle[0];
-                            t = tVertex;                                        
-                            HasIntersected = true;
-                        }
-                        
-                        b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[1]));
-                        c = SquareMagnitude(ESpaceTriangle[1]-ESpacePosition) - 1.0f;
-                        if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                        {
-                            IntersectionPoint = ESpaceTriangle[1];
-                            t = tVertex;
-                            HasIntersected = true;
-                        }
-                        
-                        b = 2.0f*(Dot(ESpaceDelta, ESpacePosition-ESpaceTriangle[2]));
-                        c = SquareMagnitude(ESpaceTriangle[2]-ESpacePosition)-1.0f;
-                        if(SolveSphereSweepRoot(a, b, c, t, &tVertex))
-                        {
-                            IntersectionPoint = ESpaceTriangle[2];
-                            t = tVertex;
-                            HasIntersected = true;
-                        }
-                    }                                    
-                    
-                    //NOTE(EVERYONE): Perform a sphere sweep test against the edges
-                    {
-                        f32 tEdge;
-                        
-                        v3f Edge = ESpaceTriangle[1]-ESpaceTriangle[0];
-                        v3f BaseToVertex = ESpaceTriangle[0] - ESpacePosition;
-                        
-                        f32 EdgeSqrLength = SquareMagnitude(Edge);
-                        f32 EdgeDotVelocity = Dot(Edge, ESpaceDelta);
-                        f32 EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                        
-                        f32 a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
-                        f32 b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                        f32 c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);
-                        
-                        if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                        {
-                            f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                            if((f >= 0.0f) && (f <= 1.0f))
-                            {
-                                IntersectionPoint = ESpaceTriangle[0] + f*Edge;
-                                t = tEdge;
-                                HasIntersected = true;
-                            }
-                        }
-                        
-                        Edge = ESpaceTriangle[2] - ESpaceTriangle[1];
-                        BaseToVertex = ESpaceTriangle[1] - ESpacePosition;
-                        
-                        EdgeSqrLength = SquareMagnitude(Edge);
-                        EdgeDotVelocity = Dot(Edge, ESpaceDelta);
-                        EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                        
-                        a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
-                        b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                        c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
-                        
-                        if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                        {
-                            f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                            if((f >= 0.0f) && (f <= 1.0f))
-                            {
-                                IntersectionPoint = ESpaceTriangle[1] + f*Edge;
-                                t = tEdge;
-                                HasIntersected = true;
-                            }
-                        }
-                        
-                        Edge = ESpaceTriangle[0] - ESpaceTriangle[2];
-                        BaseToVertex = ESpaceTriangle[2] - ESpacePosition;
-                        
-                        EdgeSqrLength = SquareMagnitude(Edge);
-                        EdgeDotVelocity = Dot(Edge, ESpaceDelta);
-                        EdgeDotBaseToVertex = Dot(Edge, BaseToVertex);
-                        
-                        a = (EdgeSqrLength * -ESpaceDeltaSqrLength) + Square(EdgeDotVelocity);
-                        b = (EdgeSqrLength * 2*Dot(ESpaceDelta, BaseToVertex)) - 2.0f*EdgeDotVelocity*EdgeDotBaseToVertex;
-                        c = (EdgeSqrLength * (1-SquareMagnitude(BaseToVertex))) + Square(EdgeDotBaseToVertex);                                            
-                        
-                        if(SolveSphereSweepRoot(a, b, c, t, &tEdge))
-                        {
-                            f32 f = ((EdgeDotVelocity*tEdge) - EdgeDotBaseToVertex) / EdgeSqrLength;
-                            if((f >= 0.0f) && (f <= 1.0f))
-                            {
-                                IntersectionPoint = ESpaceTriangle[2] + f*Edge;
-                                t = tEdge;
-                                HasIntersected = true;
-                            }
-                        }                                            
-                    }
-                }
-                
-                if(HasIntersected && (tMin > t))
-                {
-                    Result.Intersected = true;                                                
-                    tMin = t;
-                    ESpaceContactPoint = IntersectionPoint;                    
-                }    
-                
-            }
-        }                                        
-    }               
+        *t = tVertex;
+        *ContactPoint = Vertex;
+    }
     
-    if(Result.Intersected)
-    {        
-        Result.t = tMin;
-        Result.ContactPoint = ESpaceContactPoint*Ellipsoid.Radius;        
-        Result.Normal = Normalize(((ESpacePosition+ESpaceDelta*tMin) - ESpaceContactPoint)*InvRadius);                        
-    }    
+    return Result;    
+}
+
+b32
+SphereEdgeSweepTest(v3f P0, v3f P1, v3f BasePoint, v3f Delta, f32 DeltaSquare, f32* t, v3f* ContactPoint)
+{    
+    v3f Edge = P1 - P0;
+    v3f BaseToVertex = P0 - BasePoint;
+    
+    f32 EdgeSquare = SquareMagnitude(Edge);
+    f32 EdgeDotDelta = Dot(Edge, Delta);
+    f32 EdgeDotVertex = Dot(Edge, BaseToVertex);
+    
+    f32 a = EdgeSquare * -DeltaSquare + Square(EdgeDotDelta);
+    f32 b = EdgeSquare * (2*Dot(Delta, BaseToVertex)) - 2*(EdgeDotDelta*EdgeDotVertex);
+    f32 c = EdgeSquare * (1 - SquareMagnitude(BaseToVertex)) + Square(EdgeDotVertex);
+    
+    f32 tEdge;
+    
+    b32 Result = false;
+    if(GetLowestRoot(a, b, c, *t, &tEdge))
+    {
+        f32 f = (EdgeDotDelta*tEdge - EdgeDotVertex) / EdgeSquare;
+        Result = (f >= 0 && f <= 1);
+        if(Result)
+        {
+            *t = tEdge;
+            *ContactPoint = P0 + f*Edge;
+        }
+    }
     
     return Result;
 }
 
-#define APPLY_VELOCITY(Entity) \
-Entity->Velocity.xy += MoveAcceleration*dt; \
-Entity->Velocity.xy *= VelocityDamping
+struct collision_result
+{
+    b32 FoundCollision;    
+    v3f ContactPoint;
+    plane3D SlidingPlane;
+    f32 t;
+};
 
-#if 0 
-void 
-UpdateWorld(game* Game)
-{    
-    input* Input = Game->Input;
+collision_result WorldEllipsoidCollisions(world* World, v3f Position, v3f Radius, v3f Delta)
+{
+    collision_result Result = {};
     
-    v2f MoveDirection = {};
-    
-    if(IsDown(Input->MoveForward))
-        MoveDirection.y = 1.0f;
-    
-    if(IsDown(Input->MoveBackward))
-        MoveDirection.y = -1.0f;
-    
-    if(IsDown(Input->MoveRight))
-        MoveDirection.x = 1.0f;
-    
-    if(IsDown(Input->MoveLeft))
-        MoveDirection.x = -1.0f;
-    
-    if(MoveDirection != 0)
-        MoveDirection = Normalize(MoveDirection);    
-    
-    f32 dt = Game->dt;    
-    v2f MoveAcceleration = MoveDirection*MOVE_ACCELERATION;        
-    f32 VelocityDamping = (1.0f / (1.0f + dt*MOVE_DAMPING));
-    
-    player_state PlayerState = {};
-    pushing_state Pushing = InitPushingState();
-    
-#define MOVE_DELTA_EPSILON 1e-4f    
-    
-    world* World = GetWorld(Game, Game->CurrentWorldIndex);         
-    
-    pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
-    for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
-    {        
-        switch(Entity->Type)
+    v3f UnitDelta = Normalize(Delta);
+    FOR_EACH(TestEntity, &World->EntityPool)
+    {                        
+        if(TestEntity->Type == WORLD_ENTITY_TYPE_WALKABLE)
         {
-            case WORLD_ENTITY_TYPE_PLAYER:
-            {
-                ASSERT(Entity->UserData);
-                player* Player = (player*)Entity->UserData;
+            ASSERT(TestEntity->WalkableMesh);
+            walkable_mesh* WalkableMesh = TestEntity->WalkableMesh;
+            for(u32 TriangleIndex = 0; TriangleIndex < WalkableMesh->TriangleCount; TriangleIndex++)
+            {                                                                
+                triangle3D Triangle = TransformTriangle3D(WalkableMesh->Triangles[TriangleIndex], TestEntity->Transform);
                 
-                if(IsPlayerPushingObject(Game, Player, MoveDirection))
-                    continue;
-                
-                world_entity* PushingEntity = ClearEntityVelocity(Game, Player->Pushing.EntityID);
-                if(PushingEntity)                    
-                    ClearEntityVelocity(Game, PushingEntity->LinkID);        
-                
-                APPLY_VELOCITY(Entity);                
-                
-                v2f MoveDelta = Entity->Velocity.xy*dt;                                
-                
-                for(u32 Iterations = 0; ; Iterations++)
+                v3f ESpaceTriangle[3] = 
                 {
-                    DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
+                    Triangle.P[0] / Radius,
+                    Triangle.P[1] / Radius,
+                    Triangle.P[2] / Radius
+                };
+                
+                plane3D ESpaceTrianglePlane = CreatePlane3D(ESpaceTriangle);
+                
+                //NOTE(EVERYONE): Only collide with triangles that are front-facing
+                if(Dot(ESpaceTrianglePlane.Normal, UnitDelta) <= 0.0f)
+                {                                    
+                    f32 Denominator = Dot(ESpaceTrianglePlane.Normal, Delta);
+                    f32 DistanceToPlane = SignedDistance(Position, ESpaceTrianglePlane);
                     
-                    if(SquareMagnitude(MoveDelta) <= MOVE_DELTA_EPSILON)
-                        break;
+                    f32 t0, t1;
                     
-                    time_of_impact_result TOI = FindTOI(Game, Entity, MoveDelta, InvalidEntityID());
-                    
-                    if(ResolveEntity(Entity, TOI.TimeResult, &MoveDelta))
-                        break;
-                    
-                    if((TOI.TimeResult.Normal != 0) && AreEqual(MoveDirection, -TOI.TimeResult.Normal, 1e-4f))
+                    b32 IsEmbedded = false;
+                    if(Abs(Denominator) <= 1e-6f)
                     {
-                        PlayerState = PLAYER_STATE_PUSHING;
-                        Pushing.EntityID = TOI.HitEntityID;
-                        Pushing.Direction = MoveDirection;
-                    }                    
-                }
-            } break;
-            
-            case WORLD_ENTITY_TYPE_PUSHABLE:
-            {
-                player* Player = GetPlayer(Game, Entity->ID.WorldIndex);
-                if(IsPlayerPushingObject(Game, Player, MoveDirection) == Entity)
-                {
-                    world_entity* PlayerEntity = GetEntity(Game, Player->EntityID);
-                    PlayerEntity->Velocity = {};
-                    
-                    world_entity* TestEntities[2] = {Entity, GetEntityOrNull(Game, Entity->LinkID)};                                        
-                    v2f MoveDeltas[2];
-                    
-                    APPLY_VELOCITY(TestEntities[0]);
-                    MoveDeltas[0] = TestEntities[0]->Velocity.xy*dt;
-                    
-                    b32 DualLinkedEntities = false;
-                    if(TestEntities[1])
-                    {
-                        APPLY_VELOCITY(TestEntities[1]);
-                        MoveDeltas[1] = TestEntities[1]->Velocity.xy*dt;                        
-                        DualLinkedEntities = AreEqualIDs(TestEntities[1]->LinkID, TestEntities[0]->ID);
-                    }                                        
-                    
-                    if(DualLinkedEntities)
-                    {
-                        for(u32 Iterations = 0; ; Iterations++)
-                        {
-                            DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
-                            
-                            time_of_impact_result TOIs[2] = {};
-                            
-                            
-                            if((SquareMagnitude(MoveDeltas[0]) <= MOVE_DELTA_EPSILON) || (SquareMagnitude(MoveDeltas[1]) <= MOVE_DELTA_EPSILON))
-                                break;
-                            
-                            TOIs[0] = FindTOI(Game, TestEntities[0], MoveDeltas[0], PlayerEntity->ID);
-                            TOIs[1] = FindTOI(Game, TestEntities[1], MoveDeltas[1], PlayerEntity->ID);                            
-                            
-                            u32 Index = 0;
-                            if(IsInvalidTimeResult2D(TOIs[0].TimeResult) && IsInvalidTimeResult2D(TOIs[1].TimeResult))
-                            {
-                                TestEntities[0]->Position.xy += MoveDeltas[0];
-                                TestEntities[1]->Position.xy += MoveDeltas[1];
-                                
-                                if(AreEqualIDs(Player->Pushing.EntityID, TestEntities[0]->ID))
-                                    PlayerEntity->Position.xy += MoveDeltas[0];
-                                else if(AreEqualIDs(Player->Pushing.EntityID, TestEntities[1]->ID))
-                                    PlayerEntity->Position.xy += MoveDeltas[1];                                
-                                break;
-                            }                            
-                            else if(TOIs[0].TimeResult.Time == 0.0f || TOIs[1].TimeResult.Time == 0.0f)
-                            {   
-                                if(TOIs[0].TimeResult.Time == 0)
-                                    ResolvePushableImpact(PlayerEntity, TestEntities[0], TOIs[0].TimeResult.ContactPoint, TOIs[0].TimeResult.Normal, &MoveDeltas[0]);
-                                
-                                if(TOIs[1].TimeResult.Time == 0)
-                                    ResolvePushableImpact(PlayerEntity, TestEntities[1], TOIs[1].TimeResult.ContactPoint, TOIs[1].TimeResult.Normal, &MoveDeltas[1]);                                                                
-                            }
-                            else
-                            {
-                                u32 SmallestIndex = (TOIs[0].TimeResult.Time <= TOIs[1].TimeResult.Time) ? 0 : 1;
-                                u32 NotSmallestIndex = !SmallestIndex;
-                                f32 SmallestT = TOIs[SmallestIndex].TimeResult.Time;
-                                
-                                v2f ResolveNormal = TOIs[SmallestIndex].TimeResult.Normal;
-                                
-                                ResolvePushableImpact(PlayerEntity, TestEntities[SmallestIndex], TestEntities[SmallestIndex]->Position.xy + MoveDeltas[SmallestIndex]*SmallestT, 
-                                                      ResolveNormal, &MoveDeltas[SmallestIndex]);                                                                
-                                
-                                ResolvePushableImpact(PlayerEntity, TestEntities[NotSmallestIndex], TestEntities[NotSmallestIndex]->Position.xy + MoveDeltas[NotSmallestIndex]*SmallestT,
-                                                      ResolveNormal, &MoveDeltas[NotSmallestIndex]);                                                                                                                                
-                            }                                                                     
-                        }
+                        if(Abs(DistanceToPlane) >= 1)
+                            continue;
+                        
+                        t0 = 0.0f;
+                        t1 = 1.0f;
+                        IsEmbedded = true;
                     }
                     else
-                    {           
-                        b32 StopProcessing[2] = {};
-                        if(!TestEntities[1]) StopProcessing[1] = true;
+                    {
+                        t0 = ( 1 - DistanceToPlane) / Denominator;
+                        t1 = (-1 - DistanceToPlane) / Denominator;
                         
-                        for(u32 Iterations = 0; ; Iterations++)
-                        {
-                            DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
-                            
-                            time_of_impact_result TOIs[2] = {};
-                            
-                            for(u32 ObjectIndex = 0; ObjectIndex < 2; ObjectIndex++)
-                            {
-                                if(StopProcessing[ObjectIndex])
-                                    continue;
-                                
-                                if(SquareMagnitude(MoveDeltas[ObjectIndex]) <= MOVE_DELTA_EPSILON)                            
-                                    StopProcessing[ObjectIndex] = true;                                                            
-                                else                            
-                                    TOIs[ObjectIndex] = FindTOI(Game, TestEntities[ObjectIndex], MoveDeltas[ObjectIndex], PlayerEntity->ID);
-                            }                                                
-                            
-                            for(u32 ObjectIndex = 0; ObjectIndex < 2; ObjectIndex++)
-                            {
-                                if(StopProcessing[ObjectIndex])
-                                    continue;
-                                
-                                if(ResolvePushableEntity(PlayerEntity, TestEntities[ObjectIndex], TOIs[ObjectIndex].TimeResult, &MoveDeltas[ObjectIndex]))
-                                    StopProcessing[ObjectIndex] = true;                                                            
-                            }
-                            
-                            if(StopProcessing[0] && StopProcessing[1])
-                                break;                            
+                        if(t0 > t1)
+                            SWAP(t0, t1);
+                        
+                        if(t0 > 1 || t1 < 0)
+                            continue;
+                        
+                        t0 = SaturateF32(t0);
+                        t1 = SaturateF32(t1);
+                    }                                                                        
+                    
+                    f32 t = 1.0f;
+                    v3f ContactPoint = InvalidV3();
+                    b32 HasIntersected = false;
+                    
+                    if(!IsEmbedded)
+                    {
+                        v3f PlaneIntersectionPoint = (Position - ESpaceTrianglePlane.Normal) + (t0*Delta);
+                        
+                        if(IsPointInTriangle3D(ESpaceTriangle, PlaneIntersectionPoint))
+                        {                                            
+                            t = t0;
+                            ContactPoint = PlaneIntersectionPoint;
+                            HasIntersected = true;                                            
                         }
                     }
                     
-                    Pushing = Player->Pushing;
-                    PlayerState = Player->State;
-                }
-            } break;
-        }                        
-    }    
-    
-    World->Player.State = PlayerState;
-    World->Player.Pushing = Pushing;
-    
-    world_entity* PlayerEntity = GetEntity(World, World->Player.EntityID);
-    
-    f32 PlayerHeight = TrueHeight(Game->PlayerHeight, Game->PlayerRadius);
-    f32 PlayerWalkHeight = (PlayerEntity->Position.z + PlayerHeight*0.25f);
-    
-    f32 BestPointZ = -FLT_MAX;
-    triangle3D BestTriangle = InvalidTriangle3D();          
-    
-    Iter = BeginIter(&World->EntityPool);
-    for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
-    {
-        if(Entity->Type == WORLD_ENTITY_TYPE_WALKABLE)
-        {            
-            triangle3D_mesh* Mesh = &Game->Assets->BoxTriangleMesh;                        
-            
-            for(u32 TriangleIndex = 0; TriangleIndex < Mesh->TriangleCount; TriangleIndex++)
-            {
-                triangle3D Triangle = TransformTriangle3D(Mesh->Triangles[TriangleIndex], Entity->Transform);                        
-                
-                if(!IsDegenerateTriangle2D(Triangle))
-                {                                                               
-                    if(IsPointInTriangle2D(Triangle, PlayerEntity->Position.xy))
+                    if(!HasIntersected)
                     {
-                        f32 TriangleZ = FindTriangleZ(Triangle, PlayerEntity->Position.xy);
-                        if((TriangleZ > BestPointZ) && (TriangleZ <= PlayerWalkHeight))
+                        f32 DeltaSquare = SquareMagnitude(Delta);
+                        
+                        if(SphereVertexSweepTest(ESpaceTriangle[0], Position, Delta, DeltaSquare, &t, &ContactPoint))                                        
+                            HasIntersected = true;                                                                                    
+                        
+                        if(SphereVertexSweepTest(ESpaceTriangle[1], Position, Delta, DeltaSquare, &t, &ContactPoint))                                        
+                            HasIntersected = true;                                                                                    
+                        
+                        if(SphereVertexSweepTest(ESpaceTriangle[2], Position, Delta, DeltaSquare, &t, &ContactPoint))                                        
+                            HasIntersected = true;                                                                                    
+                        
+                        if(SphereEdgeSweepTest(ESpaceTriangle[0], ESpaceTriangle[1], Position, Delta, DeltaSquare, &t, &ContactPoint))                                        
+                            HasIntersected = true;                                                                                    
+                        
+                        if(SphereEdgeSweepTest(ESpaceTriangle[1], ESpaceTriangle[2], Position, Delta, DeltaSquare, &t, &ContactPoint))                                        
+                            HasIntersected = true;                                                                                    
+                        
+                        if(SphereEdgeSweepTest(ESpaceTriangle[2], ESpaceTriangle[0], Position, Delta, DeltaSquare, &t, &ContactPoint))                                        
+                            HasIntersected = true;                                                                                                                            
+                    }
+                    
+                    if(HasIntersected)
+                    {                        
+                        if(!Result.FoundCollision || (t < Result.t))
                         {
-                            BestPointZ = TriangleZ;       
-                            BestTriangle = Triangle;
-                        }
+                            Result.t = t;
+                            Result.ContactPoint = ContactPoint;
+                            Result.FoundCollision = true;                            
+                        }                                        
                     }
                 }
-                DEVELOPER_MAX_WALKING_TRIANGLE();
             }
         }
-    }
+    }    
     
-    player* Player = (player*)PlayerEntity->UserData;
+    if(Result.FoundCollision)    
+        Result.SlidingPlane = CreatePlane3D(Result.ContactPoint, (Position + Delta*Result.t)-Result.ContactPoint);    
     
-#if 0 
-    animation_controller* Controller = &Player->AnimationController;
-    playing_animation* PlayingAnimation = &Controller->PlayingAnimation;    
-    skeleton* Skeleton = Controller->Skeleton;
-    
-    u32 PrevFrameIndex = FloorU32(PlayingAnimation->t*ANIMATION_FPS);
-    u32 NextFrameIndex = PrevFrameIndex+1;
-    
-    f32 PrevFrameT = PrevFrameIndex*ANIMATION_HZ;
-    f32 NextFrameT = NextFrameIndex*ANIMATION_HZ;
-    
-    f32 BlendFactor = (PlayingAnimation->t-PrevFrameT)/(NextFrameT-PrevFrameT);
-    
-    ASSERT((BlendFactor >= 0) && (BlendFactor <= 1));
-    
-    animation_frame* PrevFrame = PlayingAnimation->Clip->Frames + PrevFrameIndex;
-    
-    if(NextFrameIndex == PlayingAnimation->Clip->FrameCount)
-        NextFrameIndex = 0;
-    animation_frame* NextFrame = PlayingAnimation->Clip->Frames + NextFrameIndex;        
-    
-    for(u32 JointIndex = 0; JointIndex < Skeleton->JointCount; JointIndex++)
-    {
-        Controller->JointPoses[JointIndex] = InterpolatePose(PrevFrame->JointPoses[JointIndex], BlendFactor, NextFrame->JointPoses[JointIndex]);                        
-    }
-    
-    PlayingAnimation->t += Game->dt;    
-    if(PlayingAnimation->t >= GetClipDuration(PlayingAnimation->Clip))
-        PlayingAnimation->t = 0.0;    
-    
-    GenerateGlobalPoses(Controller);
-#endif
-    ASSERT(BestPointZ != -FLT_MAX);    
-    PlayerEntity->Position.z = BestPointZ;                        
-    
-    camera* Camera = &World->Camera;
-    
-    Camera->Position = PlayerEntity->Position;
-    Camera->FocalPoint = PlayerEntity->Position;
-    Camera->Position.z += 6.0f;
-    Camera->Orientation = IdentityM3();    
+    return Result;
 }
-#endif
 
 void 
 UpdateWorld(game* Game)
@@ -1203,7 +524,7 @@ UpdateWorld(game* Game)
     pushing_state Pushing = InitPushingState();
     
     world* World = GetWorld(Game, Game->CurrentWorldIndex);         
-    
+                    
     FOR_EACH(Entity, &World->EntityPool)
     {        
         switch(Entity->Type)
@@ -1215,87 +536,92 @@ UpdateWorld(game* Game)
                 
                 Entity->Velocity.xy += MoveAcceleration*dt; 
                 Entity->Velocity *= VelocityDamping;
-                                
-                v3f MoveDelta = Entity->Velocity*dt;   
+                Entity->Velocity.z -= (20.0f*dt);
                 
-                ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);                
+                v3f MoveDelta = Entity->Velocity*dt;                   
+                v3f NewPosition = Entity->Position + MoveDelta;
                 
-#define MOVE_DELTA_EPSILON 1e-5f
+                DEBUG_DRAW_POINT(Entity->Position, White());
+                DEBUG_DRAW_POINT(NewPosition, Yellow());
                 
-                if(SquareMagnitude(MoveDelta) > MOVE_DELTA_EPSILON)
-                {                                                                                
-                    Entity->CollidedNormal = {};
-                    for(u32 Iterations = 0; Iterations < 32; Iterations++)
-                    {                           
-                        DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
-                        
-                        if(SquareMagnitude(MoveDelta) <= MOVE_DELTA_EPSILON)
-                            break;                                                            
-                        
-                        time_result CollisionResult = HandleEllipsoidCollisions(World, Game->Assets, PlayerEllipsoid, MoveDelta);
-                        if(CollisionResult.Intersected)
-                        {
-                            v3f TargetPosition = PlayerEllipsoid.CenterP + MoveDelta;
-                                                        
-                            Entity->CollidedNormal = CollisionResult.Normal;
-                            v3f Normal = CollisionResult.Normal;                            
-#if 1
-                            if(Abs(Dot(CollisionResult.Normal, V3(0.0f, 0.0f, 1.0f))) < 0.85f)                                                            
-                                Normal = Normalize(V3(CollisionResult.Normal.xy));                                                                                                                    
-#endif
-                            
-                            PlayerEllipsoid.CenterP += (MoveDelta*CollisionResult.t);
-                            PlayerEllipsoid.CenterP += (Normal*1e-5f);
-                            MoveDelta = TargetPosition - PlayerEllipsoid.CenterP;
-                            MoveDelta -= Dot(MoveDelta, Normal)*Normal;
-                            
-                            Entity->Velocity -= Dot(Entity->Velocity, Normal)*Normal;                                                                                                                                                                            
-                        }
-                        else
-                        {
-                            PlayerEllipsoid.CenterP += MoveDelta;
-                            break;                                                            
-                        }                                        
+                ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);
+                
+                v3f ESpacePosition = PlayerEllipsoid.CenterP / PlayerEllipsoid.Radius;
+                v3f ESpaceMoveDelta = MoveDelta / PlayerEllipsoid.Radius;                
+                
+                v3f DestinationPoint = ESpacePosition + ESpaceMoveDelta;
+                plane3D FirstPlane = InvalidPlane3D();
+                
+                for(u32 Iterations = 0; Iterations < 3; Iterations++)
+                {
+                    collision_result CollisionResult = WorldEllipsoidCollisions(World, ESpacePosition, PlayerEllipsoid.Radius, ESpaceMoveDelta);
+                    if(!CollisionResult.FoundCollision)
+                    {
+                        ESpacePosition = DestinationPoint;
+                        break;
                     }
+                    else
+                    {
+                        f32 Distance = Magnitude(ESpaceMoveDelta)*CollisionResult.t;
+                        f32 ShortenDistance = MaximumF32(Distance-VERY_CLOSE_DISTANCE, 0.0f);
+                        ESpacePosition += (Normalize(ESpaceMoveDelta)*ShortenDistance);
+                        
+                        if(Iterations == 0)
+                        {
+                            f32 LongRadius = 1.0f + VERY_CLOSE_DISTANCE;
+                            FirstPlane = CollisionResult.SlidingPlane;
+                            
+                            DestinationPoint -= (SignedDistance(DestinationPoint, FirstPlane) - LongRadius)*FirstPlane.Normal;
+                            ESpaceMoveDelta = DestinationPoint - ESpacePosition;
+                        }
+                        else if(Iterations == 1)
+                        {
+                            plane3D SecondPlane = CollisionResult.SlidingPlane;
+                            
+                            v3f Crease = Cross(FirstPlane.Normal, SecondPlane.Normal);
+                            f32 Displacement = Dot((DestinationPoint - ESpacePosition), Crease);
+                            
+                            ESpaceMoveDelta = Displacement*Crease;
+                            DestinationPoint = ESpacePosition + ESpaceMoveDelta;
+                        }
+                    }
+                }                
+               
+                
+                SetPlayerEllipsoidP(Game, Player, ESpacePosition*PlayerEllipsoid.Radius);
+                
+#if 0 
+                animation_controller* Controller = &Player->AnimationController;
+                playing_animation* PlayingAnimation = &Controller->PlayingAnimation;    
+                skeleton* Skeleton = Controller->Skeleton;
+                
+                u32 PrevFrameIndex = FloorU32(PlayingAnimation->t*ANIMATION_FPS);
+                u32 NextFrameIndex = PrevFrameIndex+1;
+                
+                f32 PrevFrameT = PrevFrameIndex*ANIMATION_HZ;
+                f32 NextFrameT = NextFrameIndex*ANIMATION_HZ;
+                
+                f32 BlendFactor = (PlayingAnimation->t-PrevFrameT)/(NextFrameT-PrevFrameT);
+                
+                ASSERT((BlendFactor >= 0) && (BlendFactor <= 1));
+                
+                animation_frame* PrevFrame = PlayingAnimation->Clip->Frames + PrevFrameIndex;
+                
+                if(NextFrameIndex == PlayingAnimation->Clip->FrameCount)
+                    NextFrameIndex = 0;
+                animation_frame* NextFrame = PlayingAnimation->Clip->Frames + NextFrameIndex;        
+                
+                for(u32 JointIndex = 0; JointIndex < Skeleton->JointCount; JointIndex++)
+                {
+                    Controller->JointPoses[JointIndex] = InterpolatePose(PrevFrame->JointPoses[JointIndex], BlendFactor, NextFrame->JointPoses[JointIndex]);                        
                 }
                 
-#if 1
-                if(Abs(Dot(Entity->CollidedNormal, V3(0.0f, 0.0f, 1.0f))) < 0.85f)
-                {       
-                    v3f GravityDelta = V3(0.0f, 0.0f, -4.5f*dt);
-                    for(u32 Iterations = 0; Iterations < 32; Iterations++)
-                    {   
-                        DEVELOPER_MAX_TIME_ITERATIONS(Iterations);
-                        
-                        if(SquareMagnitude(GravityDelta) <= MOVE_DELTA_EPSILON)
-                            break;                                                            
-                        
-                        time_result CollisionResult = HandleEllipsoidCollisions(World, Game->Assets, PlayerEllipsoid, GravityDelta);                        
-                        if(CollisionResult.Intersected)
-                        {
-                            if(Abs(Dot(CollisionResult.Normal, V3(0.0f, 0.0f, 1.0f))) < 0.85f)
-                            {                                
-                                v3f TargetPosition = PlayerEllipsoid.CenterP + GravityDelta;
-                                
-                                PlayerEllipsoid.CenterP += (GravityDelta*CollisionResult.t);
-                                PlayerEllipsoid.CenterP += (CollisionResult.Normal*1e-5f);
-                                GravityDelta = TargetPosition - PlayerEllipsoid.CenterP;
-                                GravityDelta -= Dot(GravityDelta, CollisionResult.Normal)*CollisionResult.Normal;                                                        
-                                
-                                Entity->CollidedNormal = CollisionResult.Normal;
-                            }
-                            else
-                                break;
-                        }
-                        else
-                        {
-                            PlayerEllipsoid.CenterP += GravityDelta;
-                            break;                                                            
-                        }                                        
-                    }
-                }
+                PlayingAnimation->t += Game->dt;    
+                if(PlayingAnimation->t >= GetClipDuration(PlayingAnimation->Clip))
+                    PlayingAnimation->t = 0.0;    
+                
+                GenerateGlobalPoses(Controller);
 #endif
-                SetPlayerEllipsoidP(Game, Player, PlayerEllipsoid.CenterP);                
             } break;                        
         }                        
     }    

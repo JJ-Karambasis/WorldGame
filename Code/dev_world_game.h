@@ -18,8 +18,12 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
-#define DEBUG_DRAW_POINT(position, color) ASSERT(__Internal_Dev_Context__->DebugPointCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugPoints)); __Internal_Dev_Context__->DebugPoints[__Internal_Dev_Context__->DebugPointCount++] = {position, color}
-#define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color) ASSERT(__Internal_Dev_Context__->DebugDirectionVectorsCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugDirectionVectors)); __Internal_Dev_Context__->DebugDirectionVectors[__Internal_Dev_Context__->DebugDirectionVectorsCount++] = {origin, direction, color}
+#define DEBUG_DRAW_POINT(position, color) if(!IsInitialized(&__Internal_Dev_Context__->DebugPoints)) { __Internal_Dev_Context__->DebugPoints = CreateDynamicArray<debug_point>(2048); } Append(&__Internal_Dev_Context__->DebugPoints, {position, color})
+#define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color) \
+if(!IsInitialized(&__Internal_Dev_Context__->DebugDirectionVectors)) \
+__Internal_Dev_Context__->DebugDirectionVectors = CreateDynamicArray<debug_direction_vector>(1024); \
+if(direction != V3()) \
+Append(&__Internal_Dev_Context__->DebugDirectionVectors, {origin, Normalize(direction), color})
 
 #include "imgui/imgui.h"
 #include "dev_frame_recording.h"
@@ -67,6 +71,13 @@ struct debug_direction_vector
     c4 Color;
 };
 
+enum shading_type
+{
+    SHADING_TYPE_NORMAL,
+    SHADING_TYPE_WIREFRAME,
+    SHADING_TYPE_WIREFRAME_ON_NORMAL
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -77,6 +88,7 @@ struct dev_context
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
     b32 DrawOtherWorld;                
+    shading_type ShadingType;
     
     frame_recording FrameRecording;
     
@@ -94,12 +106,9 @@ struct dev_context
     
     dev_mesh TriangleBoxMesh;    
     
-    u32 DebugPointCount;
-    debug_point DebugPoints[2048];
-    
-    u32 DebugDirectionVectorsCount;
-    debug_direction_vector DebugDirectionVectors[2048];        
-    
+    dynamic_array<debug_point> DebugPoints;
+    dynamic_array<debug_direction_vector> DebugDirectionVectors;
+
     void* PlatformData;
     b32 Initialized;
 };

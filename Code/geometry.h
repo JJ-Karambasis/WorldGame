@@ -245,6 +245,14 @@ inline triangle3D CreateTriangle3D(v3f P0, v3f P1, v3f P2)
     return Result;
 }
 
+inline plane3D InvalidPlane3D()
+{
+    plane3D Result;
+    Result.Normal = InvalidV3();
+    Result.D = INFINITY;
+    return Result;
+}
+
 inline plane3D CreatePlane3D(v3f P0, v3f P1, v3f P2)
 {
     plane3D Result;    
@@ -262,6 +270,14 @@ inline plane3D CreatePlane3D(v3f* P)
 inline plane3D CreatePlane3D(triangle3D Triangle)
 {
     plane3D Result = CreatePlane3D(Triangle.P);        
+    return Result;
+}
+
+inline plane3D CreatePlane3D(v3f Origin, v3f Normal)
+{
+    plane3D Result;
+    Result.Normal = Normalize(Normal);
+    Result.D = -(Result.Normal.x*Origin.x + Result.Normal.y*Origin.y + Result.Normal.z*Origin.z);
     return Result;
 }
 

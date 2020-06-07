@@ -38,6 +38,10 @@ EXPORT GAME_TICK(Tick)
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     SetGlobalErrorStream(Global_Platform->ErrorStream);
     
+    float min = FLT_MIN;
+    float true_min = FLT_TRUE_MIN;
+    
+    world_entity_id ID = {};
     if(!Game->Initialized)
     {        
         Game->Initialized = true;
@@ -45,6 +49,8 @@ EXPORT GAME_TICK(Tick)
         
         Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
         Game->Assets->BoxWalkableMesh = LoadWalkableMesh(Game->Assets, "Box.fbx");
+        Game->Assets->QuadGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Quad.fbx");
+        Game->Assets->QuadWalkableMesh = LoadWalkableMesh(Game->Assets, "Quad.fbx");
         Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "TestPlayerMesh.fbx");
         
 #if 0 
@@ -56,7 +62,7 @@ EXPORT GAME_TICK(Tick)
         {
             world* World = GetWorld(Game, WorldIndex);
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
-            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 1.0f), V3(0.35f, 0.35f, 1.0f), WorldIndex == 0 ? Blue() : Red());            
+            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(0.35f, 0.35f, 1.0f), WorldIndex == 0 ? Blue() : Red());            
             
             world_entity* PlayerEntity = GetPlayerEntity(World);
             camera* Camera = &World->Camera;
@@ -67,13 +73,11 @@ EXPORT GAME_TICK(Tick)
             Camera->Orientation = IdentityM3();                
         }
         
-        world_entity_id* DespawnWalls = PushArray(&Game->GameStorage, 2, world_entity_id, Clear, 0);
-        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(100.0f, 100.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                        
-        //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f, 0.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.0f, 0.25f, 1.0f), RGBA(0.45f, 0.0f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 0.5f, 0.0f, 0.0f), V3(1.5f, 10.0f, 1.0f), V3(PI*0.2f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 2.0f, -5.0f, 0.0f), V3(1.5f, 160.0f, 1.0f), V3(PI*0.1f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh);                                        
-    }            
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 50.0f, 0.0f, 0.0f), V3(1.0f, 100.0f, 100.0f), V3(0, -PI*0.5f, 0), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 2.0f, -5.0f, 0.0f), V3(2.0f, 80.0f, 1.0f), V3(0.2f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f,  0.0f, 0.0f), V3(1.0f, 1.0f, 0.75f), V3(0.0f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);        
+    }        
+    
     
     if(IsPressed(Game->Input->SwitchWorld))
     {
@@ -84,13 +88,13 @@ EXPORT GAME_TICK(Tick)
     
     UpdateWorld(Game);            
     
-    #if 0 
+#if 0 
     block_puzzle* Puzzle = &Game->TestPuzzle;    
     if(!Puzzle->IsComplete)
     {        
         Puzzle->IsComplete = true;
         for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
-        {
+        {math
             goal_rect* GoalRect = Puzzle->GoalRects + GoalIndex;        
             
             b32 GoalIsMet = false;
@@ -119,13 +123,13 @@ EXPORT GAME_TICK(Tick)
             if(!GoalRect->GoalIsMet)
                 Puzzle->IsComplete = false;
         }   
-                
+        
         if(Puzzle->IsComplete)
         {
             Puzzle->CompleteCallback(Game, Puzzle->CompleteData);        
         }
     }
-    #endif
+#endif
     
     if(NOT_IN_DEVELOPMENT_MODE())
     {           

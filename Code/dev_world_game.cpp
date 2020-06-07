@@ -4,16 +4,20 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
-#define DEBUG_FILLED_BOX_INDICES_COUNT 36
+void DrawOrientedBox(dev_context* DevContext, v3f P, v3f Dim, v3f XAxis, v3f YAxis, v3f ZAxis, c4 Color)
+{
+    m4 Model = TransformM4(P, XAxis, YAxis, ZAxis, Dim);
+    PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, Color, DevContext->TriangleBoxMesh.IndexCount, 0, 0);
+}
+
 void DrawBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
 {
-    m4 Model = TransformM4(P, Dim);
-    PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, Color, DevContext->TriangleBoxMesh.IndexCount, 0, 0);
+    DrawOrientedBox(DevContext, P, Dim, Global_WorldXAxis, Global_WorldYAxis, Global_WorldZAxis, Color);
 }
 
 void DrawPoint(dev_context* DevContext, v3f P, c4 Color)
 {
-    DrawBox(DevContext, P, V3(0.05f), Color);
+    DrawBox(DevContext, P, V3(0.025f), Color);
 }
 
 void DrawLineBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
@@ -122,6 +126,14 @@ void DevelopmentImGui(dev_context* DevContext)
         }
     }    
     
+    //const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading", "Wireframe on Normal Shading"};
+    
+    const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading"};
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Shading Style");
+    ImGui::SameLine();
+    ImGui::Combo("", (int*)&DevContext->ShadingType, ShadingTypes, ARRAYCOUNT(ShadingTypes));
+   
     DevelopmentFrameRecording(DevContext);
     
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
@@ -174,12 +186,21 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     ellipsoid3D Ellipsoid = GetPlayerEllipsoid(Game, Player);
     DrawLineEllipsoid(DevContext, Ellipsoid, PlayerColor);
     
-    for(u32 PointIndex = 0; PointIndex < DevContext->DebugPointCount; PointIndex++)
+    for(u32 PointIndex = 0; PointIndex < DevContext->DebugPoints.Size; PointIndex++)
     {
         debug_point* Point = DevContext->DebugPoints + PointIndex;
         DrawPoint(DevContext, Point->P, Point->Color);
     }
-    DevContext->DebugPointCount = 0;    
+    DevContext->DebugPoints.Size = 0;    
+    
+    for(u32 DirectionVectorIndex = 0; DirectionVectorIndex < DevContext->DebugDirectionVectors.Size; DirectionVectorIndex++)
+    {
+        debug_direction_vector* DirectionVector = DevContext->DebugDirectionVectors + DirectionVectorIndex;
+        v3f X, Y;
+        CreateBasis(DirectionVector->Direction, &X, &Y);        
+        DrawOrientedBox(DevContext, DirectionVector->Origin, V3(0.025f, 0.025f, 1.0f), X, Y, DirectionVector->Direction, DirectionVector->Color);         
+    }
+    DevContext->DebugDirectionVectors.Size = 0;
 }
 
 void DevelopmentRender(dev_context* DevContext)
@@ -245,7 +266,25 @@ void DevelopmentRender(dev_context* DevContext)
     PushClearColorAndDepth(Graphics, Black(), 1.0f);    
     ///////////////////
     
-    DevelopmentRenderWorld(DevContext, Game, Graphics, World, Camera);
+    switch(DevContext->ShadingType)
+    {
+        case SHADING_TYPE_NORMAL:
+        {
+            PushWireframe(Graphics, false);
+            DevelopmentRenderWorld(DevContext, Game, Graphics, World, Camera);
+        } break;
+        
+        case SHADING_TYPE_WIREFRAME:
+        {
+            PushWireframe(Graphics, true);
+            DevelopmentRenderWorld(DevContext, Game, Graphics, World, Camera);
+            PushWireframe(Graphics, false);
+        } break;                
+        
+        //TODO(JJ): Support this case
+        INVALID_CASE(SHADING_TYPE_WIREFRAME_ON_NORMAL);
+        INVALID_DEFAULT_CASE;        
+    }
     
     i32 OtherWidth = Graphics->RenderDim.width/4;
     i32 OtherHeight = Graphics->RenderDim.height/4;
@@ -334,9 +373,9 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     
     if(!DevContext->Initialized)
     {
-        DevContext->DevStorage = CreateArena(KILOBYTE(32));                
+        DevContext->DevStorage = CreateArena(KILOBYTE(32));                               
         DevContext->FrameRecording.RecordingPath = AllocateStringStorage(&DevContext->DevStorage, 8092);
-        DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);
+        DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);        
         
         Platform_InitImGui(DevContext->PlatformData);                
         AllocateImGuiFont(Graphics);                

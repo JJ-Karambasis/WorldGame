@@ -1,6 +1,8 @@
 #ifndef WORLD_H
 #define WORLD_H
 
+#define VERY_CLOSE_DISTANCE 0.005f
+
 enum world_entity_type
 {
     WORLD_ENTITY_TYPE_STATIC,
@@ -73,6 +75,7 @@ struct world_entity
     world_entity_id LinkID;        
     
     mesh* Mesh;
+    walkable_mesh* WalkableMesh;
     
     void* UserData;
 };

@@ -675,9 +675,9 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!Graphics)
         WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");
     
-    Assets.Graphics = Graphics;    
-    
+    Assets.Graphics = Graphics;        
     void* DevPointer = NULL;
+    
 #if DEVELOPER_BUILD
     dev_context DevContext = {};
     DevContext.InDevelopmentMode = true;
@@ -807,7 +807,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 
 wchar_t* Win32_ConvertToWide(char* String)
 {
-    int StringSize = (int)LiteralStringLength(String);
+    int StringSize = (int)LiteralStringLength(String)+1;
     wchar_t* Result = PushArray(StringSize, wchar_t, Clear, 0);
     MultiByteToWideChar(CP_ACP, 0, String, -1, Result, StringSize);
     return Result;
@@ -817,9 +817,9 @@ char* Win32_ConvertToStandard(wchar_t* String)
 {
     //CONFIRM(JJ): Do we want to actually support wide strings in string.h? If so can we remove these wide string functions 
     //from the c runtime libary?
-    int StringSize = (int)wcslen(String);
+    int StringSize = (int)wcslen(String)+1;
     char* Result = PushArray(StringSize, char, Clear, 0);
-    WideCharToMultiByte(CP_ACP, 0, String, StringSize, Result, StringSize, NULL, NULL);
+    WideCharToMultiByte(CP_ACP, 0, String, -1, Result, StringSize, NULL, NULL);
     return Result;
 }
 

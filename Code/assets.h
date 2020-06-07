@@ -100,6 +100,9 @@ struct assets
     mesh BoxGraphicsMesh;
     walkable_mesh BoxWalkableMesh;
     
+    mesh QuadGraphicsMesh;
+    walkable_mesh QuadWalkableMesh;
+    
     mesh PlayerMesh;
     
 #if 0 
