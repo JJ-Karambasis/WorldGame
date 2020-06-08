@@ -3,6 +3,7 @@
 #include "geometry.cpp"
 #include "animation.cpp"
 #include "world.cpp"
+#include "player.cpp"
 
 #include "graphics.cpp"
 

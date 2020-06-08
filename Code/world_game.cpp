@@ -3,6 +3,7 @@
 #include "audio.cpp"
 #include "animation.cpp"
 #include "world.cpp"
+#include "player.cpp"
 #include "fbx.cpp"
 #include "assets.cpp"
 #include "graphics.cpp"
@@ -38,9 +39,6 @@ EXPORT GAME_TICK(Tick)
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     SetGlobalErrorStream(Global_Platform->ErrorStream);
     
-    float min = FLT_MIN;
-    float true_min = FLT_TRUE_MIN;
-    
     world_entity_id ID = {};
     if(!Game->Initialized)
     {        
@@ -74,12 +72,13 @@ EXPORT GAME_TICK(Tick)
         }
         
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 50.0f, 0.0f, 0.0f), V3(1.0f, 100.0f, 100.0f), V3(0, -PI*0.5f, 0), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 2.0f, -5.0f, 0.0f), V3(2.0f, 80.0f, 1.0f), V3(0.2f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f,  0.0f, 0.0f), V3(1.0f, 1.0f, 0.75f), V3(0.0f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 2.0f, -5.0f, 0.0f), V3(2.0f, 40.0f, 1.0f), V3(0.3f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 4.0f, -5.0f, 0.0f), V3(2.0f, 40.0f, 1.0f), V3(0.2f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f,  0.0f, 0.0f), V3(1.0f, 1.0f, 0.25f), V3(0.0f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);        
     }        
     
     
-    if(IsPressed(Game->Input->SwitchWorld))
+    if(IsPressed(Game->Input->SwitchWorld)) 
     {
         u32 PrevIndex = Game->CurrentWorldIndex;
         Game->CurrentWorldIndex = !PrevIndex;
@@ -94,7 +93,7 @@ EXPORT GAME_TICK(Tick)
     {        
         Puzzle->IsComplete = true;
         for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
-        {math
+        {
             goal_rect* GoalRect = Puzzle->GoalRects + GoalIndex;        
             
             b32 GoalIsMet = false;

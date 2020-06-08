@@ -202,24 +202,6 @@ CreatePlayer(game* Game, u32 WorldIndex, v3f Position, v3f Radius, c4 Color)
     Player->Radius = Radius;    
 }
 
-ellipsoid3D
-GetPlayerEllipsoid(game* Game, player* Player)
-{   
-    world_entity* PlayerEntity = GetEntity(Game, Player->EntityID);
-    
-    ellipsoid3D Result;
-    Result.Radius = Player->Radius * PlayerEntity->Scale;    
-    Result.CenterP = V3(PlayerEntity->Position.xy, PlayerEntity->Position.z + Result.Radius.z);        
-    return Result;
-}
-
-void SetPlayerEllipsoidP(game* Game, player* Player, v3f CenterP)
-{
-    world_entity* PlayerEntity = GetEntity(Game, Player->EntityID);
-    f32 ZDim = Player->Radius.z * PlayerEntity->Scale.z;    
-    PlayerEntity->Position = V3(CenterP.xy, CenterP.z - ZDim);    
-}
-
 world_entity_id 
 CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Dim, c4 Color)
 {
@@ -496,35 +478,9 @@ collision_result WorldEllipsoidCollisions(world* World, v3f Position, v3f Radius
 
 void 
 UpdateWorld(game* Game)
-{        
-    input* Input = Game->Input;
-    
-    v2f MoveDirection = {};
-    
-    if(IsDown(Input->MoveForward))
-        MoveDirection.y = 1.0f;
-    
-    if(IsDown(Input->MoveBackward))
-        MoveDirection.y = -1.0f;
-    
-    if(IsDown(Input->MoveRight))
-        MoveDirection.x = 1.0f;
-    
-    if(IsDown(Input->MoveLeft))
-        MoveDirection.x = -1.0f;
-    
-    if(MoveDirection != 0)
-        MoveDirection = Normalize(MoveDirection);    
-    
-    f32 dt = Game->dt;    
-    v2f MoveAcceleration = MoveDirection*MOVE_ACCELERATION;        
-    f32 VelocityDamping = (1.0f / (1.0f + dt*MOVE_DAMPING));
-    
-    player_state PlayerState = {};
-    pushing_state Pushing = InitPushingState();
-    
+{                
     world* World = GetWorld(Game, Game->CurrentWorldIndex);         
-                    
+    
     FOR_EACH(Entity, &World->EntityPool)
     {        
         switch(Entity->Type)
@@ -532,96 +488,7 @@ UpdateWorld(game* Game)
             case WORLD_ENTITY_TYPE_PLAYER:
             {
                 ASSERT(Entity->UserData);
-                player* Player = (player*)Entity->UserData;
-                
-                Entity->Velocity.xy += MoveAcceleration*dt; 
-                Entity->Velocity *= VelocityDamping;
-                Entity->Velocity.z -= (20.0f*dt);
-                
-                v3f MoveDelta = Entity->Velocity*dt;                   
-                v3f NewPosition = Entity->Position + MoveDelta;
-                
-                DEBUG_DRAW_POINT(Entity->Position, White());
-                DEBUG_DRAW_POINT(NewPosition, Yellow());
-                
-                ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);
-                
-                v3f ESpacePosition = PlayerEllipsoid.CenterP / PlayerEllipsoid.Radius;
-                v3f ESpaceMoveDelta = MoveDelta / PlayerEllipsoid.Radius;                
-                
-                v3f DestinationPoint = ESpacePosition + ESpaceMoveDelta;
-                plane3D FirstPlane = InvalidPlane3D();
-                
-                for(u32 Iterations = 0; Iterations < 3; Iterations++)
-                {
-                    collision_result CollisionResult = WorldEllipsoidCollisions(World, ESpacePosition, PlayerEllipsoid.Radius, ESpaceMoveDelta);
-                    if(!CollisionResult.FoundCollision)
-                    {
-                        ESpacePosition = DestinationPoint;
-                        break;
-                    }
-                    else
-                    {
-                        f32 Distance = Magnitude(ESpaceMoveDelta)*CollisionResult.t;
-                        f32 ShortenDistance = MaximumF32(Distance-VERY_CLOSE_DISTANCE, 0.0f);
-                        ESpacePosition += (Normalize(ESpaceMoveDelta)*ShortenDistance);
-                        
-                        if(Iterations == 0)
-                        {
-                            f32 LongRadius = 1.0f + VERY_CLOSE_DISTANCE;
-                            FirstPlane = CollisionResult.SlidingPlane;
-                            
-                            DestinationPoint -= (SignedDistance(DestinationPoint, FirstPlane) - LongRadius)*FirstPlane.Normal;
-                            ESpaceMoveDelta = DestinationPoint - ESpacePosition;
-                        }
-                        else if(Iterations == 1)
-                        {
-                            plane3D SecondPlane = CollisionResult.SlidingPlane;
-                            
-                            v3f Crease = Cross(FirstPlane.Normal, SecondPlane.Normal);
-                            f32 Displacement = Dot((DestinationPoint - ESpacePosition), Crease);
-                            
-                            ESpaceMoveDelta = Displacement*Crease;
-                            DestinationPoint = ESpacePosition + ESpaceMoveDelta;
-                        }
-                    }
-                }                
-               
-                
-                SetPlayerEllipsoidP(Game, Player, ESpacePosition*PlayerEllipsoid.Radius);
-                
-#if 0 
-                animation_controller* Controller = &Player->AnimationController;
-                playing_animation* PlayingAnimation = &Controller->PlayingAnimation;    
-                skeleton* Skeleton = Controller->Skeleton;
-                
-                u32 PrevFrameIndex = FloorU32(PlayingAnimation->t*ANIMATION_FPS);
-                u32 NextFrameIndex = PrevFrameIndex+1;
-                
-                f32 PrevFrameT = PrevFrameIndex*ANIMATION_HZ;
-                f32 NextFrameT = NextFrameIndex*ANIMATION_HZ;
-                
-                f32 BlendFactor = (PlayingAnimation->t-PrevFrameT)/(NextFrameT-PrevFrameT);
-                
-                ASSERT((BlendFactor >= 0) && (BlendFactor <= 1));
-                
-                animation_frame* PrevFrame = PlayingAnimation->Clip->Frames + PrevFrameIndex;
-                
-                if(NextFrameIndex == PlayingAnimation->Clip->FrameCount)
-                    NextFrameIndex = 0;
-                animation_frame* NextFrame = PlayingAnimation->Clip->Frames + NextFrameIndex;        
-                
-                for(u32 JointIndex = 0; JointIndex < Skeleton->JointCount; JointIndex++)
-                {
-                    Controller->JointPoses[JointIndex] = InterpolatePose(PrevFrame->JointPoses[JointIndex], BlendFactor, NextFrame->JointPoses[JointIndex]);                        
-                }
-                
-                PlayingAnimation->t += Game->dt;    
-                if(PlayingAnimation->t >= GetClipDuration(PlayingAnimation->Clip))
-                    PlayingAnimation->t = 0.0;    
-                
-                GenerateGlobalPoses(Controller);
-#endif
+                UpdatePlayer(Game, Entity);                
             } break;                        
         }                        
     }    
