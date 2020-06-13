@@ -755,6 +755,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                                 BIND_KEY('A', Input.MoveLeft);
                                 BIND_KEY('D', Input.MoveRight);                            
                                 BIND_KEY('Q', Input.SwitchWorld);                                
+                                BIND_KEY(VK_SPACE, Input.Action);
                             }
                             
                             DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard);                            

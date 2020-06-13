@@ -236,6 +236,18 @@ inline rect3D TransformAABB3D(rect3D Rect, sqt Transform)
     return Result;    
 }
 
+inline v3f GetTriangleNormal(v3f P0, v3f P1, v3f P2)
+{
+    v3f Result = Normalize(Cross(P1-P0, P2-P0));
+    return Result;
+}
+
+inline v3f GetTriangleNormal(triangle3D Triangle)
+{
+    v3f Result = GetTriangleNormal(Triangle.P[0], Triangle.P[1], Triangle.P[2]);
+    return Result;
+}
+
 inline triangle3D CreateTriangle3D(v3f P0, v3f P1, v3f P2)
 {
     triangle3D Result;
@@ -256,7 +268,7 @@ inline plane3D InvalidPlane3D()
 inline plane3D CreatePlane3D(v3f P0, v3f P1, v3f P2)
 {
     plane3D Result;    
-    Result.Normal = Normalize(Cross(P1-P0, P2-P0));    
+    Result.Normal = GetTriangleNormal(P0, P1, P2);
     Result.D = -(Result.Normal.x*P0.x + Result.Normal.y*P0.y + Result.Normal.z*P0.z);
     return Result;
 }
@@ -296,12 +308,18 @@ inline b32 IsInvalidTriangle3D(triangle3D Triangle)
     return Result;
 }
 
-inline triangle3D TransformTriangle3D(triangle3D Triangle, sqt Transform)
+inline triangle3D TransformTriangle3D(v3f* P, sqt Transform)
 {
     triangle3D Result;
-    Result.P[0] = TransformV3(Triangle.P[0], Transform);
-    Result.P[1] = TransformV3(Triangle.P[1], Transform);
-    Result.P[2] = TransformV3(Triangle.P[2], Transform);
+    Result.P[0] = TransformV3(P[0], Transform);
+    Result.P[1] = TransformV3(P[1], Transform);
+    Result.P[2] = TransformV3(P[2], Transform);
+    return Result;
+}
+
+inline triangle3D TransformTriangle3D(triangle3D Triangle, sqt Transform)
+{
+    triangle3D Result = TransformTriangle3D(Triangle.P, Transform);    
     return Result;
 }
 

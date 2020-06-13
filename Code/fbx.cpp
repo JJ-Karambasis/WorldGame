@@ -240,8 +240,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     
     mesh Result = {};
     
-#define FBX_HASH_TABLE_SIZE 8101
-    hash_table<vertex_p3_n3_index> HashTable = CreateHashTable<vertex_p3_n3_index>(FBX_HASH_TABLE_SIZE);     
+    hash_table<vertex_p3_n3_index> HashTable = CreateHashTable<vertex_p3_n3_index>(FBX_HASH_SIZE);     
     
     void* VertexData;
     if(JointsData)
@@ -268,7 +267,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
                     NormalIndex = VertexId;                
                 else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)                
                     NormalIndex = ElementNormals->GetIndexArray().GetAt(VertexId);                
-                INVALID_ELSE;
+                 INVALID_ELSE;
             }
             else if(MappingMode == FbxGeometryElement::eByControlPoint)
             {
@@ -369,13 +368,58 @@ walkable_mesh FBX_LoadFirstWalkableMesh(fbx_context* Context, arena* Storage)
     
     u32 PolygonCount = Mesh->GetPolygonCount();    
     Result.TriangleCount = PolygonCount;
-    Result.Triangles = PushArray(Storage, PolygonCount, triangle3D, Clear, 0);
+    Result.Triangles = PushArray(Storage, PolygonCount, walkable_triangle, Clear, 0);
+    
+    hash_map<i32, edge_triangle_entry> HashMap = CreateHashMap<i32, edge_triangle_entry>(FBX_HASH_SIZE);
     
     for(u32 TriangleIndex = 0; TriangleIndex < Result.TriangleCount; TriangleIndex++)
     {
-        BOOL_CHECK_AND_HANDLE(Mesh->GetPolygonSize(TriangleIndex) == 3, "Mesh had a polygon that did not have 3 vertices. All polygons must be triangles.");
+        BOOL_CHECK_AND_HANDLE(Mesh->GetPolygonSize(TriangleIndex) == 3, "Mesh had a polygon that did not have 3 vertices. All polygons must be triangles.");        
+        walkable_triangle* Triangle = Result.Triangles + TriangleIndex;
         
-        triangle3D* Triangle = Result.Triangles + TriangleIndex;
+        i32 CPIndex0 = Mesh->GetPolygonVertex(TriangleIndex, 0);
+        i32 CPIndex1 = Mesh->GetPolygonVertex(TriangleIndex, 1);
+        i32 CPIndex2 = Mesh->GetPolygonVertex(TriangleIndex, 2);
+        
+        bool Reversed;
+        i32 EdgeIndex0 = Mesh->GetMeshEdgeIndex(CPIndex0, CPIndex1, Reversed);
+        i32 EdgeIndex1 = Mesh->GetMeshEdgeIndex(CPIndex1, CPIndex2, Reversed);
+        i32 EdgeIndex2 = Mesh->GetMeshEdgeIndex(CPIndex2, CPIndex0, Reversed);                
+        
+        edge_triangle_entry EdgeAdjTriangleEntry;
+        if(HashMap.Find(EdgeIndex0, &EdgeAdjTriangleEntry))
+        {
+            EdgeAdjTriangleEntry.Triangle->AdjTriangles[EdgeAdjTriangleEntry.EdgeIndex] = Triangle;
+            Triangle->AdjTriangles[0] = EdgeAdjTriangleEntry.Triangle;
+        }
+        else
+        {
+            edge_triangle_entry EdgeTriangleEntry = {0, Triangle};            
+            HashMap.Insert(EdgeIndex0, EdgeTriangleEntry);
+        }
+        
+        if(HashMap.Find(EdgeIndex1, &EdgeAdjTriangleEntry))
+        {
+            EdgeAdjTriangleEntry.Triangle->AdjTriangles[EdgeAdjTriangleEntry.EdgeIndex] = Triangle;
+            Triangle->AdjTriangles[1] = EdgeAdjTriangleEntry.Triangle;
+        }
+        else
+        {
+            edge_triangle_entry EdgeTriangleEntry = {1, Triangle};            
+            HashMap.Insert(EdgeIndex1, EdgeTriangleEntry);
+        }
+        
+        if(HashMap.Find(EdgeIndex2, &EdgeAdjTriangleEntry))
+        {
+            EdgeAdjTriangleEntry.Triangle->AdjTriangles[EdgeAdjTriangleEntry.EdgeIndex] = Triangle;
+            Triangle->AdjTriangles[2] = EdgeAdjTriangleEntry.Triangle;
+        }
+        else
+        {
+            edge_triangle_entry EdgeTriangleEntry = {2, Triangle};            
+            HashMap.Insert(EdgeIndex2, EdgeTriangleEntry);
+        }
+        
         for(u32 VertexIndex = 0; VertexIndex < 3; VertexIndex++)
         {
             u32 VertexId = (TriangleIndex*3) + VertexIndex;           

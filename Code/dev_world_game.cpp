@@ -4,6 +4,24 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
+void DrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
+{
+    v3f X, Y;
+    CreateBasis(Normal, &X, &Y);
+    
+    v2f HalfDim = Dim*0.5f;
+    
+    v3f P[4] = 
+    {
+        CenterP - X*HalfDim.x - Y*HalfDim.y,
+        CenterP + X*HalfDim.x - Y*HalfDim.y,
+        CenterP + X*HalfDim.x + Y*HalfDim.y,
+        CenterP - X*HalfDim.x + Y*HalfDim.y
+    };
+    
+    PushDrawQuad(DevContext->Graphics, P[0], P[1], P[2], P[3], Color);    
+}
+
 void DrawOrientedBox(dev_context* DevContext, v3f P, v3f Dim, v3f XAxis, v3f YAxis, v3f ZAxis, c4 Color)
 {
     m4 Model = TransformM4(P, XAxis, YAxis, ZAxis, Dim);
@@ -193,6 +211,21 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     }
     DevContext->DebugPoints.Size = 0;    
     
+    for(u32 EdgeIndex = 0; EdgeIndex < DevContext->DebugEdges.Size; EdgeIndex++)
+    {
+        debug_edges* DebugEdge = DevContext->DebugEdges + EdgeIndex++;
+        
+        v3f Edge = DebugEdge->P1 - DebugEdge->P0;
+        f32 EdgeLength = Magnitude(Edge);
+        
+        v3f Z = Edge/EdgeLength;
+        v3f X, Y;
+        CreateBasis(Z, &X, &Y);
+        
+        DrawOrientedBox(DevContext, DebugEdge->P0, V3(0.025f, 0.025f, EdgeLength), X, Y, Z, DebugEdge->Color);        
+    }    
+    DevContext->DebugEdges.Size = 0;
+    
     for(u32 DirectionVectorIndex = 0; DirectionVectorIndex < DevContext->DebugDirectionVectors.Size; DirectionVectorIndex++)
     {
         debug_direction_vector* DirectionVector = DevContext->DebugDirectionVectors + DirectionVectorIndex;
@@ -201,6 +234,15 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
         DrawOrientedBox(DevContext, DirectionVector->Origin, V3(0.025f, 0.025f, 1.0f), X, Y, DirectionVector->Direction, DirectionVector->Color);         
     }
     DevContext->DebugDirectionVectors.Size = 0;
+    
+    PushCull(Graphics, false);
+    for(u32 QuadIndex = 0; QuadIndex < DevContext->DebugQuads.Size; QuadIndex++)
+    {
+        debug_quad* Quad = DevContext->DebugQuads + QuadIndex;
+        DrawQuad(DevContext, Quad->CenterP, Quad->Normal, Quad->Dim, Quad->Color);
+    }
+    DevContext->DebugQuads.Size = 0;
+    PushCull(Graphics, true);
 }
 
 void DevelopmentRender(dev_context* DevContext)

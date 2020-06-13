@@ -30,3 +30,8 @@ inline i16* GetSamples(audio* Audio, u32 SampleIndex)
     i16* Result = GetSamples(Audio->Samples, &Audio->Format, SampleIndex);
     return Result;    
 }
+
+void OutputSoundSamples(game* Game, u32 SamplesToWrite)
+{
+    audio* Audio = Game->Audio;
+}

@@ -129,6 +129,8 @@ struct world
     camera Camera;
     player Player;    
     
+    jumping_quad JumpingQuads[2];
+    
     list<blocker> Blockers;    
 };
 

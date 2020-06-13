@@ -35,10 +35,16 @@ inline b32 IsAssetValid(mesh* Mesh)
     return Result;
 }
 
+struct walkable_triangle
+{
+    v3f P[3];    
+    walkable_triangle* AdjTriangles[3];
+};
+
 struct walkable_mesh
 {
     u32 TriangleCount;
-    triangle3D* Triangles;
+    walkable_triangle* Triangles;
 };
 
 inline b32 IsAssetValid(walkable_mesh* Mesh)

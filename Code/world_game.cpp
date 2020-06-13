@@ -69,12 +69,21 @@ EXPORT GAME_TICK(Tick)
             Camera->FocalPoint = PlayerEntity->Position;
             Camera->Position.z += 6.0f;
             Camera->Orientation = IdentityM3();                
+            
+            World->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
+            World->JumpingQuads[0].Dimensions = V2(1.0f, 2.0f);
+            
+            World->JumpingQuads[1].CenterP = V3(-4.0f, 0.0f, 0.0f);
+            World->JumpingQuads[1].Dimensions = V2(1.0f, 2.0f);
+            
+            World->JumpingQuads[0].OtherQuad = &World->JumpingQuads[1];
+            World->JumpingQuads[1].OtherQuad = &World->JumpingQuads[0];
         }
         
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 50.0f, 0.0f, 0.0f), V3(1.0f, 100.0f, 100.0f), V3(0, -PI*0.5f, 0), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 2.0f, -5.0f, 0.0f), V3(2.0f, 40.0f, 1.0f), V3(0.3f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 4.0f, -5.0f, 0.0f), V3(2.0f, 40.0f, 1.0f), V3(0.2f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.0f,  0.0f, 0.0f), V3(1.0f, 1.0f, 0.25f), V3(0.0f*PI, 0, PI*0.0f), RGBA(0.5f, 0.0f, 0.0f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
+        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.2f, 0.0f, 1.0f), V3(1.0f, 3.0f, 1.0f), V3(0.0f, 0.0f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);                                                        
     }        
     
     
