@@ -1,37 +1,44 @@
-inline audio_format
-CreateAudioFormat(u16 ChannelCount, u32 SamplesPerSecond)
-{
-    audio_format Format = {ChannelCount, SamplesPerSecond};
-    return Format;
-}
-
 inline ptr
-GetBytesPerSecond(audio_format* Format)
+GetBytesPerSecond(u32 ChannelCount)
 {
-    ptr Result = Format->ChannelCount*sizeof(i16)*Format->SamplesPerSecond;
+    ptr Result = ChannelCount*sizeof(i16)*AUDIO_OUTPUT_SAMPLES_PER_SECOND;
     return Result;
 }
 
 inline ptr
-GetAudioBufferSizeFromSeconds(audio_format* Format, ptr Seconds)
+GetAudioBufferSizeFromSeconds(u32 ChannelCount, ptr Seconds)
 {
-    ptr Result = GetBytesPerSecond(Format)*Seconds;
+    ptr Result = GetBytesPerSecond(ChannelCount)*Seconds;
     return Result;
 }
 
-inline i16* GetSamples(i16* Samples, audio_format* Format, u32 SampleIndex)
+inline i16* GetSamples(samples* Samples, u32 ChannelCount, u32 SampleIndex)
 {     
-    i16* Result = Samples + SampleIndex+Format->ChannelCount*sizeof(i16);
+    ASSERT(SampleIndex < Samples->Count);
+    i16* Result = Samples->Data + (SampleIndex*ChannelCount);
     return Result;
 }
 
 inline i16* GetSamples(audio* Audio, u32 SampleIndex)
-{ 
-    i16* Result = GetSamples(Audio->Samples, &Audio->Format, SampleIndex);
+{         
+    i16* Result = GetSamples(&Audio->Samples, Audio->ChannelCount, SampleIndex);
     return Result;    
 }
 
-void OutputSoundSamples(game* Game, u32 SamplesToWrite)
+void PlayAudio(audio_output* AudioOutput, audio* Audio)
 {
-    audio* Audio = Game->Audio;
+    if(IsInitialized(&AudioOutput->PlayingAudioPool))
+    {
+        pool<playing_audio>* AudioPool = &AudioOutput->PlayingAudioPool;        
+        playing_audio* PlayingAudio = GetByID(AudioPool, AllocateFromPool(AudioPool));        
+        PlayingAudio->Audio = Audio;
+    }
+}
+
+extern "C"
+EXPORT GAME_OUTPUT_SOUND_SAMPLES(OutputSoundSamples)
+{
+    Global_Platform = Platform;
+    
+    audio_output* AudioOutput = Game->AudioOutput;        
 }

@@ -31,6 +31,10 @@ global string Global_EXEFilePath;
 global arena __Global_PlatformArena__;
 global arena* Global_PlatformArena = &__Global_PlatformArena__;
 global LARGE_INTEGER Global_Frequency;
+global win32_game_code Global_GameCode;
+
+//TODO(JJ): This lock can probably be moved out into some developer code macros since it is only used for hot reloading (for the audio thread)
+global lock Global_Lock;
 
 PLATFORM_CLOCK(Win32_Clock)
 {
@@ -126,6 +130,7 @@ win32_game_code Win32_DefaultGameCode()
 {
     win32_game_code Result = {};    
     Result.Tick = Game_TickStub;    
+    Result.OutputSoundSamples = Game_OutputSoundSamplesStub;
     return Result;
 }
 
@@ -139,7 +144,8 @@ Win32_LoadGameCode(string DLLPath, string TempDLLPath)
     
     Result.GameLibrary.Library = LoadLibrary(TempDLLPath.Data);
     Result.Tick = (game_tick*)GetProcAddress(Result.GameLibrary.Library, "Tick");
-    if(!Result.GameLibrary.Library || !Result.Tick)
+    Result.OutputSoundSamples = (game_output_sound_samples*)GetProcAddress(Result.GameLibrary.Library, "OutputSoundSamples");
+    if(!Result.GameLibrary.Library || !Result.Tick || !Result.OutputSoundSamples)
         return Win32_DefaultGameCode();
     
     Result.GameLibrary.LastWriteTime = Win32_GetFileCreationTime(DLLPath);
@@ -390,7 +396,7 @@ PLATFORM_CLOSE_FILE(Win32_CloseFile)
     Win32_FreeMemory(File);    
 }
 
-win32_audio Win32_InitDSound(HWND Window, ptr BufferLength, audio_format AudioFormat)
+win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
 {    
     HMODULE DSoundLibrary = LoadLibrary("dsound.dll");
     BOOL_CHECK_AND_HANDLE(DSoundLibrary, "Failed to load the dsound.dll library.");
@@ -404,8 +410,8 @@ win32_audio Win32_InitDSound(HWND Window, ptr BufferLength, audio_format AudioFo
     
     WAVEFORMATEX WaveFormat = {};
     WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    WaveFormat.nChannels = AudioFormat.ChannelCount;    
-    WaveFormat.nSamplesPerSec = AudioFormat.SamplesPerSecond;
+    WaveFormat.nChannels = AUDIO_OUTPUT_CHANNEL_COUNT;    
+    WaveFormat.nSamplesPerSec = AUDIO_OUTPUT_SAMPLES_PER_SECOND;
     WaveFormat.wBitsPerSample = sizeof(i16)*8;
     WaveFormat.nBlockAlign = (WaveFormat.nChannels*WaveFormat.wBitsPerSample) / 8;
     WaveFormat.nAvgBytesPerSec = WaveFormat.nSamplesPerSec*WaveFormat.nBlockAlign;
@@ -421,17 +427,16 @@ win32_audio Win32_InitDSound(HWND Window, ptr BufferLength, audio_format AudioFo
     BufferDescription = {};
     BufferDescription.dwSize = sizeof(BufferDescription);
     BufferDescription.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
-    BufferDescription.dwBufferBytes = (u32)GetAudioBufferSizeFromSeconds(&AudioFormat, BufferLength);
+    BufferDescription.dwBufferBytes = (u32)GetAudioBufferSizeFromSeconds(AUDIO_OUTPUT_CHANNEL_COUNT, BufferLength);
     BufferDescription.lpwfxFormat = &WaveFormat;
     
     IDirectSoundBuffer* SoundBuffer;
     HRESULT_CHECK_AND_HANDLE(DirectSound->CreateSoundBuffer(&BufferDescription, &SoundBuffer, 0), "Failed to create the direct sound buffer.");
     
-    win32_audio Result;
-    Result.Format = AudioFormat;
-    Result.SoundBuffer = SoundBuffer;
-    Result.SampleCount = BufferLength*AudioFormat.SamplesPerSecond;
-    Result.Samples = (i16*)Win32_AllocateMemory(BufferDescription.dwBufferBytes);
+    win32_audio_output Result;        
+    Result.SoundBuffer = SoundBuffer;    
+    Result.Samples.Count = BufferLength*AUDIO_OUTPUT_SAMPLES_PER_SECOND;
+    Result.Samples.Data = (i16*)Win32_AllocateMemory(BufferDescription.dwBufferBytes);
     
     return Result;
     
@@ -441,7 +446,7 @@ win32_audio Win32_InitDSound(HWND Window, ptr BufferLength, audio_format AudioFo
 
 PLATFORM_TOGGLE_AUDIO(Win32_ToggleAudio)
 {
-    win32_audio* PlatformAudio = (win32_audio*)Audio;
+    win32_audio_output* PlatformAudio = (win32_audio_output*)Audio;
     if(State)
     {
         PlatformAudio->SoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
@@ -473,131 +478,141 @@ platform* Win32_GetPlatformStruct()
 
 DWORD WINAPI 
 AudioThread(void* Paramter)
-{
+{    
+    game* Game = (game*)Paramter;
     
-    game* Game = (game*)Paramter;                
-    win32_audio* Audio = (win32_audio *)Game->Audio;
-    
-    audio* TestAudio = &Game->Assets->TestAudio;
+    arena AudioThreadArena = CreateArena(MEGABYTE(1));
+    win32_audio_output* AudioOutput = (win32_audio_output*)Game->AudioOutput;    
+    AudioOutput->PlayingAudioPool = CreatePool<playing_audio>(&AudioThreadArena, 16);
     
 #define TARGET_AUDIO_HZ 20
     
-    IDirectSoundBuffer* SoundBuffer = Audio->SoundBuffer;    
+    IDirectSoundBuffer* SoundBuffer = AudioOutput->SoundBuffer;    
     SoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
     
     u64 FlipWallClock = Global_Platform->Clock();    
     b32 SoundIsValid = false;
     
-    u16 BytesPerSample = sizeof(u16)*Audio->Format.ChannelCount;
-    u32 SoundBufferSize = SafeU32(Audio->SampleCount*BytesPerSample);    
+    u16 BytesPerSample = sizeof(u16)*AUDIO_OUTPUT_CHANNEL_COUNT;
+    u32 SoundBufferSize = SafeU32(AudioOutput->Samples.Count*BytesPerSample);    
     f32 TargetSecondsPerFrame = SafeInverse(TARGET_AUDIO_HZ);
     
-    i32 SafetyBytes = (i32)(((f32)Audio->Format.SamplesPerSecond*(f32)BytesPerSample / TARGET_AUDIO_HZ)/3.0f);
-    
-    u64 PlayingSampleIndex = 0;
-    
+    i32 SafetyBytes = (i32)(((f32)AUDIO_OUTPUT_CHANNEL_COUNT*(f32)BytesPerSample / TARGET_AUDIO_HZ)/3.0f);
     
     for(;;)
-    {
-        u64 AudioWallClock = Global_Platform->Clock();
-        f32 FromBeginToAudioSeconds = (f32)Global_Platform->ElapsedTime(AudioWallClock, FlipWallClock);
-        
-        DWORD PlayCursor;
-        DWORD WriteCursor;
-        if(SoundBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
-        {            
-            if(!SoundIsValid)
-            {
-                Audio->RunningSampleIndex = WriteCursor / BytesPerSample;
-                SoundIsValid = true;
-            }
-            
-            DWORD ByteToLock = ((Audio->RunningSampleIndex*BytesPerSample) % SoundBufferSize);
-            
-            DWORD ExpectedSoundBytesPerFrame =
-                (int)((f32)(Audio->Format.SamplesPerSecond*BytesPerSample) / TARGET_AUDIO_HZ);
-            f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
-            DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(f32)ExpectedSoundBytesPerFrame);
-            
-            DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
-            
-            DWORD SafeWriteCursor = WriteCursor;
-            if(SafeWriteCursor < PlayCursor)
-            {
-                SafeWriteCursor += SoundBufferSize;
-            }
-            ASSERT(SafeWriteCursor >= PlayCursor);
-            SafeWriteCursor += SafetyBytes;
-            
-            b32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
-            
-            DWORD TargetCursor = 0;
-            if(AudioCardIsLowLatency)
-            {
-                TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
-            }
-            else
-            {
-                TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame + SafetyBytes);
-            }
-            TargetCursor = (TargetCursor % SoundBufferSize);
-            
-            DWORD BytesToWrite = 0;
-            if(ByteToLock > TargetCursor)
-            {
-                BytesToWrite = (SoundBufferSize - ByteToLock);
-                BytesToWrite += TargetCursor;
-            }
-            else
-            {
-                BytesToWrite = TargetCursor - ByteToLock;
-            }
-            
-            VOID* Region1;
-            VOID* Region2;
-            DWORD Region1Size;            
-            DWORD Region2Size;
-            if(SUCCEEDED(SoundBuffer->Lock(ByteToLock, BytesToWrite, &Region1, &Region1Size, &Region2, &Region2Size, 0)))
-            {                
-                DWORD Region1SampleCount = Region1Size/BytesPerSample;
-                
-                i16* DstSample  = (i16*)Region1;                 
-                for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
-                {
-                    *DstSample++ = TestAudio->Samples[PlayingSampleIndex*2];
-                    *DstSample++ = TestAudio->Samples[(PlayingSampleIndex*2)+1];
-                    
-                    Audio->RunningSampleIndex++;
-                    PlayingSampleIndex++;
-                }
-                
-                DWORD Region2SampleCount = Region2Size/BytesPerSample;
-                DstSample  = (i16*)Region2;                 
-                for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
-                {
-                    *DstSample++ = TestAudio->Samples[PlayingSampleIndex*2];
-                    *DstSample++ = TestAudio->Samples[(PlayingSampleIndex*2)+1];
-                    
-                    Audio->RunningSampleIndex++;
-                    PlayingSampleIndex++;
-                }
-                
-                SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);                
-            }            
-        }
-        else
+    {        
+        if(Game->Initialized)
         {
-            SoundIsValid = false;
-        }                  
-        
-        
-        f32 Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);
-        while(Delta < TargetSecondsPerFrame)        
-            Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);        
-        
-        FlipWallClock = Global_Platform->Clock();        
-    }
-    
+            temp_arena TemporaryArena = BeginTemporaryMemory(&AudioThreadArena);
+            
+            u64 AudioWallClock = Global_Platform->Clock();
+            f32 FromBeginToAudioSeconds = (f32)Global_Platform->ElapsedTime(AudioWallClock, FlipWallClock);
+            
+            DWORD PlayCursor;
+            DWORD WriteCursor;
+            if(SoundBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
+            {            
+                if(!SoundIsValid)
+                {
+                    AudioOutput->RunningSampleIndex = WriteCursor / BytesPerSample;
+                    SoundIsValid = true;
+                }
+                
+                DWORD ByteToLock = ((AudioOutput->RunningSampleIndex*BytesPerSample) % SoundBufferSize);
+                
+                DWORD ExpectedSoundBytesPerFrame =
+                    (int)((f32)(AUDIO_OUTPUT_SAMPLES_PER_SECOND*BytesPerSample) / TARGET_AUDIO_HZ);
+                f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
+                DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(f32)ExpectedSoundBytesPerFrame);
+                
+                DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
+                
+                DWORD SafeWriteCursor = WriteCursor;
+                if(SafeWriteCursor < PlayCursor)
+                {
+                    SafeWriteCursor += SoundBufferSize;
+                }
+                ASSERT(SafeWriteCursor >= PlayCursor);
+                SafeWriteCursor += SafetyBytes;
+                
+                b32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
+                
+                DWORD TargetCursor = 0;
+                if(AudioCardIsLowLatency)
+                {
+                    TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
+                }
+                else
+                {
+                    TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame + SafetyBytes);
+                }
+                TargetCursor = (TargetCursor % SoundBufferSize);
+                
+                DWORD BytesToWrite = 0;
+                if(ByteToLock > TargetCursor)
+                {
+                    BytesToWrite = (SoundBufferSize - ByteToLock);
+                    BytesToWrite += TargetCursor;
+                }
+                else
+                {
+                    BytesToWrite = TargetCursor - ByteToLock;
+                }
+                
+                DWORD SamplesToWrite = BytesToWrite / BytesPerSample;
+                if(!IsLocked(&Global_Lock))
+                {   
+                    ASSERT(SamplesToWrite < AudioOutput->Samples.Count);
+                    samples Samples = {SamplesToWrite, AudioOutput->Samples.Data};
+                    
+                    Global_GameCode.OutputSoundSamples(Game, Global_Platform, &Samples, &AudioThreadArena);
+                    
+                    VOID* Region1;
+                    VOID* Region2;
+                    DWORD Region1Size;            
+                    DWORD Region2Size;
+                    if(SUCCEEDED(SoundBuffer->Lock(ByteToLock, BytesToWrite, &Region1, &Region1Size, &Region2, &Region2Size, 0)))
+                    {   
+                        i16* SrcSamples = AudioOutput->Samples.Data;                    
+                        DWORD Region1SampleCount = Region1Size/BytesPerSample;
+                        
+                        i16* DstSample  = (i16*)Region1;                 
+                        for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
+                        {
+                            *DstSample++ = *SrcSamples++;
+                            *DstSample++ = *SrcSamples++;                        
+                            AudioOutput->RunningSampleIndex++;                        
+                        }
+                        
+                        DWORD Region2SampleCount = Region2Size/BytesPerSample;
+                        DstSample  = (i16*)Region2;                 
+                        for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
+                        {
+                            *DstSample++ = *SrcSamples++;
+                            *DstSample++ = *SrcSamples++;                        
+                            AudioOutput->RunningSampleIndex++;                        
+                        }
+                        
+                        SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);                
+                    }                                
+                }
+            }
+            else
+            {
+                SoundIsValid = false;
+            }                  
+            
+            
+            f32 Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);
+            while(Delta < TargetSecondsPerFrame)        
+                Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);        
+            
+            FlipWallClock = Global_Platform->Clock();        
+            
+            EndTemporaryMemory(&TemporaryArena);
+            CHECK_ARENA(&AudioThreadArena);
+        }
+    }    
 }
 
 int CALLBACK 
@@ -613,7 +628,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     InitMemory(&DefaultArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);    
     Global_Platform->TempArena = &DefaultArena;
     Global_Platform->ErrorStream = &ErrorStream;
-        
+    
     assets Assets = {};
     Assets.Storage = CreateArena(MEGABYTE(64));
     
@@ -653,8 +668,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         WRITE_AND_HANDLE_ERROR("Failed to create game window."); 
     
     u32 SoundBufferSeconds = 2;
-    win32_audio Audio = Win32_InitDSound(Window, SoundBufferSeconds, CreateAudioFormat(2, 48000)); 
-    if(!Audio.SoundBuffer)
+    win32_audio_output AudioOutput = Win32_InitDSound(Window, SoundBufferSeconds); 
+    if(!AudioOutput.SoundBuffer)
         WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");        
     
     input Input = {};
@@ -662,10 +677,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     
     Game.Assets = &Assets;
     Game.Input = &Input;
-    Game.Audio = &Audio;
+    Game.AudioOutput = &AudioOutput;
     
-    win32_game_code GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);
-    if(!GameCode.GameLibrary.Library)    
+    Global_GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);
+    if(!Global_GameCode.GameLibrary.Library)    
         WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
     
     win32_graphics_code GraphicsCode = Win32_LoadGraphicsCode(OpenGLGraphicsDLLPathName, OpenGLGraphicsTempDLLPathName);
@@ -687,10 +702,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     DevPointer = &DevContext;
 #endif
     
-#if 0 
-    Assets.TestAudio = DEBUGLoadWAVFile("Test.wav");
-    CloseHandle(CreateThread(NULL, 0, AudioThread, &Game, 0, NULL));
-#endif
+    CloseHandle(CreateThread(NULL, 0, AudioThread, &Game, 0, NULL));    
     
     
     Game.dt = 1.0f/60.0f; 
@@ -702,10 +714,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         temp_arena FrameArena = BeginTemporaryMemory();
         
         FILETIME GameDLLWriteTime = Win32_GetFileCreationTime(GameDLLPathName);
-        if(CompareFileTime(&GameCode.GameLibrary.LastWriteTime, &GameDLLWriteTime) < 0)
+        if(CompareFileTime(&Global_GameCode.GameLibrary.LastWriteTime, &GameDLLWriteTime) < 0)
         {
-            Win32_UnloadGameCode(&GameCode, TempDLLPathName);                        
-            GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);            
+            BeginLock(&Global_Lock);
+            {
+                Win32_UnloadGameCode(&Global_GameCode, TempDLLPathName);                        
+                Global_GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);            
+            }
+            EndLock(&Global_Lock);
         }
         
         MSG Message;
@@ -780,7 +796,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         DEVELOPMENT_RECORD_FRAME(&Game);
         DEVELOPMENT_PLAY_FRAME(&Game);
         
-        GameCode.Tick(&Game, Graphics, Global_Platform, DevPointer);                                
+        Global_GameCode.Tick(&Game, Graphics, Global_Platform, DevPointer);                                
         
         DEVELOPMENT_TICK(&Game, Graphics);                
         

@@ -45,6 +45,7 @@ EXPORT GAME_TICK(Tick)
         Game->Initialized = true;
         Game->GameStorage = CreateArena(MEGABYTE(16));
         
+        
         Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
         Game->Assets->BoxWalkableMesh = LoadWalkableMesh(Game->Assets, "Box.fbx");
         Game->Assets->QuadGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Quad.fbx");
@@ -83,7 +84,7 @@ EXPORT GAME_TICK(Tick)
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
         
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.2f, 0.0f, 1.0f), V3(1.0f, 3.0f, 1.0f), V3(0.0f, 0.0f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);                                                        
+        //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.2f, 0.0f, 1.0f), V3(1.0f, 3.0f, 1.0f), V3(0.0f, 0.0f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);                                                        
     }        
     
     
@@ -138,6 +139,13 @@ EXPORT GAME_TICK(Tick)
         }
     }
 #endif
+    
+    
+    FOR_EACH(PlayingAudio, &Game->AudioOutput->PlayingAudioPool)
+    {
+        if(PlayingAudio->IsFinishedPlaying)        
+            FreeFromPool(&Game->AudioOutput->PlayingAudioPool, PlayingAudio);        
+    }
     
     if(NOT_IN_DEVELOPMENT_MODE())
     {           

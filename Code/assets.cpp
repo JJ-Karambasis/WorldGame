@@ -57,17 +57,18 @@ DEBUGLoadWAVFile(char* Path)
     
     buffer SampleData = {};
     
-    audio_format AudioFormat = {};
+    wav_format* WAVFormat = NULL;
     while(IsValid(Iter))
     {
         switch(GetType(Iter))
         {
             case WAVE_CHUNK_TYPE_FMT:
             {
-                wav_format* WAVFormat = (wav_format*)GetChunkData(Iter);
+                WAVFormat = (wav_format*)GetChunkData(Iter);
                 BOOL_CHECK_AND_HANDLE(WAVFormat->wFormatTag == 1, "Format tag for wav files is not PCM");                
                 BOOL_CHECK_AND_HANDLE(WAVFormat->wBitsPerSample == 16, "Bits per sample must be 16");
-                AudioFormat = CreateAudioFormat(WAVFormat->nChannels, WAVFormat->nSamplesPerSec);                                
+                BOOL_CHECK_AND_HANDLE(WAVFormat->nSamplesPerSec == 48000, "Samples per second needs to be 48000");                
+                BOOL_CHECK_AND_HANDLE((WAVFormat->nChannels == 1) || (WAVFormat->nChannels == 2), "WAV format needs to have 1 (mono) or 2 (stereo) channels.");                
             } break;
             
             case WAVE_CHUNK_TYPE_DATA:
@@ -82,16 +83,18 @@ DEBUGLoadWAVFile(char* Path)
     
     BOOL_CHECK_AND_HANDLE(SampleData.Data, "Failed to find the data chunk for the wav file.");
     
-    Result.Format = AudioFormat;
-    Result.SampleCount = SampleData.Size / (AudioFormat.ChannelCount*sizeof(i16));
-    Result.Samples = (i16*)Global_Platform->AllocateMemory(SampleData.Size);
-    BOOL_CHECK_AND_HANDLE(Result.Samples, "Failed to allocate memory for the audio file.");
+    Result.ChannelCount = WAVFormat->nChannels;
     
-    for(u32 SampleIndex = 0; SampleIndex < Result.SampleCount; SampleIndex++)
+    samples Samples = {};
+    Samples.Count = SampleData.Size / (Result.ChannelCount*sizeof(i16));        
+    Samples.Data = (i16*)Global_Platform->AllocateMemory(SampleData.Size);
+    BOOL_CHECK_AND_HANDLE(Samples.Data, "Failed to allocate memory for the audio file.");
+    
+    for(u32 SampleIndex = 0; SampleIndex < Samples.Count; SampleIndex++)
     {
-        i16* DstChannelSamples = GetSamples(&Result, SampleIndex);
-        i16* SrcChannelSamples = GetSamples((i16*)SampleData.Data, &AudioFormat, SampleIndex);
-        for(u32 ChannelIndex = 0; ChannelIndex < AudioFormat.ChannelCount; ChannelIndex++)        
+        i16* DstChannelSamples = GetSamples(&Result.Samples, Result.ChannelCount, SampleIndex);
+        i16* SrcChannelSamples = GetSamples(&Samples, Result.ChannelCount, SampleIndex);
+        for(u32 ChannelIndex = 0; ChannelIndex < Result.ChannelCount; ChannelIndex++)        
             *DstChannelSamples++ = *SrcChannelSamples++;                    
     }
     
