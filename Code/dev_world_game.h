@@ -18,6 +18,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
+#define DEVELOPER_MUTE __Internal_Dev_Context__->Mute
 
 #define DEBUG_DRAW_POINT(position, color) \
 if(!IsInitialized(&__Internal_Dev_Context__->DebugPoints)) \
@@ -117,8 +118,7 @@ struct dev_context
     arena DevStorage;
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
-    b32 DrawOtherWorld;                
-    b32 Mute;
+    b32 DrawOtherWorld;                    
     shading_type ShadingType;
     
     frame_recording FrameRecording;

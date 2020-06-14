@@ -14,6 +14,7 @@ struct playing_audio
 
 struct audio_output
 {
+    b32 Mute;
     pool<playing_audio> PlayingAudioPool;
 };
 

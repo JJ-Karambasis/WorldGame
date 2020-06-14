@@ -433,10 +433,11 @@ win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
     IDirectSoundBuffer* SoundBuffer;
     HRESULT_CHECK_AND_HANDLE(DirectSound->CreateSoundBuffer(&BufferDescription, &SoundBuffer, 0), "Failed to create the direct sound buffer.");
     
-    win32_audio_output Result;        
+    win32_audio_output Result = {};        
     Result.SoundBuffer = SoundBuffer;    
     Result.Samples.Count = BufferLength*AUDIO_OUTPUT_SAMPLES_PER_SECOND;
     Result.Samples.Data = (i16*)Win32_AllocateMemory(BufferDescription.dwBufferBytes);
+    Result.Mute = true;
     
     return Result;
     

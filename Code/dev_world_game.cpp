@@ -154,11 +154,8 @@ void DevelopmentImGui(dev_context* DevContext)
    
     DevelopmentFrameRecording(DevContext);
     
-    b32 PrevMute = DevContext->Mute;
-    ImGui::Checkbox("Mute", (bool*)&DevContext->Mute);
-    if(DevContext->Mute != PrevMute)    
-        Global_Platform->ToggleAudio(Game->AudioOutput, !DevContext->Mute);    
     
+    ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
     
     if(ImGui::CollapsingHeader("Game Information"))
