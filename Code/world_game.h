@@ -40,7 +40,7 @@ struct game
 {
     b32 Initialized;
     assets* Assets;
-    audio* Audio;
+    audio_output* AudioOutput;
     input* Input;  
     
     arena GameStorage;
@@ -55,9 +55,15 @@ struct game
 #define GAME_TICK(name) void name(game* Game, graphics* Graphics, platform* Platform, void* DevContext)
 typedef GAME_TICK(game_tick);
 
+#define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, platform* Platform, samples* OutputSamples, arena* TempArena)
+typedef GAME_OUTPUT_SOUND_SAMPLES(game_output_sound_samples);
+
 GAME_TICK(Game_TickStub)
 {
 }
 
+GAME_OUTPUT_SOUND_SAMPLES(Game_OutputSoundSamplesStub)
+{    
+}
 
 #include "dev_world_game.h"

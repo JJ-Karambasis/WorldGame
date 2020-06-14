@@ -82,6 +82,32 @@ b32 IsPointInTriangle2D(triangle3D Triangle, v2f P)
     return Result;
 }
 
+b32 IsPointInTriangle3D(v3f P0, v3f P1, v3f P2, v3f P)
+{
+    f32 TotalAngles = 0.0f;
+        
+    v3f V1 = Normalize(P-P1);
+    v3f V2 = Normalize(P-P2);
+    v3f V3 = Normalize(P-P0);
+    
+    f32 Dot1 = ClampF32(Dot(V1, V2), -1, 1);
+    f32 Dot2 = ClampF32(Dot(V2, V3), -1, 1);
+    f32 Dot3 = ClampF32(Dot(V3, V1), -1, 1); 
+    
+    f32 Angle = ACos(Dot1) + ACos(Dot2) + ACos(Dot3);
+    
+    if(Abs(Angle-2*PI) <= 0.005f)
+        return true;
+    
+    return false;
+}
+
+b32 IsPointInTriangle3D(v3f* Triangle, v3f P)
+{
+    b32 Result = IsPointInTriangle3D(Triangle[0], Triangle[1], Triangle[2], P);
+    return Result;
+}
+
 b32 IsPointProjectedInTriangle3D(v3f P0, v3f P1, v3f P2, v3f P)
 {
     //NOTE(EVERYONE): Got this weird ass function from https://www.peroxide.dk/papers/collision/collision.pdf in Appendix C
@@ -114,13 +140,17 @@ b32 IsPointProjectedInTriangle3D(v3f P0, v3f P1, v3f P2, v3f P)
 
 b32 IsPointProjectedInTriangle3D(v3f* Triangle, v3f P)
 {
+#if 1
     b32 Result = IsPointProjectedInTriangle3D(Triangle[0], Triangle[1], Triangle[2], P);
+#else
+    b32 Result = IsPointInTriangle3D(Triangle[0], Triangle[1], Triangle[2], P);
+#endif
     return Result;
 }
 
 b32 IsPointProjectedInTriangle3D(triangle3D Triangle, v3f P)
-{
-    b32 Result = IsPointProjectedInTriangle3D(Triangle.P, P);
+{    
+    b32 Result = IsPointProjectedInTriangle3D(Triangle.P, P);            
     return Result;
 }
 

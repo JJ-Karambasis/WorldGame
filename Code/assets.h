@@ -1,19 +1,25 @@
 #ifndef ASSETS_H
 #define ASSETS_H
 
-//NOTE(EVERYONE): We only support pcm integer formats for now
-struct audio_format
-{    
-    u16 ChannelCount;
-    u32 SamplesPerSecond;
+struct samples
+{
+    u64 Count;
+    i16* Data;
 };
 
 struct audio
 {
-    audio_format Format;
-    u64 SampleCount;    
-    i16* Samples;
+    u32 ChannelCount;
+    samples Samples;    
 };
+
+inline b32 IsAssetValid(audio* Audio)
+{
+    b32 Result = (Audio->ChannelCount > 0 &&
+                  Audio->Samples.Count > 0 &&
+                  Audio->Samples.Data);
+    return Result;
+}
 
 struct mesh
 {
@@ -35,10 +41,16 @@ inline b32 IsAssetValid(mesh* Mesh)
     return Result;
 }
 
+struct walkable_triangle
+{
+    v3f P[3];    
+    walkable_triangle* AdjTriangles[3];
+};
+
 struct walkable_mesh
 {
     u32 TriangleCount;
-    triangle3D* Triangles;
+    walkable_triangle* Triangles;
 };
 
 inline b32 IsAssetValid(walkable_mesh* Mesh)
@@ -100,6 +112,9 @@ struct assets
     mesh BoxGraphicsMesh;
     walkable_mesh BoxWalkableMesh;
     
+    mesh QuadGraphicsMesh;
+    walkable_mesh QuadWalkableMesh;
+    
     mesh PlayerMesh;
     
 #if 0 
@@ -111,6 +126,7 @@ struct assets
     //animation_clip MovingAnimation;
         
     audio TestAudio;
+    audio TestAudio2;
 };
 
 

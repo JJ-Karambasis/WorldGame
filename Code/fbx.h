@@ -3,6 +3,7 @@
 
 #include "fbxsdk/fbxsdk.h"
 
+#define FBX_HASH_SIZE 8101
 global FbxManager* Global_FBXManager;
 
 struct control_point_joint_data
@@ -56,5 +57,11 @@ inline b32 operator!=(vertex_p3_n3_index Left, vertex_p3_n3_index Right)
     b32 Result = Left.Vertex != Right.Vertex;    
     return Result;
 }
+
+struct edge_triangle_entry
+{
+    u32 EdgeIndex;
+    walkable_triangle* Triangle;
+};
 
 #endif

@@ -1,6 +1,8 @@
 #ifndef WORLD_H
 #define WORLD_H
 
+#define VERY_CLOSE_DISTANCE 0.005f
+
 enum world_entity_type
 {
     WORLD_ENTITY_TYPE_STATIC,
@@ -73,6 +75,7 @@ struct world_entity
     world_entity_id LinkID;        
     
     mesh* Mesh;
+    walkable_mesh* WalkableMesh;
     
     void* UserData;
 };
@@ -100,15 +103,6 @@ struct pushing_state
     v2f Direction;
 };
 
-struct player
-{    
-    world_entity_id EntityID;
-    v3f Radius;
-    player_state State;
-    pushing_state Pushing;        
-    animation_controller AnimationController;        
-};
-
 struct blocker
 {
     v3f P0;
@@ -127,13 +121,19 @@ struct blocker_list
     u32 Count;
 };
 
+#include "player.h"
+
 struct world
 {    
     world_entity_pool EntityPool;
     camera Camera;
     player Player;    
     
+    jumping_quad JumpingQuads[2];
+    
     list<blocker> Blockers;    
 };
+
+
 
 #endif

@@ -8,6 +8,8 @@ void ReadFrame(dev_context* DevContext, u32 FrameIndex)
     frame* Frames = (frame*)(Recording->RecordingBuffer.Data + sizeof(u32));        
     frame* Frame = Frames + FrameIndex;
     
+    ASSERT(Frame->dt != 0);
+    
     Game->dt = Frame->dt;
     *Game->Input = Frame->Input;
     
@@ -159,6 +161,8 @@ void DevelopmentRecordFrame(dev_context* DevContext, game* Game)
         frame Frame;        
         
         input* Input = Game->Input;
+        
+        ASSERT(Game->dt != 0);
         
         Frame.dt = Game->dt;
         Frame.Input = *Input; 

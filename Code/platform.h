@@ -24,7 +24,7 @@ typedef u64 platform_time;
 #define PLATFORM_CLOSE_FILE(name) void name(platform_file_handle* File)
 #define PLATFORM_CLOCK(name) platform_time name()
 #define PLATFORM_ELAPSED_TIME(name) f64 name(platform_time End, platform_time Start)
-#define PLATFORM_TOGGLE_AUDIO(name) void name(struct audio* Audio, b32 State) 
+#define PLATFORM_TOGGLE_AUDIO(name) void name(struct audio_output* Audio, b32 State) 
 
 typedef PLATFORM_LOG(platform_log);
 typedef PLATFORM_READ_ENTIRE_FILE(platform_read_entire_file);

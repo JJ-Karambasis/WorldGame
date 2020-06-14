@@ -18,8 +18,27 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
-#define DEBUG_DRAW_POINT(position, color) ASSERT(__Internal_Dev_Context__->DebugPointCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugPoints)); __Internal_Dev_Context__->DebugPoints[__Internal_Dev_Context__->DebugPointCount++] = {position, color}
-#define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color) ASSERT(__Internal_Dev_Context__->DebugDirectionVectorsCount < ARRAYCOUNT(__Internal_Dev_Context__->DebugDirectionVectors)); __Internal_Dev_Context__->DebugDirectionVectors[__Internal_Dev_Context__->DebugDirectionVectorsCount++] = {origin, direction, color}
+
+#define DEBUG_DRAW_POINT(position, color) \
+if(!IsInitialized(&__Internal_Dev_Context__->DebugPoints)) \
+__Internal_Dev_Context__->DebugPoints = CreateDynamicArray<debug_point>(2048); \
+Append(&__Internal_Dev_Context__->DebugPoints, {position, color})
+
+#define DEBUG_DRAW_EDGE(position0, position1, color) \
+if(!IsInitialized(&__Internal_Dev_Context__->DebugEdges)) \
+__Internal_Dev_Context__->DebugEdges = CreateDynamicArray<debug_edges>(1024); \
+Append(&__Internal_Dev_Context__->DebugEdges, {position0, position1, color})
+
+#define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color) \
+if(!IsInitialized(&__Internal_Dev_Context__->DebugDirectionVectors)) \
+__Internal_Dev_Context__->DebugDirectionVectors = CreateDynamicArray<debug_direction_vector>(1024); \
+if(direction != V3()) \
+Append(&__Internal_Dev_Context__->DebugDirectionVectors, {origin, Normalize(direction), color})
+
+#define DEBUG_DRAW_QUAD(center, normal, dimensions, color) \
+if(!IsInitialized(&__Internal_Dev_Context__->DebugQuads)) \
+__Internal_Dev_Context__->DebugQuads = CreateDynamicArray<debug_quad>(1024); \
+Append(&__Internal_Dev_Context__->DebugQuads, {center, normal, dimensions, color})
 
 #include "imgui/imgui.h"
 #include "dev_frame_recording.h"
@@ -60,11 +79,33 @@ struct debug_point
     c4 Color;
 };
 
+struct debug_edges
+{
+    v3f P0;
+    v3f P1;
+    c4 Color;
+};
+
 struct debug_direction_vector
 {
     v3f Origin;
     v3f Direction;
     c4 Color;
+};
+
+struct debug_quad
+{
+    v3f CenterP;
+    v3f Normal;
+    v2f Dim;
+    c4 Color;
+};
+
+enum shading_type
+{
+    SHADING_TYPE_NORMAL,
+    SHADING_TYPE_WIREFRAME,
+    SHADING_TYPE_WIREFRAME_ON_NORMAL
 };
 
 #define MAX_IMGUI_MESHES 32
@@ -77,7 +118,9 @@ struct dev_context
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
     b32 DrawOtherWorld;
-    b32 SelectObjects;
+    b32 SelectObjects;           
+    b32 Mute;
+    shading_type ShadingType;
     
     frame_recording FrameRecording;
     
@@ -95,12 +138,11 @@ struct dev_context
     
     dev_mesh TriangleBoxMesh;    
     
-    u32 DebugPointCount;
-    debug_point DebugPoints[2048];
-    
-    u32 DebugDirectionVectorsCount;
-    debug_direction_vector DebugDirectionVectors[2048];        
-    
+    dynamic_array<debug_point> DebugPoints;
+    dynamic_array<debug_edges> DebugEdges;
+    dynamic_array<debug_direction_vector> DebugDirectionVectors;
+    dynamic_array<debug_quad> DebugQuads;
+
     void* PlatformData;
     b32 Initialized;
     world_entity* SelectedObject;
@@ -126,6 +168,9 @@ inline b32 IsInDevelopmentMode(dev_context* Context)
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations)
 #define NOT_IN_DEVELOPMENT_MODE() true
 #define DEBUG_DRAW_POINT(position, color)
+#define DEBUG_DRAW_EDGE(position0, position1, color)
+#define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color)
+#define DEBUG_DRAW_QUAD(center, normal, dimensions, color)
 
 #endif
 

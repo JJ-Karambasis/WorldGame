@@ -10,7 +10,7 @@ struct input
 {
     union
     {
-        button Buttons[5];
+        button Buttons[6];
         struct
         {
             button MoveForward;
@@ -18,6 +18,7 @@ struct input
             button MoveLeft;
             button MoveRight;    
             button SwitchWorld;
+            button Action;
         };
     };                
 };

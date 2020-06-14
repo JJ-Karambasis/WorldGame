@@ -3,7 +3,7 @@
 
 #define CAMERA_FIELD_OF_VIEW PI*0.3f
 #define CAMERA_ZNEAR 0.01f
-#define CAMERA_ZFAR 100.0f
+#define CAMERA_ZFAR 1000.0f
 
 struct camera
 {
