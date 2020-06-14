@@ -143,7 +143,7 @@ void DevelopmentImGui(dev_context* DevContext)
             DevCamera->Distance = Magnitude(DevCamera->FocalPoint-DevCamera->Position);
         }
     }    
-    
+     
     //const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading", "Wireframe on Normal Shading"};
     
     const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading"};
@@ -153,6 +153,11 @@ void DevelopmentImGui(dev_context* DevContext)
     ImGui::Combo("", (int*)&DevContext->ShadingType, ShadingTypes, ARRAYCOUNT(ShadingTypes));
    
     DevelopmentFrameRecording(DevContext);
+    
+    b32 PrevMute = DevContext->Mute;
+    ImGui::Checkbox("Mute", (bool*)&DevContext->Mute);
+    if(DevContext->Mute != PrevMute)    
+        Global_Platform->ToggleAudio(Game->AudioOutput, !DevContext->Mute);    
     
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
     

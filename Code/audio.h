@@ -7,8 +7,9 @@
 struct playing_audio
 {
     audio* Audio;
-    u32 PlayingSampleIndex;
+    u64 PlayingSampleIndex;
     b32 IsFinishedPlaying;
+    f32 Volume;
 };
 
 struct audio_output

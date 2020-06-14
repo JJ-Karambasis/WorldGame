@@ -4,6 +4,7 @@
 #include "animation.cpp"
 #include "world.cpp"
 #include "player.cpp"
+#include "wav.cpp"
 #include "fbx.cpp"
 #include "assets.cpp"
 #include "graphics.cpp"
@@ -41,16 +42,18 @@ EXPORT GAME_TICK(Tick)
     
     world_entity_id ID = {};
     if(!Game->Initialized)
-    {        
-        Game->Initialized = true;
-        Game->GameStorage = CreateArena(MEGABYTE(16));
-        
+    {                
+        Game->GameStorage = CreateArena(MEGABYTE(16));        
         
         Game->Assets->BoxGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
         Game->Assets->BoxWalkableMesh = LoadWalkableMesh(Game->Assets, "Box.fbx");
         Game->Assets->QuadGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Quad.fbx");
         Game->Assets->QuadWalkableMesh = LoadWalkableMesh(Game->Assets, "Quad.fbx");
         Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "TestPlayerMesh.fbx");
+        Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
+        Game->Assets->TestAudio2 = LoadAudio(Game->Assets, "TestSound2.wav");
+        
+        PlayAudio(Game, &Game->Assets->TestAudio, 1.0f);
         
 #if 0 
         Game->Assets->TestSkeletonMesh = LoadGraphicsMesh(Game->Assets, "TestSkeleton.fbx");
@@ -85,6 +88,9 @@ EXPORT GAME_TICK(Tick)
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
         
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.2f, 0.0f, 1.0f), V3(1.0f, 3.0f, 1.0f), V3(0.0f, 0.0f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);                                                        
+        
+        
+        Game->Initialized = true;
     }        
     
     
@@ -94,6 +100,9 @@ EXPORT GAME_TICK(Tick)
         Game->CurrentWorldIndex = !PrevIndex;
         OnWorldSwitch(Game, PrevIndex, Game->CurrentWorldIndex);          
     }
+    
+    if(IsPressed(Game->Input->Action))
+        PlayAudio(Game, &Game->Assets->TestAudio2, 0.15f);
     
     UpdateWorld(Game);            
     

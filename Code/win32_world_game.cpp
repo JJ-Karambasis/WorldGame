@@ -476,8 +476,25 @@ platform* Win32_GetPlatformStruct()
     return &Result;
 }
 
+void Win32_ClearSoundBuffer(win32_audio_output* Output)
+{
+    IDirectSoundBuffer* SoundBuffer = Output->SoundBuffer;    
+    
+    VOID* Region1;
+    VOID* Region2;
+    DWORD Region1Size;            
+    DWORD Region2Size;
+        
+    if(SUCCEEDED(SoundBuffer->Lock(0, 0, &Region1, &Region1Size, &Region2, &Region2Size, DSBLOCK_ENTIREBUFFER)))
+    {   
+        ClearMemory(Region1, Region1Size);
+        ClearMemory(Region2, Region2Size);        
+        SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
+    }
+}
+
 DWORD WINAPI 
-AudioThread(void* Paramter)
+Win32_AudioThread(void* Paramter)
 {    
     game* Game = (game*)Paramter;
     
@@ -488,6 +505,7 @@ AudioThread(void* Paramter)
 #define TARGET_AUDIO_HZ 20
     
     IDirectSoundBuffer* SoundBuffer = AudioOutput->SoundBuffer;    
+    Win32_ClearSoundBuffer(AudioOutput);
     SoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
     
     u64 FlipWallClock = Global_Platform->Clock();    
@@ -578,23 +596,23 @@ AudioThread(void* Paramter)
                         
                         i16* DstSample  = (i16*)Region1;                 
                         for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
-                        {
+                        {                            
                             *DstSample++ = *SrcSamples++;
-                            *DstSample++ = *SrcSamples++;                        
+                            *DstSample++ = *SrcSamples++;                                                    
                             AudioOutput->RunningSampleIndex++;                        
                         }
                         
                         DWORD Region2SampleCount = Region2Size/BytesPerSample;
                         DstSample  = (i16*)Region2;                 
                         for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
-                        {
+                        {                            
                             *DstSample++ = *SrcSamples++;
-                            *DstSample++ = *SrcSamples++;                        
+                            *DstSample++ = *SrcSamples++;                                                    
                             AudioOutput->RunningSampleIndex++;                        
                         }
                         
                         SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);                
-                    }                                
+                    }                       
                 }
             }
             else
@@ -702,7 +720,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     DevPointer = &DevContext;
 #endif
     
-    CloseHandle(CreateThread(NULL, 0, AudioThread, &Game, 0, NULL));    
+    CloseHandle(CreateThread(NULL, 0, Win32_AudioThread, &Game, 0, NULL));    
     
     
     Game.dt = 1.0f/60.0f; 

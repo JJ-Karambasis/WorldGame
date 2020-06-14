@@ -1,29 +1,6 @@
 #ifndef ASSETS_H
 #define ASSETS_H
 
-#pragma pack(push, 1)
-struct wav_format
-{
-    u16 wFormatTag;
-    u16 nChannels;
-    u32 nSamplesPerSec;
-    u32 nAvgBytesPerSec;
-    u16 nBlockAlign;
-    u16 wBitsPerSample;
-    u16 cbSize;
-    u16 wValidBitsPerSample;
-    u32 dwChannelMask;
-    u8 SubFormat[16];
-};
-#pragma pack(pop)
-
-enum 
-{
-    WAVE_CHUNK_TYPE_FMT = RIFF_CODE('f', 'm', 't', ' '),
-    WAVE_CHUNK_TYPE_DATA = RIFF_CODE('d', 'a', 't', 'a'),
-    WAVE_CHUNK_TYPE_WAVE = RIFF_CODE('W', 'A', 'V', 'E')
-};
-
 struct samples
 {
     u64 Count;
@@ -35,6 +12,14 @@ struct audio
     u32 ChannelCount;
     samples Samples;    
 };
+
+inline b32 IsAssetValid(audio* Audio)
+{
+    b32 Result = (Audio->ChannelCount > 0 &&
+                  Audio->Samples.Count > 0 &&
+                  Audio->Samples.Data);
+    return Result;
+}
 
 struct mesh
 {
@@ -141,6 +126,7 @@ struct assets
     //animation_clip MovingAnimation;
         
     audio TestAudio;
+    audio TestAudio2;
 };
 
 

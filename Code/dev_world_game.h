@@ -118,6 +118,7 @@ struct dev_context
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
     b32 DrawOtherWorld;                
+    b32 Mute;
     shading_type ShadingType;
     
     frame_recording FrameRecording;
