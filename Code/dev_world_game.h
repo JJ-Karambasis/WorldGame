@@ -122,8 +122,7 @@ struct dev_context
     shading_type ShadingType;
     
     frame_recording FrameRecording;
-    
-    
+        
     game_information GameInformation;
     
     dev_input Input;    
@@ -133,15 +132,17 @@ struct dev_context
     i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
     dev_mesh LineBoxMesh;
-    dev_mesh LineSphereMesh;
-    
-    dev_mesh TriangleBoxMesh;    
+    dev_mesh LineSphereMesh;    
+    dev_mesh TriangleBoxMesh;
+    dev_mesh TriangleCylinderMesh;
+    dev_mesh TriangleConeMesh;
+    dev_mesh TriangleArrowMesh;
     
     dynamic_array<debug_point> DebugPoints;
     dynamic_array<debug_edges> DebugEdges;
     dynamic_array<debug_direction_vector> DebugDirectionVectors;
     dynamic_array<debug_quad> DebugQuads;
-
+    
     void* PlatformData;
     b32 Initialized;
 };

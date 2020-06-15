@@ -4,6 +4,87 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
+i64 AllocateMesh(graphics* Graphics, mesh_generation_result* Mesh)
+{
+    i64 Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
+                                        Mesh->Indices, Mesh->IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
+    return Result;
+}
+
+i64 AllocateImGuiFont(graphics* Graphics)
+{    
+    ImGuiIO* IO = &ImGui::GetIO();
+    void* ImGuiFontData;
+    v2i ImGuiFontDimensions;
+    
+    IO->Fonts->GetTexDataAsRGBA32((unsigned char**)&ImGuiFontData, &ImGuiFontDimensions.width, &ImGuiFontDimensions.height);
+    
+    graphics_sampler_info SamplerInfo = {};
+    SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
+    SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
+    
+    i64 FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, &SamplerInfo);        
+    IO->Fonts->TexID = (ImTextureID)FontTexture;    
+    return FontTexture;
+}
+
+void CreateDevLineSphereMesh(dev_context* DevContext, u16 CircleSampleCount)
+{
+    mesh_generation_result MeshGenerationResult = GenerateLineSphere(GetDefaultArena(), 1.0f, CircleSampleCount);        
+    DevContext->LineSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->LineSphereMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);        
+}
+
+void CreateDevLineBoxMesh(dev_context* DevContext)
+{
+    mesh_generation_result MeshGenerationResult = GenerateLineBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));    
+    DevContext->LineBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->LineBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
+}
+
+void CreateDevTriangleBoxMesh(dev_context* DevContext)
+{
+    mesh_generation_result MeshGenerationResult = GenerateTriangleBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));       
+    DevContext->TriangleBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
+}
+
+void CreateDevTriangleCylinderMesh(dev_context* DevContext, u16 CircleSampleCount)
+{
+    mesh_generation_result MeshGenerationResult = GenerateTriangleCylinder(GetDefaultArena(), 1.0f, 1.0f, CircleSampleCount);
+    DevContext->TriangleCylinderMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleCylinderMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+}
+
+void CreateDevTriangleConeMesh(dev_context* DevContext, u16 CircleSampleCount)
+{
+    mesh_generation_result MeshGenerationResult = GenerateTriangleCone(GetDefaultArena(), 1.0f, 1.0f, CircleSampleCount);
+    DevContext->TriangleConeMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleConeMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+}
+
+void CreateDevTriangleArrowMesh(dev_context* DevContext, u16 CircleSampleCount, f32 Radius, f32 Height, f32 ArrowRadius, f32 ArrowHeight)
+{
+    mesh_generation_result BodyResult = GenerateTriangleCylinder(GetDefaultArena(), Radius, Height, CircleSampleCount);
+    mesh_generation_result ArrowResult = GenerateTriangleCone(GetDefaultArena(), ArrowRadius, ArrowHeight, CircleSampleCount, V3(0.0f, 0.0f, Height));
+    
+    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(GetDefaultArena(), BodyResult.VertexCount+ArrowResult.VertexCount, 
+                                                                               BodyResult.IndexCount+ArrowResult.IndexCount);
+    
+    ptr BodyResultVerticesSize = sizeof(vertex_p3)*BodyResult.VertexCount;
+    ptr BodyResultIndicesSize = sizeof(u16)*BodyResult.IndexCount;
+    CopyMemory(MeshGenerationResult.Vertices, BodyResult.Vertices, BodyResultVerticesSize);
+    CopyMemory(MeshGenerationResult.Indices, BodyResult.Indices, BodyResultIndicesSize);
+    CopyMemory((u8*)MeshGenerationResult.Vertices+BodyResultVerticesSize, ArrowResult.Vertices, sizeof(vertex_p3)*ArrowResult.VertexCount);
+    CopyMemory((u8*)MeshGenerationResult.Indices+BodyResultIndicesSize, ArrowResult.Indices, sizeof(u16)*ArrowResult.IndexCount);
+    
+    OffsetIndices(MeshGenerationResult.Indices+BodyResult.IndexCount, SafeU16(ArrowResult.IndexCount), SafeU16(BodyResult.VertexCount));
+    
+    DevContext->TriangleArrowMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleArrowMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+}
+
+
 void DrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
 {
     v3f X, Y;
@@ -62,49 +143,69 @@ void DrawLineEllipsoid(dev_context* DevContext, ellipsoid3D Ellipsoid, c4 Color)
     DrawLineEllipsoid(DevContext, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
 }
 
-i64 AllocateMesh(graphics* Graphics, mesh_generation_result* Mesh)
+void DrawCylinder(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c4 Color)
 {
-    i64 Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
-                                        Mesh->Indices, Mesh->IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
-    return Result;
-}
-
-void CreateDevLineSphereMesh(dev_context* DevContext, u16 CircleSampleCount)
-{
-    mesh_generation_result MeshGenerationResult = GenerateLineSphere(GetDefaultArena(), 1.0f, CircleSampleCount);        
-    DevContext->LineSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
-    DevContext->LineSphereMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);        
-}
-
-void CreateDevLineBoxMesh(dev_context* DevContext)
-{
-    mesh_generation_result MeshGenerationResult = GenerateLineBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));    
-    DevContext->LineBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
-    DevContext->LineBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
-}
-
-void CreateDevTriangleBoxMesh(dev_context* DevContext)
-{
-    mesh_generation_result MeshGenerationResult = GenerateTriangleBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));       
-    DevContext->TriangleBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
-    DevContext->TriangleBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
-}
-
-i64 AllocateImGuiFont(graphics* Graphics)
-{    
-    ImGuiIO* IO = &ImGui::GetIO();
-    void* ImGuiFontData;
-    v2i ImGuiFontDimensions;
+    v3f X, Y;
+    CreateBasis(Axis, &X, &Y);
+    X *= Radius;
+    Y *= Radius;
     
-    IO->Fonts->GetTexDataAsRGBA32((unsigned char**)&ImGuiFontData, &ImGuiFontDimensions.width, &ImGuiFontDimensions.height);
+    m4 Model = TransformM4(Position, X, Y, Axis);
+    PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleCylinderMesh.MeshID, Model, Color, DevContext->TriangleCylinderMesh.IndexCount, 0, 0);
+}
+
+void DrawCone(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c4 Color)
+{
+    v3f X, Y;
+    CreateBasis(Axis, &X, &Y);
+    X *= Radius;
+    Y *= Radius;
     
-    graphics_sampler_info SamplerInfo = {};
-    SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
-    SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
+    m4 Model = TransformM4(Position, X, Y, Axis);
+    PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleConeMesh.MeshID, Model, Color, DevContext->TriangleConeMesh.IndexCount, 0, 0);
+}
+
+void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXAxis, v3f YAxis = Global_WorldYAxis, v3f ZAxis = Global_WorldZAxis)
+{        
     
-    i64 FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, &SamplerInfo);        
-    IO->Fonts->TexID = (ImTextureID)FontTexture;    
-    return FontTexture;
+    {
+        v3f X, Y, Z;
+        Z = XAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position, X, Y, Z);
+        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Red(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
+    }
+    
+    {
+        v3f X, Y, Z;
+        Z = YAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position, X, Y, Z);
+        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Green(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+    }
+    
+    {
+        v3f X, Y, Z;
+        Z = ZAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position, X, Y, Z);
+        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Blue(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+    }
+    
+    v3f BoxPosition = V3(Position.xy, Position.z - 0.025f);
+    DrawBox(DevContext, BoxPosition, V3(0.05f), White());    
+}
+
+inline camera* 
+GetProperCamera(dev_context* DevContext, world* World)
+{
+    camera* Camera = &World->Camera;
+    if(DevContext->UseDevCamera)
+        Camera = DevContext->Cameras + World->WorldIndex;
+    return Camera;
 }
 
 void DevelopmentImGui(dev_context* DevContext)
@@ -143,7 +244,7 @@ void DevelopmentImGui(dev_context* DevContext)
             DevCamera->Distance = Magnitude(DevCamera->FocalPoint-DevCamera->Position);
         }
     }    
-     
+    
     //const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading", "Wireframe on Normal Shading"};
     
     const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading"};
@@ -189,11 +290,14 @@ void DevelopmentImGui(dev_context* DevContext)
     ImGui::Render();        
 }
 
-void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graphics, world* World, camera* Camera)
+void DevelopmentRenderWorld(dev_context* DevContext, world* World, camera* Camera)
 {   
+    graphics* Graphics = DevContext->Graphics;
+    game* Game = DevContext->Game;
+    
     PushDepth(Graphics, true);    
     
-    PushWorldCommands(Graphics, World, Camera, Game->Assets);                
+    PushWorldCommands(Graphics, World, Camera);                
     world_entity* PlayerEntity = GetPlayerEntity(World);
     player* Player = (player*)PlayerEntity->UserData;
     
@@ -202,6 +306,8 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
         PlayerColor = Red();
     
     PushDepth(Graphics, false);
+    
+    DrawFrame(DevContext, V3(0.0f, 2.0f, 0.0f));
     
     ellipsoid3D Ellipsoid = GetPlayerEllipsoid(Game, Player);
     DrawLineEllipsoid(DevContext, Ellipsoid, PlayerColor);
@@ -247,17 +353,10 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
     PushCull(Graphics, true);
 }
 
-void DevelopmentRender(dev_context* DevContext)
-{   
-    graphics* Graphics = DevContext->Graphics;
-    game* Game = DevContext->Game;
-    
-    if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
-        return;
-    
-    DevelopmentImGui(DevContext);        
-    
+void DevelopmentUpdateCamera(dev_context* DevContext)
+{    
     dev_input* Input = &DevContext->Input;
+    game* Game = DevContext->Game;
     
     world* World = GetCurrentWorld(Game);
     camera* Camera = &World->Camera;
@@ -303,60 +402,12 @@ void DevelopmentRender(dev_context* DevContext)
             Camera->Distance = CAMERA_MIN_DISTANCE;
         
         Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
-    }
-    
-    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
-    
-    PushClearColorAndDepth(Graphics, Black(), 1.0f);    
-    ///////////////////
-    
-    switch(DevContext->ShadingType)
-    {
-        case SHADING_TYPE_NORMAL:
-        {
-            PushWireframe(Graphics, false);
-            DevelopmentRenderWorld(DevContext, Game, Graphics, World, Camera);
-        } break;
-        
-        case SHADING_TYPE_WIREFRAME:
-        {
-            PushWireframe(Graphics, true);
-            DevelopmentRenderWorld(DevContext, Game, Graphics, World, Camera);
-            PushWireframe(Graphics, false);
-        } break;                
-        
-        //TODO(JJ): Support this case
-        INVALID_CASE(SHADING_TYPE_WIREFRAME_ON_NORMAL);
-        INVALID_DEFAULT_CASE;        
-    }
-    
-    i32 OtherWidth = Graphics->RenderDim.width/4;
-    i32 OtherHeight = Graphics->RenderDim.height/4;
-    
-    block_puzzle* Puzzle = &Game->TestPuzzle;
-    
-    for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
-    {
-        goal_rect* GoalRect = Puzzle->GoalRects + GoalIndex;
-        
-        c4 Color = Blue();
-        if(GoalRect->GoalIsMet)
-            Color = Red();
-        
-        DrawLineBoxMinMax(DevContext, GoalRect->Rect.Min, GoalRect->Rect.Max, Color);
-    }   
-    
-    if(DevContext->DrawOtherWorld)
-    {        
-        PushViewportAndScissor(Graphics, Graphics->RenderDim.width-OtherWidth, Graphics->RenderDim.height-OtherHeight, 
-                               OtherWidth, OtherHeight);
-        
-        world* OtherWorld = GetNotCurrentWorld(Game);
-        camera* OtherCamera = &OtherWorld->Camera;
-        if(DevContext->UseDevCamera)
-            OtherCamera = &DevContext->Cameras[!Game->CurrentWorldIndex];
-        DevelopmentRenderWorld(DevContext, Game, Graphics, OtherWorld, OtherCamera);
-    }
+    }        
+}
+
+void DevelopmentRenderImGui(dev_context* DevContext)
+{
+    graphics* Graphics = DevContext->Graphics;
     
     PushCull(Graphics, false);
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);        
@@ -410,6 +461,60 @@ void DevelopmentRender(dev_context* DevContext)
     PushDepth(Graphics, true);            
 }
 
+void DevelopmentRender(dev_context* DevContext)
+{   
+    graphics* Graphics = DevContext->Graphics;
+    game* Game = DevContext->Game;
+    
+    if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
+        return;
+    
+    DevelopmentImGui(DevContext);    
+    DevelopmentUpdateCamera(DevContext);
+    
+    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+    
+    PushClearColorAndDepth(Graphics, Black(), 1.0f);    
+    ///////////////////
+    
+    world* World = GetCurrentWorld(Game);
+    camera* Camera = GetProperCamera(DevContext, World);
+    switch(DevContext->ShadingType)
+    {
+        case SHADING_TYPE_NORMAL:
+        {
+            PushWireframe(Graphics, false);
+            DevelopmentRenderWorld(DevContext, World, Camera);
+        } break;
+        
+        case SHADING_TYPE_WIREFRAME:
+        {
+            PushWireframe(Graphics, true);
+            DevelopmentRenderWorld(DevContext, World, Camera);
+            PushWireframe(Graphics, false);
+        } break;                
+        
+        //TODO(JJ): Support this case
+        INVALID_CASE(SHADING_TYPE_WIREFRAME_ON_NORMAL);
+        INVALID_DEFAULT_CASE;        
+    }
+    
+    i32 OtherWidth = Graphics->RenderDim.width/4;
+    i32 OtherHeight = Graphics->RenderDim.height/4;
+    
+    if(DevContext->DrawOtherWorld)
+    {        
+        PushViewportAndScissor(Graphics, Graphics->RenderDim.width-OtherWidth, Graphics->RenderDim.height-OtherHeight, 
+                               OtherWidth, OtherHeight);
+        
+        world* OtherWorld = GetNotCurrentWorld(Game);
+        camera* OtherCamera = GetProperCamera(DevContext, OtherWorld);        
+        DevelopmentRenderWorld(DevContext, OtherWorld, OtherCamera);
+    }
+    
+    DevelopmentRenderImGui(DevContext);
+}
+
 void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
 {
     DevContext->Game = Game;
@@ -427,6 +532,9 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         CreateDevLineBoxMesh(DevContext);
         CreateDevLineSphereMesh(DevContext, 60);
         CreateDevTriangleBoxMesh(DevContext);
+        CreateDevTriangleCylinderMesh(DevContext, 60);
+        CreateDevTriangleConeMesh(DevContext, 60);
+        CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);
         
         SetMemoryI64(DevContext->ImGuiMeshes, -1, sizeof(DevContext->ImGuiMeshes));
         

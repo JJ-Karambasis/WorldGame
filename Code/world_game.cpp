@@ -63,8 +63,9 @@ EXPORT GAME_TICK(Tick)
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {
             world* World = GetWorld(Game, WorldIndex);
+            World->WorldIndex = WorldIndex;
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
-            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(0.35f, 0.35f, 1.0f), WorldIndex == 0 ? Blue() : Red());            
+            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(PLAYER_RADIUS, PLAYER_RADIUS, PLAYER_HEIGHT), WorldIndex == 0 ? Blue() : Red());            
             
             world_entity* PlayerEntity = GetPlayerEntity(World);
             camera* Camera = &World->Camera;
@@ -163,6 +164,6 @@ EXPORT GAME_TICK(Tick)
         PushClearColorAndDepth(Graphics, Black(), 1.0f);
         PushDepth(Graphics, true);
         
-        PushWorldCommands(Graphics, GetCurrentWorld(Game), Game->Assets);        
+        PushWorldCommands(Graphics, GetCurrentWorld(Game));        
     }    
 }

@@ -250,8 +250,8 @@ void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Hei
     PushScissor(Graphics, X, Y, Width, Height);
 }
 
-void PushWorldCommands(graphics* Graphics, world* World, camera* Camera, assets* Assets)
-{            
+void PushWorldCommands(graphics* Graphics, world* World, camera* Camera)
+{
     m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
     m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
     
@@ -280,10 +280,11 @@ void PushWorldCommands(graphics* Graphics, world* World, camera* Camera, assets*
                 PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
             }
         }
-    }    
+    }
 }
 
-void PushWorldCommands(graphics* Graphics, world* World, assets* Assets)
-{            
-    PushWorldCommands(Graphics, World, &World->Camera, Assets);        
+void PushWorldCommands(graphics* Graphics, world* World)
+{   
+    camera* Camera = &World->Camera;
+    PushWorldCommands(Graphics, World, Camera);            
 }
