@@ -118,7 +118,8 @@ struct dev_context
     arena DevStorage;
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
-    b32 DrawOtherWorld;                    
+    b32 DrawOtherWorld;    
+    b32 DrawFrames;
     shading_type ShadingType;
     
     frame_recording FrameRecording;
@@ -134,6 +135,7 @@ struct dev_context
     dev_mesh LineBoxMesh;
     dev_mesh LineSphereMesh;    
     dev_mesh TriangleBoxMesh;
+    dev_mesh TriangleSphereMesh;
     dev_mesh TriangleCylinderMesh;
     dev_mesh TriangleConeMesh;
     dev_mesh TriangleArrowMesh;

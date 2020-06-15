@@ -49,6 +49,13 @@ void CreateDevTriangleBoxMesh(dev_context* DevContext)
     DevContext->TriangleBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
 }
 
+void CreateDevTriangleSphereMesh(dev_context* DevContext)
+{
+    mesh_generation_result MeshGenerationResult = GenerateIcosahedronSphere(GetDefaultArena(), 2, 1.0f);
+    DevContext->TriangleSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleSphereMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+}
+
 void CreateDevTriangleCylinderMesh(dev_context* DevContext, u16 CircleSampleCount)
 {
     mesh_generation_result MeshGenerationResult = GenerateTriangleCylinder(GetDefaultArena(), 1.0f, 1.0f, CircleSampleCount);
@@ -117,6 +124,12 @@ void DrawBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
 void DrawPoint(dev_context* DevContext, v3f P, c4 Color)
 {
     DrawBox(DevContext, P, V3(0.025f), Color);
+}
+
+void DrawSphere(dev_context* DevContext, v3f CenterP, f32 Radius, c4 Color)
+{
+    m4 Model = TransformM4(CenterP, V3(Radius, Radius, Radius));
+    PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleSphereMesh.MeshID, Model, Color, DevContext->TriangleSphereMesh.IndexCount, 0, 0);    
 }
 
 void DrawLineBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
@@ -195,8 +208,7 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
         PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Blue(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
     }
     
-    v3f BoxPosition = V3(Position.xy, Position.z - 0.025f);
-    DrawBox(DevContext, BoxPosition, V3(0.05f), White());    
+    DrawSphere(DevContext, Position, 0.04f, White());    
 }
 
 inline camera* 
@@ -258,6 +270,7 @@ void DevelopmentImGui(dev_context* DevContext)
     
     ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
+    ImGui::Checkbox("Draw Frames", (bool*)&DevContext->DrawFrames);
     
     if(ImGui::CollapsingHeader("Game Information"))
     {
@@ -297,17 +310,14 @@ void DevelopmentRenderWorld(dev_context* DevContext, world* World, camera* Camer
     
     PushDepth(Graphics, true);    
     
-    PushWorldCommands(Graphics, World, Camera);                
+    PushWorldCommands(Graphics, World, Camera);                    
+    PushDepth(Graphics, false);    
     world_entity* PlayerEntity = GetPlayerEntity(World);
-    player* Player = (player*)PlayerEntity->UserData;
+    player* Player = (player*)PlayerEntity->UserData;    
     
     c4 PlayerColor = Blue();    
     if(World == &Game->Worlds[1])
-        PlayerColor = Red();
-    
-    PushDepth(Graphics, false);
-    
-    DrawFrame(DevContext, V3(0.0f, 2.0f, 0.0f));
+        PlayerColor = Red();    
     
     ellipsoid3D Ellipsoid = GetPlayerEllipsoid(Game, Player);
     DrawLineEllipsoid(DevContext, Ellipsoid, PlayerColor);
@@ -350,6 +360,17 @@ void DevelopmentRenderWorld(dev_context* DevContext, world* World, camera* Camer
         DrawQuad(DevContext, Quad->CenterP, Quad->Normal, Quad->Dim, Quad->Color);
     }
     DevContext->DebugQuads.Size = 0;
+    
+    
+    if(DevContext->DrawFrames)
+    {
+        FOR_EACH(Entity, &World->EntityPool)
+        {
+            m3 Orientation = ToMatrix3(Entity->Transform.Orientation);            
+            DrawFrame(DevContext, Entity->Transform.Position, Orientation.XAxis, Orientation.YAxis, Orientation.ZAxis);
+        }
+    }
+    
     PushCull(Graphics, true);
 }
 
@@ -532,6 +553,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         CreateDevLineBoxMesh(DevContext);
         CreateDevLineSphereMesh(DevContext, 60);
         CreateDevTriangleBoxMesh(DevContext);
+        CreateDevTriangleSphereMesh(DevContext);
         CreateDevTriangleCylinderMesh(DevContext, 60);
         CreateDevTriangleConeMesh(DevContext, 60);
         CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);

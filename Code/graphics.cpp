@@ -288,3 +288,13 @@ void PushWorldCommands(graphics* Graphics, world* World)
     camera* Camera = &World->Camera;
     PushWorldCommands(Graphics, World, Camera);            
 }
+
+void PushGameCommands(graphics* Graphics, game* Game)
+{
+    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);        
+    
+    PushClearColorAndDepth(Graphics, Black(), 1.0f);
+    PushDepth(Graphics, true);
+    
+    PushWorldCommands(Graphics, GetCurrentWorld(Game));        
+}
