@@ -123,7 +123,6 @@ void main()
     c3 FinalColor = Diffuse+Specular;
     
     FragColor = c4(FinalColor, 1.0f);
-    //FragColor = Color;
 }
 
 )";

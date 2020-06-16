@@ -18,28 +18,9 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
-#define DEVELOPER_MUTE __Internal_Dev_Context__->Mute
-
-#define DEBUG_DRAW_POINT(position, color) \
-if(!IsInitialized(&__Internal_Dev_Context__->DebugPoints)) \
-__Internal_Dev_Context__->DebugPoints = CreateDynamicArray<debug_point>(2048); \
-Append(&__Internal_Dev_Context__->DebugPoints, {position, color})
-
-#define DEBUG_DRAW_EDGE(position0, position1, color) \
-if(!IsInitialized(&__Internal_Dev_Context__->DebugEdges)) \
-__Internal_Dev_Context__->DebugEdges = CreateDynamicArray<debug_edges>(1024); \
-Append(&__Internal_Dev_Context__->DebugEdges, {position0, position1, color})
-
-#define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color) \
-if(!IsInitialized(&__Internal_Dev_Context__->DebugDirectionVectors)) \
-__Internal_Dev_Context__->DebugDirectionVectors = CreateDynamicArray<debug_direction_vector>(1024); \
-if(direction != V3()) \
-Append(&__Internal_Dev_Context__->DebugDirectionVectors, {origin, Normalize(direction), color})
-
-#define DEBUG_DRAW_QUAD(center, normal, dimensions, color) \
-if(!IsInitialized(&__Internal_Dev_Context__->DebugQuads)) \
-__Internal_Dev_Context__->DebugQuads = CreateDynamicArray<debug_quad>(1024); \
-Append(&__Internal_Dev_Context__->DebugQuads, {center, normal, dimensions, color})
+#define DEBUG_DRAW_POINT(position, color) DebugDrawPoint(__Internal_Dev_Context__, position, color)
+#define DEBUG_DRAW_EDGE(position0, position1, color) DebugDrawEdge(__Internal_Dev_Context__, position0, position1, color)
+#define DEBUG_DRAW_QUAD(center, normal, dimensions, color) DebugDrawQuad(__Internal_Dev_Context__, center, normal, dimensions, color)
 
 #include "imgui/imgui.h"
 #include "dev_frame_recording.h"
@@ -80,17 +61,10 @@ struct debug_point
     c4 Color;
 };
 
-struct debug_edges
+struct debug_edge
 {
     v3f P0;
     v3f P1;
-    c4 Color;
-};
-
-struct debug_direction_vector
-{
-    v3f Origin;
-    v3f Direction;
     c4 Color;
 };
 
@@ -102,11 +76,30 @@ struct debug_quad
     c4 Color;
 };
 
-enum shading_type
+enum debug_primitive_type
 {
-    SHADING_TYPE_NORMAL,
-    SHADING_TYPE_WIREFRAME,
-    SHADING_TYPE_WIREFRAME_ON_NORMAL
+    DEBUG_PRIMITIVE_TYPE_POINT,
+    DEBUG_PRIMITIVE_TYPE_EDGE,
+    DEBUG_PRIMITIVE_TYPE_QUAD
+};
+
+struct debug_primitive
+{
+    debug_primitive_type Type;
+    union
+    {
+        debug_point Point;
+        debug_edge  Edge;
+        debug_quad  Quad;
+    };
+};
+
+enum view_mode_type
+{
+    VIEW_MODE_TYPE_LIT,
+    VIEW_MODE_TYPE_UNLIT,
+    VIEW_MODE_TYPE_WIREFRAME,
+    VIEW_MODE_TYPE_WIREFRAME_ON_LIT
 };
 
 #define MAX_IMGUI_MESHES 32
@@ -120,7 +113,8 @@ struct dev_context
     b32 UseDevCamera;        
     b32 DrawOtherWorld;    
     b32 DrawFrames;
-    shading_type ShadingType;
+    b32 DrawPlayerCollisionVolume;
+    view_mode_type ViewModeType;    
     
     frame_recording FrameRecording;
         
@@ -140,10 +134,7 @@ struct dev_context
     dev_mesh TriangleConeMesh;
     dev_mesh TriangleArrowMesh;
     
-    dynamic_array<debug_point> DebugPoints;
-    dynamic_array<debug_edges> DebugEdges;
-    dynamic_array<debug_direction_vector> DebugDirectionVectors;
-    dynamic_array<debug_quad> DebugQuads;
+    dynamic_array<debug_primitive> DebugPrimitives;
     
     void* PlatformData;
     b32 Initialized;
@@ -159,6 +150,39 @@ inline b32 IsInDevelopmentMode(dev_context* Context)
     if(Context)
         return Context->InDevelopmentMode;    
     return false;
+}
+
+inline void CheckPrimitivesAreAllocated(dev_context* DevContext)
+{
+    if(!IsInitialized(&DevContext->DebugPrimitives))
+        DevContext->DebugPrimitives = CreateDynamicArray<debug_primitive>(2048);
+}
+
+inline void DebugDrawPoint(dev_context* DevContext, v3f P, c4 Color)
+{
+    CheckPrimitivesAreAllocated(DevContext);
+    
+    debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_POINT};
+    Primitive.Point = {P, Color};    
+    Append(&DevContext->DebugPrimitives, Primitive);
+}
+
+inline void DebugDrawEdge(dev_context* DevContext, v3f P0, v3f P1, c4 Color)
+{
+    CheckPrimitivesAreAllocated(DevContext);
+    
+    debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_EDGE};
+    Primitive.Edge = {P0, P1, Color};
+    Append(&DevContext->DebugPrimitives, Primitive);
+}
+
+inline void DebugDrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
+{
+    CheckPrimitivesAreAllocated(DevContext);
+    
+    debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_QUAD};
+    Primitive.Quad = {CenterP, Normal, Dim, Color};
+    Append(&DevContext->DebugPrimitives, Primitive);
 }
 
 #else

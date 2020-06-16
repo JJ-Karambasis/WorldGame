@@ -250,43 +250,21 @@ void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Hei
     PushScissor(Graphics, X, Y, Width, Height);
 }
 
-void PushWorldCommands(graphics* Graphics, world* World, camera* Camera)
+void PushCameraCommands(graphics* Graphics, camera* Camera)
 {
     m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
-    m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);        
-    
+    m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);            
     PushProjection(Graphics, Perspective); 
-    PushCameraView(Graphics, CameraView);
-    
-    pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
-    for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
-    {
-        if(Entity->Mesh)
-        {                        
-            if(Entity->Type == WORLD_ENTITY_TYPE_PLAYER)
-            {
-#if 0 
-                player* Player = (player*)Entity->UserData;
-                animation_controller* AnimationController = &Player->AnimationController;                
-                PushDrawShadedColoredSkinningMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0, 
-                                                  AnimationController->GlobalPoses, AnimationController->Skeleton->JointCount);
-#else
-                //PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
-#endif
-                
-            }
-            else
-            {
-                PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0); 
-            }
-        }
-    }
+    PushCameraView(Graphics, CameraView);        
 }
 
-void PushWorldCommands(graphics* Graphics, world* World)
-{   
-    camera* Camera = &World->Camera;
-    PushWorldCommands(Graphics, World, Camera);            
+void PushWorldShadingCommands(graphics* Graphics, world* World)
+{    
+    FOR_EACH(Entity, &World->EntityPool)        
+    {
+        if(Entity->Mesh)            
+            PushDrawShadedColoredMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Color, Entity->Mesh->IndexCount, 0, 0);                     
+    }
 }
 
 void PushGameCommands(graphics* Graphics, game* Game)
@@ -296,5 +274,8 @@ void PushGameCommands(graphics* Graphics, game* Game)
     PushClearColorAndDepth(Graphics, Black(), 1.0f);
     PushDepth(Graphics, true);
     
-    PushWorldCommands(Graphics, GetCurrentWorld(Game));        
+    world* World = GetCurrentWorld(Game);
+    
+    PushCameraCommands(Graphics, &World->Camera);    
+    PushWorldShadingCommands(Graphics, World);        
 }
