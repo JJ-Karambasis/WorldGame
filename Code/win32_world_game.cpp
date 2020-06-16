@@ -893,7 +893,7 @@ void Platform_InitImGui(void* PlatformData)
     IO.KeyMap[ImGuiKey_Z] = 'Z';    
 }
 
-void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt)
+void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* DevContext)
 {
     HWND Window = (HWND)PlatformData;
     
@@ -917,8 +917,11 @@ void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt)
     {
         if(ActiveWindow == Window || IsChild(ActiveWindow, Window))
         {
-            if(GetCursorPos(&MousePosition) && ScreenToClient(Window, &MousePosition))                
+            if(GetCursorPos(&MousePosition) && ScreenToClient(Window, &MousePosition))
+            {                
                 IO->MousePos = ImVec2((f32)MousePosition.x, (f32)MousePosition.y);                
+                DevContext->Input.MouseCoordinates = V2i((f32)MousePosition.x, (f32)MousePosition.y);
+            }
         }
     }      
 }
@@ -1094,7 +1097,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
     dev_input* Input = &DevContext->Input;
     
     Input->MouseDelta = V2i(RawMouse->lLastX, RawMouse->lLastY);
-    
+
     switch(RawMouse->usButtonFlags)
     {
         case RI_MOUSE_LEFT_BUTTON_DOWN:

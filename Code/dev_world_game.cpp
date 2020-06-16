@@ -127,7 +127,8 @@ void DevelopmentImGui(dev_context* DevContext)
     local bool open = true;
     ImGui::Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse);    
     
-    ImGui::Text("FPS: %f", 1.0f/Game->dt);        
+    ImGui::Text("FPS: %f", 1.0f/Game->dt);   
+    ImGui::Text("DebugMessage: %s", DevContext->DebugMessage);       
     
     if(ImGui::Checkbox("Debug Camera", (bool*)&DevContext->UseDevCamera))
     {
@@ -198,6 +199,21 @@ void DevelopmentImGui(dev_context* DevContext)
             
             ImGui::Text("Selected Object Position: (%.2f, %.2f, %.2f)", ObjectPosition.x, ObjectPosition.y, ObjectPosition.z);
             ImGui::Text("Selected Object Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
+            ImGui::Text("Selected Object Type: (%d)", DevContext->SelectedObject->Type);
+            ImGui::Text("Selected Object ID: (%d)", DevContext->SelectedObject->ID.ID);
+            ImGui::Text("Selected Object WorldIndex: (%d)", DevContext->SelectedObject->ID.WorldIndex);
+            if(IsInvalidEntityID(DevContext->SelectedObject->LinkID))
+            {
+                ImGui::Text("Selected Object Link ID: (%d)", DevContext->SelectedObject->LinkID.ID);
+                ImGui::Text("Selected Object Link WorldIndex: (%d)", DevContext->SelectedObject->LinkID.WorldIndex);
+            }
+            else
+            {
+                ImGui::Text("Selected Object Link ID: (%s)", "No Linked Entity");
+                ImGui::Text("Selected Object Link WorldIndex: (%s)", "No Linked Entity");
+            }
+             ImGui::Text("Alex is dumb as shit: (%.2f, %.2f, %.2f)", DevContext->dumb.x, DevContext->dumb.y, DevContext->dumb.z);
+            
         }
         else
         {
@@ -212,7 +228,8 @@ void DevelopmentImGui(dev_context* DevContext)
 
 void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graphics, world* World, camera* Camera)
 {   
-    PushDepth(Graphics, true);    
+    PushDepth(Graphics, true);  
+    SET_DEVELOPER_CONTEXT(DevContext);  
     
     PushWorldCommands(Graphics, World, Camera, Game->Assets);                
     world_entity* PlayerEntity = GetPlayerEntity(World);
@@ -264,6 +281,11 @@ void DevelopmentRenderWorld(dev_context* DevContext, game* Game, graphics* Graph
         debug_quad* Quad = DevContext->DebugQuads + QuadIndex;
         DrawQuad(DevContext, Quad->CenterP, Quad->Normal, Quad->Dim, Quad->Color);
     }
+
+    v3f alexX, alexY;
+    CreateBasis(DevContext->dumb, &alexX, &alexY);       
+    DrawOrientedBox(DevContext, Camera->Position + 0.2f * DevContext->dumb, V3(0.01f, 0.01f, 10.0f), alexX, alexY, DevContext->dumb, White()); 
+
     DevContext->DebugQuads.Size = 0;
     PushCull(Graphics, true);
 }
@@ -333,7 +355,42 @@ void DevelopmentRender(dev_context* DevContext)
             if(IsPressed(Input->LMB))
             {
                 //For not just getting the player entity. need to change to cast the ray and get the intersected object
-                DevContext->SelectedObject = GetPlayerEntity(World);
+                i32 Height = Graphics->RenderDim.height;
+                i32 Width = Graphics->RenderDim.width;
+                f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
+                f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
+                f32 z = 1.0f;
+                v3f ray_nds = V3(x, y, z);
+                v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
+                m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+                v4f ray_eye =  ray_clip * Inverse(Perspective);
+                ray_eye = V4(ray_eye.xy, -1.0, 0.0);
+                v3f ray_wor =  (ray_eye * InverseTransformM4(Camera->Position, Camera->Orientation)).xyz;
+                ray_wor = Normalize(ray_wor);
+                
+
+                f32 t = INFINITY;
+                pool_iter<world_entity> Iter = BeginIter(&World->EntityPool);
+                for(world_entity* Entity = GetFirst(&Iter); Entity; Entity = GetNext(&Iter))
+                {
+                    f32 tempt = 0.0f, tempu = 0.0f, tempv = 0.0f;
+                    if(Entity->Mesh)
+                    {
+                        if(IsRayIntersectingEntity(Camera->Position, ray_wor, Entity, &tempt, &tempu, &tempv))
+                        {
+                            if(tempt < t)
+                            {
+                                t = tempt;
+                                DevContext->SelectedObject = Entity;
+                            }
+                        }
+                    }
+                }
+                DevContext->dumb = ray_wor;
+            }
+            if(IsPressed(Input->MMB))
+            {
+                DevContext->SelectedObject = nullptr;
             }
         }    
     }    
@@ -377,8 +434,8 @@ void DevelopmentRender(dev_context* DevContext)
             Color = Red();
         
         DrawLineBoxMinMax(DevContext, GoalRect->Rect.Min, GoalRect->Rect.Max, Color);
-    }   
-    
+    }     
+
     if(DevContext->DrawOtherWorld)
     {        
         PushViewportAndScissor(Graphics, Graphics->RenderDim.width-OtherWidth, Graphics->RenderDim.height-OtherHeight, 
@@ -476,7 +533,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     
     if(IsInDevelopmentMode(DevContext))
     {        
-        Platform_DevUpdate(DevContext->PlatformData, Graphics->RenderDim, Game->dt);        
+        Platform_DevUpdate(DevContext->PlatformData, Graphics->RenderDim, Game->dt, DevContext);        
         DevelopmentRender(DevContext);        
     }
     
@@ -485,5 +542,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input->Buttons); ButtonIndex++)
         Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
 }
+
+
 
 #include "dev_frame_recording.cpp"

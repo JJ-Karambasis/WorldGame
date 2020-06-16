@@ -146,10 +146,12 @@ struct dev_context
     void* PlatformData;
     b32 Initialized;
     world_entity* SelectedObject;
+    v3f dumb;
+    char DebugMessage[100];
 };
 
 void Platform_InitImGui(void* PlatformData);
-void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt);
+void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* DevContext);
 string Platform_OpenFileDialog(char* Extension);
 string Platform_FindNewFrameRecordingPath();
 

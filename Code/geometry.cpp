@@ -1050,3 +1050,140 @@ b32 IsRectFullyContainedInRect3D(v3f MinA, v3f MaxA, v3f MinB, v3f MaxB)
     b32 Result = (MinA >= MinB) && (MaxB >= MaxA);
     return Result;    
 }
+
+
+
+b32 IsLineIntersectingTriangle3D(v3f LineOrigin, v3f LineDirection, v3f Vertex0, v3f Vertex1, v3f Vertex2, f32* t, f32* u, f32* v)
+{
+    v3f edge1;
+    v3f edge2;
+    v3f tvec;
+    v3f pvec;
+    v3f qvec;
+    f32 det;
+    f32 inv_det;
+
+    edge1 = Vertex1 - Vertex2;
+    edge2 = Vertex2 - Vertex0;
+
+    pvec = Cross(LineDirection, edge2);
+
+    det = Dot(edge1, pvec);
+
+    if(det < FLT_EPSILON)
+        return false;
+    
+    tvec = LineOrigin - Vertex0;
+
+    *u = Dot(tvec, pvec);
+    if(*u < 0.0f || *u > det)
+        return false;
+
+    qvec = Cross(tvec, edge1);
+
+    *v = Dot(LineDirection, qvec);
+    if(*v < 0.0f || *u + *v > det)
+        return false;
+
+    *t = Dot(edge2, qvec);
+    inv_det = 1.0f / det;
+    *t *= inv_det;
+    *u *= inv_det;
+    *v *= inv_det;
+
+    return true;
+}
+
+b32 IsRayIntersectingTriangle3D(ray3D Ray, triangle3D Triangle, f32* t, f32* u, f32* v)
+{
+    return IsLineIntersectingTriangle3D(Ray.Origin, Ray.Direction, Triangle.P[0], Triangle.P[1], Triangle.P[2], t, u, v);
+}
+
+b32 IsRayIntersectingEntity(v3f RayOrigin, v3f RayDirection, world_entity* Entity, f32* t, f32* u, f32* v)
+{
+    b32 RayIntersected = false;
+    ptr MyVertexSize = GetVertexBufferSize(Entity->Mesh->VertexFormat, Entity->Mesh->VertexCount);
+    ptr MyVertexStride = GetVertexStride(Entity->Mesh->VertexFormat);
+    ptr IndexSize = GetIndexBufferSize(Entity->Mesh->IndexFormat, Entity->Mesh->IndexCount);
+    ptr MyIndexStride = GetIndexSize(Entity->Mesh->IndexFormat);
+
+    u32 i = 0;
+    while(i*MyIndexStride < IndexSize)
+    {
+        u32 Index1 = 0;
+        u32 Index2 = 0;
+        u32 Index3 = 0;
+        v3f Vertex1 = V3(0,0,0);
+        v3f Vertex2 = V3(0,0,0);
+        v3f Vertex3 = V3(0,0,0);
+        if(Entity->Mesh->IndexFormat == GRAPHICS_INDEX_FORMAT_16_BIT)
+        {
+            Index1 = *(u16*)((u8*)Entity->Mesh->Indices + i*MyIndexStride);
+            i++;
+            Index2 = *(u16*)((u8*)Entity->Mesh->Indices + i*MyIndexStride);
+            i++;
+            Index3 = *(u16*)((u8*)Entity->Mesh->Indices + i*MyIndexStride);
+            i++;
+        }
+        else if(Entity->Mesh->IndexFormat == GRAPHICS_INDEX_FORMAT_32_BIT)
+        {
+            Index1 = *(u32*)((u8*)Entity->Mesh->Indices + i*MyIndexStride);
+            i++;
+            Index2 = *(u32*)((u8*)Entity->Mesh->Indices + i*MyIndexStride);
+            i++;
+            Index3 = *(u32*)((u8*)Entity->Mesh->Indices + i*MyIndexStride);
+            i++;
+        }
+        if(Entity->Mesh->VertexFormat == GRAPHICS_VERTEX_FORMAT_P3)
+        {
+            vertex_p3 TVertex1 = *(vertex_p3*)((u8*)Entity->Mesh->Vertices + (Index1*MyVertexStride));
+            vertex_p3 TVertex2 = *(vertex_p3*)((u8*)Entity->Mesh->Vertices + (Index2*MyVertexStride));
+            vertex_p3 TVertex3 = *(vertex_p3*)((u8*)Entity->Mesh->Vertices + (Index3*MyVertexStride));
+            
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;
+        }
+        if(Entity->Mesh->VertexFormat == GRAPHICS_VERTEX_FORMAT_P3_N3)
+        {
+            vertex_p3_n3 TVertex1 = *(vertex_p3_n3*)((u8*)Entity->Mesh->Vertices + (Index1*MyVertexStride));
+            vertex_p3_n3 TVertex2 = *(vertex_p3_n3*)((u8*)Entity->Mesh->Vertices + (Index2*MyVertexStride));
+            vertex_p3_n3 TVertex3 = *(vertex_p3_n3*)((u8*)Entity->Mesh->Vertices + (Index3*MyVertexStride));
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;
+        }
+        if(Entity->Mesh->VertexFormat == GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS)
+        {
+            vertex_p3_n3_weights TVertex1 = *(vertex_p3_n3_weights*)((u8*)Entity->Mesh->Vertices + (Index1*MyVertexStride));
+            vertex_p3_n3_weights TVertex2 = *(vertex_p3_n3_weights*)((u8*)Entity->Mesh->Vertices + (Index2*MyVertexStride));
+            vertex_p3_n3_weights TVertex3 = *(vertex_p3_n3_weights*)((u8*)Entity->Mesh->Vertices + (Index3*MyVertexStride));
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;
+        }
+        if(Entity->Mesh->VertexFormat == GRAPHICS_VERTEX_FORMAT_P2_UV_C)
+        {
+            ASSERT(false);
+        }
+
+        triangle3D Triangle = CreateTriangle3D(Vertex1, Vertex2, Vertex3);
+        ray3D Ray;
+        Ray.Origin = RayOrigin;
+        Ray.Direction = RayDirection;
+        Triangle = TransformTriangle3D(Triangle, Entity->Transform);
+        f32 tempt, tempu, tempv;
+        if(IsRayIntersectingTriangle3D(Ray, Triangle, &tempt, &tempu, &tempv))
+        {
+            if(*t < 0.0f || *t > tempt)
+            {
+                *t = tempt;
+                *u = tempu;
+                *v = tempv;
+            }
+            RayIntersected = true;
+        }
+
+    }
+    return RayIntersected;
+}
