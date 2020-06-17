@@ -218,32 +218,6 @@ void PushDrawImGuiUI(graphics* Graphics, i64 MeshID, i64 TextureID, u32 IndexCou
     PushCommand(Graphics, PushCommandDrawImGuiUI);
 }
 
-void PushDrawQuad(graphics* Graphics, v3f P0, v3f P1, v3f P2, v3f P3, f32 R, f32 G, f32 B, f32 A)
-{
-    push_command_draw_quad* PushCommandDrawQuad = PushStruct(push_command_draw_quad, NoClear, 0);
-    PushCommandDrawQuad->Type = PUSH_COMMAND_DRAW_QUAD;
-    PushCommandDrawQuad->P0 = P0;
-    PushCommandDrawQuad->P1 = P1;
-    PushCommandDrawQuad->P2 = P2;
-    PushCommandDrawQuad->P3 = P3;
-    PushCommandDrawQuad->R = R;
-    PushCommandDrawQuad->G = G;
-    PushCommandDrawQuad->B = B;
-    PushCommandDrawQuad->A = A;
-    
-    PushCommand(Graphics, PushCommandDrawQuad);
-}
-
-void PushDrawQuad(graphics* Graphics, v3f P0, v3f P1, v3f P2, v3f P3, c4 Color)
-{
-    PushDrawQuad(Graphics, P0, P1, P2, P3, Color.r, Color.g, Color.b, Color.a);    
-}
-
-void PushDrawQuad(graphics* Graphics, v3f* P, c4 Color)
-{
-    PushDrawQuad(Graphics, P[0], P[1], P[2], P[3], Color.r, Color.g, Color.b, Color.a);    
-}
-
 void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Height)
 {
     PushViewport(Graphics, X, Y, Width, Height);

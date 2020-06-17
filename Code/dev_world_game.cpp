@@ -74,20 +74,7 @@ void CreateDevTriangleArrowMesh(dev_context* DevContext, u16 CircleSampleCount, 
 
 void DrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
 {
-    v3f X, Y;
-    CreateBasis(Normal, &X, &Y);
-    
-    v2f HalfDim = Dim*0.5f;
-    
-    v3f P[4] = 
-    {
-        CenterP - X*HalfDim.x - Y*HalfDim.y,
-        CenterP + X*HalfDim.x - Y*HalfDim.y,
-        CenterP + X*HalfDim.x + Y*HalfDim.y,
-        CenterP - X*HalfDim.x + Y*HalfDim.y
-    };
-    
-    PushDrawQuad(DevContext->Graphics, P[0], P[1], P[2], P[3], Color);    
+    NOT_IMPLEMENTED;    
 }
 
 void DrawOrientedBox(dev_context* DevContext, v3f P, v3f Dim, v3f XAxis, v3f YAxis, v3f ZAxis, c4 Color)
@@ -350,7 +337,7 @@ void DevelopmentRender(dev_context* DevContext)
             
             case DEBUG_PRIMITIVE_TYPE_QUAD:
             {
-                DrawQuad(DevContext, Primitive->Quad.CenterP, Primitive->Quad.Normal, Primitive->Quad.Dim, Primitive->Quad.Color);                
+                //DrawQuad(DevContext, Primitive->Quad.CenterP, Primitive->Quad.Normal, Primitive->Quad.Dim, Primitive->Quad.Color);                
             } break;
             
             INVALID_DEFAULT_CASE;

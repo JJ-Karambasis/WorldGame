@@ -42,39 +42,7 @@ global PFNGLBINDBUFFERBASEPROC glBindBufferBase;
 global PFNGLBUFFERSUBDATAPROC glBufferSubData;
 global PFNGLVERTEXATTRIBIPOINTERPROC glVertexAttribIPointer;
 
-struct standard_color_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-    GLint ViewLocation;
-    GLint ModelLocation;
-    GLint ColorLocation;
-};
-
-struct standard_color_skinning_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-    GLint ViewLocation;
-    GLint ModelLocation;
-    GLint ColorLocation;    
-    GLint SkinningIndex;
-};
-
-struct imgui_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-};
-
-struct quad_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-    GLint ViewLocation;
-    GLint ColorLocation;
-    GLint PositionLocation;
-};
+#include "opengl_shaders.h"
 
 //TODO(JJ): When we are formalizing the asset/resource loading process, it would probably
 //be best to manage the memory of meshes in one VBO|EBO|VAO per vertex format and then use a draw call 
@@ -108,6 +76,18 @@ struct opengl_buffer_list
     GLuint* Ptr;
 };
 
+struct opengl_directional_light
+{
+    v4f Direction;
+    v4f Color;
+};
+
+struct opengl_light_buffer
+{
+    opengl_directional_light DirectionalLights[MAX_DIRECTIONAL_LIGHT_COUNT];
+    i32 DirectionalLightCount;
+};
+
 struct opengl_context
 {
     graphics Graphics;
@@ -116,11 +96,13 @@ struct opengl_context
     opengl_mesh_pool MeshPool;
     opengl_texture_pool TexturePool;        
     
-    standard_color_shader StandardPhongShader;        
-    standard_color_shader StandardColorShader;
-    imgui_shader ImGuiShader;
-    quad_shader QuadShader;        
-    standard_color_skinning_shader StandardSkinningPhongShader;
+    imgui_shader ImGuiShader;    
+    color_shader ColorShader;
+    color_skinning_shader ColorSkinningShader;    
+    phong_color_shader PhongColorShader;
+    phong_color_skinning_shader PhongColorSkinningShader;
+    
+    GLuint LightUBO;    
     
     opengl_buffer_list SkinningBuffers;    
 };

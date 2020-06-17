@@ -119,13 +119,11 @@ ALLOCATE_MESH(AllocateMesh)
     switch(VertexFormat)
     {
         case GRAPHICS_VERTEX_FORMAT_P3:
-        {
-            GLuint PAttribute = 0;
-            
+        {                        
             GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3, P));
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3, P));
             
-            glEnableVertexAttribArray(PAttribute);
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
         } break;
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3:
@@ -134,31 +132,26 @@ ALLOCATE_MESH(AllocateMesh)
             GLuint NAttribute = 1;
             
             GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, P));
-            glVertexAttribPointer(NAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, N));            
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, N));            
             
-            glEnableVertexAttribArray(PAttribute);
-            glEnableVertexAttribArray(NAttribute);            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
             
         } break;
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS:
-        {
-            GLuint PAttribute = 0;
-            GLuint NAttribute = 1;
-            GLuint JointIAttribute = 2;
-            GLuint JointWAttribute = 3;
-            
+        {            
             GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, P));
-            glVertexAttribPointer(NAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, N));            
-            glVertexAttribIPointer(JointIAttribute, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointI));                        
-            glVertexAttribPointer(JointWAttribute, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointW));
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, N));            
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointW));
             
-            glEnableVertexAttribArray(PAttribute);
-            glEnableVertexAttribArray(NAttribute);
-            glEnableVertexAttribArray(JointIAttribute);
-            glEnableVertexAttribArray(JointWAttribute);
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
         } break;
         
         INVALID_DEFAULT_CASE;
@@ -191,19 +184,15 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
     {
         case GRAPHICS_VERTEX_FORMAT_P2_UV_C:
         {
-            GLuint PAttribute = 0;
-            GLuint UVAttribute = 1;
-            GLuint CAttribute = 2;
             
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
+            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);            
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX,  2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, P));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, UV));
+            glVertexAttribPointer(COLOR_ATTRIBUTE_INDEX,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, C));
             
-            glVertexAttribPointer(PAttribute,  2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, P));
-            glVertexAttribPointer(UVAttribute, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, UV));
-            glVertexAttribPointer(CAttribute,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, C));
-            
-            glEnableVertexAttribArray(PAttribute);
-            glEnableVertexAttribArray(UVAttribute);
-            glEnableVertexAttribArray(CAttribute);
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(COLOR_ATTRIBUTE_INDEX);
         } break;
     }
     
@@ -229,61 +218,6 @@ STREAM_MESH_DATA(StreamMeshData)
     
     glBindVertexArray(0);    
 }
-
-GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar** FSCode, u32 FSCodeCount)
-{    
-    GLuint VertexShader   = glCreateShader(GL_VERTEX_SHADER);
-    GLuint FragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    
-    glShaderSource(VertexShader,   VSCodeCount, VSCode, 0);
-    glShaderSource(FragmentShader, FSCodeCount, FSCode, 0);
-    
-    glCompileShader(VertexShader);
-    glCompileShader(FragmentShader);
-    
-    GLint VSCompiled, FSCompiled;    
-    glGetShaderiv(VertexShader, GL_COMPILE_STATUS, &VSCompiled);
-    glGetShaderiv(FragmentShader, GL_COMPILE_STATUS, &FSCompiled);
-    
-    if(!VSCompiled || !FSCompiled)
-    {
-        char VSError[4096];
-        char FSError[4096];
-        
-        glGetShaderInfoLog(VertexShader,   sizeof(VSError), NULL, VSError);
-        glGetShaderInfoLog(FragmentShader, sizeof(FSError), NULL, FSError);
-        
-        CONSOLE_LOG("%s\n", VSError);
-        CONSOLE_LOG("%s\n", FSError);
-        
-        INVALID_CODE;
-    }
-    
-    GLuint Program = glCreateProgram();
-    glAttachShader(Program, VertexShader);
-    glAttachShader(Program, FragmentShader);
-    glLinkProgram(Program);
-    glValidateProgram(Program);
-    
-    GLint Linked;
-    glGetProgramiv(Program, GL_LINK_STATUS, &Linked);
-    
-    if(!Linked)
-    {
-        char ProgramError[4096];
-        glGetProgramInfoLog(Program, sizeof(ProgramError), NULL, ProgramError);
-        
-        CONSOLE_LOG("%s\n", ProgramError);
-        
-        INVALID_CODE;
-    }
-    
-    glDetachShader(Program, VertexShader);
-    glDetachShader(Program, FragmentShader);
-    
-    return Program;
-}
-
 
 #ifdef OS_WINDOWS
 
@@ -461,74 +395,47 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    if(!OpenGL->StandardPhongShader.Program)
-    {
-        const GLchar* VertexShader[] = { Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 1, 0, 0) };
-        const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_StandardPhongShading };
-        
-        OpenGL->StandardPhongShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->StandardPhongShader.ProjectionLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "Projection");
-        OpenGL->StandardPhongShader.ViewLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "View");
-        OpenGL->StandardPhongShader.ModelLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "Model");
-        OpenGL->StandardPhongShader.ColorLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "Color");        
-    }
-    
-    if(!OpenGL->StandardColorShader.Program)
-    {
-        const GLchar* VertexShader[] = { Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 0, 1, 0) };
-        const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_SimpleColor };
-        
-        OpenGL->StandardColorShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->StandardColorShader.ProjectionLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "Projection");
-        OpenGL->StandardColorShader.ViewLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "View");
-        OpenGL->StandardColorShader.ModelLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "Model");
-        OpenGL->StandardColorShader.ColorLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "Color");        
-    }
-    
-    if(!OpenGL->ImGuiShader.Program)
-    {
-        const GLchar* VertexShader[] = {Shader_Header, VertexShader_ImGui};
-        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_ImGui};
-        
-        OpenGL->ImGuiShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->ImGuiShader.ProjectionLocation = glGetUniformLocation(OpenGL->ImGuiShader.Program, "Projection");
-    }
-    
-    if(!OpenGL->QuadShader.Program)
-    {
-        const GLchar* VertexShader[] = {Shader_Header, VertexShader_Quad};
-        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_SimpleColor};
-        
-        OpenGL->QuadShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->QuadShader.ProjectionLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "Projection");
-        OpenGL->QuadShader.ViewLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "View");
-        OpenGL->QuadShader.ColorLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "Color");
-        OpenGL->QuadShader.PositionLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "Positions");
-    }
-    
-    if(!OpenGL->StandardSkinningPhongShader.Program)
-    {
-        const GLchar* VertexShader[] = {Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 0, 0, 1, MAX_JOINT_COUNT)};
-        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_StandardPhongShading};
-        
-        OpenGL->StandardSkinningPhongShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->StandardSkinningPhongShader.ProjectionLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "Projection");
-        OpenGL->StandardSkinningPhongShader.ViewLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "View");
-        OpenGL->StandardSkinningPhongShader.ModelLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "Model");
-        OpenGL->StandardSkinningPhongShader.ColorLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "Color");
-        
-        OpenGL->StandardSkinningPhongShader.SkinningIndex = glGetUniformBlockIndex(OpenGL->StandardSkinningPhongShader.Program, "SkinningBuffer");
-        glUniformBlockBinding(OpenGL->StandardSkinningPhongShader.Program, OpenGL->StandardSkinningPhongShader.SkinningIndex, 0);
-    }
-    
     if(!OpenGL->SkinningBuffers.Ptr)
     {
         OpenGL->SkinningBuffers.Capacity = 32;
         OpenGL->SkinningBuffers.Ptr = PushArray(&OpenGL->Storage, OpenGL->SkinningBuffers.Capacity, GLuint, Clear, 0);
     }
     
+    if(!OpenGL->ImGuiShader.Program)
+        OpenGL->ImGuiShader = CreateImGuiShader();
+    
+    if(!OpenGL->ColorShader.Program)
+        OpenGL->ColorShader = CreateColorShader();
+    
+    if(!OpenGL->ColorSkinningShader.Program)
+        OpenGL->ColorSkinningShader = CreateColorSkinningShader();
+    
+    if(!OpenGL->PhongColorShader.Program)
+        OpenGL->PhongColorShader = CreatePhongColorShader();
+    
+    if(!OpenGL->PhongColorSkinningShader.Program)
+        OpenGL->PhongColorSkinningShader = CreatePhongColorSkinningShader();
+    
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
+    
+    if(!OpenGL->LightUBO)
+    {
+        glGenBuffers(1, &OpenGL->LightUBO);
+        glBindBuffer(GL_UNIFORM_BUFFER, OpenGL->LightUBO);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(opengl_light_buffer), NULL, GL_STATIC_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);       
+        glBindBufferBase(GL_UNIFORM_BUFFER, LIGHT_BUFFER_INDEX, OpenGL->LightUBO);
+    }
+    
+    opengl_light_buffer LightBuffer = {};
+    LightBuffer.DirectionalLights[0].Direction = V4(0.0f, 0.0f, -1.0f, 0.0f);
+    LightBuffer.DirectionalLights[0].Color = V4(1.0f, 1.0f, 1.0f, 1.0f);
+    LightBuffer.DirectionalLightCount = 1;
+    
+    glBindBuffer(GL_UNIFORM_BUFFER, OpenGL->LightUBO);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(opengl_light_buffer), &LightBuffer);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
     
     glEnable(GL_SCISSOR_TEST);
     
@@ -634,16 +541,16 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawShadedColoredMesh->MeshID);
                 
-                if(BindProgram(&BoundProgram, OpenGL->StandardPhongShader.Program))
+                if(BindProgram(&BoundProgram, OpenGL->PhongColorShader.Program))
                 {                                        
-                    glUniformMatrix4fv(OpenGL->StandardPhongShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardPhongShader.ViewLocation, 1, GL_FALSE, CameraView.M);                    
+                    glUniformMatrix4fv(OpenGL->PhongColorShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
+                    glUniformMatrix4fv(OpenGL->PhongColorShader.ViewUniform, 1, GL_FALSE, CameraView.M);                    
                 }
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->StandardPhongShader.ModelLocation, 1, GL_FALSE, DrawShadedColoredMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardPhongShader.ColorLocation, DrawShadedColoredMesh->R, DrawShadedColoredMesh->G, DrawShadedColoredMesh->B, DrawShadedColoredMesh->A);
+                glUniformMatrix4fv(OpenGL->PhongColorShader.ModelUniform, 1, GL_FALSE, DrawShadedColoredMesh->WorldTransform.M);
+                glUniform4f(OpenGL->PhongColorShader.ColorUniform, DrawShadedColoredMesh->R, DrawShadedColoredMesh->G, DrawShadedColoredMesh->B, DrawShadedColoredMesh->A);
                 
                 glDrawElementsBaseVertex(GL_TRIANGLES, DrawShadedColoredMesh->IndexCount, Mesh->IndexType, 
                                          (void*)(DrawShadedColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
@@ -669,7 +576,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     glBufferData(GL_UNIFORM_BUFFER, sizeof(m4)*MAX_JOINT_COUNT, NULL, GL_STATIC_DRAW);
                     glBindBuffer(GL_UNIFORM_BUFFER, 0);
                     
-                    glBindBufferBase(GL_UNIFORM_BUFFER, 0, SkinningUBO);                    
+                    glBindBufferBase(GL_UNIFORM_BUFFER, SKINNING_BUFFER_INDEX, SkinningUBO);                    
                     
                     BufferList->Ptr[BufferList->Count++] = SkinningUBO;                                                                                                    
                 }
@@ -679,16 +586,16 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(m4)*DrawShadedColoredSkinningMesh->JointCount, DrawShadedColoredSkinningMesh->Joints);                                
                 glBindBuffer(GL_UNIFORM_BUFFER, 0);
                 
-                if(BindProgram(&BoundProgram, OpenGL->StandardSkinningPhongShader.Program))
+                if(BindProgram(&BoundProgram, OpenGL->PhongColorSkinningShader.Program))
                 {
-                    glUniformMatrix4fv(OpenGL->StandardSkinningPhongShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardSkinningPhongShader.ViewLocation, 1, GL_FALSE, CameraView.M);
+                    glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
+                    glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ViewUniform, 1, GL_FALSE, CameraView.M);
                 }
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->StandardSkinningPhongShader.ModelLocation, 1, GL_FALSE, DrawShadedColoredSkinningMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardSkinningPhongShader.ColorLocation, DrawShadedColoredSkinningMesh->R, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->A);
+                glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ModelUniform, 1, GL_FALSE, DrawShadedColoredSkinningMesh->WorldTransform.M);
+                glUniform4f(OpenGL->PhongColorSkinningShader.ColorUniform, DrawShadedColoredSkinningMesh->R, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->A);
                 
                 glDrawElementsBaseVertex(GL_TRIANGLES, DrawShadedColoredSkinningMesh->IndexCount, Mesh->IndexType, 
                                          (void*)(DrawShadedColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
@@ -705,7 +612,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ASSERT(Mesh->IsDynamic);
                 
                 if(BindProgram(&BoundProgram, OpenGL->ImGuiShader.Program))                    
-                    glUniformMatrix4fv(OpenGL->ImGuiShader.ProjectionLocation, 1, GL_FALSE, Projection.M);                                                                    
+                    glUniformMatrix4fv(OpenGL->ImGuiShader.ProjectionUniform, 1, GL_FALSE, Projection.M);                                                                    
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -717,37 +624,21 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
             } break;
             
-            case PUSH_COMMAND_DRAW_QUAD:
-            {
-                push_command_draw_quad* DrawQuad = (push_command_draw_quad*)Command;
-                
-                if(BindProgram(&BoundProgram, OpenGL->QuadShader.Program))
-                {
-                    glUniformMatrix4fv(OpenGL->QuadShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->QuadShader.ViewLocation, 1, GL_FALSE, CameraView.M);
-                }
-                
-                glUniform3fv(OpenGL->QuadShader.PositionLocation, 4, (f32*)DrawQuad->P);
-                glUniform4f(OpenGL->QuadShader.ColorLocation, DrawQuad->R, DrawQuad->G, DrawQuad->B, DrawQuad->A);
-                
-                glDrawArrays(GL_TRIANGLES, 0, 6);
-            } break;
-            
             case PUSH_COMMAND_DRAW_LINE_MESH:
             {
                 push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;                
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLineMesh->MeshID);                
                 
-                if(BindProgram(&BoundProgram, OpenGL->StandardColorShader.Program))
+                if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
                 {                    
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ViewLocation, 1, GL_FALSE, CameraView.M);
+                    glUniformMatrix4fv(OpenGL->ColorShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
+                    glUniformMatrix4fv(OpenGL->ColorShader.ViewUniform, 1, GL_FALSE, CameraView.M);
                 }
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->StandardColorShader.ModelLocation, 1, GL_FALSE, DrawLineMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardColorShader.ColorLocation, DrawLineMesh->R, DrawLineMesh->G, DrawLineMesh->B, DrawLineMesh->A);
+                glUniformMatrix4fv(OpenGL->ColorShader.ModelUniform, 1, GL_FALSE, DrawLineMesh->WorldTransform.M);
+                glUniform4f(OpenGL->ColorShader.ColorUniform, DrawLineMesh->R, DrawLineMesh->G, DrawLineMesh->B, DrawLineMesh->A);
                 
                 glDrawElementsBaseVertex(GL_LINES, DrawLineMesh->IndexCount, Mesh->IndexType, 
                                          (void*)(DrawLineMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
@@ -760,16 +651,16 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 push_command_draw_filled_mesh* DrawFilledMesh = (push_command_draw_filled_mesh*)Command;
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawFilledMesh->MeshID);
                 
-                if(BindProgram(&BoundProgram, OpenGL->StandardColorShader.Program))
+                if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
                 {                    
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ViewLocation, 1, GL_FALSE, CameraView.M);
+                    glUniformMatrix4fv(OpenGL->ColorShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
+                    glUniformMatrix4fv(OpenGL->ColorShader.ViewUniform, 1, GL_FALSE, CameraView.M);
                 }
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->StandardColorShader.ModelLocation, 1, GL_FALSE, DrawFilledMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardColorShader.ColorLocation, DrawFilledMesh->R, DrawFilledMesh->G, DrawFilledMesh->B, DrawFilledMesh->A);
+                glUniformMatrix4fv(OpenGL->ColorShader.ModelUniform, 1, GL_FALSE, DrawFilledMesh->WorldTransform.M);
+                glUniform4f(OpenGL->ColorShader.ColorUniform, DrawFilledMesh->R, DrawFilledMesh->G, DrawFilledMesh->B, DrawFilledMesh->A);
                 
                 glDrawElementsBaseVertex(GL_TRIANGLES, DrawFilledMesh->IndexCount, Mesh->IndexType, 
                                          (void*)(DrawFilledMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),

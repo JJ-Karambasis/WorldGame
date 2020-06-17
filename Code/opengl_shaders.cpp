@@ -1,3 +1,25 @@
+#define POSITION_ATTRIBUTE_INDEX 0
+#define NORMAL_ATTRIBUTE_INDEX 1
+#define UV_ATTRIBUTE_INDEX 2
+#define TANGENT_ATTRIBUTE_INDEX 3
+#define COLOR_ATTRIBUTE_INDEX 4
+#define JOINT_INDEX_ATTRIBUTE_INDEX 5
+#define JOINT_WEIGHT_ATTRIBUTE_INDEX 6
+
+#define SKINNING_BUFFER_INDEX 0
+#define LIGHT_BUFFER_INDEX 1
+
+global const char* Vertex_Attributes = R"(
+layout (location = 0) in v2f Position2D;
+layout (location = 0) in v3f Position;
+layout (location = 1) in v3f Normal;
+layout (location = 2) in v2f UV;
+layout (location = 3) in v3f Tangent;
+layout (location = 4) in c4  Color;
+layout (location = 5) in u32 JointI;
+layout (location = 6) in v4f JointW;
+)";
+
 global const char* Shader_Header = R"(
 #version 330 core
 #define v4f vec4
@@ -11,182 +33,156 @@ global const char* Shader_Header = R"(
 #define f64 double
 #define u32 uint
 #define i32 int
-
-
 )";
 
-global const char* VertexShader_StandardWorldSpaceToClipSpace = R"(
+#include "opengl_vertex_shaders.cpp"
+#include "opengl_fragment_shaders.cpp"
 
-#define LIGHT_SHADING %d
-#define POSITION_SHADING %d
-#define SKELETON_LIGHT_SHADING %d
-
-layout (location = 0) in v3f P;
-
-uniform m4 Projection;
-uniform m4 View;
-uniform m4 Model;
-
-#if SKELETON_LIGHT_SHADING || LIGHT_SHADING
-layout (location = 1) in v3f N;
-#endif
-
-#if SKELETON_LIGHT_SHADING
-layout (location = 2) in u32 JointI;
-layout (location = 3) in v4f JointW;
-
-#define MAX_JOINT_COUNT %d
-
-layout (std140) uniform SkinningBuffer
-{
-    m4 Joints[MAX_JOINT_COUNT];    
-};
-
-#endif
-
-#if LIGHT_SHADING || SKELETON_LIGHT_SHADING
-out v3f ViewP;
-out v3f ViewN;
-
-void main()
-{
-    v4f VertexP = v4f(P, 1.0f);
-    v3f VertexN = N;
-
-    #if SKELETON_LIGHT_SHADING
-
-    u32 I0 = (JointI >> 0)  & u32(0x000000FF);
-    u32 I1 = (JointI >> 8)  & u32(0x000000FF);
-    u32 I2 = (JointI >> 16) & u32(0x000000FF);
-    u32 I3 = (JointI >> 24) & u32(0x000000FF);
-
-    f32 W0 = JointW[0];
-    f32 W1 = JointW[1];
-    f32 W2 = JointW[2];
-    f32 W3 = JointW[3];
-
-    VertexP = v4f(0);
-    VertexP += W0*(Joints[I0]*v4f(P, 1.0f));
-    VertexP += W1*(Joints[I1]*v4f(P, 1.0f));
-    VertexP += W2*(Joints[I2]*v4f(P, 1.0f));
-    VertexP += W3*(Joints[I3]*v4f(P, 1.0f));
-
-    VertexN = v3f(0);
-    VertexN += W0*(m3(Joints[I0])*N);
-    VertexN += W1*(m3(Joints[I1])*N);
-    VertexN += W2*(m3(Joints[I2])*N);
-    VertexN += W3*(m3(Joints[I3])*N);
-
-    #endif
-
-
-    m4 ViewModel = View*Model;
-    ViewP = v3f(ViewModel*VertexP);
-    ViewN = m3(transpose(inverse(ViewModel)))*VertexN;
-    gl_Position = Projection*v4f(ViewP, 1.0f);
-}
-#endif
-
-#if POSITION_SHADING
-void main()
-{
-    gl_Position = Projection*View*Model*v4f(P, 1.0f);
-}
-#endif
-
-)";
-
-global const char* FragmentShader_StandardPhongShading = R"(
-
-in v3f ViewP;
-in v3f ViewN;
-
-out c4 FragColor;
-
-uniform c4 Color;
-
-void main()
-{
-    c3 LightColor = v3f(1.0f, 1.0f, 1.0f);
-    v3f L = v3f(0.0f, 0.0f, 1.0f);
-    v3f V = -ViewP;
-    v3f N = normalize(ViewN);    
-    v3f H = normalize(L+V);
-    i32 SpecularStrength = 8;
+GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar** FSCode, u32 FSCodeCount)
+{    
+    GLuint VertexShader   = glCreateShader(GL_VERTEX_SHADER);
+    GLuint FragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
     
-    f32 NDotL = max(dot(N, L), 0.0f);
-    f32 NDotH = max(dot(N, H), 0.0f);
+    glShaderSource(VertexShader,   VSCodeCount, VSCode, 0);
+    glShaderSource(FragmentShader, FSCodeCount, FSCode, 0);
     
-    c3 Diffuse = c3(Color)*NDotL;
-    c3 Specular = pow(NDotH, SpecularStrength)*LightColor*0.5f;
+    glCompileShader(VertexShader);
+    glCompileShader(FragmentShader);
     
-    c3 FinalColor = Diffuse+Specular;
+    GLint VSCompiled, FSCompiled;    
+    glGetShaderiv(VertexShader, GL_COMPILE_STATUS, &VSCompiled);
+    glGetShaderiv(FragmentShader, GL_COMPILE_STATUS, &FSCompiled);
     
-    FragColor = c4(FinalColor, 1.0f);
+    if(!VSCompiled || !FSCompiled)
+    {
+        char VSError[4096];
+        char FSError[4096];
+        
+        glGetShaderInfoLog(VertexShader,   sizeof(VSError), NULL, VSError);
+        glGetShaderInfoLog(FragmentShader, sizeof(FSError), NULL, FSError);
+        
+        CONSOLE_LOG("%s\n", VSError);
+        CONSOLE_LOG("%s\n", FSError);
+        
+        INVALID_CODE;
+    }
+    
+    GLuint Program = glCreateProgram();
+    glAttachShader(Program, VertexShader);
+    glAttachShader(Program, FragmentShader);
+    glLinkProgram(Program);
+    glValidateProgram(Program);
+    
+    GLint Linked;
+    glGetProgramiv(Program, GL_LINK_STATUS, &Linked);
+    
+    if(!Linked)
+    {
+        char ProgramError[4096];
+        glGetProgramInfoLog(Program, sizeof(ProgramError), NULL, ProgramError);
+        
+        CONSOLE_LOG("%s\n", ProgramError);
+        
+        INVALID_CODE;
+    }
+    
+    glDetachShader(Program, VertexShader);
+    glDetachShader(Program, FragmentShader);
+    
+    return Program;
 }
 
-)";
-
-global const char* VertexShader_ImGui = R"(
-
-layout (location = 0) in v2f P;
-layout (location = 1) in v2f UV;
-layout (location = 2) in c4  C;
-
-out v2f FragUV;
-out c4  FragColor;
-
-uniform m4 Projection;
-
-void main()
+imgui_shader CreateImGuiShader()
 {
-    FragUV = UV;
-    FragColor = C;
-    gl_Position = Projection*v4f(P, 0, 1);
+    imgui_shader Result;
+    
+    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, VertexShader_ImGui};
+    const GLchar* FragmentShaders[] = {Shader_Header, FragmentShader_ImGui};
+    
+    GLuint Program            = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    Result.ProjectionUniform  = glGetUniformLocation(Program, "Projection");
+    
+    Result.Program = Program;
+    return Result;
 }
 
-)";
-
-global const char* FragmentShader_ImGui = R"(
-
-in v2f FragUV;
-in c4 FragColor;
-
-out c4 FinalColor;
-
-uniform sampler2D Texture;
-
-void main()
+color_shader CreateColorShader()
 {
-    FinalColor = FragColor * texture(Texture, FragUV.st);
+    color_shader Result;
+    
+    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, FormatString(VertexShader_LocalToClip, 0, 0)};
+    const GLchar* FragmentShaders[] = {Shader_Header, FragmentShader_Color};
+    
+    GLuint Program           = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    Result.ProjectionUniform = glGetUniformLocation(Program, "Projection");
+    Result.ViewUniform       = glGetUniformLocation(Program, "View");
+    Result.ModelUniform      = glGetUniformLocation(Program, "Model");    
+    Result.ColorUniform      = glGetUniformLocation(Program, "Color");
+    
+    Result.Program = Program;
+    return Result;
 }
 
-)";
-
-global const char* VertexShader_Quad = R"(
-
-uniform m4 Projection;
-uniform m4 View;
-uniform v3f Positions[4];
-
-u32 Indices[6] = u32[6](0, 1, 2, 0, 2, 3);
-
-void main()
+color_skinning_shader CreateColorSkinningShader()
 {
-    gl_Position = Projection*View*v4f(Positions[Indices[gl_VertexID]], 1.0f);
+    color_skinning_shader Result;
+    
+    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, FormatString(VertexShader_LocalToClip, 1, 0, MAX_JOINT_COUNT)};
+    const GLchar* FragmentShaders[] = {Shader_Header, FragmentShader_Color};
+    
+    GLuint Program           = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    Result.ProjectionUniform = glGetUniformLocation(Program, "Projection");
+    Result.ViewUniform       = glGetUniformLocation(Program, "View");
+    Result.ModelUniform      = glGetUniformLocation(Program, "Model");
+    Result.ColorUniform      = glGetUniformLocation(Program, "Color");
+    
+    Result.SkinningIndex = glGetUniformBlockIndex(Program, "SkinningBuffer");
+    glUniformBlockBinding(Program, Result.SkinningIndex, SKINNING_BUFFER_INDEX);
+    
+    Result.Program = Program;
+    return Result;
+    
 }
 
-)";
-
-global const char* FragmentShader_SimpleColor = R"(
-
-out c4 FinalColor;
-
-uniform c4 Color;
-
-void main()
+phong_color_shader CreatePhongColorShader()
 {
-    FinalColor = Color;
+    phong_color_shader Result;
+    
+    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, FormatString(VertexShader_LocalToClip, 0, 1)};
+    const GLchar* FragmentShaders[] = {Shader_Header, FormatString(FragmentShader_Phong, MAX_DIRECTIONAL_LIGHT_COUNT)};
+    
+    GLuint Program           = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    Result.ProjectionUniform = glGetUniformLocation(Program, "Projection");
+    Result.ViewUniform       = glGetUniformLocation(Program,  "View");
+    Result.ModelUniform      = glGetUniformLocation(Program, "Model");
+    Result.ColorUniform      = glGetUniformLocation(Program, "Color");
+    
+    Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");
+    glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
+    
+    Result.Program = Program;
+    return Result;
 }
 
-)";
+phong_color_skinning_shader CreatePhongColorSkinningShader()
+{
+    phong_color_skinning_shader Result;
+    
+    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, FormatString(VertexShader_LocalToClip, 1, 1, MAX_JOINT_COUNT)};
+    const GLchar* FragmentShaders[] = {Shader_Header, FormatString(FragmentShader_Phong, MAX_DIRECTIONAL_LIGHT_COUNT)};
+    
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    Result.ProjectionUniform = glGetUniformLocation(Program, "Projection");
+    Result.ViewUniform = glGetUniformLocation(Program, "View");
+    Result.ModelUniform = glGetUniformLocation(Program, "Model");
+    Result.ColorUniform = glGetUniformLocation(Program, "Color");
+    
+    Result.SkinningIndex = glGetUniformBlockIndex(Program, "SkinningBuffer");
+    Result.LightIndex    = glGetUniformBlockIndex(Program, "LightBuffer");
+    
+    glUniformBlockBinding(Program, Result.SkinningIndex, SKINNING_BUFFER_INDEX);
+    glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
+    
+    Result.Program = Program;
+    return Result;
+}

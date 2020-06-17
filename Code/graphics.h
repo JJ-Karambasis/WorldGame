@@ -5,6 +5,7 @@
 #include "platform.h"
 
 #define MAX_JOINT_COUNT 256
+#define MAX_DIRECTIONAL_LIGHT_COUNT 1
 
 enum graphics_vertex_format
 {
@@ -45,14 +46,13 @@ enum push_command_type
     PUSH_COMMAND_BLEND,
     PUSH_COMMAND_SCISSOR,    
     PUSH_COMMAND_VIEWPORT,
-    PUSH_COMMAND_PROJECTION,
+    PUSH_COMMAND_PROJECTION,    
     PUSH_COMMAND_CAMERA_VIEW,    
     PUSH_COMMAND_DRAW_SHADED_COLORED_MESH,
     PUSH_COMMAND_DRAW_SHADED_COLORED_SKINNING_MESH,
     PUSH_COMMAND_DRAW_LINE_MESH,
     PUSH_COMMAND_DRAW_FILLED_MESH, 
-    PUSH_COMMAND_DRAW_IMGUI_UI,
-    PUSH_COMMAND_DRAW_QUAD,    
+    PUSH_COMMAND_DRAW_IMGUI_UI,    
 };
 
 struct push_command
@@ -166,17 +166,6 @@ struct push_command_draw_imgui_ui : public push_command
     u32 IndexCount;
     u32 IndexOffset;
     u32 VertexOffset;
-};
-
-struct push_command_draw_quad : public push_command
-{
-    union
-    {
-        v3f P[4];
-        struct { v3f P0, P1, P2, P3; };
-    };
-    
-    f32 R, G, B, A;
 };
 
 //CONFIRM(JJ): Is this alright to be fixed sized?
