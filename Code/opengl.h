@@ -2,6 +2,7 @@
 #define OPENGL_H
 
 #include "graphics.h"
+#include "dev_world_game.h"
 
 #include "opengl/gl.h"
 #include "opengl/glext.h"
@@ -41,6 +42,8 @@ global PFNGLUNIFORMBLOCKBINDINGPROC glUniformBlockBinding;
 global PFNGLBINDBUFFERBASEPROC glBindBufferBase;
 global PFNGLBUFFERSUBDATAPROC glBufferSubData;
 global PFNGLVERTEXATTRIBIPOINTERPROC glVertexAttribIPointer;
+global PFNGLDELETESHADERPROC glDeleteShader;
+global PFNGLDELETEPROGRAMPROC glDeleteProgram;
 
 #include "opengl_shaders.h"
 

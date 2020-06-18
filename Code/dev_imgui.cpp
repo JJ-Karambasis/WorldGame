@@ -39,9 +39,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     
     ImGui::NewFrame();
     
-    //IMPORTANT(EVERYONE): If you need help figuring out how to use IMGUI you can always switch this to 1 and look at the imgui demo window
+    //IMPORTANT(EVERYONE): If you need help figuring out how to use ImGui you can always switch this to 1 and look at the imgui demo window
     //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start
-#if 0 
+#if 0
     local bool demo_window;
     ImGui::ShowDemoWindow(&demo_window);
 #endif
@@ -108,6 +108,25 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         
         ImGui::Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
         ImGui::Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
+    }
+    
+    if(ImGui::CollapsingHeader("Debug Logs"))
+    {
+        if(ImGui::Button("Clear"))
+        {
+            DevContext->Logs.Size = 0;
+            ResetArena(&DevContext->LogStorage);
+        }        
+        
+        ImGui::SameLine();
+        
+        if(ImGui::Button("Copy")) ImGui::LogToClipboard();       
+        
+        for(u32 LogIndex = 0; LogIndex < DevContext->Logs.Size; LogIndex++)
+        {
+            string Log = DevContext->Logs[LogIndex];
+            ImGui::TextUnformatted(Log.Data, Log.Data+Log.Length);
+        }
     }
     
     ImGui::End();        

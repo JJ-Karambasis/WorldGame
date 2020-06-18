@@ -21,8 +21,11 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEBUG_DRAW_POINT(position, color) DebugDrawPoint(__Internal_Dev_Context__, position, color)
 #define DEBUG_DRAW_EDGE(position0, position1, color) DebugDrawEdge(__Internal_Dev_Context__, position0, position1, color)
 #define DEBUG_DRAW_QUAD(center, normal, dimensions, color) DebugDrawQuad(__Internal_Dev_Context__, center, normal, dimensions, color)
+#define DEBUG_LOG(format, ...) DebugLog(__Internal_Dev_Context__, format, __VA_ARGS__)
 
 #include "imgui/imgui.h"
+#include "camera.h"
+#include "input.h"
 #include "dev_frame_recording.h"
 
 struct dev_input
@@ -105,7 +108,7 @@ enum view_mode_type
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
-    game* Game;
+    struct game* Game;
     graphics* Graphics;
     
     arena DevStorage;
@@ -135,6 +138,9 @@ struct dev_context
     dev_mesh TriangleArrowMesh;
     
     dynamic_array<debug_primitive> DebugPrimitives;
+    
+    arena LogStorage;
+    dynamic_array<string> Logs;
     
     void* PlatformData;
     b32 Initialized;
@@ -183,6 +189,18 @@ inline void DebugDrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f 
     debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_QUAD};
     Primitive.Quad = {CenterP, Normal, Dim, Color};
     Append(&DevContext->DebugPrimitives, Primitive);
+}
+
+inline void DebugLog(dev_context* DevContext, char* Format, ...)
+{
+    if(!IsInitialized(&DevContext->Logs))
+        DevContext->Logs = CreateDynamicArray<string>(16);    
+           
+    va_list Args;
+    va_start(Args, Format);
+    Append(&DevContext->Logs, FormatString(Format, Args, &DevContext->LogStorage));    
+    va_end(Args);
+    CONSOLE_LOG(DevContext->Logs[DevContext->Logs.Size-1].Data);
 }
 
 #else

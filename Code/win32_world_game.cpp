@@ -168,7 +168,9 @@ Win32_DefaultGraphicsCode()
 {
     win32_graphics_code Result = {};
     Result.InitGraphics = Graphics_InitGraphicsStub;
-    Result.ExecuteRenderCommands = Graphics_ExecuteRenderCommandsStub;        
+    Result.BindGraphicsFunctions = Graphics_BindGraphicsFunctionsStub;
+    Result.ExecuteRenderCommands = Graphics_ExecuteRenderCommandsStub;            
+    Result.InvalidateShaders = Graphics_InvalidateShadersStub;
     return Result;
 }
 
@@ -188,8 +190,16 @@ Win32_LoadGraphicsCode(string DLLPath, string TempDLLPath)
     if(!Result.InitGraphics)
         return Win32_DefaultGraphicsCode();
     
+    Result.BindGraphicsFunctions = (bind_graphics_functions*)GetProcAddress(Result.GraphicsLibrary.Library, "BindGraphicsFunctions");
+    if(!Result.BindGraphicsFunctions)
+        return Win32_DefaultGraphicsCode();
+    
     Result.ExecuteRenderCommands = (execute_render_commands*)GetProcAddress(Result.GraphicsLibrary.Library, "ExecuteRenderCommands");
     if(!Result.ExecuteRenderCommands)
+        return Win32_DefaultGraphicsCode();
+    
+    Result.InvalidateShaders = (invalidate_shaders*)GetProcAddress(Result.GraphicsLibrary.Library, "InvalidateShaders");
+    if(!Result.InvalidateShaders)
         return Win32_DefaultGraphicsCode();
     
     Result.GraphicsLibrary.LastWriteTime = Win32_GetFileCreationTime(DLLPath);
@@ -485,7 +495,7 @@ void Win32_ClearSoundBuffer(win32_audio_output* Output)
     VOID* Region2;
     DWORD Region1Size;            
     DWORD Region2Size;
-        
+    
     if(SUCCEEDED(SoundBuffer->Lock(0, 0, &Region1, &Region1Size, &Region2, &Region2Size, DSBLOCK_ENTIREBUFFER)))
     {   
         ClearMemory(Region1, Region1Size);
@@ -708,7 +718,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     
     graphics* Graphics = GraphicsCode.InitGraphics(Global_Platform, Window);
     if(!Graphics)
-        WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");
+        WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
+    
+    if(!GraphicsCode.BindGraphicsFunctions(Graphics))
+        WRITE_AND_HANDLE_ERROR("Failed to bind the opengl graphics functions.");
     
     Assets.Graphics = Graphics;        
     void* DevPointer = NULL;
@@ -741,6 +754,15 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                 Global_GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);            
             }
             EndLock(&Global_Lock);
+        }
+        
+        FILETIME GraphicsDLLWriteTime = Win32_GetFileCreationTime(OpenGLGraphicsDLLPathName);
+        if(CompareFileTime(&GraphicsCode.GraphicsLibrary.LastWriteTime, &GraphicsDLLWriteTime) < 0)
+        {
+            GraphicsCode.InvalidateShaders(Graphics);
+            Win32_UnloadGraphicsCode(&GraphicsCode, OpenGLGraphicsTempDLLPathName);            
+            GraphicsCode = Win32_LoadGraphicsCode(OpenGLGraphicsDLLPathName, OpenGLGraphicsTempDLLPathName);
+            GraphicsCode.BindGraphicsFunctions(Graphics);
         }
         
         MSG Message;
@@ -819,7 +841,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         
         DEVELOPMENT_TICK(&Game, Graphics);                
         
-        GraphicsCode.ExecuteRenderCommands(Graphics);
+        GraphicsCode.ExecuteRenderCommands(Graphics, Global_Platform, DevPointer);
         
         for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
@@ -1001,7 +1023,7 @@ string Platform_FindNewFrameRecordingPath()
             break;
     }        
         
-    Result = PushLiteralString(FormatString("%s\\frame_recordings\\FrameRecording_%d.arc_recording", Global_DataPath, Global_FrameRecordingIndex));    
+    Result = FormatString("%s\\frame_recordings\\FrameRecording_%d.arc_recording", Global_DataPath, Global_FrameRecordingIndex);    
     return Result;
 }
 

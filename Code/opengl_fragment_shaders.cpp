@@ -19,7 +19,7 @@ uniform c4 Color;
                                              
 void main()
 {
-    FragColor = Color;
+    FragColor = Color;    
 }
 
 )";

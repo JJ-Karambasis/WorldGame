@@ -366,6 +366,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     if(!DevContext->Initialized)
     {
         DevContext->DevStorage = CreateArena(KILOBYTE(32));                               
+        DevContext->LogStorage = CreateArena(MEGABYTE(1));
         DevContext->FrameRecording.RecordingPath = AllocateStringStorage(&DevContext->DevStorage, 8092);
         DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);        
         

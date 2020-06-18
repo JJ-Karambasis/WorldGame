@@ -334,6 +334,20 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     
     BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(Graphics->PlatformData), "Failed to initialize opengl.");
     
+    return Graphics;
+    
+    handle_error:
+    return NULL;
+}
+
+extern "C"
+EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
+{    
+    Graphics->AllocateTexture = AllocateTexture;
+    Graphics->AllocateMesh = AllocateMesh;
+    Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
+    Graphics->StreamMeshData = StreamMeshData;        
+    
     LOAD_FUNCTION(PFNGLCREATESHADERPROC, glCreateShader);
     LOAD_FUNCTION(PFNGLSHADERSOURCEPROC, glShaderSource);
     LOAD_FUNCTION(PFNGLCOMPILESHADERPROC, glCompileShader);
@@ -364,6 +378,8 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     LOAD_FUNCTION(PFNGLBINDBUFFERBASEPROC, glBindBufferBase);
     LOAD_FUNCTION(PFNGLBUFFERSUBDATAPROC, glBufferSubData);
     LOAD_FUNCTION(PFNGLVERTEXATTRIBIPOINTERPROC, glVertexAttribIPointer);
+    LOAD_FUNCTION(PFNGLDELETESHADERPROC, glDeleteShader);
+    LOAD_FUNCTION(PFNGLDELETEPROGRAMPROC, glDeleteProgram);
     
 #if DEVELOPER_BUILD
     
@@ -377,44 +393,53 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     glDebugMessageCallback((GLDEBUGPROC)glDebugCallback, NULL);
     glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
     
-#endif    
+#endif        
     
-    Graphics->AllocateTexture = AllocateTexture;
-    Graphics->AllocateMesh = AllocateMesh;
-    Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
-    Graphics->StreamMeshData = StreamMeshData;
-    
-    return Graphics;
+    return true;
     
     handle_error:
-    return NULL;
+    return false;
 }
 
+#define CHECK_SHADER(shader) \
+do \
+{ \
+    if(!OpenGL->##shader.Valid) \
+       { \
+           auto Shader = Create##shader(); \
+           if(Shader.Valid) \
+           { \
+               glDeleteProgram(OpenGL->##shader.Program); \
+               OpenGL->##shader = Shader; \
+} \
+else \
+               { \
+                   ASSERT(OpenGL->##shader.Program > 0); \
+                          OpenGL->##shader.Valid = true; \
+               } \
+           } \
+       } while(0)
+       
 extern "C"
 EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {
+    SET_DEVELOPER_CONTEXT(DevContext);
+    
+    Global_Platform = Platform;        
+    InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
     if(!OpenGL->SkinningBuffers.Ptr)
     {
         OpenGL->SkinningBuffers.Capacity = 32;
         OpenGL->SkinningBuffers.Ptr = PushArray(&OpenGL->Storage, OpenGL->SkinningBuffers.Capacity, GLuint, Clear, 0);
-    }
+    }    
     
-    if(!OpenGL->ImGuiShader.Program)
-        OpenGL->ImGuiShader = CreateImGuiShader();
-    
-    if(!OpenGL->ColorShader.Program)
-        OpenGL->ColorShader = CreateColorShader();
-    
-    if(!OpenGL->ColorSkinningShader.Program)
-        OpenGL->ColorSkinningShader = CreateColorSkinningShader();
-    
-    if(!OpenGL->PhongColorShader.Program)
-        OpenGL->PhongColorShader = CreatePhongColorShader();
-    
-    if(!OpenGL->PhongColorSkinningShader.Program)
-        OpenGL->PhongColorSkinningShader = CreatePhongColorSkinningShader();
+    CHECK_SHADER(ImGuiShader);
+    CHECK_SHADER(ColorShader);
+    CHECK_SHADER(ColorSkinningShader);
+    CHECK_SHADER(PhongColorShader);
+    CHECK_SHADER(PhongColorSkinningShader);
     
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
@@ -677,4 +702,15 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     CommandList->Count = 0;        
     
     Platform_SwapBuffers(Graphics->PlatformData);    
+}
+
+extern "C"
+EXPORT INVALIDATE_SHADERS(InvalidateShaders)
+{
+    opengl_context* OpenGL = (opengl_context*)Graphics;
+    OpenGL->ImGuiShader.Valid = false;
+    OpenGL->ColorShader.Valid = false;
+    OpenGL->ColorSkinningShader.Valid = false;
+    OpenGL->PhongColorShader.Valid = false;
+    OpenGL->PhongColorSkinningShader.Valid = false;    
 }

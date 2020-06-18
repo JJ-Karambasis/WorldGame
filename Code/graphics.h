@@ -193,8 +193,14 @@ typedef STREAM_MESH_DATA(stream_mesh_data);
 #define INIT_GRAPHICS(name) graphics* name(platform* Platform, void* PlatformData)
 typedef INIT_GRAPHICS(init_graphics);
 
-#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics)
+#define BIND_GRAPHICS_FUNCTIONS(name) b32 name(graphics* Graphics)
+typedef BIND_GRAPHICS_FUNCTIONS(bind_graphics_functions);
+
+#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, platform* Platform, void* DevContext)
 typedef EXECUTE_RENDER_COMMANDS(execute_render_commands);
+
+#define INVALIDATE_SHADERS(name) void name(graphics* Graphics)
+typedef INVALIDATE_SHADERS(invalidate_shaders);
 
 struct graphics
 {       
@@ -208,14 +214,28 @@ struct graphics
     stream_mesh_data* StreamMeshData;
 };
 
+STREAM_MESH_DATA(Graphics_StreamMeshDataStub)
+{
+}
+
 INIT_GRAPHICS(Graphics_InitGraphicsStub)
 {
     return NULL;
 }
 
-EXECUTE_RENDER_COMMANDS(Graphics_ExecuteRenderCommandsStub)
+BIND_GRAPHICS_FUNCTIONS(Graphics_BindGraphicsFunctionsStub)
 {
-    
+    Graphics->StreamMeshData = Graphics_StreamMeshDataStub;
+    return false;
+}
+
+EXECUTE_RENDER_COMMANDS(Graphics_ExecuteRenderCommandsStub)
+{    
+    Graphics->CommandList.Count = 0;
+}
+
+INVALIDATE_SHADERS(Graphics_InvalidateShadersStub)
+{    
 }
 
 inline ptr 
