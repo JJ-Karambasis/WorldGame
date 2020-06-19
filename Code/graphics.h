@@ -6,6 +6,7 @@
 
 #define MAX_JOINT_COUNT 256
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
+#define MAX_POINT_LIGHT_COUNT 8
 
 enum graphics_vertex_format
 {
@@ -35,6 +36,30 @@ struct graphics_sampler_info
     graphics_filter MagFilter;
 };
 
+struct graphics_directional_light
+{    
+    c3 Color;    
+    f32 Intensity;
+    v3f Direction;
+    f32 Padding;
+};
+
+struct graphics_point_light
+{        
+    c3 Color;  
+    f32 Intensity;
+    v3f Position;
+    f32 Radius;
+};
+
+struct graphics_light_buffer
+{
+    u32 DirectionalLightCount;
+    u32 PointLightCount;
+    graphics_directional_light DirectionalLights[MAX_DIRECTIONAL_LIGHT_COUNT];    
+    graphics_point_light PointLights[MAX_POINT_LIGHT_COUNT];
+};
+
 enum push_command_type
 {
     PUSH_COMMAND_UNKNOWN,
@@ -47,9 +72,10 @@ enum push_command_type
     PUSH_COMMAND_SCISSOR,    
     PUSH_COMMAND_VIEWPORT,
     PUSH_COMMAND_PROJECTION,    
-    PUSH_COMMAND_CAMERA_VIEW,    
-    PUSH_COMMAND_DRAW_SHADED_COLORED_MESH,
-    PUSH_COMMAND_DRAW_SHADED_COLORED_SKINNING_MESH,
+    PUSH_COMMAND_CAMERA_VIEW,
+    PUSH_COMMAND_SUBMIT_LIGHT_BUFFER,
+    PUSH_COMMAND_DRAW_PHONG_COLORED_MESH,
+    PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH,
     PUSH_COMMAND_DRAW_LINE_MESH,
     PUSH_COMMAND_DRAW_FILLED_MESH, 
     PUSH_COMMAND_DRAW_IMGUI_UI,    
@@ -111,10 +137,17 @@ struct push_command_4x4_matrix : public push_command
     m4 Matrix;
 };
 
-struct push_command_draw_shaded_colored_mesh : public push_command
+struct push_command_submit_light_buffer : public push_command
+{
+    graphics_light_buffer LightBuffer;
+};
+
+struct push_command_draw_phong_colored_mesh : public push_command
 {    
-    m4 WorldTransform;    
-    f32 R, G, B, A;
+    m4 WorldTransform;
+    c4 SurfaceColor;
+    c4 SpecularColor;
+    i32 Shininess;
     i64 MeshID;
     
     u32 IndexCount;
@@ -122,10 +155,12 @@ struct push_command_draw_shaded_colored_mesh : public push_command
     u32 VertexOffset;
 };
 
-struct push_command_draw_shaded_colored_skinning_mesh : public push_command
+struct push_command_draw_phong_colored_skinning_mesh : public push_command
 {
     m4 WorldTransform;    
-    f32 R, G, B, A;
+    c4 SurfaceColor;
+    c4 SpecularColor;    
+    i32 Shininess;
     i64 MeshID;
     
     u32 IndexCount;
@@ -190,7 +225,7 @@ typedef ALLOCATE_DYNAMIC_MESH(allocate_dynamic_mesh);
 #define STREAM_MESH_DATA(name) void name(graphics* Graphics, i64 MeshID, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
 typedef STREAM_MESH_DATA(stream_mesh_data);
 
-#define INIT_GRAPHICS(name) graphics* name(platform* Platform, void* PlatformData)
+#define INIT_GRAPHICS(name) graphics* name(platform* Platform, void** PlatformData)
 typedef INIT_GRAPHICS(init_graphics);
 
 #define BIND_GRAPHICS_FUNCTIONS(name) b32 name(graphics* Graphics)
@@ -206,7 +241,7 @@ struct graphics
 {       
     v2i RenderDim;
     push_command_list CommandList;    
-    void* PlatformData;                        
+    void** PlatformData;                        
     
     allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;
@@ -274,6 +309,27 @@ inline ptr
 GetIndexBufferSize(graphics_index_format Format, u32 IndexCount)
 {    
     ptr Result = GetIndexSize(Format) * IndexCount;
+    return Result;
+}
+
+inline graphics_directional_light
+CreateDirectionalLight(c3 Color, f32 Intensity, v3f Direction)
+{
+    graphics_directional_light Result;
+    Result.Color = Color;
+    Result.Intensity = Intensity;
+    Result.Direction = Direction;
+    return Result;
+}
+
+inline graphics_point_light 
+CreatePointLight(c3 Color, f32 Intensity, v3f Position, f32 Radius)
+{
+    graphics_point_light Result;    
+    Result.Color = Color;
+    Result.Intensity = Intensity;    
+    Result.Position = Position;
+    Result.Radius = Radius;
     return Result;
 }
 

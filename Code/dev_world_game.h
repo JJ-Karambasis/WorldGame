@@ -142,7 +142,7 @@ struct dev_context
     arena LogStorage;
     dynamic_array<string> Logs;
     
-    void* PlatformData;
+    void** PlatformData;
     b32 Initialized;
 };
 

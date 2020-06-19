@@ -166,7 +166,7 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
         CreateBasis(Z, &X, &Y);
         
         m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Red(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
+        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Red4(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
     }
     
     {
@@ -175,7 +175,7 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
         CreateBasis(Z, &X, &Y);
         
         m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Green(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Green4(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
     }
     
     {
@@ -184,10 +184,10 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
         CreateBasis(Z, &X, &Y);
         
         m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Blue(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+        PushDrawFilledMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Blue4(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
     }
     
-    DrawSphere(DevContext, Position, 0.04f, White());    
+    DrawSphere(DevContext, Position, 0.04f, White4());    
 }
 
 inline camera* 
@@ -258,7 +258,7 @@ void DrawWireframeWorld(graphics* Graphics, world* World)
     FOR_EACH(Entity, &World->EntityPool)
     {
         if(Entity->Mesh)
-            PushDrawFilledMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Cyan(), Entity->Mesh->IndexCount, 0, 0);
+            PushDrawFilledMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Cyan4(), Entity->Mesh->IndexCount, 0, 0);
     }
     PushCull(Graphics, true);
     PushWireframe(Graphics, false);
@@ -276,7 +276,7 @@ void DevelopmentRender(dev_context* DevContext)
     DevelopmentUpdateCamera(DevContext);
     
     PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);    
-    PushClearColorAndDepth(Graphics, Black(), 1.0f);        
+    PushClearColorAndDepth(Graphics, Black4(), 1.0f);        
     PushDepth(Graphics, true);
     
     world* World = GetCurrentWorld(Game);
@@ -316,7 +316,7 @@ void DevelopmentRender(dev_context* DevContext)
     if(DevContext->DrawPlayerCollisionVolume)
     {
         world_entity* PlayerEntity = GetPlayerEntity(World);
-        DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(Game, (player*)PlayerEntity->UserData), Magenta());
+        DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(Game, (player*)PlayerEntity->UserData), Magenta4());
     }
     
     PushDepth(Graphics, false);    
@@ -389,7 +389,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     
     if(IsInDevelopmentMode(DevContext))
     {        
-        Platform_DevUpdate(DevContext->PlatformData, Graphics->RenderDim, Game->dt);        
+        Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, Game->dt);        
         DevelopmentRender(DevContext);        
     }
     

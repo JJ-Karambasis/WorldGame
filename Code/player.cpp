@@ -246,7 +246,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
         v2f Min = JumpingQuad->CenterP.xy - HalfDim;
         v2f Max = JumpingQuad->CenterP.xy + HalfDim;
         
-        c4 QuadColor = Red();
+        c4 QuadColor = Red4();
         if(PlayerEntity->Position.xy >= Min && PlayerEntity->Position.xy <= Max)
         {
             if(Abs(PlayerEntity->Position.z - JumpingQuad->CenterP.z) < 1e-2f)
@@ -257,7 +257,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
                     break;                    
                     
                 }                
-                QuadColor = Yellow();
+                QuadColor = Yellow4();
             }
         }       
         

@@ -241,8 +241,8 @@ UpdateWorld(game* Game)
 {                
     world* World = GetWorld(Game, Game->CurrentWorldIndex);         
     
-    DEBUG_DRAW_QUAD(World->JumpingQuads[0].CenterP, Global_WorldZAxis, World->JumpingQuads[0].Dimensions, Yellow());    
-    DEBUG_DRAW_QUAD(World->JumpingQuads[1].CenterP, Global_WorldZAxis, World->JumpingQuads[1].Dimensions, Yellow());
+    DEBUG_DRAW_QUAD(World->JumpingQuads[0].CenterP, Global_WorldZAxis, World->JumpingQuads[0].Dimensions, Yellow4());    
+    DEBUG_DRAW_QUAD(World->JumpingQuads[1].CenterP, Global_WorldZAxis, World->JumpingQuads[1].Dimensions, Yellow4());
     
     FOR_EACH(Entity, &World->EntityPool)
     {        

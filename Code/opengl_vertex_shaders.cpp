@@ -8,6 +8,7 @@ void main()
 {
     FragUV = UV;
     FragColor = Color;
+    FragColor.rgb = pow(FragColor.rgb, v3f(2.2f));
     gl_Position = Projection*v4f(Position2D, 0, 1);
 }
 

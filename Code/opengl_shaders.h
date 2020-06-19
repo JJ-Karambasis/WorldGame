@@ -35,7 +35,9 @@ struct phong_color_shader : public base_shader
     GLint ProjectionUniform;
     GLint ViewUniform;
     GLint ModelUniform;
-    GLint ColorUniform;
+    GLint SurfaceColorUniform;
+    GLint SpecularColorUniform;
+    GLint ShininessUniform;
     
     GLint LightIndex;    
 };
@@ -45,7 +47,9 @@ struct phong_color_skinning_shader : public base_shader
     GLint ProjectionUniform;
     GLint ViewUniform;
     GLint ModelUniform;
-    GLint ColorUniform;        
+    GLint SurfaceColorUniform;        
+    GLint SpecularColorUniform;
+    GLint ShininessUniform;
     
     GLint SkinningIndex;
     GLint LightIndex;    

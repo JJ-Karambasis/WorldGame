@@ -169,7 +169,7 @@ phong_color_shader CreatePhongColorShader()
     phong_color_shader Result = {};
     
     const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, FormatString(VertexShader_LocalToClip, 0, 1).Data};
-    const GLchar* FragmentShaders[] = {Shader_Header, FormatString(FragmentShader_Phong, MAX_DIRECTIONAL_LIGHT_COUNT).Data};    
+    const GLchar* FragmentShaders[] = {Shader_Header, FormatString(FragmentShader_Phong, MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT).Data};    
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -177,10 +177,12 @@ phong_color_shader CreatePhongColorShader()
         Result.Valid = true;
         Result.Program = Program;
         
-        Result.ProjectionUniform = glGetUniformLocation(Program, "Projection");
-        Result.ViewUniform       = glGetUniformLocation(Program,  "View");
-        Result.ModelUniform      = glGetUniformLocation(Program, "Model");
-        Result.ColorUniform      = glGetUniformLocation(Program, "Color");
+        Result.ProjectionUniform    = glGetUniformLocation(Program, "Projection");
+        Result.ViewUniform          = glGetUniformLocation(Program,  "View");
+        Result.ModelUniform         = glGetUniformLocation(Program, "Model");
+        Result.SurfaceColorUniform  = glGetUniformLocation(Program, "SurfaceColor");
+        Result.SpecularColorUniform = glGetUniformLocation(Program, "SpecularColor");
+        Result.ShininessUniform     = glGetUniformLocation(Program, "Shininess");
         
         Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");
         glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
@@ -194,7 +196,7 @@ phong_color_skinning_shader CreatePhongColorSkinningShader()
     phong_color_skinning_shader Result = {};
     
     const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, FormatString(VertexShader_LocalToClip, 1, 1, MAX_JOINT_COUNT).Data};
-    const GLchar* FragmentShaders[] = {Shader_Header, FormatString(FragmentShader_Phong, MAX_DIRECTIONAL_LIGHT_COUNT).Data};        
+    const GLchar* FragmentShaders[] = {Shader_Header, FormatString(FragmentShader_Phong, MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT).Data};        
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -202,10 +204,12 @@ phong_color_skinning_shader CreatePhongColorSkinningShader()
         Result.Valid = true;
         Result.Program = Program;
         
-        Result.ProjectionUniform = glGetUniformLocation(Program, "Projection");
-        Result.ViewUniform = glGetUniformLocation(Program, "View");
-        Result.ModelUniform = glGetUniformLocation(Program, "Model");
-        Result.ColorUniform = glGetUniformLocation(Program, "Color");
+        Result.ProjectionUniform    = glGetUniformLocation(Program, "Projection");
+        Result.ViewUniform          = glGetUniformLocation(Program, "View");
+        Result.ModelUniform         = glGetUniformLocation(Program, "Model");
+        Result.SurfaceColorUniform  = glGetUniformLocation(Program, "SurfaceColor");
+        Result.SpecularColorUniform = glGetUniformLocation(Program, "SpecularColor");
+        Result.ShininessUniform     = glGetUniformLocation(Program, "Shininess");
         
         Result.SkinningIndex = glGetUniformBlockIndex(Program, "SkinningBuffer");
         Result.LightIndex    = glGetUniformBlockIndex(Program, "LightBuffer");

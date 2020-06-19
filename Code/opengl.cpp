@@ -32,6 +32,12 @@ GetBlendFactor(graphics_blend Blend)
     return (GLenum)-1;
 }
 
+inline void 
+SetUniform4f(GLint Uniform, v4f Value)
+{
+    glUniform4f(Uniform, Value.x, Value.y, Value.z, Value.w);
+}
+
 b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
 {    
     if(*BoundVAO != NewVAO)
@@ -235,28 +241,90 @@ void* Platform_LoadProc(char* FunctionName)
     return Function;
 }
 
-b32 Platform_InitOpenGL(void* PlatformData)
+b32 Platform_InitOpenGL(void** PlatformData)
 {
-    HWND Window = (HWND)PlatformData;
+    HWND Window = (HWND)PlatformData[0];
+    HINSTANCE Instance = (HINSTANCE)PlatformData[1];
+    char ClassName[256];
+    GetClassName(Window, ClassName, sizeof(ClassName));
+    
+    HWND TempWindow = CreateWindow(ClassName, "Temp", WS_SYSMENU, 0, 0, 1, 1, NULL, NULL, Instance, NULL);
+    BOOL_CHECK_AND_HANDLE(TempWindow, "Failed to create the temporary window.");
+    
+    PIXELFORMATDESCRIPTOR TempPixelFormatDescriptor = 
+    {
+        sizeof(PIXELFORMATDESCRIPTOR),
+        1, 
+        PFD_SUPPORT_OPENGL
+    };
+    
+    HDC TempDeviceContext = GetDC(TempWindow);
+    
+    i32 TempPixelFormatIndex = ChoosePixelFormat(TempDeviceContext, &TempPixelFormatDescriptor);
+    BOOL_CHECK_AND_HANDLE(TempPixelFormatIndex, "Failed to get the temporary pixel format index.");
+    BOOL_CHECK_AND_HANDLE(SetPixelFormat(TempDeviceContext, TempPixelFormatIndex, &TempPixelFormatDescriptor),
+                          "Failed to set the temporary pixel format.");
+    
+    HGLRC TempRenderingContext = wglCreateContext(TempDeviceContext);
+    BOOL_CHECK_AND_HANDLE(TempRenderingContext, "Failed to create the temporary rendering context.");    
+    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(TempDeviceContext, TempRenderingContext), "Failed to set the temporary context's as the current context.");
+    
+    PFNWGLGETEXTENSIONSSTRINGARBPROC wglGetExtensionsStringARB = (PFNWGLGETEXTENSIONSSTRINGARBPROC)wglGetProcAddress("wglGetExtensionsStringARB");
+    BOOL_CHECK_AND_HANDLE(wglGetExtensionsStringARB, "wglGetExtensionsStringARB function not found");
+    
+    char* Extensions = (char*)wglGetExtensionsStringARB(TempDeviceContext);
+    char* Iter = Extensions;
+    
+    b32 wglPixelFormatExtensionFound = false;
+    b32 wglSRBExtensionFound = false;
+    b32 wglSwapControlExtensionFound = false;
+    
+    while(*Iter)
+    {
+        char* End = Iter;
+        while(!IsWhitespace(*End)) End++;
+        
+        if(StringEquals("WGL_ARB_pixel_format", Iter, End-Iter)) wglPixelFormatExtensionFound = true;        
+        if(StringEquals("WGL_EXT_swap_control", Iter, End-Iter)) wglSwapControlExtensionFound = true;
+        if(StringEquals("WGL_ARB_framebuffer_sRGB", Iter, End-Iter)) wglSRBExtensionFound = true;
+        if(StringEquals("WGL_EXT_framebuffer_sRGB", Iter, End-Iter)) wglSRBExtensionFound = true;        
+        
+        while(IsWhitespace(*End)) End++;
+        Iter = End;
+    }
+    
+    BOOL_CHECK_AND_HANDLE(wglPixelFormatExtensionFound, "WGL_ARB_pixel_format extension not found");
+    BOOL_CHECK_AND_HANDLE(wglSwapControlExtensionFound, "WGL_EXT_swap_control extension not found");
+    BOOL_CHECK_AND_HANDLE(wglSRBExtensionFound, "WGL_ARB_framebuffer_sRGB or WGL_EXT_framebuffer_sRGB extension not found");
+    
+    PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)wglGetProcAddress("wglChoosePixelFormatARB");
+    BOOL_CHECK_AND_HANDLE(wglChoosePixelFormatARB, "wglChoosePixelFormatARB function not found");
+    
+    int PixelFormatAttributes[] = 
+    {
+        WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
+        WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
+        WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
+        WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB, 
+        WGL_COLOR_BITS_ARB, 32, 
+        WGL_DEPTH_BITS_ARB, 24, 
+        WGL_STENCIL_BITS_ARB, 8,
+        WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB, GL_TRUE,
+        0
+    };
+    
     HDC DeviceContext = GetDC(Window);
     
-    PIXELFORMATDESCRIPTOR PixelFormat = {};
-    PixelFormat.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-    PixelFormat.nVersion = 1;
-    PixelFormat.dwFlags = PFD_DOUBLEBUFFER|PFD_SUPPORT_OPENGL|PFD_DRAW_TO_WINDOW;
-    PixelFormat.iPixelType = PFD_TYPE_RGBA;
-    PixelFormat.cColorBits = 32;
-    PixelFormat.cDepthBits = 32;
-    PixelFormat.iLayerType = PFD_MAIN_PLANE;
+    UINT NumFormat;
+    i32 PixelFormatIndex;
+    BOOL_CHECK_AND_HANDLE(wglChoosePixelFormatARB(DeviceContext, PixelFormatAttributes, NULL, 1, &PixelFormatIndex, &NumFormat) || !NumFormat,
+                          "Failed to choose an actual pixel format and retrieve its index.");
     
-    int PixelFormatIndex = ChoosePixelFormat(DeviceContext, &PixelFormat);
-    BOOL_CHECK_AND_HANDLE(PixelFormatIndex, "Failed to find a valid win32 pixel format.");
-    
-    BOOL_CHECK_AND_HANDLE(SetPixelFormat(DeviceContext, PixelFormatIndex, &PixelFormat),
-                          "Failed to set the win32 pixel format.");
-    
-    HGLRC TempContext = wglCreateContext(DeviceContext);
-    wglMakeCurrent(DeviceContext, TempContext);
+    PIXELFORMATDESCRIPTOR PixelFormatDescriptor = {};
+    BOOL_CHECK_AND_HANDLE(DescribePixelFormat(DeviceContext, PixelFormatIndex, sizeof(PIXELFORMATDESCRIPTOR), &PixelFormatDescriptor),
+                          "Failed to get a description of the actual pixel format descriptor.");
+    BOOL_CHECK_AND_HANDLE(SetPixelFormat(DeviceContext, PixelFormatIndex, &PixelFormatDescriptor), 
+                          "Failed to set the actual pixel format descriptor.");
     
     int AttribFlags = 0;
 #if DEVELOPER_BUILD
@@ -278,18 +346,21 @@ b32 Platform_InitOpenGL(void* PlatformData)
     HGLRC RenderingContext = wglCreateContextAttribsARB(DeviceContext, 0, Attribs);
     BOOL_CHECK_AND_HANDLE(RenderingContext, "Failed to create the opengl rendering context.");
     
-    wglMakeCurrent(NULL, NULL);
-    wglDeleteContext(TempContext);
-    wglMakeCurrent(DeviceContext, RenderingContext);
+    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(NULL, NULL), "Failed to unset the current contexts.");
+    BOOL_CHECK_AND_HANDLE(wglDeleteContext(TempRenderingContext), "Failed to delete the rendering temporary context.");
+    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(DeviceContext, RenderingContext), "Failed to set the actual context as the current context.");
     
     PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
     BOOL_CHECK_AND_HANDLE(wglSwapIntervalEXT, "Failed to load the wglSwapIntervalEXT function.");
     
     wglSwapIntervalEXT(1);
     
+    DestroyWindow(TempWindow);
+    
     return true;
     
     handle_error:
+        
     return false;
 }
 
@@ -329,10 +400,9 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     OpenGL->TexturePool = CreatePool<opengl_texture>(&OpenGL->Storage, 128);
     
     graphics* Graphics = &OpenGL->Graphics;
-    
     Graphics->PlatformData = PlatformData;
     
-    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(Graphics->PlatformData), "Failed to initialize opengl.");
+    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(PlatformData), "Failed to initialize opengl.");
     
     return Graphics;
     
@@ -380,6 +450,7 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLVERTEXATTRIBIPOINTERPROC, glVertexAttribIPointer);
     LOAD_FUNCTION(PFNGLDELETESHADERPROC, glDeleteShader);
     LOAD_FUNCTION(PFNGLDELETEPROGRAMPROC, glDeleteProgram);
+    LOAD_FUNCTION(PFNGLUNIFORM1IPROC, glUniform1i);
     
 #if DEVELOPER_BUILD
     
@@ -453,22 +524,14 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         glBindBufferBase(GL_UNIFORM_BUFFER, LIGHT_BUFFER_INDEX, OpenGL->LightUBO);
     }
     
-    opengl_light_buffer LightBuffer = {};
-    LightBuffer.DirectionalLights[0].Direction = V4(0.0f, 0.0f, -1.0f, 0.0f);
-    LightBuffer.DirectionalLights[0].Color = V4(1.0f, 1.0f, 1.0f, 1.0f);
-    LightBuffer.DirectionalLightCount = 1;
-    
-    glBindBuffer(GL_UNIFORM_BUFFER, OpenGL->LightUBO);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(opengl_light_buffer), &LightBuffer);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    
-    glEnable(GL_SCISSOR_TEST);
+    glEnable(GL_SCISSOR_TEST);    
+    glEnable(GL_FRAMEBUFFER_SRGB);                
     
     GLuint BoundProgram = (GLuint)-1;
     GLuint BoundVAO = (GLuint)-1;
     
     u32 SkinningIndex = 0;
-    
+        
     push_command_list* CommandList = &Graphics->CommandList;        
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
     {
@@ -560,11 +623,44 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 CameraView = ((push_command_4x4_matrix*)Command)->Matrix;
             } break;
             
-            case PUSH_COMMAND_DRAW_SHADED_COLORED_MESH:
+            case PUSH_COMMAND_SUBMIT_LIGHT_BUFFER:
             {
-                push_command_draw_shaded_colored_mesh* DrawShadedColoredMesh = (push_command_draw_shaded_colored_mesh*)Command;                                                
+                graphics_light_buffer SrcLightBuffer = ((push_command_submit_light_buffer*)Command)->LightBuffer;
                 
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawShadedColoredMesh->MeshID);
+                opengl_light_buffer DstLightBuffer = {};
+                DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
+                DstLightBuffer.PointLightCount = SrcLightBuffer.PointLightCount;
+                
+                for(i32 DirectionalLightIndex = 0; DirectionalLightIndex < DstLightBuffer.DirectionalLightCount; DirectionalLightIndex++)
+                {
+                    graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
+                    opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
+                    
+                    DstLight->Direction = Normalize(V4(SrcLight->Direction, 0.0f)*CameraView);
+                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
+                }
+                
+                for(i32 PointLightIndex = 0; PointLightIndex < DstLightBuffer.PointLightCount; PointLightIndex++)
+                {
+                    graphics_point_light* SrcLight = SrcLightBuffer.PointLights + PointLightIndex;
+                    opengl_point_light* DstLight = DstLightBuffer.PointLights + PointLightIndex;
+                    
+                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
+                    
+                    v4f LightPosition = V4(SrcLight->Position, 1.0f)*CameraView;
+                    DstLight->Position = V4(LightPosition.xyz, SrcLight->Radius);                                        
+                }
+                
+                glBindBuffer(GL_UNIFORM_BUFFER, OpenGL->LightUBO);
+                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(opengl_light_buffer), &DstLightBuffer);
+                glBindBuffer(GL_UNIFORM_BUFFER, 0);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_PHONG_COLORED_MESH:
+            {
+                push_command_draw_phong_colored_mesh* DrawPhongColoredMesh = (push_command_draw_phong_colored_mesh*)Command;                                                
+                
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredMesh->MeshID);
                 
                 if(BindProgram(&BoundProgram, OpenGL->PhongColorShader.Program))
                 {                                        
@@ -574,19 +670,24 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->PhongColorShader.ModelUniform, 1, GL_FALSE, DrawShadedColoredMesh->WorldTransform.M);
-                glUniform4f(OpenGL->PhongColorShader.ColorUniform, DrawShadedColoredMesh->R, DrawShadedColoredMesh->G, DrawShadedColoredMesh->B, DrawShadedColoredMesh->A);
+                glUniformMatrix4fv(OpenGL->PhongColorShader.ModelUniform, 1, GL_FALSE, DrawPhongColoredMesh->WorldTransform.M);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawShadedColoredMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawShadedColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawShadedColoredMesh->VertexOffset);
+                c4 SurfaceColor = DrawPhongColoredMesh->SurfaceColor;
+                c4 SpecularColor = DrawPhongColoredMesh->SpecularColor;
+                SetUniform4f(OpenGL->PhongColorShader.SurfaceColorUniform,  SurfaceColor);
+                SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
+                glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredMesh->Shininess);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongColoredMesh->IndexCount, Mesh->IndexType, 
+                                         (void*)(DrawPhongColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                                         DrawPhongColoredMesh->VertexOffset);
                 
             } break;            
             
-            case PUSH_COMMAND_DRAW_SHADED_COLORED_SKINNING_MESH:
+            case PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH:
             {
-                push_command_draw_shaded_colored_skinning_mesh* DrawShadedColoredSkinningMesh = (push_command_draw_shaded_colored_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawShadedColoredSkinningMesh->MeshID);                
+                push_command_draw_phong_colored_skinning_mesh* DrawPhongColoredSkinningMesh = (push_command_draw_phong_colored_skinning_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredSkinningMesh->MeshID);                
                 
                 opengl_buffer_list* BufferList = &OpenGL->SkinningBuffers;      
                 ASSERT(SkinningIndex <= BufferList->Count);
@@ -608,7 +709,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 GLuint SkinningUBO = BufferList->Ptr[SkinningIndex];
                 glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
-                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(m4)*DrawShadedColoredSkinningMesh->JointCount, DrawShadedColoredSkinningMesh->Joints);                                
+                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(m4)*DrawPhongColoredSkinningMesh->JointCount, DrawPhongColoredSkinningMesh->Joints);                                
                 glBindBuffer(GL_UNIFORM_BUFFER, 0);
                 
                 if(BindProgram(&BoundProgram, OpenGL->PhongColorSkinningShader.Program))
@@ -619,12 +720,18 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ModelUniform, 1, GL_FALSE, DrawShadedColoredSkinningMesh->WorldTransform.M);
-                glUniform4f(OpenGL->PhongColorSkinningShader.ColorUniform, DrawShadedColoredSkinningMesh->R, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->A);
+                glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ModelUniform, 1, GL_FALSE, DrawPhongColoredSkinningMesh->WorldTransform.M);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawShadedColoredSkinningMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawShadedColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawShadedColoredSkinningMesh->VertexOffset);
+                
+                c4 SurfaceColor = DrawPhongColoredSkinningMesh->SurfaceColor;
+                c4 SpecularColor = DrawPhongColoredSkinningMesh->SpecularColor;
+                SetUniform4f(OpenGL->PhongColorShader.SurfaceColorUniform,  SurfaceColor);
+                SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
+                glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredSkinningMesh->Shininess);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongColoredSkinningMesh->IndexCount, Mesh->IndexType, 
+                                         (void*)(DrawPhongColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
+                                         DrawPhongColoredSkinningMesh->VertexOffset);
                 
                 SkinningIndex++;
             } break;
@@ -701,7 +808,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     
     CommandList->Count = 0;        
     
-    Platform_SwapBuffers(Graphics->PlatformData);    
+    Platform_SwapBuffers(Graphics->PlatformData[0]);    
 }
 
 extern "C"

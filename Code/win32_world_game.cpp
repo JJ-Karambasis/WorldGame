@@ -716,7 +716,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!GraphicsCode.GraphicsLibrary.Library)
         WRITE_AND_HANDLE_ERROR("Failed to load the graphics's dll code.");
     
-    graphics* Graphics = GraphicsCode.InitGraphics(Global_Platform, Window);
+    void* PlatformData[2] = 
+    {
+        Window,
+        Instance
+    };
+    
+    graphics* Graphics = GraphicsCode.InitGraphics(Global_Platform, PlatformData);
     if(!Graphics)
         WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
     
@@ -729,7 +735,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 #if DEVELOPER_BUILD
     dev_context DevContext = {};
     DevContext.InDevelopmentMode = true;
-    DevContext.PlatformData = Window;
+    DevContext.PlatformData = PlatformData;
     
     DevPointer = &DevContext;
 #endif

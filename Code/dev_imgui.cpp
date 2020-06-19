@@ -22,7 +22,7 @@ i64 AllocateImGuiFont(graphics* Graphics)
 
 void DevelopmentImGuiInit(dev_context* DevContext)
 {    
-    Platform_InitImGui(DevContext->PlatformData);                
+    Platform_InitImGui(DevContext->PlatformData[0]);                
     AllocateImGuiFont(DevContext->Graphics);                
     
     SetMemoryI64(DevContext->ImGuiMeshes, -1, sizeof(DevContext->ImGuiMeshes));

@@ -44,6 +44,7 @@ global PFNGLBUFFERSUBDATAPROC glBufferSubData;
 global PFNGLVERTEXATTRIBIPOINTERPROC glVertexAttribIPointer;
 global PFNGLDELETESHADERPROC glDeleteShader;
 global PFNGLDELETEPROGRAMPROC glDeleteProgram;
+global PFNGLUNIFORM1IPROC glUniform1i;
 
 #include "opengl_shaders.h"
 
@@ -82,13 +83,21 @@ struct opengl_buffer_list
 struct opengl_directional_light
 {
     v4f Direction;
-    v4f Color;
+    c4 Color;
+};
+
+struct opengl_point_light
+{
+    v4f Position;
+    c4 Color;
 };
 
 struct opengl_light_buffer
 {
     opengl_directional_light DirectionalLights[MAX_DIRECTIONAL_LIGHT_COUNT];
+    opengl_point_light PointLights[MAX_POINT_LIGHT_COUNT];
     i32 DirectionalLightCount;
+    i32 PointLightCount;
 };
 
 struct opengl_context
