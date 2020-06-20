@@ -1175,7 +1175,7 @@ b32 IsRayIntersectingEntity(v3f RayOrigin, v3f RayDirection, world_entity* Entit
         f32 tempt, tempu, tempv;
         if(IsRayIntersectingTriangle3D(Ray, Triangle, &tempt, &tempu, &tempv))
         {
-            if(*t < 0.0f || *t > tempt)
+            if(tempt < *t)
             {
                 *t = tempt;
                 *u = tempu;

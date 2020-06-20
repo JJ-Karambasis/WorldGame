@@ -146,7 +146,7 @@ struct dev_context
     void* PlatformData;
     b32 Initialized;
     world_entity* SelectedObject;
-    v3f dumb;
+    v3f InspectRay;
     char DebugMessage[100];
 };
 
