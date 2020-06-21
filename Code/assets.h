@@ -104,6 +104,19 @@ inline b32 IsAssetValid(animation_clip* Clip)
     return Result;
 }
 
+struct texture
+{
+    void* Texels;
+    v2i Dimensions;   
+    i64 GDIHandle;
+};
+
+inline b32 IsAssetValid(texture* Texture)
+{
+    b32 Result = (Texture->Texels && Texture->Dimensions.width && Texture->Dimensions.height);
+    return Result;
+}
+
 struct assets
 {
     arena Storage;
@@ -116,6 +129,9 @@ struct assets
     walkable_mesh QuadWalkableMesh;
     
     mesh PlayerMesh;
+    
+    texture TestDiffuse;
+    texture TestSpecular;
     
 #if 0 
     mesh TestSkeletonMesh;

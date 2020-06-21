@@ -45,6 +45,7 @@ global PFNGLVERTEXATTRIBIPOINTERPROC glVertexAttribIPointer;
 global PFNGLDELETESHADERPROC glDeleteShader;
 global PFNGLDELETEPROGRAMPROC glDeleteProgram;
 global PFNGLUNIFORM1IPROC glUniform1i;
+global PFNGLACTIVETEXTUREPROC glActiveTexture;
 
 #include "opengl_shaders.h"
 
@@ -110,9 +111,17 @@ struct opengl_context
     
     imgui_shader ImGuiShader;    
     color_shader ColorShader;
-    color_skinning_shader ColorSkinningShader;    
+    texture_shader TextureShader;
+    color_skinning_shader ColorSkinningShader;        
+    texture_skinning_shader TextureSkinningShader;
+    lambertian_color_shader LambertianColorShader;
+    lambertian_texture_shader LambertianTextureShader;
+    lambertian_color_skinning_shader LambertianColorSkinningShader;
+    lambertian_texture_skinning_shader LambertianTextureSkinningShader;
     phong_color_shader PhongColorShader;
+    phong_texture_shader PhongTextureShader;
     phong_color_skinning_shader PhongColorSkinningShader;
+    phong_texture_skinning_shader PhongTextureSkinningShader;
     
     GLuint LightUBO;    
     

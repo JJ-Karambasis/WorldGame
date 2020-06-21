@@ -49,3 +49,20 @@ LoadAudio(assets* Assets, char* File)
     ASSERT(IsAssetValid(&Result));
     return Result;    
 }
+
+texture
+LoadTexture(assets* Assets, char* File, b32 sRGB)
+{
+    ASSERT(StringEquals(GetFileExtension(File), "png"));
+    texture Result = PNG_LoadTexture(File, &Assets->Storage);
+    if(Result.Texels)
+    {
+        graphics_sampler_info SamplerInfo = {};
+        SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
+        SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
+        
+        Result.GDIHandle = Assets->Graphics->AllocateTexture(Assets->Graphics, Result.Texels, Result.Dimensions, sRGB, &SamplerInfo);
+    }
+    ASSERT(IsAssetValid(&Result));
+    return Result;
+}

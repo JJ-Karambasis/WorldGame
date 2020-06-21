@@ -142,6 +142,18 @@ fbx_context FBX_LoadFile(const char* Path)
     return {};
 }
 
+b32 ValidateMappingMode(FbxLayerElement::EMappingMode MappingMode)
+{
+    b32 Result = (MappingMode == FbxGeometryElement::eByPolygonVertex) || (MappingMode == FbxGeometryElement::eByControlPoint);
+    return Result;
+}
+
+b32 ValidateReferenceMode(FbxLayerElement::EReferenceMode ReferenceMode)
+{
+    b32 Result = (ReferenceMode == FbxGeometryElement::eDirect) || (ReferenceMode == FbxGeometryElement::eIndexToDirect);
+    return Result;
+}
+
 mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
 {
     if(Context->MeshNodes.Count == 0)
@@ -159,18 +171,24 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     FbxGeometryElementNormal* ElementNormals = Mesh->GetElementNormal(0);
     BOOL_CHECK_AND_HANDLE(ElementNormals, "Mesh did not have any normals.");                        
     
-    FbxLayerElement::EMappingMode MappingMode = ElementNormals->GetMappingMode();
-    BOOL_CHECK_AND_HANDLE((MappingMode == FbxGeometryElement::eByPolygonVertex) || (MappingMode == FbxGeometryElement::eByControlPoint),
-                          "Mapping mode for normals is not supported. Must be by polygon vertex or control point.");                                                                              
+    FbxLayerElement::EMappingMode NormalMappingMode = ElementNormals->GetMappingMode();
+    BOOL_CHECK_AND_HANDLE(ValidateMappingMode(NormalMappingMode), "Mapping mode for normals is not supported. Must be by polygon vertex or control point.");                                                                              
     
-    FbxLayerElement::EReferenceMode ReferenceMode = ElementNormals->GetReferenceMode();
-    BOOL_CHECK_AND_HANDLE((ReferenceMode == FbxGeometryElement::eDirect) || (ReferenceMode == FbxGeometryElement::eIndexToDirect),
-                          "Reference mode for normals is not supported. Must be direct or index to direct.");
+    FbxLayerElement::EReferenceMode NormalReferenceMode = ElementNormals->GetReferenceMode();
+    BOOL_CHECK_AND_HANDLE(ValidateReferenceMode(NormalReferenceMode), "Reference mode for normals is not supported. Must be direct or index to direct.");        
     
+    FbxGeometryElementUV* ElementUVs = Mesh->GetElementUV(0);
+    BOOL_CHECK_AND_HANDLE(ElementUVs, "Mesh  did not have any uvs supplied.");
+    
+    FbxLayerElement::EMappingMode UVMappingMode = ElementUVs->GetMappingMode();
+    BOOL_CHECK_AND_HANDLE(ValidateMappingMode(UVMappingMode), "Mapping mode for uvs is not supported. Must be by polygon vertex or control point.");
+    
+    FbxLayerElement::EReferenceMode UVReferenceMode = ElementUVs->GetReferenceMode();
+    BOOL_CHECK_AND_HANDLE(ValidateReferenceMode(UVReferenceMode), "Reference mode for uvs is not supported. Must be direct or index to direct.");    
+                                                  
     u32 ControlPointCount = Mesh->GetControlPointsCount();
     FbxVector4* ControlPoints = Mesh->GetControlPoints();                        
-    
-    
+        
     u32 SkinCount = Mesh->GetDeformerCount(FbxDeformer::eSkin);                        
     
     control_point_joint_data* JointsData = NULL;
@@ -240,13 +258,13 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     
     mesh Result = {};
     
-    hash_table<vertex_p3_n3_index> HashTable = CreateHashTable<vertex_p3_n3_index>(FBX_HASH_SIZE);     
+    hash_table<vertex_p3_n3_uv_index> HashTable = CreateHashTable<vertex_p3_n3_uv_index>(FBX_HASH_SIZE*4);     
     
     void* VertexData;
     if(JointsData)
-        VertexData = PushArray(IndexCount, vertex_p3_n3_weights, Clear, 0);
+        VertexData = PushArray(IndexCount, vertex_p3_n3_uv_weights, Clear, 0);
     else
-        VertexData = PushArray(IndexCount, vertex_p3_n3, Clear, 0);
+        VertexData = PushArray(IndexCount, vertex_p3_n3_uv, Clear, 0);
     
     for(u32 PolygonIndex = 0; PolygonIndex < PolygonCount; PolygonIndex++)
     {
@@ -260,34 +278,53 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
             
             i32 ControlPointIndex = Mesh->GetPolygonVertex(PolygonIndex, VertexIndex);
             i32 NormalIndex = -1;
+            i32 UVIndex = -1;
             
-            if(MappingMode == FbxGeometryElement::eByPolygonVertex)
+            if(NormalMappingMode == FbxGeometryElement::eByPolygonVertex)
             {
-                if(ReferenceMode == FbxGeometryElement::eDirect)                    
+                if(NormalReferenceMode == FbxGeometryElement::eDirect)                    
                     NormalIndex = VertexId;                
-                else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)                
+                else if(NormalReferenceMode == FbxGeometryElement::eIndexToDirect)                
                     NormalIndex = ElementNormals->GetIndexArray().GetAt(VertexId);                
-                 INVALID_ELSE;
+                INVALID_ELSE;
             }
-            else if(MappingMode == FbxGeometryElement::eByControlPoint)
+            else if(NormalMappingMode == FbxGeometryElement::eByControlPoint)
             {
-                if(ReferenceMode == FbxGeometryElement::eDirect)
+                if(NormalReferenceMode == FbxGeometryElement::eDirect)
                     NormalIndex = ControlPointIndex;
-                else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)
+                else if(NormalReferenceMode == FbxGeometryElement::eIndexToDirect)
                     NormalIndex = ElementNormals->GetIndexArray().GetAt(ControlPointIndex);
                 INVALID_ELSE;
                     
             }
             INVALID_ELSE;
             
+            if(UVMappingMode == FbxGeometryElement::eByPolygonVertex)
+            {
+                if(UVReferenceMode == FbxGeometryElement::eDirect)
+                    UVIndex = VertexId;
+                else if(UVReferenceMode == FbxGeometryElement::eIndexToDirect)
+                    UVIndex = ElementUVs->GetIndexArray().GetAt(VertexId);
+                INVALID_ELSE;
+            }
+            else if(UVMappingMode == FbxGeometryElement::eByControlPoint)
+            {
+                if(UVReferenceMode == FbxGeometryElement::eDirect)
+                    UVIndex = ControlPointIndex;
+                else if(UVReferenceMode == FbxGeometryElement::eIndexToDirect)
+                    UVIndex = ElementUVs->GetIndexArray().GetAt(ControlPointIndex);
+                INVALID_ELSE;
+            }
+            
             TriangleP[VertexIndex] = V3(ControlPoints[ControlPointIndex].Buffer());
-            vertex_p3_n3 Vertex = 
+            vertex_p3_n3_uv Vertex = 
             {
                 TriangleP[VertexIndex],
-                V3(ElementNormals->GetDirectArray().GetAt(NormalIndex).Buffer())
+                V3(ElementNormals->GetDirectArray().GetAt(NormalIndex).Buffer()),
+                V2(ElementUVs->GetDirectArray().GetAt(UVIndex).Buffer())
             };
             
-            vertex_p3_n3_index Entry = {Vertex, VertexCount};
+            vertex_p3_n3_uv_index Entry = {Vertex, VertexCount};
             if(HashTable[Entry])
             {
                 IndexData[VertexId] = HashTable.Table[HashTable.GetHashIndex(Entry)].Key.Index;
@@ -297,16 +334,16 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
                 if(JointsData)
                 {
                     control_point_joint_data JointData = JointsData[ControlPointIndex];
-                    ((vertex_p3_n3_weights*)VertexData)[VertexCount] = 
+                    ((vertex_p3_n3_uv_weights*)VertexData)[VertexCount] = 
                     {
-                        V3(V4(Vertex.P, 1.0f)*Transform), Vertex.N*NormalTransform, 
+                        V3(V4(Vertex.P, 1.0f)*Transform), Vertex.N*NormalTransform, Vertex.UV,
                         JointData.Indices[0], JointData.Indices[1], JointData.Indices[2], JointData.Indices[3], 
                         (f32)JointData.Weights[0], (f32)JointData.Weights[1], (f32)JointData.Weights[2], (f32)JointData.Weights[3]
                     };
                 }
                 else
                 {
-                    ((vertex_p3_n3*)VertexData)[VertexCount] = {V3(V4(Vertex.P, 1.0f)*Transform), Vertex.N*NormalTransform};                                                                                       
+                    ((vertex_p3_n3_uv*)VertexData)[VertexCount] = {V3(V4(Vertex.P, 1.0f)*Transform), Vertex.N*NormalTransform, Vertex.UV};                                                                                       
                 }
                 
                 IndexData[VertexId] = VertexCount;                                    
@@ -318,14 +355,14 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     Result.VertexCount = VertexCount;    
     if(JointsData)
     {
-        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS;
-        Result.Vertices = PushWriteArray(Storage, VertexData, VertexCount, vertex_p3_n3_weights, 0);
+        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS;
+        Result.Vertices = PushWriteArray(Storage, VertexData, VertexCount, vertex_p3_n3_uv_weights, 0);
         
     }
     else
     {
-        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3;
-        Result.Vertices = PushWriteArray(Storage, VertexData, VertexCount, vertex_p3_n3, 0);
+        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3_UV;
+        Result.Vertices = PushWriteArray(Storage, VertexData, VertexCount, vertex_p3_n3_uv, 0);
     }
     
     Result.IndexCount = IndexCount;

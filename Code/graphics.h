@@ -13,8 +13,10 @@ enum graphics_vertex_format
     GRAPHICS_VERTEX_FORMAT_UNKNOWN,
     GRAPHICS_VERTEX_FORMAT_P2_UV_C,
     GRAPHICS_VERTEX_FORMAT_P3,
-    GRAPHICS_VERTEX_FORMAT_P3_N3,    
-    GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS
+    GRAPHICS_VERTEX_FORMAT_P3_N3,
+    GRAPHICS_VERTEX_FORMAT_P3_N3_UV,
+    GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS,
+    GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS
 };
 
 enum graphics_index_format
@@ -74,10 +76,19 @@ enum push_command_type
     PUSH_COMMAND_PROJECTION,    
     PUSH_COMMAND_CAMERA_VIEW,
     PUSH_COMMAND_SUBMIT_LIGHT_BUFFER,
+    PUSH_COMMAND_DRAW_COLORED_LINE_MESH,
+    PUSH_COMMAND_DRAW_COLORED_MESH,
+    PUSH_COMMAND_DRAW_TEXTURED_MESH,
+    PUSH_COMMAND_DRAW_COLORED_SKINNING_MESH,
+    PUSH_COMMAND_DRAW_TEXTURED_SKINNING_MESH,
+    PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_MESH,
+    PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_MESH,
+    PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_SKINNING_MESH,
+    PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_SKINNING_MESH,
     PUSH_COMMAND_DRAW_PHONG_COLORED_MESH,
-    PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH,
-    PUSH_COMMAND_DRAW_LINE_MESH,
-    PUSH_COMMAND_DRAW_FILLED_MESH, 
+    PUSH_COMMAND_DRAW_PHONG_TEXTURED_MESH,
+    PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH,    
+    PUSH_COMMAND_DRAW_PHONG_TEXTURED_SKINNING_MESH,    
     PUSH_COMMAND_DRAW_IMGUI_UI,    
 };
 
@@ -142,10 +153,110 @@ struct push_command_submit_light_buffer : public push_command
     graphics_light_buffer LightBuffer;
 };
 
+struct push_command_draw_colored_mesh : public push_command
+{
+    m4 WorldTransform;
+    c4 Color;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
+struct push_command_draw_textured_mesh : public push_command
+{
+    m4 WorldTransform;
+    i64 TextureID;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
+struct push_command_draw_colored_skinning_mesh : public push_command
+{
+    m4 WorldTransform;
+    c4 Color;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+    
+    m4* Joints;
+    u32 JointCount;
+};
+
+struct push_command_draw_textured_skinning_mesh : public push_command
+{
+    m4 WorldTransform;
+    i64 TextureID;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+    
+    m4* Joints;
+    u32 JointCount;
+};
+
+struct push_command_draw_lambertian_colored_mesh : public push_command
+{
+    m4 WorldTransform;
+    c4 DiffuseColor;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
+struct push_command_draw_lambertian_textured_mesh : public push_command
+{
+    m4 WorldTransform;
+    i64 DiffuseID;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
+struct push_command_draw_lambertian_colored_skinning_mesh : public push_command
+{
+    m4 WorldTransform;
+    c4 DiffuseColor;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+    
+    m4* Joints;
+    u32 JointCount;
+};
+
+struct push_command_draw_lambertian_textured_skinning_mesh : public push_command
+{
+    m4 WorldTransform;
+    i64 DiffuseID;
+    i64 MeshID;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+    
+    m4* Joints;
+    u32 JointCount;
+};
+
 struct push_command_draw_phong_colored_mesh : public push_command
 {    
     m4 WorldTransform;
-    c4 SurfaceColor;
+    c4 DiffuseColor;
     c4 SpecularColor;
     i32 Shininess;
     i64 MeshID;
@@ -155,10 +266,23 @@ struct push_command_draw_phong_colored_mesh : public push_command
     u32 VertexOffset;
 };
 
+struct push_command_draw_phong_textured_mesh : public push_command
+{
+    m4 WorldTransform;
+    i64 MeshID;
+    i64 DiffuseID;
+    i64 SpecularID;
+    i32 Shininess;
+    
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
 struct push_command_draw_phong_colored_skinning_mesh : public push_command
 {
     m4 WorldTransform;    
-    c4 SurfaceColor;
+    c4 DiffuseColor;
     c4 SpecularColor;    
     i32 Shininess;
     i64 MeshID;
@@ -171,26 +295,20 @@ struct push_command_draw_phong_colored_skinning_mesh : public push_command
     u32 JointCount;
 };
 
-struct push_command_draw_line_mesh : public push_command
-{    
-    m4 WorldTransform;
-    f32 R, G, B, A;
-    i64 MeshID;
-    
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
-};
-
-struct push_command_draw_filled_mesh : public push_command
+struct push_command_draw_phong_textured_skinning_mesh : public push_command
 {
     m4 WorldTransform;
-    f32 R, G, B, A;
     i64 MeshID;
+    i64 DiffuseID;
+    i64 SpecularID;
+    i32 Shininess;
     
     u32 IndexCount;
     u32 IndexOffset;
     u32 VertexOffset;
+    
+    m4* Joints;
+    u32 JointCount;
 };
 
 struct push_command_draw_imgui_ui : public push_command
@@ -213,7 +331,7 @@ struct push_command_list
 
 struct graphics;
 
-#define ALLOCATE_TEXTURE(name) i64 name(graphics* Graphics, void* Data, v2i Dimensions, graphics_sampler_info* SamplerInfo)
+#define ALLOCATE_TEXTURE(name) i64 name(graphics* Graphics, void* Data, v2i Dimensions, b32 sRGB, graphics_sampler_info* SamplerInfo)
 typedef ALLOCATE_TEXTURE(allocate_texture);
 
 #define ALLOCATE_MESH(name) i64 name(graphics* Graphics, void* VertexData, ptr VertexDataSize, graphics_vertex_format VertexFormat, void* IndexData, ptr IndexDataSize, graphics_index_format IndexFormat)
@@ -283,7 +401,9 @@ GetVertexStride(graphics_vertex_format Format)
         case GRAPHICS_VERTEX_FORMAT_P2_UV_C: { Result = sizeof(vertex_p2_uv_c); } break;        
         case GRAPHICS_VERTEX_FORMAT_P3: { Result = sizeof(vertex_p3); } break;        
         case GRAPHICS_VERTEX_FORMAT_P3_N3: { Result = sizeof(vertex_p3_n3); } break;        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV: { Result = sizeof(vertex_p3_n3_uv); } break;
         case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS: { Result = sizeof(vertex_p3_n3_weights); } break;
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS: { Result = sizeof(vertex_p3_n3_uv_weights); } break;
         INVALID_DEFAULT_CASE;
     }
     

@@ -51,6 +51,24 @@ inline world_entity_id MakeEntityID(u64 ID, u32 WorldIndex) { world_entity_id Re
 inline world_entity_id InvalidEntityID() { return MakeEntityID(0, (u32)-1); }
 inline b32 IsInvalidEntityID(world_entity_id ID) { return (ID.ID == 0) || ((ID.WorldIndex != 0) && (ID.WorldIndex != 1)); }
 
+struct texture_color_handle
+{
+    b32 IsUsed;
+    b32 IsTexture;
+    union
+    {
+        c4 Color;
+        texture* Texture;
+    };
+};
+
+struct material
+{
+    texture_color_handle Diffuse;
+    texture_color_handle Specular;
+    i32 Shininess;    
+};
+
 struct world_entity
 {
     world_entity_type Type;            
@@ -65,7 +83,10 @@ struct world_entity
         };
     };
     
+    material Material;
+    
     c4 Color;
+    
     v3f Velocity;        
     
     v3f CollidedNormal;

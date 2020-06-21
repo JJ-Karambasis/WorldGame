@@ -15,29 +15,29 @@ void main()
 )";
 
 global const char* VertexShader_LocalToClip = R"(
-#define HAS_SKINNING %d
-#define HAS_NORMALS  %d
-
 uniform m4 Projection;
 uniform m4 View;
 uniform m4 Model;
 
-#if HAS_SKINNING
-#define MAX_JOINT_COUNT %d
+#ifdef HAS_SKINNING
 layout (std140) uniform SkinningBuffer
 {
     m4 Joints[MAX_JOINT_COUNT];    
 };
 #endif
 
-#if HAS_NORMALS
+#ifdef HAS_NORMALS
 out v3f ViewP;
 out v3f ViewN;
 #endif
 
+#ifdef HAS_TEXTURES
+out v2f FragUV;
+#endif
+
 void main()
 {
-#if HAS_SKINNING
+#ifdef HAS_SKINNING
     u32 I0 = (JointI >> 0)  & u32(0x000000FF);
     u32 I1 = (JointI >> 8)  & u32(0x000000FF);
     u32 I2 = (JointI >> 16) & u32(0x000000FF);
@@ -54,7 +54,7 @@ void main()
     VertexP += W2*(Joints[I2]*v4f(Position, 1.0f));
     VertexP += W3*(Joints[I3]*v4f(Position, 1.0f));
 
-#if HAS_NORMALS
+#ifdef HAS_NORMALS
     v3f VertexN = v3f(0);
     VertexN += W0*(m3(Joints[I0])*Normal);
     VertexN += W1*(m3(Joints[I1])*Normal);
@@ -66,7 +66,7 @@ void main()
     
     v4f VertexP = v4f(Position, 1.0f);
 
-#if HAS_NORMALS
+#ifdef HAS_NORMALS
     v3f VertexN = Normal;
 #endif
 
@@ -74,9 +74,13 @@ void main()
 
     m4 ModelView = View*Model;
     
-#if HAS_NORMALS
+#ifdef HAS_NORMALS
     ViewP = v3f(ModelView*VertexP);
     ViewN = m3(transpose(inverse(ModelView)))*VertexN;
+#endif
+
+#ifdef HAS_TEXTURES
+    FragUV = UV;
 #endif
 
     gl_Position = Projection*ModelView*VertexP;    

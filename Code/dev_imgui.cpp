@@ -15,7 +15,7 @@ i64 AllocateImGuiFont(graphics* Graphics)
     SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
     SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
     
-    i64 FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, &SamplerInfo);        
+    i64 FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, false, &SamplerInfo);        
     IO->Fonts->TexID = (ImTextureID)FontTexture;    
     return FontTexture;
 }

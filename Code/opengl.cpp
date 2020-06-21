@@ -38,6 +38,31 @@ SetUniform4f(GLint Uniform, v4f Value)
     glUniform4f(Uniform, Value.x, Value.y, Value.z, Value.w);
 }
 
+b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
+{
+    if(*BoundProgram != NewProgram)
+    {
+        *BoundProgram = NewProgram;
+        glUseProgram(*BoundProgram);
+        return true;
+    }
+    
+    return false;
+}
+
+inline void
+SetProgramAndMVPUniforms(GLuint* BoundProgram, GLuint Program, mvp_uniforms* Uniforms, 
+                         m4* Model, m4* View, m4* Projection)
+{    
+    if(BindProgram(BoundProgram, Program))
+    {
+        glUniformMatrix4fv(Uniforms->Projection, 1, GL_FALSE, Projection->M);
+        glUniformMatrix4fv(Uniforms->View, 1, GL_FALSE, View->M);                    
+    }
+    
+    glUniformMatrix4fv(Uniforms->Model, 1, GL_FALSE, Model->M);    
+}
+
 b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
 {    
     if(*BoundVAO != NewVAO)
@@ -50,16 +75,29 @@ b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
     return false;
 }
 
-b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
-{
-    if(*BoundProgram != NewProgram)
-    {
-        *BoundProgram = NewProgram;
-        glUseProgram(*BoundProgram);
-        return true;
+void UploadSkinningMatrices(opengl_buffer_list* SkinningBuffers, u32 SkinningIndex, u32 JointCount, m4* Joints)
+{    
+    ASSERT(SkinningIndex <= SkinningBuffers->Count);    
+    
+    if(SkinningIndex == SkinningBuffers->Count)
+    {                    
+        ASSERT(SkinningBuffers->Count < SkinningBuffers->Capacity);
+        GLuint SkinningUBO; 
+        
+        glGenBuffers(1, &SkinningUBO);
+        glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(m4)*MAX_JOINT_COUNT, NULL, GL_STATIC_DRAW);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        
+        glBindBufferBase(GL_UNIFORM_BUFFER, SKINNING_BUFFER_INDEX, SkinningUBO);                    
+        
+        SkinningBuffers->Ptr[SkinningBuffers->Count++] = SkinningUBO;                                                                                                    
     }
     
-    return false;
+    GLuint SkinningUBO = SkinningBuffers->Ptr[SkinningIndex];
+    glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(m4)*JointCount, Joints);                                
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
 inline GLenum
@@ -93,7 +131,8 @@ ALLOCATE_TEXTURE(AllocateTexture)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, MinFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, MagFilter);
     
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Dimensions.width, Dimensions.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Data);
+    GLint InternalFormat = sRGB ? GL_SRGB_ALPHA : GL_RGBA;
+    glTexImage2D(GL_TEXTURE_2D, 0, InternalFormat, Dimensions.width, Dimensions.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Data);
     
     glBindTexture(GL_TEXTURE_2D, 0);
     
@@ -122,33 +161,39 @@ ALLOCATE_MESH(AllocateMesh)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Mesh->EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndexDataSize, IndexData, GL_STATIC_DRAW);
     
+    GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
     switch(VertexFormat)
     {
         case GRAPHICS_VERTEX_FORMAT_P3:
-        {                        
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
+        {                                    
             glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3, P));
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
         } break;
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3:
-        {
-            GLuint PAttribute = 0;
-            GLuint NAttribute = 1;
-            
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
+        {                        
             glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, P));
             glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, N));            
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
             
+        } break; 
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV:
+        {            
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, N));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, UV)); 
+            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
         } break;
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS:
-        {            
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
+        {                        
             glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, P));
             glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, N));            
             glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointI));                        
@@ -159,6 +204,21 @@ ALLOCATE_MESH(AllocateMesh)
             glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
         } break;
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS:
+        {
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, N));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, UV)); 
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointW));
+            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
+        } break;        
         
         INVALID_DEFAULT_CASE;
     }
@@ -360,7 +420,7 @@ b32 Platform_InitOpenGL(void** PlatformData)
     return true;
     
     handle_error:
-        
+    
     return false;
 }
 
@@ -451,6 +511,7 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLDELETESHADERPROC, glDeleteShader);
     LOAD_FUNCTION(PFNGLDELETEPROGRAMPROC, glDeleteProgram);
     LOAD_FUNCTION(PFNGLUNIFORM1IPROC, glUniform1i);
+    LOAD_FUNCTION(PFNGLACTIVETEXTUREPROC, glActiveTexture);
     
 #if DEVELOPER_BUILD
     
@@ -481,16 +542,16 @@ do \
            if(Shader.Valid) \
            { \
                glDeleteProgram(OpenGL->##shader.Program); \
-               OpenGL->##shader = Shader; \
-} \
-else \
-               { \
-                   ASSERT(OpenGL->##shader.Program > 0); \
-                          OpenGL->##shader.Valid = true; \
-               } \
+                               OpenGL->##shader = Shader; \
            } \
-       } while(0)
-       
+           else \
+           { \
+               ASSERT(OpenGL->##shader.Program > 0); \
+                      OpenGL->##shader.Valid = true; \
+           } \
+       } \
+} while(0)
+
 extern "C"
 EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {
@@ -508,9 +569,17 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     
     CHECK_SHADER(ImGuiShader);
     CHECK_SHADER(ColorShader);
+    CHECK_SHADER(TextureShader);
     CHECK_SHADER(ColorSkinningShader);
+    CHECK_SHADER(TextureSkinningShader);
+    CHECK_SHADER(LambertianColorShader);
+    CHECK_SHADER(LambertianTextureShader);
+    CHECK_SHADER(LambertianColorSkinningShader);
+    CHECK_SHADER(LambertianTextureSkinningShader);
     CHECK_SHADER(PhongColorShader);
+    CHECK_SHADER(PhongTextureShader);
     CHECK_SHADER(PhongColorSkinningShader);
+    CHECK_SHADER(PhongTextureSkinningShader);
     
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
@@ -531,7 +600,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     GLuint BoundVAO = (GLuint)-1;
     
     u32 SkinningIndex = 0;
-        
+    
     push_command_list* CommandList = &Graphics->CommandList;        
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
     {
@@ -656,25 +725,165 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 glBindBuffer(GL_UNIFORM_BUFFER, 0);
             } break;
             
+            case PUSH_COMMAND_DRAW_COLORED_LINE_MESH:
+            case PUSH_COMMAND_DRAW_COLORED_MESH:
+            {
+                push_command_draw_colored_mesh* DrawColoredMesh = (push_command_draw_colored_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawColoredMesh->MeshID);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->ColorShader.Program, &OpenGL->ColorShader.MVPUniforms,
+                                         &DrawColoredMesh->WorldTransform, &CameraView, &Projection);
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                SetUniform4f(OpenGL->ColorShader.ColorUniform, DrawColoredMesh->Color);                
+                
+                GLenum PrimitiveType = (Command->Type == PUSH_COMMAND_DRAW_COLORED_LINE_MESH) ? GL_LINES : GL_TRIANGLES;
+                
+                glDrawElementsBaseVertex(PrimitiveType, DrawColoredMesh->IndexCount, Mesh->IndexType, 
+                                         (void*)(DrawColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                                         DrawColoredMesh->VertexOffset);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_TEXTURED_MESH:
+            {
+                push_command_draw_textured_mesh* DrawTexturedMesh = (push_command_draw_textured_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawTexturedMesh->MeshID);
+                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawTexturedMesh->TextureID);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->TextureShader.Program, &OpenGL->TextureShader.MVPUniforms,
+                                         &DrawTexturedMesh->WorldTransform, &CameraView, &Projection);                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glBindTexture(GL_TEXTURE_2D, Texture->Handle);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawTexturedMesh->IndexCount, Mesh->IndexType, 
+                                         (void*)(DrawTexturedMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
+                                         DrawTexturedMesh->VertexOffset);                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_COLORED_SKINNING_MESH:
+            {
+                push_command_draw_colored_skinning_mesh* DrawColoredSkinningMesh = (push_command_draw_colored_skinning_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawColoredSkinningMesh->MeshID);
+                
+                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawColoredSkinningMesh->JointCount, DrawColoredSkinningMesh->Joints);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->ColorSkinningShader.Program, &OpenGL->ColorSkinningShader.MVPUniforms,
+                                         &DrawColoredSkinningMesh->WorldTransform, &CameraView, &Projection);
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                SetUniform4f(OpenGL->ColorShader.ColorUniform, DrawColoredSkinningMesh->Color);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawColoredSkinningMesh->IndexCount, Mesh->IndexType, 
+                                         (void*)(DrawColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                                         DrawColoredSkinningMesh->VertexOffset);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_TEXTURED_SKINNING_MESH:
+            {
+                push_command_draw_textured_skinning_mesh* DrawTexturedSkinningMesh = (push_command_draw_textured_skinning_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawTexturedSkinningMesh->MeshID);
+                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawTexturedSkinningMesh->TextureID);
+                
+                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawTexturedSkinningMesh->JointCount, DrawTexturedSkinningMesh->Joints);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->TextureSkinningShader.Program, &OpenGL->TextureSkinningShader.MVPUniforms,
+                                         &DrawTexturedSkinningMesh->WorldTransform, &CameraView, &Projection);
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glBindTexture(GL_TEXTURE_2D, Texture->Handle);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawTexturedSkinningMesh->IndexCount, Mesh->IndexType,
+                                         (void*)(DrawTexturedSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
+                                         DrawTexturedSkinningMesh->VertexOffset);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_MESH:
+            {
+                push_command_draw_lambertian_colored_mesh* DrawLambertianColoredMesh = (push_command_draw_lambertian_colored_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianColoredMesh->MeshID);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianColorShader.Program, &OpenGL->LambertianColorShader.MVPUniforms,
+                                         &DrawLambertianColoredMesh->WorldTransform, &CameraView, &Projection);
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                SetUniform4f(OpenGL->LambertianColorShader.DiffuseColorUniform, DrawLambertianColoredMesh->DiffuseColor);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianColoredMesh->IndexCount, Mesh->IndexType, 
+                                         (void*)(DrawLambertianColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                                         DrawLambertianColoredMesh->VertexOffset);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_MESH:
+            {
+                push_command_draw_lambertian_textured_mesh* DrawLambertianTexturedMesh = (push_command_draw_lambertian_textured_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianTexturedMesh->MeshID);
+                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawLambertianTexturedMesh->DiffuseID);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianTextureShader.Program, &OpenGL->LambertianTextureShader.MVPUniforms,
+                                         &DrawLambertianTexturedMesh->WorldTransform, &CameraView, &Projection);                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianTexturedMesh->IndexCount, Mesh->IndexType,
+                                         (void*)(DrawLambertianTexturedMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
+                                         DrawLambertianTexturedMesh->VertexOffset);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_SKINNING_MESH:
+            {
+                push_command_draw_lambertian_colored_skinning_mesh* DrawLambertianColoredSkinningMesh = (push_command_draw_lambertian_colored_skinning_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianColoredSkinningMesh->MeshID);
+                
+                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawLambertianColoredSkinningMesh->JointCount, DrawLambertianColoredSkinningMesh->Joints);
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianColorSkinningShader.Program, &OpenGL->LambertianColorShader.MVPUniforms,
+                                         &DrawLambertianColoredSkinningMesh->WorldTransform, &CameraView, &Projection);
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                SetUniform4f(OpenGL->LambertianColorSkinningShader.DiffuseColorUniform, DrawLambertianColoredSkinningMesh->DiffuseColor);
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianColoredSkinningMesh->IndexCount, Mesh->IndexType, 
+                                         (void*)(DrawLambertianColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                                         DrawLambertianColoredSkinningMesh->VertexOffset);
+            } break;
+            
+            case PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_SKINNING_MESH:
+            {
+                push_command_draw_lambertian_textured_skinning_mesh* DrawLambertianTexturedSkinningMesh = (push_command_draw_lambertian_textured_skinning_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianTexturedSkinningMesh->MeshID);
+                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawLambertianTexturedSkinningMesh->DiffuseID);
+                
+                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawLambertianTexturedSkinningMesh->JointCount, DrawLambertianTexturedSkinningMesh->Joints);
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianTextureSkinningShader.Program, &OpenGL->LambertianTextureShader.MVPUniforms,
+                                         &DrawLambertianTexturedSkinningMesh->WorldTransform, &CameraView, &Projection);
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianTexturedSkinningMesh->IndexCount, Mesh->IndexType,
+                                         (void*)(DrawLambertianTexturedSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
+                                         DrawLambertianTexturedSkinningMesh->VertexOffset);
+            } break;
+            
             case PUSH_COMMAND_DRAW_PHONG_COLORED_MESH:
             {
                 push_command_draw_phong_colored_mesh* DrawPhongColoredMesh = (push_command_draw_phong_colored_mesh*)Command;                                                
                 
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredMesh->MeshID);
                 
-                if(BindProgram(&BoundProgram, OpenGL->PhongColorShader.Program))
-                {                                        
-                    glUniformMatrix4fv(OpenGL->PhongColorShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->PhongColorShader.ViewUniform, 1, GL_FALSE, CameraView.M);                    
-                }
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorShader.Program, &OpenGL->PhongColorShader.MVPUniforms,
+                                         &DrawPhongColoredMesh->WorldTransform, &CameraView, &Projection);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->PhongColorShader.ModelUniform, 1, GL_FALSE, DrawPhongColoredMesh->WorldTransform.M);
-                
-                c4 SurfaceColor = DrawPhongColoredMesh->SurfaceColor;
+                c4 DiffuseColor = DrawPhongColoredMesh->DiffuseColor;
                 c4 SpecularColor = DrawPhongColoredMesh->SpecularColor;
-                SetUniform4f(OpenGL->PhongColorShader.SurfaceColorUniform,  SurfaceColor);
+                SetUniform4f(OpenGL->PhongColorShader.DiffuseColorUniform,  DiffuseColor);
                 SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
                 glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredMesh->Shininess);
                 
@@ -684,56 +893,81 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
             } break;            
             
+            case PUSH_COMMAND_DRAW_PHONG_TEXTURED_MESH:
+            {
+                push_command_draw_phong_textured_mesh* DrawPhongTexturedMesh = (push_command_draw_phong_textured_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongTexturedMesh->MeshID);
+                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawPhongTexturedMesh->DiffuseID);
+                opengl_texture* Specular = GetByID(&OpenGL->TexturePool, DrawPhongTexturedMesh->SpecularID);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureShader.Program, &OpenGL->PhongTextureShader.MVPUniforms,
+                                         &DrawPhongTexturedMesh->WorldTransform, &CameraView, &Projection);
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glUniform1i(OpenGL->PhongTextureShader.ShininessUniform, DrawPhongTexturedMesh->Shininess);
+                
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, Specular->Handle);
+                
+                glUniform1i(OpenGL->PhongTextureShader.DiffuseUniform, 0);
+                glUniform1i(OpenGL->PhongTextureShader.SpecularUniform, 1);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongTexturedMesh->IndexCount, Mesh->IndexType,
+                                         (void*)(DrawPhongTexturedMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
+                                         DrawPhongTexturedMesh->VertexOffset);
+            } break;
+            
             case PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH:
             {
                 push_command_draw_phong_colored_skinning_mesh* DrawPhongColoredSkinningMesh = (push_command_draw_phong_colored_skinning_mesh*)Command;
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredSkinningMesh->MeshID);                
                 
-                opengl_buffer_list* BufferList = &OpenGL->SkinningBuffers;      
-                ASSERT(SkinningIndex <= BufferList->Count);
-                
-                if(SkinningIndex == BufferList->Count)
-                {                    
-                    ASSERT(BufferList->Count < BufferList->Capacity);
-                    GLuint SkinningUBO; 
-                    
-                    glGenBuffers(1, &SkinningUBO);
-                    glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
-                    glBufferData(GL_UNIFORM_BUFFER, sizeof(m4)*MAX_JOINT_COUNT, NULL, GL_STATIC_DRAW);
-                    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-                    
-                    glBindBufferBase(GL_UNIFORM_BUFFER, SKINNING_BUFFER_INDEX, SkinningUBO);                    
-                    
-                    BufferList->Ptr[BufferList->Count++] = SkinningUBO;                                                                                                    
-                }
-                
-                GLuint SkinningUBO = BufferList->Ptr[SkinningIndex];
-                glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
-                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(m4)*DrawPhongColoredSkinningMesh->JointCount, DrawPhongColoredSkinningMesh->Joints);                                
-                glBindBuffer(GL_UNIFORM_BUFFER, 0);
-                
-                if(BindProgram(&BoundProgram, OpenGL->PhongColorSkinningShader.Program))
-                {
-                    glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ViewUniform, 1, GL_FALSE, CameraView.M);
-                }
+                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongColoredSkinningMesh->JointCount, DrawPhongColoredSkinningMesh->Joints);
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorSkinningShader.Program, &OpenGL->PhongColorSkinningShader.MVPUniforms,
+                                         &DrawPhongColoredSkinningMesh->WorldTransform, &CameraView, &Projection);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
-                glUniformMatrix4fv(OpenGL->PhongColorSkinningShader.ModelUniform, 1, GL_FALSE, DrawPhongColoredSkinningMesh->WorldTransform.M);
-                
-                
-                c4 SurfaceColor = DrawPhongColoredSkinningMesh->SurfaceColor;
+                c4 DiffuseColor = DrawPhongColoredSkinningMesh->DiffuseColor;
                 c4 SpecularColor = DrawPhongColoredSkinningMesh->SpecularColor;
-                SetUniform4f(OpenGL->PhongColorShader.SurfaceColorUniform,  SurfaceColor);
+                SetUniform4f(OpenGL->PhongColorShader.DiffuseColorUniform,  DiffuseColor);
                 SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
                 glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredSkinningMesh->Shininess);
                 
                 glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongColoredSkinningMesh->IndexCount, Mesh->IndexType, 
                                          (void*)(DrawPhongColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawPhongColoredSkinningMesh->VertexOffset);
+                                         DrawPhongColoredSkinningMesh->VertexOffset);                                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_PHONG_TEXTURED_SKINNING_MESH:
+            {
+                push_command_draw_phong_textured_skinning_mesh* DrawPhongTexturedSkinningMesh = (push_command_draw_phong_textured_skinning_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongTexturedSkinningMesh->MeshID);
+                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawPhongTexturedSkinningMesh->DiffuseID);
+                opengl_texture* Specular = GetByID(&OpenGL->TexturePool, DrawPhongTexturedSkinningMesh->SpecularID);
                 
-                SkinningIndex++;
+                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongTexturedSkinningMesh->JointCount, DrawPhongTexturedSkinningMesh->Joints);
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureSkinningShader.Program, &OpenGL->PhongTextureSkinningShader.MVPUniforms,
+                                         &DrawPhongTexturedSkinningMesh->WorldTransform, &CameraView, &Projection);                
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glUniform1i(OpenGL->PhongTextureSkinningShader.ShininessUniform, DrawPhongTexturedSkinningMesh->Shininess);
+                
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, Specular->Handle);
+                
+                glUniform1i(OpenGL->PhongTextureSkinningShader.DiffuseUniform, 0);
+                glUniform1i(OpenGL->PhongTextureSkinningShader.SpecularUniform, 1);
+                
+                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongTexturedSkinningMesh->IndexCount, Mesh->IndexType,
+                                         (void*)(DrawPhongTexturedSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
+                                         DrawPhongTexturedSkinningMesh->VertexOffset);
             } break;
             
             case PUSH_COMMAND_DRAW_IMGUI_UI:
@@ -748,55 +982,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
+                glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, Texture->Handle);
-                
+                                                
                 glDrawElementsBaseVertex(GL_TRIANGLES, DrawImGuiUI->IndexCount, Mesh->IndexType, 
                                          (void*)(DrawImGuiUI->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
                                          DrawImGuiUI->VertexOffset);
                 
-            } break;
-            
-            case PUSH_COMMAND_DRAW_LINE_MESH:
-            {
-                push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;                
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLineMesh->MeshID);                
-                
-                if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
-                {                    
-                    glUniformMatrix4fv(OpenGL->ColorShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->ColorShader.ViewUniform, 1, GL_FALSE, CameraView.M);
-                }
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniformMatrix4fv(OpenGL->ColorShader.ModelUniform, 1, GL_FALSE, DrawLineMesh->WorldTransform.M);
-                glUniform4f(OpenGL->ColorShader.ColorUniform, DrawLineMesh->R, DrawLineMesh->G, DrawLineMesh->B, DrawLineMesh->A);
-                
-                glDrawElementsBaseVertex(GL_LINES, DrawLineMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawLineMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawLineMesh->VertexOffset);
-                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_FILLED_MESH:
-            {
-                push_command_draw_filled_mesh* DrawFilledMesh = (push_command_draw_filled_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawFilledMesh->MeshID);
-                
-                if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
-                {                    
-                    glUniformMatrix4fv(OpenGL->ColorShader.ProjectionUniform, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->ColorShader.ViewUniform, 1, GL_FALSE, CameraView.M);
-                }
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniformMatrix4fv(OpenGL->ColorShader.ModelUniform, 1, GL_FALSE, DrawFilledMesh->WorldTransform.M);
-                glUniform4f(OpenGL->ColorShader.ColorUniform, DrawFilledMesh->R, DrawFilledMesh->G, DrawFilledMesh->B, DrawFilledMesh->A);
-                
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawFilledMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawFilledMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawFilledMesh->VertexOffset);                
             } break;
             
             INVALID_DEFAULT_CASE;

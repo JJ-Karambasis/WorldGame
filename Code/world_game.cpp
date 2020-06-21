@@ -6,6 +6,7 @@
 #include "player.cpp"
 #include "wav.cpp"
 #include "fbx.cpp"
+#include "png.cpp"
 #include "assets.cpp"
 #include "graphics.cpp"
 
@@ -52,6 +53,8 @@ EXPORT GAME_TICK(Tick)
         Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "TestPlayerMesh.fbx");
         Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
         Game->Assets->TestAudio2 = LoadAudio(Game->Assets, "TestSound2.wav");
+        Game->Assets->TestDiffuse = LoadTexture(Game->Assets, "TestDiffuse.png", true);
+        Game->Assets->TestSpecular = LoadTexture(Game->Assets, "TestSpecular.png", false);
         
         PlayAudio(Game, &Game->Assets->TestAudio, 1.0f);
         
