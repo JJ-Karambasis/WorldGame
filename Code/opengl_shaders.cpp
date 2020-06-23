@@ -358,9 +358,10 @@ phong_color_shader CreatePhongColorShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);        
-        Result.DiffuseColorUniform  = glGetUniformLocation(Program, "DiffuseColor");
-        Result.SpecularColorUniform = glGetUniformLocation(Program, "SpecularColor");
-        Result.ShininessUniform     = glGetUniformLocation(Program, "Shininess");
+        Result.DiffuseColorUniform   = glGetUniformLocation(Program, "DiffuseColor");
+        Result.SpecularColorUniform  = glGetUniformLocation(Program, "SpecularColor");
+        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
+        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");
         
         Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");
         glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
@@ -383,9 +384,10 @@ phong_texture_shader CreatePhongTextureShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);
-        Result.ShininessUniform = glGetUniformLocation(Program, "Shininess");
-        Result.DiffuseUniform = glGetUniformLocation(Program, "DiffuseTexture");
-        Result.SpecularUniform = glGetUniformLocation(Program, "SpecularTexture");
+        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
+        Result.DiffuseUniform        = glGetUniformLocation(Program, "DiffuseTexture");
+        Result.SpecularUniform       = glGetUniformLocation(Program, "SpecularTexture");
+        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");
         
         Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");
         glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
@@ -408,9 +410,10 @@ phong_color_skinning_shader CreatePhongColorSkinningShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);
-        Result.DiffuseColorUniform  = glGetUniformLocation(Program, "DiffuseColor");
-        Result.SpecularColorUniform = glGetUniformLocation(Program, "SpecularColor");
-        Result.ShininessUniform     = glGetUniformLocation(Program, "Shininess");
+        Result.DiffuseColorUniform   = glGetUniformLocation(Program, "DiffuseColor");
+        Result.SpecularColorUniform  = glGetUniformLocation(Program, "SpecularColor");
+        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
+        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");
         
         Result.SkinningIndex = glGetUniformBlockIndex(Program, "SkinningBuffer");
         Result.LightIndex    = glGetUniformBlockIndex(Program, "LightBuffer");
@@ -435,9 +438,10 @@ phong_texture_skinning_shader CreatePhongTextureSkinningShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);
-        Result.DiffuseUniform = glGetUniformLocation(Program, "DiffuseTexture");
-        Result.SpecularUniform = glGetUniformLocation(Program, "SpecularTexture");
-        Result.ShininessUniform = glGetUniformLocation(Program, "Shininess");
+        Result.DiffuseUniform        = glGetUniformLocation(Program, "DiffuseTexture");
+        Result.SpecularUniform       = glGetUniformLocation(Program, "SpecularTexture");
+        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
+        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");        
         
         Result.SkinningIndex = glGetUniformBlockIndex(Program, "SkinningBuffer");
         Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");

@@ -38,6 +38,12 @@ SetUniform4f(GLint Uniform, v4f Value)
     glUniform4f(Uniform, Value.x, Value.y, Value.z, Value.w);
 }
 
+inline void 
+SetUniform3f(GLint Uniform, v3f Value)
+{
+    glUniform3f(Uniform, Value.x, Value.y, Value.z);
+}
+
 b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
 {
     if(*BoundProgram != NewProgram)
@@ -50,17 +56,19 @@ b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
     return false;
 }
 
-inline void
+inline b32
 SetProgramAndMVPUniforms(GLuint* BoundProgram, GLuint Program, mvp_uniforms* Uniforms, 
                          m4* Model, m4* View, m4* Projection)
-{    
-    if(BindProgram(BoundProgram, Program))
+{   
+    b32 Result = BindProgram(BoundProgram, Program);
+    if(Result)
     {
         glUniformMatrix4fv(Uniforms->Projection, 1, GL_FALSE, Projection->M);
-        glUniformMatrix4fv(Uniforms->View, 1, GL_FALSE, View->M);                    
+        glUniformMatrix4fv(Uniforms->View, 1, GL_FALSE, View->M);                            
     }
     
     glUniformMatrix4fv(Uniforms->Model, 1, GL_FALSE, Model->M);    
+    return Result;
 }
 
 b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
@@ -512,6 +520,7 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLDELETEPROGRAMPROC, glDeleteProgram);
     LOAD_FUNCTION(PFNGLUNIFORM1IPROC, glUniform1i);
     LOAD_FUNCTION(PFNGLACTIVETEXTUREPROC, glActiveTexture);
+    LOAD_FUNCTION(PFNGLUNIFORM3FPROC, glUniform3f);
     
 #if DEVELOPER_BUILD
     
@@ -583,6 +592,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     
     m4 Projection = IdentityM4();
     m4 CameraView = IdentityM4();
+    v3f CameraPosition = V3();
     
     if(!OpenGL->LightUBO)
     {
@@ -689,7 +699,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_CAMERA_VIEW:
             {
-                CameraView = ((push_command_4x4_matrix*)Command)->Matrix;
+                push_command_camera_view* CommandCameraView = (push_command_camera_view*)Command;
+                CameraView = CommandCameraView->Matrix;
+                CameraPosition = CommandCameraView->CameraPosition;                
             } break;
             
             case PUSH_COMMAND_SUBMIT_LIGHT_BUFFER:
@@ -705,8 +717,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
                     opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
                     
-                    DstLight->Direction = Normalize(V4(SrcLight->Direction, 0.0f)*CameraView);
-                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
+                    DstLight->Direction =  V4(SrcLight->Direction, 0.0f);
+                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);                    
                 }
                 
                 for(i32 PointLightIndex = 0; PointLightIndex < DstLightBuffer.PointLightCount; PointLightIndex++)
@@ -715,9 +727,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     opengl_point_light* DstLight = DstLightBuffer.PointLights + PointLightIndex;
                     
                     DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
-                    
-                    v4f LightPosition = V4(SrcLight->Position, 1.0f)*CameraView;
-                    DstLight->Position = V4(LightPosition.xyz, SrcLight->Radius);                                        
+                    DstLight->Position = V4(SrcLight->Position, SrcLight->Radius);                                                           
                 }
                 
                 glBindBuffer(GL_UNIFORM_BUFFER, OpenGL->LightUBO);
@@ -825,7 +835,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianTextureShader.Program, &OpenGL->LambertianTextureShader.MVPUniforms,
                                          &DrawLambertianTexturedMesh->WorldTransform, &CameraView, &Projection);                
-                BindVAO(&BoundVAO, Mesh->VAO);
+                BindVAO(&BoundVAO, Mesh->VAO);                                                                
                 
                 glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
                 
@@ -876,8 +886,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredMesh->MeshID);
                 
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorShader.Program, &OpenGL->PhongColorShader.MVPUniforms,
-                                         &DrawPhongColoredMesh->WorldTransform, &CameraView, &Projection);
+                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorShader.Program, &OpenGL->PhongColorShader.MVPUniforms,
+                                            &DrawPhongColoredMesh->WorldTransform, &CameraView, &Projection))                
+                    SetUniform3f(OpenGL->PhongColorShader.CameraPositionUniform, CameraPosition);                
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -900,8 +911,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawPhongTexturedMesh->DiffuseID);
                 opengl_texture* Specular = GetByID(&OpenGL->TexturePool, DrawPhongTexturedMesh->SpecularID);
                 
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureShader.Program, &OpenGL->PhongTextureShader.MVPUniforms,
-                                         &DrawPhongTexturedMesh->WorldTransform, &CameraView, &Projection);
+                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureShader.Program, &OpenGL->PhongTextureShader.MVPUniforms,
+                                            &DrawPhongTexturedMesh->WorldTransform, &CameraView, &Projection))
+                    SetUniform3f(OpenGL->PhongTextureShader.CameraPositionUniform, CameraPosition);                
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -926,8 +938,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredSkinningMesh->MeshID);                
                 
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongColoredSkinningMesh->JointCount, DrawPhongColoredSkinningMesh->Joints);
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorSkinningShader.Program, &OpenGL->PhongColorSkinningShader.MVPUniforms,
-                                         &DrawPhongColoredSkinningMesh->WorldTransform, &CameraView, &Projection);
+                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorSkinningShader.Program, &OpenGL->PhongColorSkinningShader.MVPUniforms,
+                                            &DrawPhongColoredSkinningMesh->WorldTransform, &CameraView, &Projection))
+                    SetUniform3f(OpenGL->PhongColorSkinningShader.CameraPositionUniform, CameraPosition);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -950,8 +963,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_texture* Specular = GetByID(&OpenGL->TexturePool, DrawPhongTexturedSkinningMesh->SpecularID);
                 
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongTexturedSkinningMesh->JointCount, DrawPhongTexturedSkinningMesh->Joints);
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureSkinningShader.Program, &OpenGL->PhongTextureSkinningShader.MVPUniforms,
-                                         &DrawPhongTexturedSkinningMesh->WorldTransform, &CameraView, &Projection);                
+                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureSkinningShader.Program, &OpenGL->PhongTextureSkinningShader.MVPUniforms,
+                                            &DrawPhongTexturedSkinningMesh->WorldTransform, &CameraView, &Projection))
+                    SetUniform3f(OpenGL->PhongTextureSkinningShader.CameraPositionUniform, CameraPosition);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 

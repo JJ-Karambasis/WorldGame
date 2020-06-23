@@ -27,8 +27,8 @@ layout (std140) uniform SkinningBuffer
 #endif
 
 #ifdef HAS_NORMALS
-out v3f ViewP;
-out v3f ViewN;
+out v3f FragPosition;
+out v3f FragNormal;
 #endif
 
 #ifdef HAS_TEXTURES
@@ -70,20 +70,19 @@ void main()
     v3f VertexN = Normal;
 #endif
 
-#endif
-
-    m4 ModelView = View*Model;
+#endif    
     
+    v3f WorldSpacePosition = v3f(Model*VertexP);
 #ifdef HAS_NORMALS
-    ViewP = v3f(ModelView*VertexP);
-    ViewN = m3(transpose(inverse(ModelView)))*VertexN;
+    FragPosition = WorldSpacePosition;
+    FragNormal = m3(transpose(inverse(Model)))*VertexN;
 #endif
 
 #ifdef HAS_TEXTURES
     FragUV = UV;
 #endif
 
-    gl_Position = Projection*ModelView*VertexP;    
+    gl_Position = Projection*View*v4f(WorldSpacePosition, 1.0f);
 }
 
 )";

@@ -37,8 +37,8 @@ void main()
 global const char* FragmentShader_Lighting = R"(
 out c4 FragColor;
 
-in v3f ViewP;
-in v3f ViewN;
+in v3f FragPosition;
+in v3f FragNormal;
 
 #ifdef HAS_TEXTURES
 in v2f FragUV;
@@ -89,6 +89,8 @@ layout (std140) uniform LightBuffer
     i32 PointLightCount;
 };
 
+uniform v3f CameraPosition;
+
 struct brdf
 {
     c3 Diffuse;
@@ -115,9 +117,12 @@ brdf BlinnPhong(v3f N, v3f L, v3f V, c3 LightColor, c3 SurfaceColor, c3 Specular
 }
 
 void main()
-{
-    v3f V = -normalize(ViewP);
-    v3f N = normalize(ViewN);
+{    
+    v3f N = normalize(FragNormal);
+
+#if LAMBERTIAN_MODEL == 0
+    v3f V = normalize(CameraPosition-FragPosition);
+#endif
 
 #ifdef DIFFUSE_COLOR
     c3 SurfaceColor = DiffuseColor.rgb;
@@ -155,7 +160,7 @@ void main()
         point_light PointLight = PointLights[PointLightIndex];
         
         f32 LightRadius  = PointLight.Position.w;
-        v3f L = PointLight.Position.xyz - ViewP;
+        v3f L = PointLight.Position.xyz - FragPosition;
 
         f32 DistanceFromLight = length(L);
         L /= DistanceFromLight;        

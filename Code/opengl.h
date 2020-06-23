@@ -46,6 +46,7 @@ global PFNGLDELETESHADERPROC glDeleteShader;
 global PFNGLDELETEPROGRAMPROC glDeleteProgram;
 global PFNGLUNIFORM1IPROC glUniform1i;
 global PFNGLACTIVETEXTUREPROC glActiveTexture;
+global PFNGLUNIFORM3FPROC glUniform3f;
 
 #include "opengl_shaders.h"
 

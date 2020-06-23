@@ -114,9 +114,14 @@ void PushProjection(graphics* Graphics, m4 Matrix)
     PushMatrix(Graphics, PUSH_COMMAND_PROJECTION, Matrix);    
 }
 
-void PushCameraView(graphics* Graphics, m4 Matrix)
+void PushCameraView(graphics* Graphics, m4 View, v3f Position)
 {
-    PushMatrix(Graphics, PUSH_COMMAND_CAMERA_VIEW, Matrix);
+    push_command_camera_view* PushCommandCameraView = PushStruct(push_command_camera_view, NoClear, 0);
+    PushCommandCameraView->Type = PUSH_COMMAND_CAMERA_VIEW;
+    PushCommandCameraView->Matrix = View;
+    PushCommandCameraView->CameraPosition = Position;
+    
+    PushCommand(Graphics, PushCommandCameraView);
 }
 
 void PushSubmitLightBuffer(graphics* Graphics, graphics_light_buffer* LightBuffer)
@@ -378,19 +383,30 @@ void PushCameraCommands(graphics* Graphics, camera* Camera)
     m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
     m4 CameraView = InverseTransformM4(Camera->Position, Camera->Orientation);            
     PushProjection(Graphics, Perspective); 
-    PushCameraView(Graphics, CameraView);        
+    PushCameraView(Graphics, CameraView, Camera->Position);        
 }
 
 void PushWorldShadingCommands(graphics* Graphics, world* World, assets* Assets)
 {
     graphics_light_buffer LightBuffer = {};
-    LightBuffer.DirectionalLightCount = 0;
-    LightBuffer.DirectionalLights[0] = CreateDirectionalLight(White3(), 1.0f, -Global_WorldZAxis); 
+    LightBuffer.DirectionalLightCount = 1;
+    LightBuffer.DirectionalLights[0] = CreateDirectionalLight(White3(), 1.0f, Normalize(V3(0.0f, 0.3f, -0.6f)));
     
-    LightBuffer.PointLightCount = 2;
+    LightBuffer.PointLightCount = 0;
     LightBuffer.PointLights[0] = CreatePointLight(White3(), 5.0f, V3(1.0f, 0.0f, 3.0f), 10.0f);
     LightBuffer.PointLights[1] = CreatePointLight(White3(), 5.0f, V3(-5.0f, 0.0f, 3.0f), 10.0f);
     
+#if 0 
+    for(u32 DirectionalLightIndex = 0; DirectionalLightIndex < LightBuffer.DirectionalLights; DirectionalLightIndex++)
+    {
+        graphics_directional_light* DirectionalLight = LightBuffer.DirectionalLights + DirectionalLightIndex;
+        PushShadowMap(DirectionalLight->ShadowMap);        
+        FOR_EACH(Entity, &World->EntityPool)
+        {
+            PushDrawShadowedMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);
+        }
+    }
+#endif
     PushSubmitLightBuffer(Graphics, &LightBuffer);
     
     FOR_EACH(Entity, &World->EntityPool)        

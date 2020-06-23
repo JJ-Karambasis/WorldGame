@@ -46,9 +46,9 @@ struct texture_skinning_shader : public base_shader
 
 struct lambertian_color_shader : public base_shader
 {    
-    mvp_uniforms MVPUniforms;
+    mvp_uniforms MVPUniforms;    
     GLint DiffuseColorUniform;    
-        
+    
     GLint LightIndex;
 };
 
@@ -80,6 +80,7 @@ struct phong_color_shader : public base_shader
     GLint DiffuseColorUniform;
     GLint SpecularColorUniform;
     GLint ShininessUniform;
+    GLint CameraPositionUniform;
     
     GLint LightIndex;    
 };
@@ -90,6 +91,7 @@ struct phong_texture_shader : public base_shader
     GLint ShininessUniform;
     GLint DiffuseUniform;
     GLint SpecularUniform;
+    GLint CameraPositionUniform;
     
     GLint LightIndex;
 };
@@ -100,6 +102,7 @@ struct phong_color_skinning_shader : public base_shader
     GLint DiffuseColorUniform;        
     GLint SpecularColorUniform;
     GLint ShininessUniform;
+    GLint CameraPositionUniform;
     
     GLint SkinningIndex;
     GLint LightIndex;    
@@ -111,6 +114,7 @@ struct phong_texture_skinning_shader : public base_shader
     GLint ShininessUniform;
     GLint DiffuseUniform;
     GLint SpecularUniform;
+    GLint CameraPositionUniform;
     
     GLint SkinningIndex;
     GLint LightIndex;

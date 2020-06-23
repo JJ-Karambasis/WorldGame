@@ -38,12 +38,13 @@ struct graphics_sampler_info
     graphics_filter MagFilter;
 };
 
+struct shadow_map;
+
 struct graphics_directional_light
 {    
     c3 Color;    
     f32 Intensity;
-    v3f Direction;
-    f32 Padding;
+    v3f Direction;                
 };
 
 struct graphics_point_light
@@ -146,6 +147,12 @@ struct push_command_rect : public push_command
 struct push_command_4x4_matrix : public push_command
 {
     m4 Matrix;
+};
+
+struct push_command_camera_view : public push_command
+{
+    m4 Matrix;
+    v3f CameraPosition;
 };
 
 struct push_command_submit_light_buffer : public push_command
