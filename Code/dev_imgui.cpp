@@ -137,7 +137,7 @@ void DevelopmentImGuiRender(dev_context* DevContext)
 {
     graphics* Graphics = DevContext->Graphics;
     
-    PushCull(Graphics, false);
+    PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);        
     PushDepth(Graphics, false);        
     
@@ -185,6 +185,6 @@ void DevelopmentImGuiRender(dev_context* DevContext)
     }
     
     PushBlend(Graphics, false);
-    PushCull(Graphics, true);
+    PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     PushDepth(Graphics, true);            
 }

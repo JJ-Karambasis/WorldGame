@@ -254,13 +254,13 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
 void DrawWireframeWorld(graphics* Graphics, world* World)
 {
     PushWireframe(Graphics, true);
-    PushCull(Graphics, false);    
+    PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);    
     FOR_EACH(Entity, &World->EntityPool)
     {
         if(Entity->Mesh)
             PushDrawColoredMesh(Graphics, Entity->Mesh->GDIHandle, TransformM4(Entity->Transform), Cyan4(), Entity->Mesh->IndexCount, 0, 0);
     }
-    PushCull(Graphics, true);
+    PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     PushWireframe(Graphics, false);
 }
 
@@ -275,23 +275,22 @@ void DevelopmentRender(dev_context* DevContext)
     DevelopmentImGuiUpdate(DevContext);    
     DevelopmentUpdateCamera(DevContext);
     
-    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);    
-    PushClearColorAndDepth(Graphics, Black4(), 1.0f);        
-    PushDepth(Graphics, true);
-    
     world* World = GetCurrentWorld(Game);
     camera* Camera = GetProperCamera(DevContext, World);
-    
-    PushCameraCommands(Graphics, Camera);
+        
     switch(DevContext->ViewModeType)
     {
         case VIEW_MODE_TYPE_LIT:
         {                        
-            PushWorldShadingCommands(Graphics, World, Game->Assets);                                                         
+            PushWorldShadingCommands(Graphics, World, Camera, Game->Assets);                                                         
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
-        {            
+        {
+            PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+            PushClearColorAndDepth(Graphics, Black4(), 1.0f);
+            
+            PushCameraCommands(Graphics, Camera);
             FOR_EACH(Entity, &World->EntityPool)
             {
                 if(Entity->Mesh)                    
@@ -301,12 +300,15 @@ void DevelopmentRender(dev_context* DevContext)
         
         case VIEW_MODE_TYPE_WIREFRAME:
         {
+            PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+            PushClearColorAndDepth(Graphics, Black4(), 1.0f);
+            PushCameraCommands(Graphics, Camera);
             DrawWireframeWorld(Graphics, World);            
         } break;
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(Graphics, World, Game->Assets);
+            PushWorldShadingCommands(Graphics, World, Camera, Game->Assets);
             DrawWireframeWorld(Graphics, World);            
         } break;
         

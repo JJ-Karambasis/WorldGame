@@ -47,6 +47,9 @@ global PFNGLDELETEPROGRAMPROC glDeleteProgram;
 global PFNGLUNIFORM1IPROC glUniform1i;
 global PFNGLACTIVETEXTUREPROC glActiveTexture;
 global PFNGLUNIFORM3FPROC glUniform3f;
+global PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
+global PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
+global PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 
 #include "opengl_shaders.h"
 
@@ -102,6 +105,12 @@ struct opengl_light_buffer
     i32 PointLightCount;
 };
 
+struct shadow_map
+{    
+    GLuint FBO;
+    GLuint DepthMap;
+};
+
 struct opengl_context
 {
     graphics Graphics;
@@ -123,8 +132,10 @@ struct opengl_context
     phong_texture_shader PhongTextureShader;
     phong_color_skinning_shader PhongColorSkinningShader;
     phong_texture_skinning_shader PhongTextureSkinningShader;
+    shadow_map_shader ShadowMapShader;
     
     GLuint LightUBO;    
+    GLuint LightViewProjectionUBO;
     
     opengl_buffer_list SkinningBuffers;    
 };

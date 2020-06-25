@@ -14,8 +14,7 @@ struct imgui_shader : public base_shader
 
 struct mvp_uniforms
 {
-    GLint Projection;
-    GLint View;
+    GLint ViewProjection;    
     GLint Model;
 };
 
@@ -80,7 +79,7 @@ struct phong_color_shader : public base_shader
     GLint DiffuseColorUniform;
     GLint SpecularColorUniform;
     GLint ShininessUniform;
-    GLint CameraPositionUniform;
+    GLint ViewPositionUniform;
     
     GLint LightIndex;    
 };
@@ -91,9 +90,12 @@ struct phong_texture_shader : public base_shader
     GLint ShininessUniform;
     GLint DiffuseUniform;
     GLint SpecularUniform;
-    GLint CameraPositionUniform;
+    GLint ViewPositionUniform;
+        
+    GLint ShadowMapsUniform[MAX_DIRECTIONAL_LIGHT_COUNT];    
     
     GLint LightIndex;
+    GLint LightViewProjectionIndex;
 };
 
 struct phong_color_skinning_shader : public base_shader
@@ -102,7 +104,7 @@ struct phong_color_skinning_shader : public base_shader
     GLint DiffuseColorUniform;        
     GLint SpecularColorUniform;
     GLint ShininessUniform;
-    GLint CameraPositionUniform;
+    GLint ViewPositionUniform;
     
     GLint SkinningIndex;
     GLint LightIndex;    
@@ -114,10 +116,25 @@ struct phong_texture_skinning_shader : public base_shader
     GLint ShininessUniform;
     GLint DiffuseUniform;
     GLint SpecularUniform;
-    GLint CameraPositionUniform;
+    GLint ViewPositionUniform;
     
     GLint SkinningIndex;
-    GLint LightIndex;
+    GLint LightIndex;    
+};
+
+
+//TODO(JJ): Will probably need skinning versions of these shaders
+struct shadow_map_shader : public base_shader
+{
+    mvp_uniforms MVPUniforms;        
+};
+
+struct onmi_shader_map_shader : public base_shader
+{
+    GLint ModelUniform;
+    GLint LightViewProjectionUniforms[6];
+    GLint LightPositionUniform;
+    GLint FarPlaneDistanceUniform;
 };
 
 #endif

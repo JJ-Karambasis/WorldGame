@@ -1,6 +1,30 @@
 #include "opengl.h"
 #include "opengl_shaders.cpp"
 
+inline ptr
+GetIndexTypeSize(GLenum IndexType)
+{        
+    ASSERT((IndexType == GL_UNSIGNED_INT) || (IndexType == GL_UNSIGNED_SHORT));
+    ptr Result = (IndexType == GL_UNSIGNED_INT) ? sizeof(u32) : sizeof(u16);
+    return Result;
+}
+
+inline void 
+DrawTriangles(opengl_mesh* Mesh, graphics_draw_info* DrawInfo)
+{    
+    glDrawElementsBaseVertex(GL_TRIANGLES, DrawInfo->IndexCount, Mesh->IndexType, 
+                             (void*)(DrawInfo->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                             DrawInfo->VertexOffset);
+}
+
+inline void 
+DrawLines(opengl_mesh* Mesh, graphics_draw_info* DrawInfo)
+{    
+    glDrawElementsBaseVertex(GL_LINES, DrawInfo->IndexCount, Mesh->IndexType, 
+                             (void*)(DrawInfo->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                             DrawInfo->VertexOffset);
+}
+
 inline GLenum
 GetFilterType(graphics_filter Filter)
 {
@@ -58,14 +82,11 @@ b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
 
 inline b32
 SetProgramAndMVPUniforms(GLuint* BoundProgram, GLuint Program, mvp_uniforms* Uniforms, 
-                         m4* Model, m4* View, m4* Projection)
+                         m4* Model, m4* ViewProjection)
 {   
     b32 Result = BindProgram(BoundProgram, Program);
-    if(Result)
-    {
-        glUniformMatrix4fv(Uniforms->Projection, 1, GL_FALSE, Projection->M);
-        glUniformMatrix4fv(Uniforms->View, 1, GL_FALSE, View->M);                            
-    }
+    if(Result)    
+        glUniformMatrix4fv(Uniforms->ViewProjection, 1, GL_FALSE, ViewProjection->M);            
     
     glUniformMatrix4fv(Uniforms->Model, 1, GL_FALSE, Model->M);    
     return Result;
@@ -83,6 +104,25 @@ b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
     return false;
 }
 
+GLuint AllocateUBO(ptr UBOSize, u32 UBOIndex)
+{
+    GLuint Result;
+    glGenBuffers(1, &Result);
+    glBindBuffer(GL_UNIFORM_BUFFER, Result);
+    glBufferData(GL_UNIFORM_BUFFER, UBOSize, NULL, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);    
+    glBindBufferBase(GL_UNIFORM_BUFFER, UBOIndex, Result); 
+    return Result;
+}
+
+inline void 
+UploadUBO(GLuint UBO, ptr UploadSize, void* Data)
+{
+    glBindBuffer(GL_UNIFORM_BUFFER, UBO);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, UploadSize, Data);                                
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
+
 void UploadSkinningMatrices(opengl_buffer_list* SkinningBuffers, u32 SkinningIndex, u32 JointCount, m4* Joints)
 {    
     ASSERT(SkinningIndex <= SkinningBuffers->Count);    
@@ -90,22 +130,11 @@ void UploadSkinningMatrices(opengl_buffer_list* SkinningBuffers, u32 SkinningInd
     if(SkinningIndex == SkinningBuffers->Count)
     {                    
         ASSERT(SkinningBuffers->Count < SkinningBuffers->Capacity);
-        GLuint SkinningUBO; 
-        
-        glGenBuffers(1, &SkinningUBO);
-        glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(m4)*MAX_JOINT_COUNT, NULL, GL_STATIC_DRAW);
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
-        
-        glBindBufferBase(GL_UNIFORM_BUFFER, SKINNING_BUFFER_INDEX, SkinningUBO);                    
-        
+        GLuint SkinningUBO = AllocateUBO(sizeof(m4)*MAX_JOINT_COUNT, SKINNING_BUFFER_INDEX);         
         SkinningBuffers->Ptr[SkinningBuffers->Count++] = SkinningUBO;                                                                                                    
     }
     
-    GLuint SkinningUBO = SkinningBuffers->Ptr[SkinningIndex];
-    glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(m4)*JointCount, Joints);                                
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    UploadUBO(SkinningBuffers->Ptr[SkinningIndex], sizeof(m4)*JointCount, Joints);    
 }
 
 inline GLenum
@@ -116,11 +145,31 @@ GetIndexType(graphics_index_format IndexFormat)
     return IndexType;
 }
 
-inline ptr
-GetIndexTypeSize(GLenum IndexType)
-{        
-    ASSERT((IndexType == GL_UNSIGNED_INT) || (IndexType == GL_UNSIGNED_SHORT));
-    ptr Result = (IndexType == GL_UNSIGNED_INT) ? sizeof(u32) : sizeof(u16);
+ALLOCATE_SHADOW_MAP(AllocateShadowMap)
+{
+    opengl_context* OpenGL = (opengl_context*)Graphics;
+    
+    shadow_map* Result = PushStruct(&OpenGL->Storage, shadow_map, Clear, 0);
+    glGenFramebuffers(1, &Result->FBO);
+    
+    glGenTextures(1, &Result->DepthMap);
+    glBindTexture(GL_TEXTURE_2D, Result->DepthMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, Dimensions.width, Dimensions.height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    
+    f32 BorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, BorderColor);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, Result->FBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, Result->DepthMap, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    
     return Result;
 }
 
@@ -467,6 +516,8 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     OpenGL->MeshPool = CreatePool<opengl_mesh>(&OpenGL->Storage, 128);
     OpenGL->TexturePool = CreatePool<opengl_texture>(&OpenGL->Storage, 128);
     
+    
+    
     graphics* Graphics = &OpenGL->Graphics;
     Graphics->PlatformData = PlatformData;
     
@@ -480,7 +531,8 @@ EXPORT INIT_GRAPHICS(InitGraphics)
 
 extern "C"
 EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
-{    
+{   
+    Graphics->AllocateShadowMap = AllocateShadowMap;
     Graphics->AllocateTexture = AllocateTexture;
     Graphics->AllocateMesh = AllocateMesh;
     Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
@@ -521,6 +573,9 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLUNIFORM1IPROC, glUniform1i);
     LOAD_FUNCTION(PFNGLACTIVETEXTUREPROC, glActiveTexture);
     LOAD_FUNCTION(PFNGLUNIFORM3FPROC, glUniform3f);
+    LOAD_FUNCTION(PFNGLGENFRAMEBUFFERSPROC, glGenFramebuffers);
+    LOAD_FUNCTION(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D);
     
 #if DEVELOPER_BUILD
     
@@ -589,27 +644,29 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     CHECK_SHADER(PhongTextureShader);
     CHECK_SHADER(PhongColorSkinningShader);
     CHECK_SHADER(PhongTextureSkinningShader);
+    CHECK_SHADER(ShadowMapShader);
     
     m4 Projection = IdentityM4();
-    m4 CameraView = IdentityM4();
-    v3f CameraPosition = V3();
+    m4 View = IdentityM4();
+    m4 ViewProjection = IdentityM4();
+    v3f ViewPosition = V3();    
     
     if(!OpenGL->LightUBO)
-    {
-        glGenBuffers(1, &OpenGL->LightUBO);
-        glBindBuffer(GL_UNIFORM_BUFFER, OpenGL->LightUBO);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(opengl_light_buffer), NULL, GL_STATIC_DRAW);
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);       
-        glBindBufferBase(GL_UNIFORM_BUFFER, LIGHT_BUFFER_INDEX, OpenGL->LightUBO);
-    }
+        OpenGL->LightUBO = AllocateUBO(sizeof(opengl_light_buffer), LIGHT_BUFFER_INDEX);
+    
+    if(!OpenGL->LightViewProjectionUBO)
+        OpenGL->LightViewProjectionUBO = AllocateUBO(sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LIGHT_VIEW_PROJECTION_INDEX);
     
     glEnable(GL_SCISSOR_TEST);    
-    glEnable(GL_FRAMEBUFFER_SRGB);                
+    glEnable(GL_FRAMEBUFFER_SRGB);                    
     
     GLuint BoundProgram = (GLuint)-1;
     GLuint BoundVAO = (GLuint)-1;
     
     u32 SkinningIndex = 0;
+    
+    
+    shadow_map* ShadowMaps[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
     
     push_command_list* CommandList = &Graphics->CommandList;        
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
@@ -621,8 +678,16 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             {
                 push_command_clear_color* ClearColorCommand = (push_command_clear_color*)Command;
                 
-                glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+                glClear(GL_COLOR_BUFFER_BIT);
                 glClearColor(ClearColorCommand->R, ClearColorCommand->G, ClearColorCommand->B, ClearColorCommand->A);                                
+            } break;
+            
+            case PUSH_COMMAND_CLEAR_DEPTH:
+            {
+                push_command_clear_depth* ClearDepthCommand = (push_command_clear_depth*)Command;
+                
+                glClear(GL_DEPTH_BUFFER_BIT);
+                glClearDepth(ClearDepthCommand->Depth);
             } break;
             
             case PUSH_COMMAND_CLEAR_COLOR_AND_DEPTH:
@@ -648,10 +713,16 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_CULL:
             {
                 push_command_cull* CommandCull = (push_command_cull*)Command;
-                if(CommandCull->Enable) 
-                    glEnable(GL_CULL_FACE);                
-                else
+                if(CommandCull->CullMode == GRAPHICS_CULL_MODE_NONE)
                     glDisable(GL_CULL_FACE);
+                else
+                {
+                    glEnable(GL_CULL_FACE);
+                    if(CommandCull->CullMode == GRAPHICS_CULL_MODE_FRONT)                        
+                        glCullFace(GL_FRONT);
+                    else
+                        glCullFace(GL_BACK);
+                }                
             } break;
             
             case PUSH_COMMAND_WIREFRAME:
@@ -694,28 +765,41 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_PROJECTION:
             {
-                Projection = ((push_command_4x4_matrix*)Command)->Matrix;
+                Projection = ((push_command_4x4_matrix*)Command)->Matrix;                
+                ViewProjection = View*Projection;
             } break;
             
-            case PUSH_COMMAND_CAMERA_VIEW:
+            case PUSH_COMMAND_VIEW_TRANSFORM:
             {
-                push_command_camera_view* CommandCameraView = (push_command_camera_view*)Command;
-                CameraView = CommandCameraView->Matrix;
-                CameraPosition = CommandCameraView->CameraPosition;                
+                push_command_view_transform* CommandViewTransform = (push_command_view_transform*)Command;
+                
+                View = InverseTransformM4(CommandViewTransform->Position, CommandViewTransform->Orientation);
+                ViewPosition = CommandViewTransform->Position;                                                
+                ViewProjection = View*Projection;
             } break;
             
             case PUSH_COMMAND_SUBMIT_LIGHT_BUFFER:
             {
                 graphics_light_buffer SrcLightBuffer = ((push_command_submit_light_buffer*)Command)->LightBuffer;
                 
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                
                 opengl_light_buffer DstLightBuffer = {};
                 DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
                 DstLightBuffer.PointLightCount = SrcLightBuffer.PointLightCount;
                 
+                m4 LightViewProjectionBuffers[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
+                
+                m4 LightProjection = GetLightProjectionMatrix();
                 for(i32 DirectionalLightIndex = 0; DirectionalLightIndex < DstLightBuffer.DirectionalLightCount; DirectionalLightIndex++)
                 {
                     graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
                     opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
+                    
+                    m4 LightView = GetLightViewMatrix(SrcLight->Position, SrcLight->Direction);                    
+                    
+                    ShadowMaps[DirectionalLightIndex] = SrcLight->ShadowMap;                    
+                    LightViewProjectionBuffers[DirectionalLightIndex] = LightView*LightProjection;
                     
                     DstLight->Direction =  V4(SrcLight->Direction, 0.0f);
                     DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);                    
@@ -730,9 +814,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     DstLight->Position = V4(SrcLight->Position, SrcLight->Radius);                                                           
                 }
                 
-                glBindBuffer(GL_UNIFORM_BUFFER, OpenGL->LightUBO);
-                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(opengl_light_buffer), &DstLightBuffer);
-                glBindBuffer(GL_UNIFORM_BUFFER, 0);
+                UploadUBO(OpenGL->LightViewProjectionUBO, sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LightViewProjectionBuffers);
+                UploadUBO(OpenGL->LightUBO, sizeof(opengl_light_buffer), &DstLightBuffer);                
             } break;
             
             case PUSH_COMMAND_DRAW_COLORED_LINE_MESH:
@@ -742,7 +825,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawColoredMesh->MeshID);
                 
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->ColorShader.Program, &OpenGL->ColorShader.MVPUniforms,
-                                         &DrawColoredMesh->WorldTransform, &CameraView, &Projection);
+                                         &DrawColoredMesh->WorldTransform, &ViewProjection);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -750,9 +833,10 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 GLenum PrimitiveType = (Command->Type == PUSH_COMMAND_DRAW_COLORED_LINE_MESH) ? GL_LINES : GL_TRIANGLES;
                 
-                glDrawElementsBaseVertex(PrimitiveType, DrawColoredMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawColoredMesh->VertexOffset);
+                if(Command->Type == PUSH_COMMAND_DRAW_COLORED_LINE_MESH)
+                    DrawLines(Mesh, &DrawColoredMesh->DrawInfo);
+                else
+                    DrawTriangles(Mesh, &DrawColoredMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_TEXTURED_MESH:
@@ -762,14 +846,12 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawTexturedMesh->TextureID);
                 
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->TextureShader.Program, &OpenGL->TextureShader.MVPUniforms,
-                                         &DrawTexturedMesh->WorldTransform, &CameraView, &Projection);                
+                                         &DrawTexturedMesh->WorldTransform, &ViewProjection);                
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
                 glBindTexture(GL_TEXTURE_2D, Texture->Handle);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawTexturedMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawTexturedMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawTexturedMesh->VertexOffset);                
+                DrawTriangles(Mesh, &DrawTexturedMesh->DrawInfo);
             } break;
             
             case PUSH_COMMAND_DRAW_COLORED_SKINNING_MESH:
@@ -780,15 +862,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawColoredSkinningMesh->JointCount, DrawColoredSkinningMesh->Joints);
                 
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->ColorSkinningShader.Program, &OpenGL->ColorSkinningShader.MVPUniforms,
-                                         &DrawColoredSkinningMesh->WorldTransform, &CameraView, &Projection);
+                                         &DrawColoredSkinningMesh->WorldTransform, &ViewProjection);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
                 SetUniform4f(OpenGL->ColorShader.ColorUniform, DrawColoredSkinningMesh->Color);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawColoredSkinningMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawColoredSkinningMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawColoredSkinningMesh->DrawInfo);               
             } break;
             
             case PUSH_COMMAND_DRAW_TEXTURED_SKINNING_MESH:
@@ -800,14 +880,12 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawTexturedSkinningMesh->JointCount, DrawTexturedSkinningMesh->Joints);
                 
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->TextureSkinningShader.Program, &OpenGL->TextureSkinningShader.MVPUniforms,
-                                         &DrawTexturedSkinningMesh->WorldTransform, &CameraView, &Projection);
+                                         &DrawTexturedSkinningMesh->WorldTransform, &ViewProjection);
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
                 glBindTexture(GL_TEXTURE_2D, Texture->Handle);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawTexturedSkinningMesh->IndexCount, Mesh->IndexType,
-                                         (void*)(DrawTexturedSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawTexturedSkinningMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawTexturedSkinningMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_MESH:
@@ -816,15 +894,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianColoredMesh->MeshID);
                 
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianColorShader.Program, &OpenGL->LambertianColorShader.MVPUniforms,
-                                         &DrawLambertianColoredMesh->WorldTransform, &CameraView, &Projection);
+                                         &DrawLambertianColoredMesh->WorldTransform, &ViewProjection);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
                 SetUniform4f(OpenGL->LambertianColorShader.DiffuseColorUniform, DrawLambertianColoredMesh->DiffuseColor);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianColoredMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawLambertianColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawLambertianColoredMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawLambertianColoredMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_MESH:
@@ -834,14 +910,12 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawLambertianTexturedMesh->DiffuseID);
                 
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianTextureShader.Program, &OpenGL->LambertianTextureShader.MVPUniforms,
-                                         &DrawLambertianTexturedMesh->WorldTransform, &CameraView, &Projection);                
+                                         &DrawLambertianTexturedMesh->WorldTransform, &ViewProjection);                
                 BindVAO(&BoundVAO, Mesh->VAO);                                                                
                 
                 glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianTexturedMesh->IndexCount, Mesh->IndexType,
-                                         (void*)(DrawLambertianTexturedMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawLambertianTexturedMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawLambertianTexturedMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_SKINNING_MESH:
@@ -851,14 +925,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawLambertianColoredSkinningMesh->JointCount, DrawLambertianColoredSkinningMesh->Joints);
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianColorSkinningShader.Program, &OpenGL->LambertianColorShader.MVPUniforms,
-                                         &DrawLambertianColoredSkinningMesh->WorldTransform, &CameraView, &Projection);
+                                         &DrawLambertianColoredSkinningMesh->WorldTransform, &ViewProjection);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
                 SetUniform4f(OpenGL->LambertianColorSkinningShader.DiffuseColorUniform, DrawLambertianColoredSkinningMesh->DiffuseColor);
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianColoredSkinningMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawLambertianColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawLambertianColoredSkinningMesh->VertexOffset);
+                
+                DrawTriangles(Mesh, &DrawLambertianColoredSkinningMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_SKINNING_MESH:
@@ -869,15 +942,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawLambertianTexturedSkinningMesh->JointCount, DrawLambertianTexturedSkinningMesh->Joints);
                 SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianTextureSkinningShader.Program, &OpenGL->LambertianTextureShader.MVPUniforms,
-                                         &DrawLambertianTexturedSkinningMesh->WorldTransform, &CameraView, &Projection);
+                                         &DrawLambertianTexturedSkinningMesh->WorldTransform, &ViewProjection);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
                 glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawLambertianTexturedSkinningMesh->IndexCount, Mesh->IndexType,
-                                         (void*)(DrawLambertianTexturedSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawLambertianTexturedSkinningMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawLambertianTexturedSkinningMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_PHONG_COLORED_MESH:
@@ -887,8 +958,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredMesh->MeshID);
                 
                 if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorShader.Program, &OpenGL->PhongColorShader.MVPUniforms,
-                                            &DrawPhongColoredMesh->WorldTransform, &CameraView, &Projection))                
-                    SetUniform3f(OpenGL->PhongColorShader.CameraPositionUniform, CameraPosition);                
+                                            &DrawPhongColoredMesh->WorldTransform, &ViewProjection))                
+                    SetUniform3f(OpenGL->PhongColorShader.ViewPositionUniform, ViewPosition);                
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -898,9 +969,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
                 glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredMesh->Shininess);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongColoredMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawPhongColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawPhongColoredMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawPhongColoredMesh->DrawInfo);                
                 
             } break;            
             
@@ -912,8 +981,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 opengl_texture* Specular = GetByID(&OpenGL->TexturePool, DrawPhongTexturedMesh->SpecularID);
                 
                 if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureShader.Program, &OpenGL->PhongTextureShader.MVPUniforms,
-                                            &DrawPhongTexturedMesh->WorldTransform, &CameraView, &Projection))
-                    SetUniform3f(OpenGL->PhongTextureShader.CameraPositionUniform, CameraPosition);                
+                                            &DrawPhongTexturedMesh->WorldTransform, &ViewProjection))
+                {
+                    SetUniform3f(OpenGL->PhongTextureShader.ViewPositionUniform, ViewPosition);                
+                    glUniform1i(OpenGL->PhongTextureShader.ShadowMapsUniform[0], 2);
+                    glActiveTexture(GL_TEXTURE2);
+                    glBindTexture(GL_TEXTURE_2D, ShadowMaps[0]->DepthMap);                    
+                }
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -927,9 +1001,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 glUniform1i(OpenGL->PhongTextureShader.DiffuseUniform, 0);
                 glUniform1i(OpenGL->PhongTextureShader.SpecularUniform, 1);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongTexturedMesh->IndexCount, Mesh->IndexType,
-                                         (void*)(DrawPhongTexturedMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawPhongTexturedMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawPhongTexturedMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH:
@@ -939,8 +1011,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongColoredSkinningMesh->JointCount, DrawPhongColoredSkinningMesh->Joints);
                 if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorSkinningShader.Program, &OpenGL->PhongColorSkinningShader.MVPUniforms,
-                                            &DrawPhongColoredSkinningMesh->WorldTransform, &CameraView, &Projection))
-                    SetUniform3f(OpenGL->PhongColorSkinningShader.CameraPositionUniform, CameraPosition);
+                                            &DrawPhongColoredSkinningMesh->WorldTransform, &ViewProjection))
+                    SetUniform3f(OpenGL->PhongColorSkinningShader.ViewPositionUniform, ViewPosition);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -950,9 +1022,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
                 glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredSkinningMesh->Shininess);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongColoredSkinningMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawPhongColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawPhongColoredSkinningMesh->VertexOffset);                                
+                DrawTriangles(Mesh, &DrawPhongColoredSkinningMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_PHONG_TEXTURED_SKINNING_MESH:
@@ -964,8 +1034,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongTexturedSkinningMesh->JointCount, DrawPhongTexturedSkinningMesh->Joints);
                 if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureSkinningShader.Program, &OpenGL->PhongTextureSkinningShader.MVPUniforms,
-                                            &DrawPhongTexturedSkinningMesh->WorldTransform, &CameraView, &Projection))
-                    SetUniform3f(OpenGL->PhongTextureSkinningShader.CameraPositionUniform, CameraPosition);
+                                            &DrawPhongTexturedSkinningMesh->WorldTransform, &ViewProjection))
+                    SetUniform3f(OpenGL->PhongTextureSkinningShader.ViewPositionUniform, ViewPosition);
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
                 
@@ -979,9 +1049,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 glUniform1i(OpenGL->PhongTextureSkinningShader.DiffuseUniform, 0);
                 glUniform1i(OpenGL->PhongTextureSkinningShader.SpecularUniform, 1);
                 
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawPhongTexturedSkinningMesh->IndexCount, Mesh->IndexType,
-                                         (void*)(DrawPhongTexturedSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawPhongTexturedSkinningMesh->VertexOffset);
+                DrawTriangles(Mesh, &DrawPhongTexturedSkinningMesh->DrawInfo);                
             } break;
             
             case PUSH_COMMAND_DRAW_IMGUI_UI:
@@ -998,14 +1066,36 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, Texture->Handle);
-                                                
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawImGuiUI->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawImGuiUI->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawImGuiUI->VertexOffset);
+                
+                DrawTriangles(Mesh, &DrawImGuiUI->DrawInfo);                
                 
             } break;
             
-            INVALID_DEFAULT_CASE;
+            case PUSH_COMMAND_LIGHT_FOR_SHADOW_MAP:
+            {
+                push_command_light_for_shadow_map* LightForShadowMap = (push_command_light_for_shadow_map*)Command;
+                shadow_map* ShadowMap = LightForShadowMap->ShadowMap;
+                
+                glBindFramebuffer(GL_FRAMEBUFFER, ShadowMap->FBO);
+                
+                View = LightForShadowMap->LightView;
+                Projection = LightForShadowMap->LightProjection;                
+                ViewProjection = View*Projection;
+            } break;
+            
+            case PUSH_COMMAND_DRAW_SHADOWED_MESH:
+            {
+                push_command_draw_shadowed_mesh* DrawShadowedMesh = (push_command_draw_shadowed_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawShadowedMesh->MeshID);
+                
+                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->ShadowMapShader.Program, &OpenGL->ShadowMapShader.MVPUniforms,
+                                         &DrawShadowedMesh->WorldTransform, &ViewProjection);
+                
+                BindVAO(&BoundVAO, Mesh->VAO);                
+                DrawTriangles(Mesh, &DrawShadowedMesh->DrawInfo);
+            } break;
+            
+            INVALID_DEFAULT_CASE;                        
         }
     }    
     

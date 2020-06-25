@@ -1,14 +1,16 @@
+global const char* FragmentShader_None = "void main(){}\n";
+
 global const char* FragmentShader_ImGui = R"(
 out c4 FinalColor;
 
-in v2f FragUV;
-in c4 FragColor;
+in v2f PixelUV;
+in c4 PixelColor;
 
 uniform sampler2D Texture;
 
 void main()
 {
-    FinalColor = FragColor * texture(Texture, FragUV.st);
+    FinalColor = PixelColor * texture(Texture, PixelUV.st);
 }
 
 )";
@@ -18,7 +20,7 @@ out c4 FragColor;
 
 #ifdef HAS_TEXTURES
 uniform sampler2D Texture;
-in v2f FragUV;
+in v2f PixelUV;
 #else
 uniform c4 Color;
 #endif
@@ -26,7 +28,7 @@ uniform c4 Color;
 void main()
 {
 #ifdef HAS_TEXTURES    
-    FragColor = texture(Texture, FragUV);
+    FragColor = texture(Texture, PixelUV);
 #else
     FragColor = Color;    
 #endif
@@ -34,14 +36,29 @@ void main()
 
 )";
 
+global const char* FragmentShader_Shadow = R"(
+in v3f FragPosition;
+uniform f32 FarPlaneDistance;
+uniform v3f LightPosition;
+
+void main()
+{
+    f32 LightDistance = length(FragPosition.xyz-LightPosition);
+    LightDistance /= FarPlaneDistance;    
+    gl_FragDepth = LightDistance;
+}
+
+)";
+
 global const char* FragmentShader_Lighting = R"(
 out c4 FragColor;
 
-in v3f FragPosition;
-in v3f FragNormal;
+in v3f PixelWorldPosition;
+in v3f PixelWorldNormal;
+in v4f PixelLightPositions[MAX_DIRECTIONAL_LIGHT_COUNT];
 
 #ifdef HAS_TEXTURES
-in v2f FragUV;
+in v2f PixelUV;
 #endif
 
 #ifdef DIFFUSE_COLOR
@@ -66,9 +83,6 @@ uniform i32 Shininess;
 
 #define LAMBERTIAN_MODEL (defined(DIFFUSE_COLOR) || defined(DIFFUSE_TEXTURE)) && (!defined(SPECULAR_COLOR) && !defined(SPECULAR_TEXTURE) && !defined(SPECULAR_SHININESS))
 
-#define MAX_DIRECTIONAL_LIGHT_COUNT %d
-#define MAX_POINT_LIGHT_COUNT %d
-
 struct directional_light
 {
     v4f Direction;
@@ -89,7 +103,8 @@ layout (std140) uniform LightBuffer
     i32 PointLightCount;
 };
 
-uniform v3f CameraPosition;
+uniform v3f ViewPosition;
+uniform sampler2D ShadowMaps[MAX_DIRECTIONAL_LIGHT_COUNT];
 
 struct brdf
 {
@@ -116,12 +131,39 @@ brdf BlinnPhong(v3f N, v3f L, v3f V, c3 LightColor, c3 SurfaceColor, c3 Specular
     return Result;
 }
 
+f32 SampleShadow(v4f FragPosition, i32 ShadowIndex, v3f N, v3f L)
+{
+    v3f ProjPosition = FragPosition.xyz /= FragPosition.w;
+    ProjPosition = ProjPosition * 0.5f + 0.5f;
+    f32 ClosestDepth = texture(ShadowMaps[ShadowIndex], ProjPosition.xy).r;
+    f32 CurrentDepth = ProjPosition.z;
+
+    f32 Bias = max(0.05f * (1.0f - dot(N, L)), 0.05f);
+
+    f32 Result = 0.0f;
+    vec2 TexelSize = 1.0f/textureSize(ShadowMaps[ShadowIndex], 0);
+    for(i32 x = -1; x <= 1; ++x)
+    {
+        for(i32 y = -1; y <= 1; ++y)
+        {
+            f32 PCF = texture(ShadowMaps[ShadowIndex], ProjPosition.xy + vec2(x, y)*TexelSize).r;
+            Result += CurrentDepth-Bias > PCF ? 1.0f : 0.0f;
+        }
+    }
+    
+    Result /= 9.0f;
+    if(ProjPosition.z > 1.0f)
+        Result = 0.0f;
+
+    return Result;
+}
+
 void main()
 {    
-    v3f N = normalize(FragNormal);
+    v3f N = normalize(PixelWorldNormal);
 
 #if LAMBERTIAN_MODEL == 0
-    v3f V = normalize(CameraPosition-FragPosition);
+    v3f V = normalize(ViewPosition-PixelWorldPosition);
 #endif
 
 #ifdef DIFFUSE_COLOR
@@ -129,7 +171,7 @@ void main()
 #endif
 
 #ifdef DIFFUSE_TEXTURE
-    c3 SurfaceColor = texture(DiffuseTexture, FragUV).rgb;
+    c3 SurfaceColor = texture(DiffuseTexture, PixelUV).rgb;
 #endif
 
 #ifdef SPECULAR_COLOR
@@ -137,7 +179,7 @@ void main()
 #endif
 
 #ifdef SPECULAR_TEXTURE
-    c3 Specular = texture(SpecularTexture, FragUV).rgb;
+    c3 Specular = texture(SpecularTexture, PixelUV).rgb;
 #endif
 
     c3 FinalColor = c3(0, 0, 0);
@@ -146,12 +188,14 @@ void main()
         directional_light DirectionalLight = DirectionalLights[DirectionalLightIndex];
         v3f L = -DirectionalLight.Direction.xyz;
 
+        f32 Shadow = 1.0f - SampleShadow(PixelLightPositions[DirectionalLightIndex], DirectionalLightIndex, N, L);
+
 #if LAMBERTIAN_MODEL
         c3 LambertianColor = Lambertian(N, L, DirectionalLight.Color.rgb, SurfaceColor);
-        FinalColor += LambertianColor;
+        FinalColor += Shadow*LambertianColor;
 #else
         brdf BRDF = BlinnPhong(N, L, V, DirectionalLight.Color.rgb, SurfaceColor, Specular, Shininess);
-        FinalColor += (BRDF.Diffuse+BRDF.Specular);    
+        FinalColor += Shadow*(BRDF.Diffuse+BRDF.Specular);    
 #endif
     }
 
@@ -160,7 +204,7 @@ void main()
         point_light PointLight = PointLights[PointLightIndex];
         
         f32 LightRadius  = PointLight.Position.w;
-        v3f L = PointLight.Position.xyz - FragPosition;
+        v3f L = PointLight.Position.xyz - PixelWorldPosition;
 
         f32 DistanceFromLight = length(L);
         L /= DistanceFromLight;        

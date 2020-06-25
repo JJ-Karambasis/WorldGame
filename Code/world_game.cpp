@@ -54,7 +54,7 @@ EXPORT GAME_TICK(Tick)
         Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
         Game->Assets->TestAudio2 = LoadAudio(Game->Assets, "TestSound2.wav");
         Game->Assets->TestDiffuse = LoadTexture(Game->Assets, "TestDiffuse.png", true);
-        Game->Assets->TestSpecular = LoadTexture(Game->Assets, "TestSpecular.png", false);
+        Game->Assets->TestSpecular = LoadTexture(Game->Assets, "TestSpecular.png", false);                
         
         PlayAudio(Game, &Game->Assets->TestAudio, 1.0f);
         
@@ -90,6 +90,7 @@ EXPORT GAME_TICK(Tick)
         }
         
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 0.0f, 0.0f), V3(1.0f, 30.0f, 30.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.5f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
         
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.2f, 0.0f, 1.0f), V3(1.0f, 3.0f, 1.0f), V3(0.0f, 0.0f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);                                                                
@@ -162,6 +163,7 @@ EXPORT GAME_TICK(Tick)
     
     if(NOT_IN_DEVELOPMENT_MODE())
     {   
-        PushGameCommands(Graphics, Game);        
+        world* World = GetCurrentWorld(Game);
+        PushWorldShadingCommands(Graphics, World, &World->Camera, Game->Assets);        
     }    
 }

@@ -8,6 +8,7 @@
 
 #define SKINNING_BUFFER_INDEX 0
 #define LIGHT_BUFFER_INDEX 1
+#define LIGHT_VIEW_PROJECTION_INDEX 2
 
 global const char* Vertex_Attributes = R"(
 layout (location = 0) in v2f Position2D;
@@ -37,45 +38,74 @@ global const char* Shader_Header = R"(
 
 #include "opengl_vertex_shaders.cpp"
 #include "opengl_fragment_shaders.cpp"
+#include "opengl_geometry_shaders.cpp"
 
-GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar** FSCode, u32 FSCodeCount)
-{    
-    GLuint VertexShader   = glCreateShader(GL_VERTEX_SHADER);
-    GLuint FragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+GLuint CompileShader(const GLchar** Code, u32 CodeCount, GLenum Type)
+{
+    GLuint Shader = glCreateShader(Type);
+    glShaderSource(Shader, CodeCount, Code, 0);
+    glCompileShader(Shader);
     
-    glShaderSource(VertexShader,   VSCodeCount, VSCode, 0);
-    glShaderSource(FragmentShader, FSCodeCount, FSCode, 0);
-    
-    glCompileShader(VertexShader);
-    glCompileShader(FragmentShader);
-    
-    GLint VSCompiled, FSCompiled;    
-    glGetShaderiv(VertexShader, GL_COMPILE_STATUS, &VSCompiled);
-    glGetShaderiv(FragmentShader, GL_COMPILE_STATUS, &FSCompiled);
-    
-    if(!VSCompiled || !FSCompiled)
+    GLint Compiled;
+    glGetShaderiv(Shader, GL_COMPILE_STATUS, &Compiled);
+    if(!Compiled)
     {
-        char VSError[4096];
-        char FSError[4096];
+        char Error[4096];
+        glGetShaderInfoLog(Shader, sizeof(Error), NULL, Error);
         
-        glGetShaderInfoLog(VertexShader,   sizeof(VSError), NULL, VSError);
-        glGetShaderInfoLog(FragmentShader, sizeof(FSError), NULL, FSError);
+        if(!Compiled)
+        {
+            switch(Type)
+            {
+                case GL_VERTEX_SHADER:
+                {
+                    DEBUG_LOG("Vertex Shader Error: %s", Error);
+                } break;
+                
+                case GL_FRAGMENT_SHADER:
+                {
+                    DEBUG_LOG("Fragment Shader Error: %s", Error);
+                } break;
+                
+                case GL_GEOMETRY_SHADER:
+                {
+                    DEBUG_LOG("Geometry Shader Error: %s", Error);
+                } break;
+                
+                INVALID_DEFAULT_CASE;
+            }
+        }
         
-        if(!VSCompiled)
-            DEBUG_LOG("Vertex Shader Error: %s", VSError);
-        
-        if(!FSCompiled)
-            DEBUG_LOG("Fragment Shader Error: %s", FSError);
-        
-        glDeleteShader(VertexShader);
-        glDeleteShader(FragmentShader);
-        
+        glDeleteShader(Shader);
         return 0;
     }
+    
+    return Shader;
+}
+
+GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar** FSCode, u32 FSCodeCount, 
+                           const GLchar** GSCode=NULL, u32 GSCodeCount=0)
+{   
+    GLuint VertexShader = CompileShader(VSCode, VSCodeCount, GL_VERTEX_SHADER);
+    GLuint FragmentShader = CompileShader(FSCode, FSCodeCount, GL_FRAGMENT_SHADER);
+    
+    GLuint GeometryShader = 0;    
+    if(GSCodeCount)    
+        GeometryShader = CompileShader(GSCode, GSCodeCount, GL_GEOMETRY_SHADER);    
+    
+    if(!VertexShader || !FragmentShader)
+        return 0;
+    
+    if(GSCodeCount && !GeometryShader)
+        return 0;
     
     GLuint Program = glCreateProgram();
     glAttachShader(Program, VertexShader);
     glAttachShader(Program, FragmentShader);
+    
+    if(GeometryShader)
+        glAttachShader(Program, GeometryShader);
+    
     glLinkProgram(Program);
     glValidateProgram(Program);
     
@@ -94,15 +124,21 @@ GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar*
     glDetachShader(Program, VertexShader);
     glDetachShader(Program, FragmentShader);
     
+    if(GeometryShader)
+        glDetachShader(Program, GeometryShader);
+    
     glDeleteShader(VertexShader);
     glDeleteShader(FragmentShader);
+    
+    if(GeometryShader)
+        glDeleteShader(GeometryShader);
     
     return Program;
 }
 
-inline char* ShaderDefinesNormal()
+inline char* ShaderDefinesLighting()
 {
-    char* Result = "#define HAS_NORMALS\n";
+    char* Result = "#define HAS_LIGHTING\n";
     return Result;
 }
 
@@ -142,18 +178,29 @@ inline char* ShaderDefinesSpecularTexture()
     return Result;
 }
 
-inline char* GetLightingShader(u32 MaxDirectionalLights, u32 MaxPointLights)
+inline char* ShaderDefinesShadowOutput()
 {
-    char* Result = FormatString(FragmentShader_Lighting, MaxDirectionalLights, MaxPointLights).Data;
+    char* Result = "#define SHADOW_OUTPUT\n";
+    return Result;
+}
+
+inline char* ShaderDefinesMaxDirectionalLightCount(u32 DirectionalLightCount)
+{
+    char* Result = FormatString("#define MAX_DIRECTIONAL_LIGHT_COUNT %d\n", DirectionalLightCount).Data;
+    return Result;
+}
+
+inline char* ShaderDefinesMaxPointLightCount(u32 PointLightCount)
+{
+    char* Result = FormatString("#define MAX_POINT_LIGHT_COUNT %d\n", PointLightCount).Data;
     return Result;
 }
 
 mvp_uniforms GetMVPUniforms(GLint Program)
 {
     mvp_uniforms Result;
-    Result.Projection = glGetUniformLocation(Program, "Projection");
-    Result.View       = glGetUniformLocation(Program, "View");
-    Result.Model      = glGetUniformLocation(Program, "Model");
+    Result.ViewProjection = glGetUniformLocation(Program, "ViewProjection");    
+    Result.Model          = glGetUniformLocation(Program, "Model");
     return Result;
 }
 
@@ -256,8 +303,11 @@ lambertian_color_shader CreateLambertianColorShader()
 {
     lambertian_color_shader Result = {};
     
-    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesNormal(), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesDiffuseColor(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesLighting(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesDiffuseColor(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -279,8 +329,11 @@ lambertian_texture_shader CreateLambertianTextureShader()
 {
     lambertian_texture_shader Result = {};
     
-    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), ShaderDefinesNormal(), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), MaxDirectionalLightString, ShaderDefinesLighting(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -299,8 +352,12 @@ lambertian_texture_shader CreateLambertianTextureShader()
 lambertian_color_skinning_shader CreateLambertianColorSkinningShader()
 {
     lambertian_color_skinning_shader Result = {};
-    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesNormal(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesDiffuseColor(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};
+    
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesLighting(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesDiffuseColor(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -324,8 +381,12 @@ lambertian_color_skinning_shader CreateLambertianColorSkinningShader()
 lambertian_texture_skinning_shader CreateLambertianTextureSkinningShader()
 {
     lambertian_texture_skinning_shader Result = {};
-    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), ShaderDefinesNormal(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};
+    
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesTextures(), ShaderDefinesLighting(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
     
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     if(Program > 0)
@@ -348,8 +409,11 @@ phong_color_shader CreatePhongColorShader()
 {
     phong_color_shader Result = {};
     
-    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, ShaderDefinesNormal(), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesDiffuseColor(), ShaderDefinesSpecularColor(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesLighting(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, MaxDirectionalLightString, MaxPointLightString, ShaderDefinesDiffuseColor(), ShaderDefinesSpecularColor(), FragmentShader_Lighting};
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -358,10 +422,10 @@ phong_color_shader CreatePhongColorShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);        
-        Result.DiffuseColorUniform   = glGetUniformLocation(Program, "DiffuseColor");
-        Result.SpecularColorUniform  = glGetUniformLocation(Program, "SpecularColor");
-        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
-        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");
+        Result.DiffuseColorUniform  = glGetUniformLocation(Program, "DiffuseColor");
+        Result.SpecularColorUniform = glGetUniformLocation(Program, "SpecularColor");
+        Result.ShininessUniform     = glGetUniformLocation(Program, "Shininess");
+        Result.ViewPositionUniform  = glGetUniformLocation(Program, "ViewPosition");
         
         Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");
         glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
@@ -374,8 +438,11 @@ phong_texture_shader CreatePhongTextureShader()
 {
     phong_texture_shader Result = {};
     
-    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), ShaderDefinesNormal(), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), ShaderDefinesSpecularTexture(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesTextures(), ShaderDefinesLighting(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, MaxDirectionalLightString, MaxPointLightString, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), ShaderDefinesSpecularTexture(), FragmentShader_Lighting};
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -384,13 +451,18 @@ phong_texture_shader CreatePhongTextureShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);
-        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
-        Result.DiffuseUniform        = glGetUniformLocation(Program, "DiffuseTexture");
-        Result.SpecularUniform       = glGetUniformLocation(Program, "SpecularTexture");
-        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");
+        Result.ShininessUniform    = glGetUniformLocation(Program, "Shininess");
+        Result.DiffuseUniform      = glGetUniformLocation(Program, "DiffuseTexture");
+        Result.SpecularUniform     = glGetUniformLocation(Program, "SpecularTexture");
+        Result.ViewPositionUniform = glGetUniformLocation(Program, "ViewPosition");
         
-        Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");
+        for(u32 DirectionalLightIndex = 0; DirectionalLightIndex < MAX_DIRECTIONAL_LIGHT_COUNT; DirectionalLightIndex++)
+            Result.ShadowMapsUniform[DirectionalLightIndex] = glGetUniformLocation(Program, FormatString("ShadowMaps[%d]", DirectionalLightIndex).Data); 
+        
+        Result.LightViewProjectionIndex = glGetUniformBlockIndex(Program, "LightViewProjectionBuffer");
+        Result.LightIndex               = glGetUniformBlockIndex(Program, "LightBuffer");
         glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
+        glUniformBlockBinding(Program, Result.LightViewProjectionIndex, LIGHT_VIEW_PROJECTION_INDEX); 
     }
     
     return Result;
@@ -400,8 +472,11 @@ phong_color_skinning_shader CreatePhongColorSkinningShader()
 {
     phong_color_skinning_shader Result = {};
     
-    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, ShaderDefinesNormal(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesDiffuseColor(), ShaderDefinesSpecularColor(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};        
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[]   = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesLighting(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, MaxDirectionalLightString, MaxPointLightString, ShaderDefinesDiffuseColor(), ShaderDefinesSpecularColor(), FragmentShader_Lighting};        
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     
     if(Program > 0)
@@ -410,10 +485,10 @@ phong_color_skinning_shader CreatePhongColorSkinningShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);
-        Result.DiffuseColorUniform   = glGetUniformLocation(Program, "DiffuseColor");
-        Result.SpecularColorUniform  = glGetUniformLocation(Program, "SpecularColor");
-        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
-        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");
+        Result.DiffuseColorUniform  = glGetUniformLocation(Program, "DiffuseColor");
+        Result.SpecularColorUniform = glGetUniformLocation(Program, "SpecularColor");
+        Result.ShininessUniform     = glGetUniformLocation(Program, "Shininess");
+        Result.ViewPositionUniform  = glGetUniformLocation(Program, "ViewPosition");
         
         Result.SkinningIndex = glGetUniformBlockIndex(Program, "SkinningBuffer");
         Result.LightIndex    = glGetUniformBlockIndex(Program, "LightBuffer");
@@ -428,8 +503,11 @@ phong_texture_skinning_shader CreatePhongTextureSkinningShader()
 {
     phong_texture_skinning_shader Result = {};
     
-    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), ShaderDefinesNormal(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
-    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), ShaderDefinesSpecularTexture(), GetLightingShader(MAX_DIRECTIONAL_LIGHT_COUNT, MAX_POINT_LIGHT_COUNT)};
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesTextures(), ShaderDefinesLighting(), ShaderDefinesSkinning(MAX_JOINT_COUNT), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, MaxDirectionalLightString, MaxPointLightString, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), ShaderDefinesSpecularTexture(), FragmentShader_Lighting};
     
     GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
     if(Program > 0)
@@ -438,16 +516,34 @@ phong_texture_skinning_shader CreatePhongTextureSkinningShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);
-        Result.DiffuseUniform        = glGetUniformLocation(Program, "DiffuseTexture");
-        Result.SpecularUniform       = glGetUniformLocation(Program, "SpecularTexture");
-        Result.ShininessUniform      = glGetUniformLocation(Program, "Shininess");
-        Result.CameraPositionUniform = glGetUniformLocation(Program, "CameraPosition");        
+        Result.DiffuseUniform      = glGetUniformLocation(Program, "DiffuseTexture");
+        Result.SpecularUniform     = glGetUniformLocation(Program, "SpecularTexture");
+        Result.ShininessUniform    = glGetUniformLocation(Program, "Shininess");
+        Result.ViewPositionUniform = glGetUniformLocation(Program, "ViewPosition");        
         
         Result.SkinningIndex = glGetUniformBlockIndex(Program, "SkinningBuffer");
         Result.LightIndex = glGetUniformBlockIndex(Program, "LightBuffer");
         
         glUniformBlockBinding(Program, Result.SkinningIndex, SKINNING_BUFFER_INDEX);
         glUniformBlockBinding(Program, Result.LightIndex, LIGHT_BUFFER_INDEX);
+    }
+    
+    return Result;
+}
+
+shadow_map_shader CreateShadowMapShader()
+{
+    shadow_map_shader Result = {};
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, FragmentShader_None};
+    
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;        
+        Result.MVPUniforms = GetMVPUniforms(Program);               
     }
     
     return Result;

@@ -8,6 +8,9 @@
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
 #define MAX_POINT_LIGHT_COUNT 8
 
+#define SHADOW_MAP_WIDTH 1024
+#define SHADOW_MAP_HEIGHT 1024
+
 enum graphics_vertex_format
 {
     GRAPHICS_VERTEX_FORMAT_UNKNOWN,
@@ -32,6 +35,20 @@ enum graphics_filter
     GRAPHICS_FILTER_LINEAR
 };
 
+enum graphics_cull_mode
+{
+    GRAPHICS_CULL_MODE_NONE,
+    GRAPHICS_CULL_MODE_FRONT,
+    GRAPHICS_CULL_MODE_BACK
+};
+
+struct graphics_draw_info
+{
+    u32 IndexCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+};
+
 struct graphics_sampler_info
 {
     graphics_filter MinFilter;
@@ -42,9 +59,11 @@ struct shadow_map;
 
 struct graphics_directional_light
 {    
+    v3f Position; 
+    v3f Direction;    
     c3 Color;    
-    f32 Intensity;
-    v3f Direction;                
+    f32 Intensity;    
+    shadow_map* ShadowMap;
 };
 
 struct graphics_point_light
@@ -67,6 +86,7 @@ enum push_command_type
 {
     PUSH_COMMAND_UNKNOWN,
     PUSH_COMMAND_CLEAR_COLOR,
+    PUSH_COMMAND_CLEAR_DEPTH,
     PUSH_COMMAND_CLEAR_COLOR_AND_DEPTH,
     PUSH_COMMAND_DEPTH,
     PUSH_COMMAND_CULL,
@@ -74,8 +94,8 @@ enum push_command_type
     PUSH_COMMAND_BLEND,
     PUSH_COMMAND_SCISSOR,    
     PUSH_COMMAND_VIEWPORT,
-    PUSH_COMMAND_PROJECTION,    
-    PUSH_COMMAND_CAMERA_VIEW,
+    PUSH_COMMAND_PROJECTION,
+    PUSH_COMMAND_VIEW_TRANSFORM,    
     PUSH_COMMAND_SUBMIT_LIGHT_BUFFER,
     PUSH_COMMAND_DRAW_COLORED_LINE_MESH,
     PUSH_COMMAND_DRAW_COLORED_MESH,
@@ -91,6 +111,8 @@ enum push_command_type
     PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH,    
     PUSH_COMMAND_DRAW_PHONG_TEXTURED_SKINNING_MESH,    
     PUSH_COMMAND_DRAW_IMGUI_UI,    
+    PUSH_COMMAND_LIGHT_FOR_SHADOW_MAP,
+    PUSH_COMMAND_DRAW_SHADOWED_MESH
 };
 
 struct push_command
@@ -101,6 +123,11 @@ struct push_command
 struct push_command_clear_color : public push_command
 {
     f32 R, G, B, A;
+};
+
+struct push_command_clear_depth : public push_command
+{
+    f32 Depth;
 };
 
 struct push_command_clear_color_and_depth : public push_command
@@ -116,7 +143,7 @@ struct push_command_depth : public push_command
 
 struct push_command_cull : public push_command
 {
-    b32 Enable;
+    graphics_cull_mode CullMode;
 };
 
 struct push_command_wireframe : public push_command
@@ -149,10 +176,10 @@ struct push_command_4x4_matrix : public push_command
     m4 Matrix;
 };
 
-struct push_command_camera_view : public push_command
+struct push_command_view_transform : public push_command
 {
-    m4 Matrix;
-    v3f CameraPosition;
+    v3f Position;
+    m3  Orientation;
 };
 
 struct push_command_submit_light_buffer : public push_command
@@ -166,9 +193,7 @@ struct push_command_draw_colored_mesh : public push_command
     c4 Color;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;    
 };
 
 struct push_command_draw_textured_mesh : public push_command
@@ -177,9 +202,7 @@ struct push_command_draw_textured_mesh : public push_command
     i64 TextureID;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;    
 };
 
 struct push_command_draw_colored_skinning_mesh : public push_command
@@ -188,9 +211,7 @@ struct push_command_draw_colored_skinning_mesh : public push_command
     c4 Color;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
     
     m4* Joints;
     u32 JointCount;
@@ -202,9 +223,7 @@ struct push_command_draw_textured_skinning_mesh : public push_command
     i64 TextureID;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
     
     m4* Joints;
     u32 JointCount;
@@ -216,9 +235,7 @@ struct push_command_draw_lambertian_colored_mesh : public push_command
     c4 DiffuseColor;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
 };
 
 struct push_command_draw_lambertian_textured_mesh : public push_command
@@ -227,9 +244,7 @@ struct push_command_draw_lambertian_textured_mesh : public push_command
     i64 DiffuseID;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;    
 };
 
 struct push_command_draw_lambertian_colored_skinning_mesh : public push_command
@@ -238,9 +253,7 @@ struct push_command_draw_lambertian_colored_skinning_mesh : public push_command
     c4 DiffuseColor;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
     
     m4* Joints;
     u32 JointCount;
@@ -252,9 +265,7 @@ struct push_command_draw_lambertian_textured_skinning_mesh : public push_command
     i64 DiffuseID;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
     
     m4* Joints;
     u32 JointCount;
@@ -268,9 +279,7 @@ struct push_command_draw_phong_colored_mesh : public push_command
     i32 Shininess;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
 };
 
 struct push_command_draw_phong_textured_mesh : public push_command
@@ -281,9 +290,7 @@ struct push_command_draw_phong_textured_mesh : public push_command
     i64 SpecularID;
     i32 Shininess;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
 };
 
 struct push_command_draw_phong_colored_skinning_mesh : public push_command
@@ -294,9 +301,7 @@ struct push_command_draw_phong_colored_skinning_mesh : public push_command
     i32 Shininess;
     i64 MeshID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
     
     m4* Joints;
     u32 JointCount;
@@ -310,9 +315,7 @@ struct push_command_draw_phong_textured_skinning_mesh : public push_command
     i64 SpecularID;
     i32 Shininess;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
     
     m4* Joints;
     u32 JointCount;
@@ -323,9 +326,22 @@ struct push_command_draw_imgui_ui : public push_command
     i64 MeshID;
     i64 TextureID;
     
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    graphics_draw_info DrawInfo;
+};
+
+struct push_command_light_for_shadow_map : public push_command
+{    
+    m4  LightView;
+    m4  LightProjection;
+    shadow_map* ShadowMap;
+};
+
+struct push_command_draw_shadowed_mesh : public push_command
+{
+    i64 MeshID;
+    m4 WorldTransform;
+    
+    graphics_draw_info DrawInfo;    
 };
 
 //CONFIRM(JJ): Is this alright to be fixed sized?
@@ -337,6 +353,9 @@ struct push_command_list
 };
 
 struct graphics;
+
+#define ALLOCATE_SHADOW_MAP(name) shadow_map* name(graphics* Graphics, v2i Dimensions)
+typedef ALLOCATE_SHADOW_MAP(allocate_shadow_map);
 
 #define ALLOCATE_TEXTURE(name) i64 name(graphics* Graphics, void* Data, v2i Dimensions, b32 sRGB, graphics_sampler_info* SamplerInfo)
 typedef ALLOCATE_TEXTURE(allocate_texture);
@@ -368,6 +387,9 @@ struct graphics
     push_command_list CommandList;    
     void** PlatformData;                        
     
+    shadow_map* ShadowMaps[MAX_DIRECTIONAL_LIGHT_COUNT];
+    
+    allocate_shadow_map* AllocateShadowMap;
     allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;
     allocate_dynamic_mesh* AllocateDynamicMesh;
@@ -440,9 +462,10 @@ GetIndexBufferSize(graphics_index_format Format, u32 IndexCount)
 }
 
 inline graphics_directional_light
-CreateDirectionalLight(c3 Color, f32 Intensity, v3f Direction)
+CreateDirectionalLight(v3f Position, c3 Color, f32 Intensity, v3f Direction)
 {
     graphics_directional_light Result;
+    Result.Position = Position;
     Result.Color = Color;
     Result.Intensity = Intensity;
     Result.Direction = Direction;
@@ -458,6 +481,23 @@ CreatePointLight(c3 Color, f32 Intensity, v3f Position, f32 Radius)
     Result.Position = Position;
     Result.Radius = Radius;
     return Result;
+}
+
+inline
+m4 GetLightViewMatrix(v3f LightPosition, v3f Direction)
+{    
+    v3f Z = -Direction;
+    v3f X;
+    v3f Y;
+    
+    CreateBasis(Z, &X, &Y);    
+    return InverseTransformM4(LightPosition, X, Y, Z);
+}
+
+inline m4 
+GetLightProjectionMatrix()
+{
+    return OrthographicM4(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 10.0f);
 }
 
 #endif
