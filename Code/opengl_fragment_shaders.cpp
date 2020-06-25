@@ -104,7 +104,7 @@ layout (std140) uniform LightBuffer
 };
 
 uniform v3f ViewPosition;
-uniform sampler2D ShadowMaps[MAX_DIRECTIONAL_LIGHT_COUNT];
+uniform sampler2DArray ShadowMap;
 
 struct brdf
 {
@@ -131,16 +131,16 @@ brdf BlinnPhong(v3f N, v3f L, v3f V, c3 LightColor, c3 SurfaceColor, c3 Specular
     return Result;
 }
 
-f32 SampleShadowMap(sampler2D ShadowMap, v2f UV, v2f TexelSize, f32 Compare)
+f32 SampleShadowMap(i32 ShadowMapIndex, v2f UV, v2f TexelSize, f32 Compare)
 {
     v2f PixelPosition = UV/TexelSize + v2f(0.5f);
     v2f FractionPart = fract(PixelPosition);
     v2f StartTexel = (PixelPosition - FractionPart)*TexelSize;
     
-    f32 BottomLeft = step(Compare, texture(ShadowMap, StartTexel).r);
-    f32 BottomRight = step(Compare, texture(ShadowMap, StartTexel + v2f(TexelSize.x, 0.0f)).r);
-    f32 TopLeft = step(Compare, texture(ShadowMap, StartTexel + v2f(0.0f, TexelSize.y)).r);
-    f32 TopRight = step(Compare, texture(ShadowMap, StartTexel + TexelSize).r);
+    f32 BottomLeft = step(Compare, texture(ShadowMap, v3f(StartTexel, ShadowMapIndex)).r);
+    f32 BottomRight = step(Compare, texture(ShadowMap, v3f(StartTexel + v2f(TexelSize.x, 0.0f), ShadowMapIndex)).r);
+    f32 TopLeft = step(Compare, texture(ShadowMap, v3f(StartTexel + v2f(0.0f, TexelSize.y), ShadowMapIndex)).r);
+    f32 TopRight = step(Compare, texture(ShadowMap, v3f(StartTexel + TexelSize, ShadowMapIndex)).r);
 
     f32 LeftMix = mix(BottomLeft, TopLeft, FractionPart.y);
     f32 RightMix = mix(BottomRight, TopRight, FractionPart.y);
@@ -148,14 +148,18 @@ f32 SampleShadowMap(sampler2D ShadowMap, v2f UV, v2f TexelSize, f32 Compare)
     return Result;
 }
 
-f32 SampleShadow(v4f FragPosition, sampler2D ShadowMap, v3f N, v3f L)
+f32 SampleShadow(v4f FragPosition, i32 ShadowMapIndex, v3f N, v3f L)
 {
     v3f ProjPosition = FragPosition.xyz / FragPosition.w;
     ProjPosition = ProjPosition * 0.5f + 0.5f;    
+
+    if(ProjPosition.z > 1.0f)
+        return 0;
+
     f32 CurrentDepth = ProjPosition.z;
 
     f32 Bias = max(0.05f * (1.0f - dot(N, L)), 0.05f);
-    v2f TexelSize = 1.0f/textureSize(ShadowMap, 0);
+    v2f TexelSize = 1.0f/textureSize(ShadowMap, 0).xy;
 
     f32 CompareValue = CurrentDepth-Bias;
 
@@ -170,7 +174,7 @@ f32 SampleShadow(v4f FragPosition, sampler2D ShadowMap, v3f N, v3f L)
         for(f32 x = -Samples; x <= Samples; x += 1.0f)
         {
             v2f CoordOffset = v2f(x, y)*TexelSize;
-            Result += SampleShadowMap(ShadowMap, ProjPosition.xy+CoordOffset, TexelSize, CompareValue);
+            Result += SampleShadowMap(ShadowMapIndex, ProjPosition.xy+CoordOffset, TexelSize, CompareValue);
         }
     }
 
@@ -208,7 +212,7 @@ void main()
         directional_light DirectionalLight = DirectionalLights[DirectionalLightIndex];
         v3f L = -DirectionalLight.Direction.xyz;
 
-        f32 Shadow = SampleShadow(PixelLightPositions[DirectionalLightIndex], ShadowMaps[DirectionalLightIndex], N, L);
+        f32 Shadow = SampleShadow(PixelLightPositions[DirectionalLightIndex], DirectionalLightIndex, N, L);
 
 #if LAMBERTIAN_MODEL
         c3 LambertianColor = Lambertian(N, L, DirectionalLight.Color.rgb, SurfaceColor);

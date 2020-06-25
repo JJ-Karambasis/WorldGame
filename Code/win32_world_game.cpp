@@ -726,9 +726,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     if(!Graphics)
         WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
     
-    if(!GraphicsCode.BindGraphicsFunctions(Graphics))
-        WRITE_AND_HANDLE_ERROR("Failed to bind the opengl graphics functions.");
-    
     Assets.Graphics = Graphics;        
     void* DevPointer = NULL;
     

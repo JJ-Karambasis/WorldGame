@@ -145,34 +145,6 @@ GetIndexType(graphics_index_format IndexFormat)
     return IndexType;
 }
 
-ALLOCATE_SHADOW_MAP(AllocateShadowMap)
-{
-    opengl_context* OpenGL = (opengl_context*)Graphics;
-    
-    shadow_map* Result = PushStruct(&OpenGL->Storage, shadow_map, Clear, 0);
-    glGenFramebuffers(1, &Result->FBO);
-    
-    glGenTextures(1, &Result->DepthMap);
-    glBindTexture(GL_TEXTURE_2D, Result->DepthMap);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, Dimensions.width, Dimensions.height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    
-    f32 BorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, BorderColor);
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, Result->FBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, Result->DepthMap, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    
-    return Result;
-}
-
 ALLOCATE_TEXTURE(AllocateTexture)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
@@ -504,35 +476,8 @@ void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLs
 #endif
 
 extern "C"
-EXPORT INIT_GRAPHICS(InitGraphics)
-{
-    Global_Platform = Platform;
-    InitMemory(Platform->TempArena, Platform->AllocateMemory, Platform->FreeMemory);
-    
-    arena GraphicsStorage = CreateArena(KILOBYTE(128));    
-    opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
-    
-    OpenGL->Storage = GraphicsStorage;
-    OpenGL->MeshPool = CreatePool<opengl_mesh>(&OpenGL->Storage, 128);
-    OpenGL->TexturePool = CreatePool<opengl_texture>(&OpenGL->Storage, 128);
-    
-    
-    
-    graphics* Graphics = &OpenGL->Graphics;
-    Graphics->PlatformData = PlatformData;
-    
-    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(PlatformData), "Failed to initialize opengl.");
-    
-    return Graphics;
-    
-    handle_error:
-    return NULL;
-}
-
-extern "C"
 EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
-{   
-    Graphics->AllocateShadowMap = AllocateShadowMap;
+{       
     Graphics->AllocateTexture = AllocateTexture;
     Graphics->AllocateMesh = AllocateMesh;
     Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
@@ -576,6 +521,9 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLGENFRAMEBUFFERSPROC, glGenFramebuffers);
     LOAD_FUNCTION(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer);
     LOAD_FUNCTION(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D);
+    LOAD_FUNCTION(PFNGLTEXIMAGE3DPROC, glTexImage3D);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERTEXTURE3DPROC, glFramebufferTexture3D);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERTEXTURELAYERPROC, glFramebufferTextureLayer);
     
 #if DEVELOPER_BUILD
     
@@ -595,6 +543,48 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     
     handle_error:
     return false;
+}
+
+extern "C"
+EXPORT INIT_GRAPHICS(InitGraphics)
+{
+    Global_Platform = Platform;
+    InitMemory(Platform->TempArena, Platform->AllocateMemory, Platform->FreeMemory);
+    
+    arena GraphicsStorage = CreateArena(KILOBYTE(128));    
+    opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
+    
+    OpenGL->Storage = GraphicsStorage;
+    OpenGL->MeshPool = CreatePool<opengl_mesh>(&OpenGL->Storage, 128);
+    OpenGL->TexturePool = CreatePool<opengl_texture>(&OpenGL->Storage, 128);
+    
+    graphics* Graphics = &OpenGL->Graphics;
+    Graphics->PlatformData = PlatformData;
+    
+    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(PlatformData), "Failed to initialize opengl.");
+    
+    BindGraphicsFunctions(Graphics);
+    
+    glGenTextures(1, &OpenGL->ShadowMapTextureArray);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->ShadowMapTextureArray);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, MAX_DIRECTIONAL_LIGHT_COUNT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    
+    c4 BorderColor = White4();
+    glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, (f32*)&BorderColor);
+    
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    
+    glGenFramebuffers(1, &OpenGL->ShadowMapFBO);    
+    
+    return Graphics;
+    
+    handle_error:
+    return NULL;
 }
 
 #define CHECK_SHADER(shader) \
@@ -663,10 +653,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     GLuint BoundProgram = (GLuint)-1;
     GLuint BoundVAO = (GLuint)-1;
     
-    u32 SkinningIndex = 0;
-    
-    
-    shadow_map* ShadowMaps[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
+    u32 SkinningIndex = 0;        
+    u32 DirectionalLightCounter = 0;
     
     push_command_list* CommandList = &Graphics->CommandList;        
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
@@ -796,9 +784,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
                     opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
                     
-                    m4 LightView = GetLightViewMatrix(SrcLight->Position, SrcLight->Direction);                    
-                    
-                    ShadowMaps[DirectionalLightIndex] = SrcLight->ShadowMap;                    
+                    m4 LightView = GetLightViewMatrix(SrcLight->Position, SrcLight->Direction);                                                            
                     LightViewProjectionBuffers[DirectionalLightIndex] = LightView*LightProjection;
                     
                     DstLight->Direction =  V4(SrcLight->Direction, 0.0f);
@@ -816,6 +802,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 UploadUBO(OpenGL->LightViewProjectionUBO, sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LightViewProjectionBuffers);
                 UploadUBO(OpenGL->LightUBO, sizeof(opengl_light_buffer), &DstLightBuffer);                
+                
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->ShadowMapTextureArray);
             } break;
             
             case PUSH_COMMAND_DRAW_COLORED_LINE_MESH:
@@ -984,9 +973,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                             &DrawPhongTexturedMesh->WorldTransform, &ViewProjection))
                 {
                     SetUniform3f(OpenGL->PhongTextureShader.ViewPositionUniform, ViewPosition);                
-                    glUniform1i(OpenGL->PhongTextureShader.ShadowMapsUniform[0], 2);
-                    glActiveTexture(GL_TEXTURE2);
-                    glBindTexture(GL_TEXTURE_2D, ShadowMaps[0]->DepthMap);                    
+                    glUniform1i(OpenGL->PhongTextureShader.ShadowMapUniform, 2);                                      
                 }
                 
                 BindVAO(&BoundVAO, Mesh->VAO);
@@ -1073,10 +1060,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_LIGHT_FOR_SHADOW_MAP:
             {
-                push_command_light_for_shadow_map* LightForShadowMap = (push_command_light_for_shadow_map*)Command;
-                shadow_map* ShadowMap = LightForShadowMap->ShadowMap;
+                push_command_light_for_shadow_map* LightForShadowMap = (push_command_light_for_shadow_map*)Command;                
                 
-                glBindFramebuffer(GL_FRAMEBUFFER, ShadowMap->FBO);
+                glBindFramebuffer(GL_FRAMEBUFFER, OpenGL->ShadowMapFBO);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->ShadowMapTextureArray);                
+                glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, OpenGL->ShadowMapTextureArray, 0, DirectionalLightCounter++);                
+                glDrawBuffer(GL_NONE);
+                glReadBuffer(GL_NONE);                
                 
                 View = LightForShadowMap->LightView;
                 Projection = LightForShadowMap->LightProjection;                

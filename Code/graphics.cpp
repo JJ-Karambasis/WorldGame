@@ -363,15 +363,12 @@ void PushDrawImGuiUI(graphics* Graphics, i64 MeshID, i64 TextureID, u32 IndexCou
 }
 
 void PushLightForShadowMap(graphics* Graphics, graphics_directional_light* DirectionalLight)
-{
-    ASSERT(DirectionalLight->ShadowMap);
-    
+{        
     push_command_light_for_shadow_map* PushCommandLightForShadowMap = PushStruct(push_command_light_for_shadow_map, NoClear, 0);
     PushCommandLightForShadowMap->Type = PUSH_COMMAND_LIGHT_FOR_SHADOW_MAP;
     
     PushCommandLightForShadowMap->LightView = GetLightViewMatrix(DirectionalLight->Position, DirectionalLight->Direction);
-    PushCommandLightForShadowMap->LightProjection = GetLightProjectionMatrix();
-    PushCommandLightForShadowMap->ShadowMap = DirectionalLight->ShadowMap;
+    PushCommandLightForShadowMap->LightProjection = GetLightProjectionMatrix();    
     
     PushCommand(Graphics, PushCommandLightForShadowMap);
 }
@@ -410,7 +407,7 @@ void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, 
     
     LightBuffer.PointLightCount = 0;
     LightBuffer.PointLights[0] = CreatePointLight(White3(), 5.0f, V3(1.0f, 0.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[1] = CreatePointLight(White3(), 5.0f, V3(-5.0f, 0.0f, 3.0f), 10.0f);
+    //LightBuffer.PointLights[1] = CreatePointLight(White3(), 5.0f, V3(-5.0f, 0.0f, 3.0f), 10.0f);
     
     PushDepth(Graphics, true);
     
@@ -418,12 +415,8 @@ void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, 
     PushCull(Graphics, GRAPHICS_CULL_MODE_FRONT);
     PushViewportAndScissor(Graphics, 0, 0, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);        
     for(u32 DirectionalLightIndex = 0; DirectionalLightIndex < LightBuffer.DirectionalLightCount; DirectionalLightIndex++)
-    {           
-        if(!Graphics->ShadowMaps[DirectionalLightIndex])
-            Graphics->ShadowMaps[DirectionalLightIndex] = Graphics->AllocateShadowMap(Graphics, V2i(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT));
-        
-        graphics_directional_light* DirectionalLight = LightBuffer.DirectionalLights + DirectionalLightIndex;        
-        DirectionalLight->ShadowMap = Graphics->ShadowMaps[DirectionalLightIndex];
+    {                   
+        graphics_directional_light* DirectionalLight = LightBuffer.DirectionalLights + DirectionalLightIndex;                
         
         PushLightForShadowMap(Graphics, DirectionalLight);
         PushClearDepth(Graphics, 1.0f);        

@@ -50,6 +50,9 @@ global PFNGLUNIFORM3FPROC glUniform3f;
 global PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
 global PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
 global PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
+global PFNGLTEXIMAGE3DPROC glTexImage3D;
+global PFNGLFRAMEBUFFERTEXTURE3DPROC glFramebufferTexture3D;
+global PFNGLFRAMEBUFFERTEXTURELAYERPROC glFramebufferTextureLayer;
 
 #include "opengl_shaders.h"
 
@@ -133,6 +136,9 @@ struct opengl_context
     phong_color_skinning_shader PhongColorSkinningShader;
     phong_texture_skinning_shader PhongTextureSkinningShader;
     shadow_map_shader ShadowMapShader;
+       
+    GLuint ShadowMapFBO;
+    GLuint ShadowMapTextureArray;
     
     GLuint LightUBO;    
     GLuint LightViewProjectionUBO;

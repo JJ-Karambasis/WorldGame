@@ -455,9 +455,7 @@ phong_texture_shader CreatePhongTextureShader()
         Result.DiffuseUniform      = glGetUniformLocation(Program, "DiffuseTexture");
         Result.SpecularUniform     = glGetUniformLocation(Program, "SpecularTexture");
         Result.ViewPositionUniform = glGetUniformLocation(Program, "ViewPosition");
-        
-        for(u32 DirectionalLightIndex = 0; DirectionalLightIndex < MAX_DIRECTIONAL_LIGHT_COUNT; DirectionalLightIndex++)
-            Result.ShadowMapsUniform[DirectionalLightIndex] = glGetUniformLocation(Program, FormatString("ShadowMaps[%d]", DirectionalLightIndex).Data); 
+        Result.ShadowMapUniform    = glGetUniformLocation(Program, "ShadowMap");
         
         Result.LightViewProjectionIndex = glGetUniformBlockIndex(Program, "LightViewProjectionBuffer");
         Result.LightIndex               = glGetUniformBlockIndex(Program, "LightBuffer");

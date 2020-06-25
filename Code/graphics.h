@@ -8,8 +8,8 @@
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
 #define MAX_POINT_LIGHT_COUNT 8
 
-#define SHADOW_MAP_WIDTH 1024
-#define SHADOW_MAP_HEIGHT 1024
+#define SHADOW_MAP_WIDTH 2048
+#define SHADOW_MAP_HEIGHT 2048
 
 enum graphics_vertex_format
 {
@@ -55,15 +55,12 @@ struct graphics_sampler_info
     graphics_filter MagFilter;
 };
 
-struct shadow_map;
-
 struct graphics_directional_light
 {    
     v3f Position; 
     v3f Direction;    
     c3 Color;    
-    f32 Intensity;    
-    shadow_map* ShadowMap;
+    f32 Intensity;        
 };
 
 struct graphics_point_light
@@ -332,15 +329,13 @@ struct push_command_draw_imgui_ui : public push_command
 struct push_command_light_for_shadow_map : public push_command
 {    
     m4  LightView;
-    m4  LightProjection;
-    shadow_map* ShadowMap;
+    m4  LightProjection;    
 };
 
 struct push_command_draw_shadowed_mesh : public push_command
 {
     i64 MeshID;
-    m4 WorldTransform;
-    
+    m4 WorldTransform;    
     graphics_draw_info DrawInfo;    
 };
 
@@ -353,9 +348,6 @@ struct push_command_list
 };
 
 struct graphics;
-
-#define ALLOCATE_SHADOW_MAP(name) shadow_map* name(graphics* Graphics, v2i Dimensions)
-typedef ALLOCATE_SHADOW_MAP(allocate_shadow_map);
 
 #define ALLOCATE_TEXTURE(name) i64 name(graphics* Graphics, void* Data, v2i Dimensions, b32 sRGB, graphics_sampler_info* SamplerInfo)
 typedef ALLOCATE_TEXTURE(allocate_texture);
@@ -385,11 +377,8 @@ struct graphics
 {       
     v2i RenderDim;
     push_command_list CommandList;    
-    void** PlatformData;                        
-    
-    shadow_map* ShadowMaps[MAX_DIRECTIONAL_LIGHT_COUNT];
-    
-    allocate_shadow_map* AllocateShadowMap;
+    void** PlatformData;                                
+        
     allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;
     allocate_dynamic_mesh* AllocateDynamicMesh;

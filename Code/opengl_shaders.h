@@ -90,9 +90,8 @@ struct phong_texture_shader : public base_shader
     GLint ShininessUniform;
     GLint DiffuseUniform;
     GLint SpecularUniform;
-    GLint ViewPositionUniform;
-        
-    GLint ShadowMapsUniform[MAX_DIRECTIONAL_LIGHT_COUNT];    
+    GLint ViewPositionUniform;    
+    GLint ShadowMapUniform;
     
     GLint LightIndex;
     GLint LightViewProjectionIndex;
