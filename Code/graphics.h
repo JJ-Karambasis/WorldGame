@@ -497,7 +497,7 @@ m4 GetLightViewMatrix(v3f LightPosition, v3f Direction)
 inline m4 
 GetLightProjectionMatrix()
 {
-    return OrthographicM4(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 10.0f);
+    return OrthographicM4(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 8.0f);
 }
 
 #endif
