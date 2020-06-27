@@ -6,10 +6,10 @@
 
 #define MAX_JOINT_COUNT 256
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
-#define MAX_POINT_LIGHT_COUNT 8
+#define MAX_POINT_LIGHT_COUNT 1
 
-#define SHADOW_MAP_WIDTH 2048
-#define SHADOW_MAP_HEIGHT 2048
+#define SHADOW_MAP_WIDTH 1024
+#define SHADOW_MAP_HEIGHT 1024
 
 enum graphics_vertex_format
 {
@@ -61,6 +61,7 @@ struct graphics_directional_light
     v3f Direction;    
     c3 Color;    
     f32 Intensity;        
+    m4 ViewProjection;
 };
 
 struct graphics_point_light
@@ -92,7 +93,8 @@ enum push_command_type
     PUSH_COMMAND_SCISSOR,    
     PUSH_COMMAND_VIEWPORT,
     PUSH_COMMAND_PROJECTION,
-    PUSH_COMMAND_VIEW_TRANSFORM,    
+    PUSH_COMMAND_VIEW_PROJECTION,
+    PUSH_COMMAND_VIEW_POSITION,    
     PUSH_COMMAND_SUBMIT_LIGHT_BUFFER,
     PUSH_COMMAND_DRAW_COLORED_LINE_MESH,
     PUSH_COMMAND_DRAW_COLORED_MESH,
@@ -108,8 +110,9 @@ enum push_command_type
     PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH,    
     PUSH_COMMAND_DRAW_PHONG_TEXTURED_SKINNING_MESH,    
     PUSH_COMMAND_DRAW_IMGUI_UI,    
-    PUSH_COMMAND_LIGHT_FOR_SHADOW_MAP,
-    PUSH_COMMAND_DRAW_SHADOWED_MESH
+    PUSH_COMMAND_SHADOW_MAP,
+    PUSH_COMMAND_OMNI_SHADOW_MAP,
+    PUSH_COMMAND_DRAW_SHADOWED_MESH        
 };
 
 struct push_command
@@ -173,10 +176,9 @@ struct push_command_4x4_matrix : public push_command
     m4 Matrix;
 };
 
-struct push_command_view_transform : public push_command
+struct push_command_view_position : public push_command
 {
-    v3f Position;
-    m3  Orientation;
+    v3f Position;    
 };
 
 struct push_command_submit_light_buffer : public push_command
@@ -326,17 +328,16 @@ struct push_command_draw_imgui_ui : public push_command
     graphics_draw_info DrawInfo;
 };
 
-struct push_command_light_for_shadow_map : public push_command
-{    
-    m4  LightView;
-    m4  LightProjection;    
-};
-
 struct push_command_draw_shadowed_mesh : public push_command
 {
     i64 MeshID;
     m4 WorldTransform;    
     graphics_draw_info DrawInfo;    
+};
+
+struct push_command_omni_shadow_map : public push_command
+{        
+    f32 FarPlaneDistance;
 };
 
 //CONFIRM(JJ): Is this alright to be fixed sized?
@@ -378,7 +379,7 @@ struct graphics
     v2i RenderDim;
     push_command_list CommandList;    
     void** PlatformData;                                
-        
+    
     allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;
     allocate_dynamic_mesh* AllocateDynamicMesh;
@@ -451,13 +452,15 @@ GetIndexBufferSize(graphics_index_format Format, u32 IndexCount)
 }
 
 inline graphics_directional_light
-CreateDirectionalLight(v3f Position, c3 Color, f32 Intensity, v3f Direction)
+CreateDirectionalLight(v3f Position, c3 Color, f32 Intensity, v3f Direction, 
+                       f32 MinX, f32 MaxX, f32 MinY, f32 MaxY, f32 MinZ, f32 MaxZ)
 {
     graphics_directional_light Result;
     Result.Position = Position;
     Result.Color = Color;
     Result.Intensity = Intensity;
-    Result.Direction = Direction;
+    Result.Direction = Direction;    
+    Result.ViewProjection = LookAt(Position, Position+Direction)*OrthographicM4(MinX, MaxX, MinY, MaxY, MinZ, MaxZ);    
     return Result;
 }
 
@@ -472,21 +475,5 @@ CreatePointLight(c3 Color, f32 Intensity, v3f Position, f32 Radius)
     return Result;
 }
 
-inline
-m4 GetLightViewMatrix(v3f LightPosition, v3f Direction)
-{    
-    v3f Z = -Direction;
-    v3f X;
-    v3f Y;
-    
-    CreateBasis(Z, &X, &Y);    
-    return InverseTransformM4(LightPosition, X, Y, Z);
-}
-
-inline m4 
-GetLightProjectionMatrix()
-{
-    return OrthographicM4(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 8.0f);
-}
 
 #endif

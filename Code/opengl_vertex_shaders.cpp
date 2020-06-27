@@ -25,8 +25,8 @@ layout (std140) uniform SkinningBuffer
 };
 #endif
 
-#ifdef SHADOW_POSITION_OMNI
-out v3f WorldPosition;
+#ifdef OMNI_SHADOW_MAP
+out v3f PixelWorldPosition;
 #endif
 
 #ifdef HAS_LIGHTING
@@ -93,12 +93,11 @@ void main()
     PixelUV = UV;
 #endif
 
-#ifdef SHADOW_OUTPUT_OMNI
+#ifdef OMNI_SHADOW_MAP
     PixelWorldPosition = WorldSpacePosition;
-    gl_Position = v4f(WorldSpacePosition, 1.0f);
-#else
-    gl_Position = ViewProjection*v4f(WorldSpacePosition, 1.0f);
 #endif
+
+    gl_Position = ViewProjection*v4f(WorldSpacePosition, 1.0f);
 }
 
 )";

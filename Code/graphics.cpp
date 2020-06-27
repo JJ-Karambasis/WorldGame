@@ -123,19 +123,18 @@ void PushProjection(graphics* Graphics, m4 Matrix)
     PushMatrix(Graphics, PUSH_COMMAND_PROJECTION, Matrix);    
 }
 
-void PushViewTransform(graphics* Graphics, v3f Position, m3 Orientation)
+void PushViewProjection(graphics* Graphics, m4 Matrix)
 {
-    push_command_view_transform* PushCommandViewTransform = PushStruct(push_command_view_transform, NoClear, 0);
-    PushCommandViewTransform->Type = PUSH_COMMAND_VIEW_TRANSFORM;
-    PushCommandViewTransform->Position = Position;
-    PushCommandViewTransform->Orientation = Orientation;
-    
-    PushCommand(Graphics, PushCommandViewTransform);
+    PushMatrix(Graphics, PUSH_COMMAND_VIEW_PROJECTION, Matrix);
 }
 
-void PushViewTransform(graphics* Graphics, v3f Position, quaternion Orientation)
+void PushViewPosition(graphics* Graphics, v3f Position)
 {
-    PushViewTransform(Graphics, Position, ToMatrix3(Orientation));
+    push_command_view_position* PushCommandViewPosition = PushStruct(push_command_view_position, NoClear, 0);
+    PushCommandViewPosition->Type = PUSH_COMMAND_VIEW_POSITION;
+    PushCommandViewPosition->Position = Position;
+    
+    PushCommand(Graphics, PushCommandViewPosition);
 }
 
 void PushSubmitLightBuffer(graphics* Graphics, graphics_light_buffer* LightBuffer)
@@ -362,17 +361,20 @@ void PushDrawImGuiUI(graphics* Graphics, i64 MeshID, i64 TextureID, u32 IndexCou
     PushCommand(Graphics, PushCommandDrawImGuiUI);
 }
 
-void PushLightForShadowMap(graphics* Graphics, graphics_directional_light* DirectionalLight)
+void PushShadowMap(graphics* Graphics)
 {        
-    push_command_light_for_shadow_map* PushCommandLightForShadowMap = PushStruct(push_command_light_for_shadow_map, NoClear, 0);
-    PushCommandLightForShadowMap->Type = PUSH_COMMAND_LIGHT_FOR_SHADOW_MAP;
-    
-    PushCommandLightForShadowMap->LightView = GetLightViewMatrix(DirectionalLight->Position, DirectionalLight->Direction);
-    PushCommandLightForShadowMap->LightProjection = GetLightProjectionMatrix();    
-    
-    PushCommand(Graphics, PushCommandLightForShadowMap);
+    push_command* PushCommandShadowMap = PushStruct(push_command, NoClear, 0);
+    PushCommandShadowMap->Type = PUSH_COMMAND_SHADOW_MAP;    
+    PushCommand(Graphics, PushCommandShadowMap);
 }
 
+void PushOmniShadowMap(graphics* Graphics, f32 FarPlaneDistance)
+{
+    push_command_omni_shadow_map* PushCommandOmniShadowMap = PushStruct(push_command_omni_shadow_map, NoClear, 0);
+    PushCommandOmniShadowMap->Type = PUSH_COMMAND_OMNI_SHADOW_MAP;
+    PushCommandOmniShadowMap->FarPlaneDistance = FarPlaneDistance;
+    PushCommand(Graphics, PushCommandOmniShadowMap); 
+}
 
 void PushDrawShadowedMesh(graphics* Graphics, i64 MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
@@ -395,50 +397,69 @@ void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Hei
 void PushCameraCommands(graphics* Graphics, camera* Camera)
 {    
     m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
-    PushProjection(Graphics, Perspective);
-    PushViewTransform(Graphics, Camera->Position, Camera->Orientation);    
+    m4 View = InverseTransformM4(Camera->Position, Camera->Orientation);
+    PushViewPosition(Graphics, Camera->Position);
+    PushViewProjection(Graphics, View*Perspective);    
 }
 
 void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, assets* Assets)
 {
     graphics_light_buffer LightBuffer = {};
     LightBuffer.DirectionalLightCount = 1;
-    LightBuffer.DirectionalLights[0] = CreateDirectionalLight(V3(0.0f, -5.0f, 5.0f), White3(), 1.0f, Normalize(V3(0.0f, 0.3f, -0.6f)));
     
-    LightBuffer.PointLightCount = 0;
-    LightBuffer.PointLights[0] = CreatePointLight(White3(), 5.0f, V3(1.0f, 0.0f, 3.0f), 10.0f);
+    
+    LightBuffer.DirectionalLights[0] = CreateDirectionalLight(Camera->Position, White3(), 0.3f, Normalize(V3(0.0f, 0.3f, -0.6f)), 
+                                                              -7.0f, 7.0f, -7.0f, 7.0f, 1.0f, 10.0f);
+    
+    LightBuffer.PointLightCount = 1;
+    LightBuffer.PointLights[0] = CreatePointLight(White3(), 2.0f, V3(-3.0f, 1.0f, 3.0f), 10.0f);
     //LightBuffer.PointLights[1] = CreatePointLight(White3(), 5.0f, V3(-5.0f, 0.0f, 3.0f), 10.0f);
     
     PushDepth(Graphics, true);
-    
-#if 1
+        
     PushCull(Graphics, GRAPHICS_CULL_MODE_FRONT);
     PushViewportAndScissor(Graphics, 0, 0, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);        
     for(u32 DirectionalLightIndex = 0; DirectionalLightIndex < LightBuffer.DirectionalLightCount; DirectionalLightIndex++)
     {                   
         graphics_directional_light* DirectionalLight = LightBuffer.DirectionalLights + DirectionalLightIndex;                
         
-        PushLightForShadowMap(Graphics, DirectionalLight);
+        PushViewProjection(Graphics, DirectionalLight->ViewProjection);
+        PushShadowMap(Graphics);
         PushClearDepth(Graphics, 1.0f);        
         FOR_EACH(Entity, &World->EntityPool)
         {
             PushDrawShadowedMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);            
         }
     }
-#endif
     
-#if 0 
-    for(u32 PointLightIndex = 0; PointLightIndex < LightBuffer.PointLights; PointLightIndex++)
-    {
-        graphics_point_light* PointLight = LightBuffer.PointLights + PointLightIndex;
-        PushOmniShadowMap(PointLight->ShadowMap);
-        PushClearDepth(Graphics, Block4(), 1.0f);
-        FOR_EACH(Entity, &World->EntityPool)
+    PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
+    for(u32 PointLightIndex = 0; PointLightIndex < LightBuffer.PointLightCount; PointLightIndex++)
+    {           
+        graphics_point_light* PointLight = LightBuffer.PointLights + PointLightIndex;              
+        m4 LightPerspective = PerspectiveM4(PI*0.5f, SHADOW_MAP_WIDTH/SHADOW_MAP_HEIGHT, 0.01f, PointLight->Radius);
+        
+        m4 LightViewProjections[6] = 
         {
-            PushDrawOmniShadowedMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);
+            LookAt(PointLight->Position, PointLight->Position + Global_WorldXAxis)*LightPerspective,
+            LookAt(PointLight->Position, PointLight->Position - Global_WorldXAxis)*LightPerspective,
+            LookAt(PointLight->Position, PointLight->Position + Global_WorldYAxis)*LightPerspective,
+            LookAt(PointLight->Position, PointLight->Position - Global_WorldYAxis)*LightPerspective,
+            LookAt(PointLight->Position, PointLight->Position + Global_WorldZAxis)*LightPerspective,
+            LookAt(PointLight->Position, PointLight->Position - Global_WorldZAxis)*LightPerspective
+        };
+        
+        PushViewPosition(Graphics, PointLight->Position);
+        for(u32 FaceIndex = 0; FaceIndex < 6; FaceIndex++)
+        {
+            PushViewProjection(Graphics, LightViewProjections[FaceIndex]);
+            PushOmniShadowMap(Graphics, PointLight->Radius);
+            PushClearDepth(Graphics, 1.0f);
+            FOR_EACH(Entity, &World->EntityPool)
+            {
+                PushDrawShadowedMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);
+            }
         }
-    }
-#endif
+    }    
         
     PushSubmitLightBuffer(Graphics, &LightBuffer);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);

@@ -387,13 +387,13 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     
     dev_input* Input = &DevContext->Input;    
     
-    if(IsPressed(Input->ToggleDevState)) DevContext->InDevelopmentMode = !DevContext->InDevelopmentMode;
-    
     if(IsInDevelopmentMode(DevContext))
     {        
         Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, Game->dt);        
         DevelopmentRender(DevContext);        
     }
+    
+    if(IsPressed(Input->ToggleDevState)) DevContext->InDevelopmentMode = !DevContext->InDevelopmentMode;
     
     Input->MouseDelta = {};
     Input->Scroll = 0.0f;

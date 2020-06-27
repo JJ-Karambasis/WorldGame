@@ -92,6 +92,7 @@ struct phong_texture_shader : public base_shader
     GLint SpecularUniform;
     GLint ViewPositionUniform;    
     GLint ShadowMapUniform;
+    GLint OmniShadowMapUniform;
     
     GLint LightIndex;
     GLint LightViewProjectionIndex;
@@ -128,10 +129,9 @@ struct shadow_map_shader : public base_shader
     mvp_uniforms MVPUniforms;        
 };
 
-struct onmi_shader_map_shader : public base_shader
+struct omni_shadow_map_shader : public base_shader
 {
-    GLint ModelUniform;
-    GLint LightViewProjectionUniforms[6];
+    mvp_uniforms MVPUniforms;    
     GLint LightPositionUniform;
     GLint FarPlaneDistanceUniform;
 };

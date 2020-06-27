@@ -7,8 +7,8 @@
 #include "opengl/gl.h"
 #include "opengl/glext.h"
 #include "opengl/glcorearb.h"
-
 #ifdef OS_WINDOWS
+
 #include "opengl/wglext.h"
 #endif
 
@@ -53,6 +53,9 @@ global PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 global PFNGLTEXIMAGE3DPROC glTexImage3D;
 global PFNGLFRAMEBUFFERTEXTURE3DPROC glFramebufferTexture3D;
 global PFNGLFRAMEBUFFERTEXTURELAYERPROC glFramebufferTextureLayer;
+global PFNGLUNIFORM1FPROC glUniform1f;
+global PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
+global PFNGLDRAWBUFFERSPROC glDrawBuffers;
 
 #include "opengl_shaders.h"
 
@@ -136,9 +139,13 @@ struct opengl_context
     phong_color_skinning_shader PhongColorSkinningShader;
     phong_texture_skinning_shader PhongTextureSkinningShader;
     shadow_map_shader ShadowMapShader;
-       
+    omni_shadow_map_shader OmniShadowMapShader;
+    
     GLuint ShadowMapFBO;
     GLuint ShadowMapTextureArray;
+    
+    GLuint OmniShadowMapFBO;
+    GLuint OmniShadowMapTextureArray;
     
     GLuint LightUBO;    
     GLuint LightViewProjectionUBO;

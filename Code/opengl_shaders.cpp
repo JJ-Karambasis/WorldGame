@@ -34,6 +34,7 @@ global const char* Shader_Header = R"(
 #define f64 double
 #define u32 uint
 #define i32 int
+#define b32 i32
 )";
 
 #include "opengl_vertex_shaders.cpp"
@@ -193,6 +194,12 @@ inline char* ShaderDefinesMaxDirectionalLightCount(u32 DirectionalLightCount)
 inline char* ShaderDefinesMaxPointLightCount(u32 PointLightCount)
 {
     char* Result = FormatString("#define MAX_POINT_LIGHT_COUNT %d\n", PointLightCount).Data;
+    return Result;
+}
+
+inline char* ShaderDefinesOmniShadowMap()
+{
+    char* Result = "#define OMNI_SHADOW_MAP\n";
     return Result;
 }
 
@@ -451,11 +458,12 @@ phong_texture_shader CreatePhongTextureShader()
         Result.Program = Program;
         
         Result.MVPUniforms = GetMVPUniforms(Program);
-        Result.ShininessUniform    = glGetUniformLocation(Program, "Shininess");
-        Result.DiffuseUniform      = glGetUniformLocation(Program, "DiffuseTexture");
-        Result.SpecularUniform     = glGetUniformLocation(Program, "SpecularTexture");
-        Result.ViewPositionUniform = glGetUniformLocation(Program, "ViewPosition");
-        Result.ShadowMapUniform    = glGetUniformLocation(Program, "ShadowMap");
+        Result.ShininessUniform     = glGetUniformLocation(Program, "Shininess");
+        Result.DiffuseUniform       = glGetUniformLocation(Program, "DiffuseTexture");
+        Result.SpecularUniform      = glGetUniformLocation(Program, "SpecularTexture");
+        Result.ViewPositionUniform  = glGetUniformLocation(Program, "ViewPosition");
+        Result.ShadowMapUniform     = glGetUniformLocation(Program, "ShadowMap");
+        Result.OmniShadowMapUniform = glGetUniformLocation(Program, "OmniShadowMap");
         
         Result.LightViewProjectionIndex = glGetUniformBlockIndex(Program, "LightViewProjectionBuffer");
         Result.LightIndex               = glGetUniformBlockIndex(Program, "LightBuffer");
@@ -542,6 +550,27 @@ shadow_map_shader CreateShadowMapShader()
         Result.Valid = true;
         Result.Program = Program;        
         Result.MVPUniforms = GetMVPUniforms(Program);               
+    }
+    
+    return Result;
+}
+
+omni_shadow_map_shader CreateOmniShadowMapShader()
+{
+    omni_shadow_map_shader Result = {};
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesOmniShadowMap(), VertexShader_LocalToClip};    
+    const GLchar* FragmentShaders[] = {Shader_Header, FragmentShader_Shadow};    
+    
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));                                         
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;
+        
+        Result.MVPUniforms = GetMVPUniforms(Program);        
+        Result.LightPositionUniform = glGetUniformLocation(Program, "LightPosition");
+        Result.FarPlaneDistanceUniform = glGetUniformLocation(Program, "FarPlaneDistance");        
     }
     
     return Result;

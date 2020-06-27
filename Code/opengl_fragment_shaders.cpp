@@ -37,13 +37,13 @@ void main()
 )";
 
 global const char* FragmentShader_Shadow = R"(
-in v3f FragPosition;
+in v3f PixelWorldPosition;
 uniform f32 FarPlaneDistance;
 uniform v3f LightPosition;
 
 void main()
 {
-    f32 LightDistance = length(FragPosition.xyz-LightPosition);
+    f32 LightDistance = length(PixelWorldPosition-LightPosition);
     LightDistance /= FarPlaneDistance;    
     gl_FragDepth = LightDistance;
 }
@@ -92,7 +92,7 @@ struct directional_light
 struct point_light
 {
     v4f Position;
-    c4 Color;
+    c4 Color;    
 };
 
 layout (std140) uniform LightBuffer
@@ -105,6 +105,7 @@ layout (std140) uniform LightBuffer
 
 uniform v3f ViewPosition;
 uniform sampler2DArray ShadowMap;
+uniform sampler2DArray OmniShadowMap;
 
 struct brdf
 {
@@ -131,7 +132,15 @@ brdf BlinnPhong(v3f N, v3f L, v3f V, c3 LightColor, c3 SurfaceColor, c3 Specular
     return Result;
 }
 
-f32 SampleShadowMap(i32 ShadowMapIndex, v2f UV, v2f TexelSize, f32 Compare)
+f32 BillinearInterpolate(f32 BottomLeft, f32 BottomRight, f32 TopLeft, f32 TopRight, f32 t, f32 u)
+{
+    f32 LeftMix = mix(BottomLeft, TopLeft, u);
+    f32 RightMix = mix(BottomRight, TopRight, u);
+    f32 Result = mix(LeftMix, RightMix, t);
+    return Result;
+}
+
+f32 BillinearSampleShadowMap(i32 ShadowMapIndex, v2f UV, v2f TexelSize, f32 Compare)
 {
     v2f PixelPosition = UV/TexelSize + v2f(0.5f);
     v2f FractionPart = fract(PixelPosition);
@@ -142,13 +151,15 @@ f32 SampleShadowMap(i32 ShadowMapIndex, v2f UV, v2f TexelSize, f32 Compare)
     f32 TopLeft = step(Compare, texture(ShadowMap, v3f(StartTexel + v2f(0.0f, TexelSize.y), ShadowMapIndex)).r);
     f32 TopRight = step(Compare, texture(ShadowMap, v3f(StartTexel + TexelSize, ShadowMapIndex)).r);
 
-    f32 LeftMix = mix(BottomLeft, TopLeft, FractionPart.y);
-    f32 RightMix = mix(BottomRight, TopRight, FractionPart.y);
-    f32 Result = mix(LeftMix, RightMix, FractionPart.x);
+    f32 Result = BillinearInterpolate(BottomLeft, BottomRight, TopLeft, TopRight, FractionPart.x, FractionPart.y);
     return Result;
 }
 
-f32 SampleShadow(v4f FragPosition, i32 ShadowMapIndex, v3f N, v3f L)
+#define NUM_SAMPLES 3.0f
+#define NUM_SAMPLES_SQR NUM_SAMPLES*NUM_SAMPLES
+#define NUM_SAMPLES_CUBE NUM_SAMPLES*NUM_SAMPLES*NUM_SAMPLES
+
+f32 SampleShadowMap(i32 ShadowMapIndex, v4f FragPosition, v3f N, v3f L)
 {
     v3f ProjPosition = FragPosition.xyz / FragPosition.w;
     ProjPosition = ProjPosition * 0.5f + 0.5f;    
@@ -156,39 +167,115 @@ f32 SampleShadow(v4f FragPosition, i32 ShadowMapIndex, v3f N, v3f L)
     if(ProjPosition.z > 1.0f)
         return 0;
 
+    f32 ClosestDepth = texture(ShadowMap, v3f(ProjPosition.xy, ShadowMapIndex)).r;
     f32 CurrentDepth = ProjPosition.z;
 
-    f32 Bias = max(0.05f * (1.0f - dot(N, L)), 0.05f);
-    v2f TexelSize = 1.0f/textureSize(ShadowMap, 0).xy;
+    f32 Bias = max(0.05f * (1.0f - dot(N, L)), 0.05f);    
+    f32 Result = step(CurrentDepth-Bias, ClosestDepth);
 
-    f32 CompareValue = CurrentDepth-Bias;
+    return Result;
+}
 
-#define NUM_SAMPLES 3.0f
-#define NUM_SAMPLES_SQR NUM_SAMPLES*NUM_SAMPLES
+#define POSITIVE_X 0
+#define NEGATIVE_X 1
+#define POSITIVE_Y 2
+#define NEGATIVE_Y 3
+#define POSITIVE_Z 4
+#define NEGATIVE_Z 5
 
-    f32 Samples = (NUM_SAMPLES-1.0f)/2.0f;
+i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
+{       
+    f32 AbsX = abs(TexCoords.x);
+    f32 AbsY = abs(TexCoords.y);
+    f32 AbsZ = abs(TexCoords.z);
+    
+    f32 LargestAxis;
+    f32 U, V;
 
-    f32 Result = 0.0f;
-    for(f32 y = -Samples; y <= Samples; y += 1.0f)
+    i32 Result;
+
+    if((AbsX >= AbsY) && (AbsX >= AbsZ))
     {
-        for(f32 x = -Samples; x <= Samples; x += 1.0f)
+        LargestAxis = AbsX;
+        if(TexCoords.x >= 0)
+        {            
+            U =  TexCoords.z;
+            V =  TexCoords.y;
+            Result = POSITIVE_X;
+        }
+        else
         {
-            v2f CoordOffset = v2f(x, y)*TexelSize;
-            Result += SampleShadowMap(ShadowMapIndex, ProjPosition.xy+CoordOffset, TexelSize, CompareValue);
+            U = -TexCoords.z;
+            V = TexCoords.y;
+            Result = NEGATIVE_X;
         }
     }
 
-    Result /= NUM_SAMPLES_SQR;
+    if((AbsY >= AbsX) && (AbsY >= AbsZ))
+    {
+        LargestAxis = AbsY;
+        if(TexCoords.y >= 0)
+        {
+            U = TexCoords.x;
+            V = TexCoords.z;
+            Result = POSITIVE_Y;
+        }
+        else 
+        { 
+            U =  -TexCoords.x;
+            V =  TexCoords.z;
+            Result = NEGATIVE_Y;
+        }
+    }
+
+    if((AbsZ >= AbsX) && (AbsZ >= AbsY))
+    {
+        LargestAxis = AbsZ;
+        if(TexCoords.z >= 0)
+        {
+            U = -TexCoords.x;
+            V = TexCoords.y;
+            Result = POSITIVE_Z;
+        }
+        else
+        { 
+            U =  TexCoords.x;
+            V =  TexCoords.y;
+            Result = NEGATIVE_Z;
+        }
+    }
+
+    OutTexCoords.x = 0.5f * (U / LargestAxis + 1.0f);
+    OutTexCoords.y = 0.5f * (V / LargestAxis + 1.0f);
+    return Result;
+}
+
+f32 SampleOmniShadowMap(i32 ShadowMapIndex, v3f PixelWorldPosition, v3f LightWorldPosition, f32 FarPlaneDistance, f32 ViewDistance, 
+                        v3f N, v3f L)
+{
+    i32 ActualShadowMapIndex = 6*ShadowMapIndex;
+    v3f LightToPixel = PixelWorldPosition-LightWorldPosition;
+    f32 CurrentDepth = length(LightToPixel);
+
+    v2f OutTexCoords;
+    i32 FaceIndex = ChooseFaceIndex(LightToPixel, OutTexCoords);
+    i32 FinalFaceIndex = ActualShadowMapIndex+FaceIndex;
+
+    f32 ClosestDepth = texture(OmniShadowMap, v3f(OutTexCoords, FinalFaceIndex)).r;
+    ClosestDepth *= FarPlaneDistance;
+
+    f32 Bias = max(0.05f*(1.0f-dot(N, L)), 0.05f);
+    f32 Result = step(CurrentDepth-Bias, ClosestDepth);
     return Result;
 }
 
 void main()
 {    
     v3f N = normalize(PixelWorldNormal);
-
-#if LAMBERTIAN_MODEL == 0
-    v3f V = normalize(ViewPosition-PixelWorldPosition);
-#endif
+    
+    v3f V = ViewPosition-PixelWorldPosition;
+    f32 ViewDistance = length(V);
+    V /= ViewDistance;
 
 #ifdef DIFFUSE_COLOR
     c3 SurfaceColor = DiffuseColor.rgb;
@@ -212,7 +299,7 @@ void main()
         directional_light DirectionalLight = DirectionalLights[DirectionalLightIndex];
         v3f L = -DirectionalLight.Direction.xyz;
 
-        f32 Shadow = SampleShadow(PixelLightPositions[DirectionalLightIndex], DirectionalLightIndex, N, L);
+        f32 Shadow = SampleShadowMap(DirectionalLightIndex, PixelLightPositions[DirectionalLightIndex], N, L);
 
 #if LAMBERTIAN_MODEL
         c3 LambertianColor = Lambertian(N, L, DirectionalLight.Color.rgb, SurfaceColor);
@@ -237,14 +324,16 @@ void main()
         f32 Denominator = (DistanceFromLight)+1.0f;
         f32 Falloff = (Numerator*Numerator)/Denominator;
 
-        c3 LightColor = PointLight.Color.xyz*Falloff;
-
+        c3 LightColor = PointLight.Color.xyz*Falloff;        
+        
+        f32 Shadow = SampleOmniShadowMap(PointLightIndex, PixelWorldPosition, PointLight.Position.xyz, 
+                                         LightRadius, ViewDistance, N, L);
 #if LAMBERTIAN_MODEL
         c3 LambertianColor = Lambertian(N, L, LightColor, SurfaceColor);
-        FinalColor += LambertianColor;
+        FinalColor += Shadow*LambertianColor;
 #else
         brdf BRDF = BlinnPhong(N, L, V, LightColor, SurfaceColor, Specular, Shininess);
-        FinalColor += (BRDF.Diffuse+BRDF.Specular);    
+        FinalColor += Shadow*(BRDF.Diffuse+BRDF.Specular);    
 #endif        
     }
 
