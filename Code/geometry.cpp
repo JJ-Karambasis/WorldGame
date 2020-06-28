@@ -1063,7 +1063,7 @@ b32 IsLineIntersectingTriangle3D(v3f LineOrigin, v3f LineDirection, v3f Vertex0,
     f32 det;
     f32 inv_det;
 
-    edge1 = Vertex1 - Vertex2;
+    edge1 = Vertex1 - Vertex0;
     edge2 = Vertex2 - Vertex0;
 
     pvec = Cross(LineDirection, edge2);
