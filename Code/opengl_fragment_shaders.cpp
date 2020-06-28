@@ -22,15 +22,15 @@ out c4 FragColor;
 uniform sampler2D Texture;
 in v2f PixelUV;
 #else
-uniform c4 Color;
+uniform c3 Color;
 #endif
                                              
 void main()
 {
 #ifdef HAS_TEXTURES    
-    FragColor = texture(Texture, PixelUV);
+    FragColor = c4(texture(Texture, PixelUV).rgb, 1.0f);
 #else
-    FragColor = Color;    
+    FragColor = c4(Color, 1.0f);    
 #endif
 }
 
@@ -62,7 +62,7 @@ in v2f PixelUV;
 #endif
 
 #ifdef DIFFUSE_COLOR
-uniform c4 DiffuseColor;
+uniform c3 DiffuseColor;
 #endif
 
 #ifdef DIFFUSE_TEXTURE
@@ -70,7 +70,7 @@ uniform sampler2D DiffuseTexture;
 #endif
 
 #ifdef SPECULAR_COLOR
-uniform c4 SpecularColor;
+uniform f32 SpecularColor;
 #endif
 
 #ifdef SPECULAR_TEXTURE
@@ -103,7 +103,11 @@ layout (std140) uniform LightBuffer
     i32 PointLightCount;
 };
 
+
+#if LAMBERTIAN_MODEL == 0
 uniform v3f ViewPosition;
+#endif
+
 uniform sampler2DArray ShadowMap;
 uniform sampler2DArray OmniShadowMap;
 
@@ -119,7 +123,7 @@ c3 Lambertian(v3f N, v3f L, v3f SurfaceColor, v3f LightColor)
     return Result;
 }
 
-brdf BlinnPhong(v3f N, v3f L, v3f V, c3 LightColor, c3 SurfaceColor, c3 SpecularColor, f32 Shininess)
+brdf BlinnPhong(v3f N, v3f L, v3f V, c3 LightColor, c3 SurfaceColor, f32 SpecularColor, f32 Shininess)
 {
     brdf Result;
 
@@ -250,8 +254,7 @@ i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
     return Result;
 }
 
-f32 SampleOmniShadowMap(i32 ShadowMapIndex, v3f PixelWorldPosition, v3f LightWorldPosition, f32 FarPlaneDistance, f32 ViewDistance, 
-                        v3f N, v3f L)
+f32 SampleOmniShadowMap(i32 ShadowMapIndex, v3f PixelWorldPosition, v3f LightWorldPosition, f32 FarPlaneDistance, v3f N, v3f L)
 {
     i32 ActualShadowMapIndex = 6*ShadowMapIndex;
     v3f LightToPixel = PixelWorldPosition-LightWorldPosition;
@@ -273,12 +276,8 @@ void main()
 {    
     v3f N = normalize(PixelWorldNormal);
     
-    v3f V = ViewPosition-PixelWorldPosition;
-    f32 ViewDistance = length(V);
-    V /= ViewDistance;
-
 #ifdef DIFFUSE_COLOR
-    c3 SurfaceColor = DiffuseColor.rgb;
+    c3 SurfaceColor = DiffuseColor;
 #endif
 
 #ifdef DIFFUSE_TEXTURE
@@ -286,11 +285,15 @@ void main()
 #endif
 
 #ifdef SPECULAR_COLOR
-    c3 Specular = SpecularColor.rgb; 
+    f32 Specular = SpecularColor; 
 #endif
 
 #ifdef SPECULAR_TEXTURE
-    c3 Specular = texture(SpecularTexture, PixelUV).rgb;
+    f32 Specular = texture(SpecularTexture, PixelUV).r;
+#endif
+
+#if LAMBERTIAN_MODEL == 0
+    v3f V = normalize(ViewPosition-PixelWorldPosition);
 #endif
 
     c3 FinalColor = c3(0, 0, 0);
@@ -326,8 +329,7 @@ void main()
 
         c3 LightColor = PointLight.Color.xyz*Falloff;        
         
-        f32 Shadow = SampleOmniShadowMap(PointLightIndex, PixelWorldPosition, PointLight.Position.xyz, 
-                                         LightRadius, ViewDistance, N, L);
+        f32 Shadow = SampleOmniShadowMap(PointLightIndex, PixelWorldPosition, PointLight.Position.xyz, LightRadius, N, L);
 #if LAMBERTIAN_MODEL
         c3 LambertianColor = Lambertian(N, L, LightColor, SurfaceColor);
         FinalColor += Shadow*LambertianColor;

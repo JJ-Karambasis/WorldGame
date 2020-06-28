@@ -61,14 +61,14 @@ struct dev_mesh
 struct debug_point
 {
     v3f P;
-    c4 Color;
+    c3 Color;
 };
 
 struct debug_edge
 {
     v3f P0;
     v3f P1;
-    c4 Color;
+    c3 Color;
 };
 
 struct debug_quad
@@ -76,7 +76,7 @@ struct debug_quad
     v3f CenterP;
     v3f Normal;
     v2f Dim;
-    c4 Color;
+    c3 Color;
 };
 
 enum debug_primitive_type
@@ -164,7 +164,7 @@ inline void CheckPrimitivesAreAllocated(dev_context* DevContext)
         DevContext->DebugPrimitives = CreateDynamicArray<debug_primitive>(2048);
 }
 
-inline void DebugDrawPoint(dev_context* DevContext, v3f P, c4 Color)
+inline void DebugDrawPoint(dev_context* DevContext, v3f P, c3 Color)
 {
     CheckPrimitivesAreAllocated(DevContext);
     
@@ -173,7 +173,7 @@ inline void DebugDrawPoint(dev_context* DevContext, v3f P, c4 Color)
     Append(&DevContext->DebugPrimitives, Primitive);
 }
 
-inline void DebugDrawEdge(dev_context* DevContext, v3f P0, v3f P1, c4 Color)
+inline void DebugDrawEdge(dev_context* DevContext, v3f P0, v3f P1, c3 Color)
 {
     CheckPrimitivesAreAllocated(DevContext);
     
@@ -182,7 +182,7 @@ inline void DebugDrawEdge(dev_context* DevContext, v3f P0, v3f P1, c4 Color)
     Append(&DevContext->DebugPrimitives, Primitive);
 }
 
-inline void DebugDrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
+inline void DebugDrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c3 Color)
 {
     CheckPrimitivesAreAllocated(DevContext);
     

@@ -111,10 +111,27 @@ struct opengl_light_buffer
     i32 PointLightCount;
 };
 
-struct shadow_map
-{    
-    GLuint FBO;
-    GLuint DepthMap;
+enum shadow_pass_state
+{
+    SHADOW_PASS_STATE_NONE,
+    SHADOW_PASS_STATE_DIRECTIONAL,
+    SHADOW_PASS_STATE_OMNI_DIRECTIONAL
+};
+
+struct shadow_pass
+{
+    b32 Current;    
+    u32 ShadowMapCounter;
+    u32 OmniShadowMapCounter;
+    f32 FarPlaneDistance;    
+    shadow_pass_state State;
+};
+
+struct opengl_forward_pass
+{
+    b32 Current;
+    graphics_material* PrevBoundMaterial;
+    graphics_material* BoundMaterial;        
 };
 
 struct opengl_context
@@ -125,21 +142,17 @@ struct opengl_context
     opengl_mesh_pool MeshPool;
     opengl_texture_pool TexturePool;        
     
-    imgui_shader ImGuiShader;    
-    color_shader ColorShader;
-    texture_shader TextureShader;
-    color_skinning_shader ColorSkinningShader;        
-    texture_skinning_shader TextureSkinningShader;
-    lambertian_color_shader LambertianColorShader;
-    lambertian_texture_shader LambertianTextureShader;
-    lambertian_color_skinning_shader LambertianColorSkinningShader;
-    lambertian_texture_skinning_shader LambertianTextureSkinningShader;
-    phong_color_shader PhongColorShader;
-    phong_texture_shader PhongTextureShader;
-    phong_color_skinning_shader PhongColorSkinningShader;
-    phong_texture_skinning_shader PhongTextureSkinningShader;
-    shadow_map_shader ShadowMapShader;
-    omni_shadow_map_shader OmniShadowMapShader;
+    imgui_shader              ImGuiShader;
+    color_shader              ColorShader;
+    texture_shader            TextureShader;
+    lambertian_color_shader   LambertianColorShader;
+    lambertian_texture_shader LambertianTextureShader;    
+    phong_dcon_scon_shader    PhongDConSConShader;
+    phong_dcon_stex_shader    PhongDConSTexShader;
+    phong_dtex_scon_shader    PhongDTexSConShader;
+    phong_dtex_stex_shader    PhongDTexSTexShader;
+    shadow_map_shader         ShadowMapShader;
+    omni_shadow_map_shader    OmniShadowMapShader;
     
     GLuint ShadowMapFBO;
     GLuint ShadowMapTextureArray;

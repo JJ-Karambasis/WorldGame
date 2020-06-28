@@ -107,8 +107,9 @@ inline b32 IsAssetValid(animation_clip* Clip)
 struct texture
 {
     void* Texels;
-    v2i Dimensions;   
-    i64 GDIHandle;
+    v2i Dimensions;
+    graphics_texture_format Format;
+    graphics_texture_id GDIHandle;
 };
 
 inline b32 IsAssetValid(texture* Texture)
@@ -130,8 +131,18 @@ struct assets
     
     mesh PlayerMesh;
     
-    texture TestDiffuse;
-    texture TestSpecular;
+    texture TestMaterial0_Diffuse;
+    texture TestMaterial0_Specular;
+    
+    texture TestMaterial1_Diffuse;
+    texture TestMaterial1_Specular;
+    
+    graphics_material Material_DiffuseC;
+    graphics_material Material_DiffuseT;            
+    graphics_material Material_DiffuseC_SpecularC;
+    graphics_material Material_DiffuseC_SpecularT;
+    graphics_material Material_DiffuseT_SpecularC;
+    graphics_material Material_DiffuseT_SpecularT;
     
 #if 0 
     mesh TestSkeletonMesh;

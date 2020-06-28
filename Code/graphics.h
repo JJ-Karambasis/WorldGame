@@ -6,10 +6,12 @@
 
 #define MAX_JOINT_COUNT 256
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
-#define MAX_POINT_LIGHT_COUNT 1
+#define MAX_POINT_LIGHT_COUNT 9
 
 #define SHADOW_MAP_WIDTH 1024
 #define SHADOW_MAP_HEIGHT 1024
+
+typedef i64 graphics_texture_id;
 
 enum graphics_vertex_format
 {
@@ -28,6 +30,71 @@ enum graphics_index_format
     GRAPHICS_INDEX_FORMAT_16_BIT,
     GRAPHICS_INDEX_FORMAT_32_BIT
 };
+
+enum graphics_texture_format
+{   
+    GRAPHICS_TEXTURE_FORMAT_R8,    
+    GRAPHICS_TEXTURE_FORMAT_R8G8B8,
+    GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB,
+    GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8, 
+    GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8
+};
+
+struct graphics_diffuse_material_slot
+{
+    b32 IsTexture;
+    union
+    {
+        graphics_texture_id DiffuseID;
+        v3f Diffuse;
+    };
+};
+
+struct graphics_specular_material_slot
+{
+    b32 InUse;    
+    b32 IsTexture;
+    union
+    {
+        graphics_texture_id SpecularID;
+        f32 Specular;
+    };
+    i32 Shininess;
+};
+
+struct graphics_normal_material_slot
+{
+    b32 InUse;
+    graphics_texture_id NormalID;
+};
+
+struct graphics_material
+{   
+    graphics_diffuse_material_slot  Diffuse;
+    graphics_specular_material_slot Specular;
+    graphics_normal_material_slot   Normal;
+};
+
+inline graphics_texture_format 
+ConvertToSRGBFormat(graphics_texture_format Format)
+{
+    switch(Format)
+    {
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8:
+        {
+            return GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB;
+        }
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8:
+        {
+            return GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8;
+        }
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (graphics_texture_format)-1;
+}
 
 enum graphics_filter
 {
@@ -80,77 +147,6 @@ struct graphics_light_buffer
     graphics_point_light PointLights[MAX_POINT_LIGHT_COUNT];
 };
 
-enum push_command_type
-{
-    PUSH_COMMAND_UNKNOWN,
-    PUSH_COMMAND_CLEAR_COLOR,
-    PUSH_COMMAND_CLEAR_DEPTH,
-    PUSH_COMMAND_CLEAR_COLOR_AND_DEPTH,
-    PUSH_COMMAND_DEPTH,
-    PUSH_COMMAND_CULL,
-    PUSH_COMMAND_WIREFRAME,
-    PUSH_COMMAND_BLEND,
-    PUSH_COMMAND_SCISSOR,    
-    PUSH_COMMAND_VIEWPORT,
-    PUSH_COMMAND_PROJECTION,
-    PUSH_COMMAND_VIEW_PROJECTION,
-    PUSH_COMMAND_VIEW_POSITION,    
-    PUSH_COMMAND_SUBMIT_LIGHT_BUFFER,
-    PUSH_COMMAND_DRAW_COLORED_LINE_MESH,
-    PUSH_COMMAND_DRAW_COLORED_MESH,
-    PUSH_COMMAND_DRAW_TEXTURED_MESH,
-    PUSH_COMMAND_DRAW_COLORED_SKINNING_MESH,
-    PUSH_COMMAND_DRAW_TEXTURED_SKINNING_MESH,
-    PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_MESH,
-    PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_MESH,
-    PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_SKINNING_MESH,
-    PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_SKINNING_MESH,
-    PUSH_COMMAND_DRAW_PHONG_COLORED_MESH,
-    PUSH_COMMAND_DRAW_PHONG_TEXTURED_MESH,
-    PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH,    
-    PUSH_COMMAND_DRAW_PHONG_TEXTURED_SKINNING_MESH,    
-    PUSH_COMMAND_DRAW_IMGUI_UI,    
-    PUSH_COMMAND_SHADOW_MAP,
-    PUSH_COMMAND_OMNI_SHADOW_MAP,
-    PUSH_COMMAND_DRAW_SHADOWED_MESH        
-};
-
-struct push_command
-{
-    push_command_type Type;
-};
-
-struct push_command_clear_color : public push_command
-{
-    f32 R, G, B, A;
-};
-
-struct push_command_clear_depth : public push_command
-{
-    f32 Depth;
-};
-
-struct push_command_clear_color_and_depth : public push_command
-{
-    f32 R, G, B, A;
-    f32 Depth;
-};
-
-struct push_command_depth : public push_command
-{
-    b32 Enable;
-};
-
-struct push_command_cull : public push_command
-{
-    graphics_cull_mode CullMode;
-};
-
-struct push_command_wireframe : public push_command
-{
-    b32 Enable;
-};
-
 enum graphics_blend
 {
     GRAPHICS_BLEND_UNKNOWN,
@@ -158,199 +154,11 @@ enum graphics_blend
     GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA
 };
 
-struct push_command_blend : public push_command
-{
-    b32 Enable;
-    graphics_blend SrcGraphicsBlend;
-    graphics_blend DstGraphicsBlend;
-};
-
-struct push_command_rect : public push_command
-{ 
-    i32 X, Y;
-    i32 Width, Height;
-};
-
-struct push_command_4x4_matrix : public push_command
-{
-    m4 Matrix;
-};
-
-struct push_command_view_position : public push_command
-{
-    v3f Position;    
-};
-
-struct push_command_submit_light_buffer : public push_command
-{
-    graphics_light_buffer LightBuffer;
-};
-
-struct push_command_draw_colored_mesh : public push_command
-{
-    m4 WorldTransform;
-    c4 Color;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;    
-};
-
-struct push_command_draw_textured_mesh : public push_command
-{
-    m4 WorldTransform;
-    i64 TextureID;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;    
-};
-
-struct push_command_draw_colored_skinning_mesh : public push_command
-{
-    m4 WorldTransform;
-    c4 Color;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;
-    
-    m4* Joints;
-    u32 JointCount;
-};
-
-struct push_command_draw_textured_skinning_mesh : public push_command
-{
-    m4 WorldTransform;
-    i64 TextureID;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;
-    
-    m4* Joints;
-    u32 JointCount;
-};
-
-struct push_command_draw_lambertian_colored_mesh : public push_command
-{
-    m4 WorldTransform;
-    c4 DiffuseColor;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;
-};
-
-struct push_command_draw_lambertian_textured_mesh : public push_command
-{
-    m4 WorldTransform;
-    i64 DiffuseID;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;    
-};
-
-struct push_command_draw_lambertian_colored_skinning_mesh : public push_command
-{
-    m4 WorldTransform;
-    c4 DiffuseColor;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;
-    
-    m4* Joints;
-    u32 JointCount;
-};
-
-struct push_command_draw_lambertian_textured_skinning_mesh : public push_command
-{
-    m4 WorldTransform;
-    i64 DiffuseID;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;
-    
-    m4* Joints;
-    u32 JointCount;
-};
-
-struct push_command_draw_phong_colored_mesh : public push_command
-{    
-    m4 WorldTransform;
-    c4 DiffuseColor;
-    c4 SpecularColor;
-    i32 Shininess;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;
-};
-
-struct push_command_draw_phong_textured_mesh : public push_command
-{
-    m4 WorldTransform;
-    i64 MeshID;
-    i64 DiffuseID;
-    i64 SpecularID;
-    i32 Shininess;
-    
-    graphics_draw_info DrawInfo;
-};
-
-struct push_command_draw_phong_colored_skinning_mesh : public push_command
-{
-    m4 WorldTransform;    
-    c4 DiffuseColor;
-    c4 SpecularColor;    
-    i32 Shininess;
-    i64 MeshID;
-    
-    graphics_draw_info DrawInfo;
-    
-    m4* Joints;
-    u32 JointCount;
-};
-
-struct push_command_draw_phong_textured_skinning_mesh : public push_command
-{
-    m4 WorldTransform;
-    i64 MeshID;
-    i64 DiffuseID;
-    i64 SpecularID;
-    i32 Shininess;
-    
-    graphics_draw_info DrawInfo;
-    
-    m4* Joints;
-    u32 JointCount;
-};
-
-struct push_command_draw_imgui_ui : public push_command
-{
-    i64 MeshID;
-    i64 TextureID;
-    
-    graphics_draw_info DrawInfo;
-};
-
-struct push_command_draw_shadowed_mesh : public push_command
-{
-    i64 MeshID;
-    m4 WorldTransform;    
-    graphics_draw_info DrawInfo;    
-};
-
-struct push_command_omni_shadow_map : public push_command
-{        
-    f32 FarPlaneDistance;
-};
-
-//CONFIRM(JJ): Is this alright to be fixed sized?
-#define MAX_COMMAND_COUNT 1024
-struct push_command_list
-{
-    push_command* Ptr[MAX_COMMAND_COUNT];
-    u32 Count;
-};
+#include "graphics_push_commands.h"
 
 struct graphics;
 
-#define ALLOCATE_TEXTURE(name) i64 name(graphics* Graphics, void* Data, v2i Dimensions, b32 sRGB, graphics_sampler_info* SamplerInfo)
+#define ALLOCATE_TEXTURE(name) graphics_texture_id name(graphics* Graphics, void* Data, v2i Dimensions, graphics_texture_format TextureFormat, graphics_sampler_info* SamplerInfo)
 typedef ALLOCATE_TEXTURE(allocate_texture);
 
 #define ALLOCATE_MESH(name) i64 name(graphics* Graphics, void* VertexData, ptr VertexDataSize, graphics_vertex_format VertexFormat, void* IndexData, ptr IndexDataSize, graphics_index_format IndexFormat)
@@ -475,5 +283,51 @@ CreatePointLight(c3 Color, f32 Intensity, v3f Position, f32 Radius)
     return Result;
 }
 
+inline graphics_diffuse_material_slot 
+CreateDiffuseMaterialSlot(c3 Diffuse)
+{
+    graphics_diffuse_material_slot Result = {};
+    Result.Diffuse = Diffuse;
+    return Result;
+}
+
+inline graphics_diffuse_material_slot 
+CreateDiffuseMaterialSlot(graphics_texture_id DiffuseID)
+{
+    graphics_diffuse_material_slot Result = {};
+    Result.IsTexture = true;
+    Result.DiffuseID = DiffuseID;
+    return Result;
+}
+
+inline graphics_specular_material_slot
+CreateSpecularMaterialSlot(f32 Specular, i32 Shininess)
+{
+    graphics_specular_material_slot Result = {};
+    Result.InUse = true;    
+    Result.Specular = Specular;
+    Result.Shininess = Shininess;
+    return Result;
+}
+
+inline graphics_specular_material_slot 
+CreateSpecularMaterialSlot(graphics_texture_id SpecularID, i32 Shininess)
+{
+    graphics_specular_material_slot Result = {};
+    Result.InUse = true;
+    Result.IsTexture = true;
+    Result.SpecularID = SpecularID;    
+    Result.Shininess = Shininess;
+    return Result;
+}
+
+inline graphics_normal_material_slot 
+CreateNormalMaterialSlot(graphics_texture_id NormalID)
+{
+    graphics_normal_material_slot Result;
+    Result.InUse = true;
+    Result.NormalID = NormalID;
+    return Result;
+}
 
 #endif

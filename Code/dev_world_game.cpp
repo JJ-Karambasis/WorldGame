@@ -77,24 +77,24 @@ void DrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Colo
     NOT_IMPLEMENTED;    
 }
 
-void DrawOrientedBox(dev_context* DevContext, v3f P, v3f Dim, v3f XAxis, v3f YAxis, v3f ZAxis, c4 Color)
+void DrawOrientedBox(dev_context* DevContext, v3f P, v3f Dim, v3f XAxis, v3f YAxis, v3f ZAxis, c3 Color)
 {
     m4 Model = TransformM4(P, XAxis, YAxis, ZAxis, Dim);
-    PushDrawColoredMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, Color, DevContext->TriangleBoxMesh.IndexCount, 0, 0);
+    PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleBoxMesh.IndexCount, 0, 0);
 }
 
-void DrawBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
+void DrawBox(dev_context* DevContext, v3f P, v3f Dim, c3 Color)
 {
     DrawOrientedBox(DevContext, P, Dim, Global_WorldXAxis, Global_WorldYAxis, Global_WorldZAxis, Color);
 }
 
-void DrawPoint(dev_context* DevContext, v3f P, c4 Color)
+void DrawPoint(dev_context* DevContext, v3f P, c3 Color)
 {
     DrawBox(DevContext, P, V3(0.025f), Color);
 }
 
 
-void DrawEdge(dev_context* DevContext, v3f P0, v3f P1, c4 Color)
+void DrawEdge(dev_context* DevContext, v3f P0, v3f P1, c3 Color)
 {
     v3f ZAxis = P1-P0;
     f32 ZLength = Magnitude(ZAxis);
@@ -105,37 +105,37 @@ void DrawEdge(dev_context* DevContext, v3f P0, v3f P1, c4 Color)
     DrawOrientedBox(DevContext, P0, V3(0.025f, 0.025f, ZLength), XAxis, YAxis, ZAxis, Color);
 }
 
-void DrawSphere(dev_context* DevContext, v3f CenterP, f32 Radius, c4 Color)
+void DrawSphere(dev_context* DevContext, v3f CenterP, f32 Radius, c3 Color)
 {
     m4 Model = TransformM4(CenterP, V3(Radius, Radius, Radius));
-    PushDrawColoredMesh(DevContext->Graphics, DevContext->TriangleSphereMesh.MeshID, Model, Color, DevContext->TriangleSphereMesh.IndexCount, 0, 0);    
+    PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleSphereMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleSphereMesh.IndexCount, 0, 0);    
 }
 
-void DrawLineBox(dev_context* DevContext, v3f P, v3f Dim, c4 Color)
+void DrawLineBox(dev_context* DevContext, v3f P, v3f Dim, c3 Color)
 {    
     m4 Model = TransformM4(P, Dim);
-    PushDrawColoredLineMesh(DevContext->Graphics, DevContext->LineBoxMesh.MeshID, Model, Color, DevContext->LineBoxMesh.IndexCount, 0, 0);        
+    PushDrawLineMesh(DevContext->Graphics, DevContext->LineBoxMesh.MeshID, Model, Color, DevContext->LineBoxMesh.IndexCount, 0, 0);        
 }
 
-void DrawLineBoxMinMax(dev_context* DevContext, v3f Min, v3f Max, c4 Color)
+void DrawLineBoxMinMax(dev_context* DevContext, v3f Min, v3f Max, c3 Color)
 {   
     v3f Dim = Max-Min;
-    v3f P = V3(Min.xy + Dim.xy*0.5f, Min.z);
+    v3f P = V3(Min.xy + Dim.xy*0.5f, Min.z);    
     DrawLineBox(DevContext, P, Dim, Color);    
 }
 
-void DrawLineEllipsoid(dev_context* DevContext, v3f CenterP, v3f Radius, c4 Color)
+void DrawLineEllipsoid(dev_context* DevContext, v3f CenterP, v3f Radius, c3 Color)
 {
     m4 Model = TransformM4(CenterP, Radius);
-    PushDrawColoredLineMesh(DevContext->Graphics, DevContext->LineSphereMesh.MeshID, Model, Color, DevContext->LineSphereMesh.IndexCount, 0, 0); 
+    PushDrawLineMesh(DevContext->Graphics, DevContext->LineSphereMesh.MeshID, Model, Color, DevContext->LineSphereMesh.IndexCount, 0, 0); 
 }
 
-void DrawLineEllipsoid(dev_context* DevContext, ellipsoid3D Ellipsoid, c4 Color)
+void DrawLineEllipsoid(dev_context* DevContext, ellipsoid3D Ellipsoid, c3 Color)
 {
     DrawLineEllipsoid(DevContext, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
 }
 
-void DrawCylinder(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c4 Color)
+void DrawCylinder(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c3 Color)
 {
     v3f X, Y;
     CreateBasis(Axis, &X, &Y);
@@ -143,10 +143,10 @@ void DrawCylinder(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c
     Y *= Radius;
     
     m4 Model = TransformM4(Position, X, Y, Axis);
-    PushDrawColoredMesh(DevContext->Graphics, DevContext->TriangleCylinderMesh.MeshID, Model, Color, DevContext->TriangleCylinderMesh.IndexCount, 0, 0);
+    PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleCylinderMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleCylinderMesh.IndexCount, 0, 0);
 }
 
-void DrawCone(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c4 Color)
+void DrawCone(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c3 Color)
 {
     v3f X, Y;
     CreateBasis(Axis, &X, &Y);
@@ -154,7 +154,7 @@ void DrawCone(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c4 Co
     Y *= Radius;
     
     m4 Model = TransformM4(Position, X, Y, Axis);
-    PushDrawColoredMesh(DevContext->Graphics, DevContext->TriangleConeMesh.MeshID, Model, Color, DevContext->TriangleConeMesh.IndexCount, 0, 0);
+    PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleConeMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleConeMesh.IndexCount, 0, 0);
 }
 
 void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXAxis, v3f YAxis = Global_WorldYAxis, v3f ZAxis = Global_WorldZAxis)
@@ -166,7 +166,7 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
         CreateBasis(Z, &X, &Y);
         
         m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawColoredMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Red4(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(Red3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
     }
     
     {
@@ -175,7 +175,7 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
         CreateBasis(Z, &X, &Y);
         
         m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawColoredMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Green4(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(Green3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
     }
     
     {
@@ -184,10 +184,10 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
         CreateBasis(Z, &X, &Y);
         
         m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawColoredMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, Blue4(), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(Blue3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
     }
     
-    DrawSphere(DevContext, Position, 0.04f, White4());    
+    DrawSphere(DevContext, Position, 0.04f, White3());    
 }
 
 inline camera* 
@@ -258,7 +258,7 @@ void DrawWireframeWorld(graphics* Graphics, world* World)
     FOR_EACH(Entity, &World->EntityPool)
     {
         if(Entity->Mesh)
-            PushDrawColoredMesh(Graphics, Entity->Mesh->GDIHandle, TransformM4(Entity->Transform), Cyan4(), Entity->Mesh->IndexCount, 0, 0);
+            PushDrawUnlitMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, CreateDiffuseMaterialSlot(Cyan3()), Entity->Mesh->IndexCount, 0, 0);
     }
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     PushWireframe(Graphics, false);
@@ -294,7 +294,10 @@ void DevelopmentRender(dev_context* DevContext)
             FOR_EACH(Entity, &World->EntityPool)
             {
                 if(Entity->Mesh)                    
-                    PushDrawColoredMesh(Graphics, Entity->Mesh->GDIHandle, TransformM4(Entity->Transform), Entity->Color, Entity->Mesh->IndexCount, 0, 0);                                     
+                {
+                    graphics_material* Material = Entity->Material;                    
+                    PushDrawUnlitMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Material->Diffuse, Entity->Mesh->IndexCount, 0, 0);                                     
+                }
             }
         } break;                
         
@@ -318,7 +321,7 @@ void DevelopmentRender(dev_context* DevContext)
     if(DevContext->DrawPlayerCollisionVolume)
     {
         world_entity* PlayerEntity = GetPlayerEntity(World);
-        DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(Game, (player*)PlayerEntity->UserData), Magenta4());
+        DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(Game, (player*)PlayerEntity->UserData), Magenta3());
     }
     
     PushDepth(Graphics, false);    

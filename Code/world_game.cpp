@@ -53,8 +53,18 @@ EXPORT GAME_TICK(Tick)
         Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "TestPlayerMesh.fbx");
         Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
         Game->Assets->TestAudio2 = LoadAudio(Game->Assets, "TestSound2.wav");
-        Game->Assets->TestDiffuse = LoadTexture(Game->Assets, "TestDiffuse.png", true);
-        Game->Assets->TestSpecular = LoadTexture(Game->Assets, "TestSpecular.png", false);                
+        
+        Game->Assets->TestMaterial0_Diffuse = LoadTexture(Game->Assets, "TestMaterial0_diffuse.png", true);
+        Game->Assets->TestMaterial0_Specular = LoadTexture(Game->Assets, "TestMaterial0_specular.png", false);        
+        Game->Assets->TestMaterial1_Diffuse = LoadTexture(Game->Assets, "TestMaterial1_diffuse.png", true);
+        Game->Assets->TestMaterial1_Specular = LoadTexture(Game->Assets, "TestMaterial1_specular.png", false);
+        
+        Game->Assets->Material_DiffuseC = CreateMaterial_DCon(Game->Assets, Blue3());
+        Game->Assets->Material_DiffuseT = CreateMaterial_DTex(Game->Assets, &Game->Assets->TestMaterial1_Diffuse);                        
+        Game->Assets->Material_DiffuseC_SpecularC = CreateMaterial_DCon_SCon(Game->Assets, Blue3(), 0.5f, 8);
+        Game->Assets->Material_DiffuseC_SpecularT = CreateMaterial_DCon_STex(Game->Assets, Red3(), &Game->Assets->TestMaterial0_Specular, 8);
+        Game->Assets->Material_DiffuseT_SpecularC = CreateMaterial_DTex_SCon(Game->Assets, &Game->Assets->TestMaterial1_Diffuse, 1.0f, 8);
+        Game->Assets->Material_DiffuseT_SpecularT = CreateMaterial_DTex_SCon(Game->Assets, &Game->Assets->TestMaterial0_Diffuse, &Game->Assets->TestMaterial0_Specular, 16);
         
         PlayAudio(Game, &Game->Assets->TestAudio, 1.0f);
         
@@ -69,7 +79,7 @@ EXPORT GAME_TICK(Tick)
             world* World = GetWorld(Game, WorldIndex);
             World->WorldIndex = WorldIndex;
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
-            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(PLAYER_RADIUS, PLAYER_RADIUS, PLAYER_HEIGHT), WorldIndex == 0 ? Blue4() : Red4());            
+            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(PLAYER_RADIUS, PLAYER_RADIUS, PLAYER_HEIGHT), &Game->Assets->Material_DiffuseC_SpecularC, &Game->Assets->PlayerMesh);
             
             world_entity* PlayerEntity = GetPlayerEntity(World);
             camera* Camera = &World->Camera;
@@ -89,14 +99,17 @@ EXPORT GAME_TICK(Tick)
             World->JumpingQuads[1].OtherQuad = &World->JumpingQuads[0];
         }
         
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 0.0f, 0.0f), V3(1.0f, 30.0f, 30.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.5f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.3f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.5f, 2.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.5f, -2.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.4f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 0.0f, 4.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 0.0f, -4.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-6.5f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.3f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-6.5f, 6.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-1.0f, 5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_SpecularT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.0f, 4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_SpecularC, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 2.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseC_SpecularT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 0.0f, 0.0f), V3(1.0f, 30.0f, 30.0f), V3(0.0f, -0.5f*PI, 0.0f), &Game->Assets->Material_DiffuseT, &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.5f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.3f), &Game->Assets->Material_DiffuseT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.5f, 2.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f), &Game->Assets->Material_DiffuseT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.5f, -2.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.4f), &Game->Assets->Material_DiffuseT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 0.0f, 4.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), &Game->Assets->Material_DiffuseT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3( 0.0f, -4.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), &Game->Assets->Material_DiffuseT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-6.5f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.3f), &Game->Assets->Material_DiffuseT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-6.5f, 6.0f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), &Game->Assets->Material_DiffuseT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
         
         
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        

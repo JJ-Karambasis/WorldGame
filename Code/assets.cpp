@@ -61,8 +61,107 @@ LoadTexture(assets* Assets, char* File, b32 sRGB)
         SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
         SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
         
-        Result.GDIHandle = Assets->Graphics->AllocateTexture(Assets->Graphics, Result.Texels, Result.Dimensions, sRGB, &SamplerInfo);
+        Result.Format = sRGB ? ConvertToSRGBFormat(Result.Format) : Result.Format;        
+        Result.GDIHandle = Assets->Graphics->AllocateTexture(Assets->Graphics, Result.Texels, Result.Dimensions, Result.Format, &SamplerInfo);
     }
     ASSERT(IsAssetValid(&Result));
+    return Result;
+}
+
+graphics_material CreateMaterial_DCon(assets* Assets, c3 Diffuse)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse);
+    return Result;
+}
+
+graphics_material CreateMaterial_DTex(assets* Assets, texture* Diffuse)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse->GDIHandle);
+    return Result;
+}
+
+graphics_material CreateMaterial_DCon_NTex(assets* Assets, c3 Diffuse, texture* Normal)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse);
+    Result.Normal = CreateNormalMaterialSlot(Normal->GDIHandle);
+    return Result;
+}
+
+graphics_material CreateMaterial_DTex_NTex(assets* Assets, texture* Diffuse, texture* Normal)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse->GDIHandle);
+    Result.Normal = CreateNormalMaterialSlot(Normal->GDIHandle);
+    return Result;
+}
+
+graphics_material CreateMaterial_DCon_SCon(assets* Assets, c3 Diffuse, f32 Specular, i32 Shininess)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse);
+    Result.Specular = CreateSpecularMaterialSlot(Specular, Shininess);
+    return Result;
+}
+
+graphics_material CreateMaterial_DCon_STex(assets* Assets, c3 Diffuse, texture* Specular, i32 Shininess)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse);
+    Result.Specular = CreateSpecularMaterialSlot(Specular->GDIHandle, Shininess);
+    return Result;
+}
+
+graphics_material CreateMaterial_DTex_SCon(assets* Assets, texture* Diffuse, f32 Specular, i32 Shininess)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse->GDIHandle);
+    Result.Specular = CreateSpecularMaterialSlot(Specular, Shininess);
+    return Result;
+}
+
+graphics_material CreateMaterial_DTex_SCon(assets* Assets, texture* Diffuse, texture* Specular, i32 Shininess)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse->GDIHandle);
+    Result.Specular = CreateSpecularMaterialSlot(Specular->GDIHandle, Shininess);
+    return Result;
+}
+
+graphics_material CreateMaterial_DCon_SCon(assets* Assets, c3 Diffuse, f32 Specular, i32 Shininess, texture* Normal)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse);
+    Result.Specular = CreateSpecularMaterialSlot(Specular, Shininess);
+    Result.Normal = CreateNormalMaterialSlot(Normal->GDIHandle);
+    return Result;
+}
+
+graphics_material CreateMaterial_DCon_STex(assets* Assets, c3 Diffuse, texture* Specular, i32 Shininess, texture* Normal)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse);
+    Result.Specular = CreateSpecularMaterialSlot(Specular->GDIHandle, Shininess);
+    Result.Normal = CreateNormalMaterialSlot(Normal->GDIHandle);
+    return Result;
+}
+
+graphics_material CreateMaterial_DTex_SCon(assets* Assets, texture* Diffuse, f32 Specular, i32 Shininess, texture* Normal)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse->GDIHandle);
+    Result.Specular = CreateSpecularMaterialSlot(Specular, Shininess);
+    Result.Normal = CreateNormalMaterialSlot(Normal->GDIHandle);
+    return Result;
+}
+
+graphics_material CreateMaterial_DTex_SCon(assets* Assets, texture* Diffuse, texture* Specular, i32 Shininess, texture* Normal)
+{
+    graphics_material Result = {};
+    Result.Diffuse = CreateDiffuseMaterialSlot(Diffuse->GDIHandle);
+    Result.Specular = CreateSpecularMaterialSlot(Specular->GDIHandle, Shininess);
+    Result.Normal = CreateNormalMaterialSlot(Normal->GDIHandle);
     return Result;
 }

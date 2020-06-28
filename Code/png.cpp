@@ -6,12 +6,31 @@ texture PNG_LoadTexture(char* File, arena* Storage)
     texture Result = {};
     
     i32 Channels;
-    u8* Texels = stbi_load(File, &Result.Dimensions.width, &Result.Dimensions.height, &Channels, 4);
+    u8* Texels = stbi_load(File, &Result.Dimensions.width, &Result.Dimensions.height, &Channels, 0);
     
     BOOL_CHECK_AND_HANDLE(Texels, "Failed load %s\n", File);
-    BOOL_CHECK_AND_HANDLE(Channels == 4, "Texture must have 4 channels. Found %d channels", Channels);        
     
-    ptr TextureSizeInBytes = Result.Dimensions.width*Result.Dimensions.height*4;
+    switch(Channels)
+    {
+        case 4:
+        {
+            Result.Format = GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8;
+        } break;
+        
+        case 3:
+        {
+            Result.Format = GRAPHICS_TEXTURE_FORMAT_R8G8B8;
+        } break;
+        
+        case 1:
+        {
+            Result.Format = GRAPHICS_TEXTURE_FORMAT_R8;
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    ptr TextureSizeInBytes = Result.Dimensions.width*Result.Dimensions.height*Channels;
     Result.Texels = PushSize(Storage, TextureSizeInBytes, Clear, 0);    
     CopyMemory(Result.Texels, Texels, TextureSizeInBytes);
     

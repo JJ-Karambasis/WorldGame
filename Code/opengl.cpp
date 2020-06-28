@@ -1,6 +1,92 @@
 #include "opengl.h"
 #include "opengl_shaders.cpp"
 
+#define SHADOW_MAP_TEXTURE_UNIT 2
+#define OMNI_SHADOW_MAP_TEXTURE_UNIT 3
+
+#define SET_PROGRAM() \
+ModelUniform = Shader->ModelUniform; \
+BindProgram(&BoundProgram, Shader->Program)
+
+#define SET_ILLUMINATION_PROGRAM() \
+SET_PROGRAM(); \
+glUniform1i(Shader->ShadowMapUniform, SHADOW_MAP_TEXTURE_UNIT); \
+glUniform1i(Shader->OmniShadowMapUniform, OMNI_SHADOW_MAP_TEXTURE_UNIT)
+
+#define SET_VIEW_UNIFORMS() \
+SetUniformM4(Shader->ViewProjectionUniform, ViewProjection); \
+SetUniform3f(Shader->ViewPositionUniform, ViewPosition)
+
+inline void
+BindTextureToUnit(GLuint Texture, GLint Uniform, GLuint Unit)
+{
+    glActiveTexture(GL_TEXTURE0+Unit);
+    glBindTexture(GL_TEXTURE_2D, Texture);
+    glUniform1i(Uniform, Unit);
+}
+
+inline GLenum GetInternalFormat(graphics_texture_format Format)
+{
+    switch(Format)
+    {
+        case GRAPHICS_TEXTURE_FORMAT_R8:
+        {
+            return GL_R8;
+        } break;
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8:
+        {
+            return GL_RGB8;
+        } 
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB:
+        {
+            return GL_SRGB8;
+        }
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8:
+        {
+            return GL_RGBA8;
+        }
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8:
+        {
+            return GL_SRGB8_ALPHA8;
+        }        
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (GLenum)-1;
+}
+
+inline GLenum GetFormat(graphics_texture_format Format)
+{
+    switch(Format)
+    {
+        case GRAPHICS_TEXTURE_FORMAT_R8:
+        {
+            return GL_RED;
+        } break;
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8:
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB:
+        {
+            return GL_RGB;
+        } 
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8:
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8:
+        {
+            return GL_RGBA;
+        }
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (GLenum)-1;
+}
+
 inline ptr
 GetIndexTypeSize(GLenum IndexType)
 {        
@@ -86,18 +172,6 @@ b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
     return false;
 }
 
-inline b32
-SetProgramAndMVPUniforms(GLuint* BoundProgram, GLuint Program, mvp_uniforms* Uniforms, 
-                         m4 Model, m4 ViewProjection)
-{   
-    b32 Result = BindProgram(BoundProgram, Program);
-    if(Result)    
-        SetUniformM4(Uniforms->ViewProjection, ViewProjection);            
-    
-    SetUniformM4(Uniforms->Model, Model);    
-    return Result;
-}
-
 b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
 {    
     if(*BoundVAO != NewVAO)
@@ -173,7 +247,7 @@ ALLOCATE_TEXTURE(AllocateTexture)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    i64 ResultID = AllocateFromPool(&OpenGL->TexturePool);
+    graphics_texture_id ResultID = AllocateFromPool(&OpenGL->TexturePool);
     opengl_texture* Texture = GetByID(&OpenGL->TexturePool, ResultID);
     
     GLenum MinFilter = GetFilterType(SamplerInfo->MinFilter);
@@ -184,8 +258,11 @@ ALLOCATE_TEXTURE(AllocateTexture)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, MinFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, MagFilter);
     
-    GLint InternalFormat = sRGB ? GL_SRGB_ALPHA : GL_RGBA;
-    glTexImage2D(GL_TEXTURE_2D, 0, InternalFormat, Dimensions.width, Dimensions.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Data);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    GLint InternalFormat = GetInternalFormat(TextureFormat);    
+    GLint Format = GetFormat(TextureFormat);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, InternalFormat, Dimensions.width, Dimensions.height, 0, Format, GL_UNSIGNED_BYTE, Data);
     
     glBindTexture(GL_TEXTURE_2D, 0);
     
@@ -667,17 +744,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     
     CHECK_SHADER(ImGuiShader);
     CHECK_SHADER(ColorShader);
-    CHECK_SHADER(TextureShader);
-    CHECK_SHADER(ColorSkinningShader);
-    CHECK_SHADER(TextureSkinningShader);
+    CHECK_SHADER(TextureShader);        
     CHECK_SHADER(LambertianColorShader);
     CHECK_SHADER(LambertianTextureShader);
-    CHECK_SHADER(LambertianColorSkinningShader);
-    CHECK_SHADER(LambertianTextureSkinningShader);
-    CHECK_SHADER(PhongColorShader);
-    CHECK_SHADER(PhongTextureShader);
-    CHECK_SHADER(PhongColorSkinningShader);
-    CHECK_SHADER(PhongTextureSkinningShader);
+    CHECK_SHADER(PhongDConSConShader);
+    CHECK_SHADER(PhongDConSTexShader);
+    CHECK_SHADER(PhongDTexSConShader);
+    CHECK_SHADER(PhongDTexSTexShader);
     CHECK_SHADER(ShadowMapShader);
     CHECK_SHADER(OmniShadowMapShader);
     
@@ -691,26 +764,352 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     if(!OpenGL->LightViewProjectionUBO)
         OpenGL->LightViewProjectionUBO = AllocateUBO(sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LIGHT_VIEW_PROJECTION_INDEX);
     
-    glEnable(GL_SCISSOR_TEST);    
-    glEnable(GL_FRAMEBUFFER_SRGB);                    
+    glEnable(GL_SCISSOR_TEST);        
     
     GLuint BoundProgram = (GLuint)-1;
     GLuint BoundVAO = (GLuint)-1;
+    GLuint WorldTransformUniform = (GLuint)-1;
     
     u32 SkinningIndex = 0;        
     u32 DirectionalLightCounter = 0;
     
-    u32 ShadowMapCounter = 0;
-    u32 OmniShadowMapCounter = 0;    
+    shadow_pass ShadowPass = {};
+    opengl_forward_pass ForwardPass = {};
     
-    b32 RenderToOmniShadowMap = false;
+    GLint ModelUniform = -1;
     
-    push_command_list* CommandList = &Graphics->CommandList;        
+    push_command_list* CommandList = &Graphics->CommandList;            
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
     {
         push_command* Command = CommandList->Ptr[CommandIndex];
         switch(Command->Type)
         {   
+            case PUSH_COMMAND_SHADOW_MAP:
+            {                
+                ForwardPass = {};                
+                ShadowPass.Current = true;
+                
+                if(!BindShadowMapFBO(OpenGL->ShadowMapFBO, OpenGL->ShadowMapTextureArray, &ShadowPass.ShadowMapCounter))
+                    INVALID_CODE;
+                
+                ShadowPass.State = SHADOW_PASS_STATE_DIRECTIONAL;                
+            } break;
+            
+            case PUSH_COMMAND_OMNI_SHADOW_MAP:
+            {
+                glDisable(GL_FRAMEBUFFER_SRGB);
+                
+                ForwardPass = {};                
+                ShadowPass.Current = true;
+                
+                push_command_omni_shadow_map* OmniShadowMap = (push_command_omni_shadow_map*)Command;                
+                if(!BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &ShadowPass.OmniShadowMapCounter))
+                    INVALID_CODE;
+                
+                ShadowPass.State = SHADOW_PASS_STATE_OMNI_DIRECTIONAL;
+                ShadowPass.FarPlaneDistance = OmniShadowMap->FarPlaneDistance;                
+            } break;
+            
+            case PUSH_COMMAND_LIGHT_BUFFER:
+            {        
+                glEnable(GL_FRAMEBUFFER_SRGB);                    
+                ShadowPass = {};
+                ForwardPass.Current = true;
+                
+                graphics_light_buffer SrcLightBuffer = ((push_command_light_buffer*)Command)->LightBuffer;
+                
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                
+                opengl_light_buffer DstLightBuffer = {};
+                DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
+                DstLightBuffer.PointLightCount = SrcLightBuffer.PointLightCount;
+                
+                m4 LightViewProjectionBuffers[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
+                
+                for(i32 DirectionalLightIndex = 0; DirectionalLightIndex < DstLightBuffer.DirectionalLightCount; DirectionalLightIndex++)
+                {
+                    graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
+                    opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
+                    
+                    LightViewProjectionBuffers[DirectionalLightIndex] = SrcLight->ViewProjection;
+                    
+                    DstLight->Direction =  V4(SrcLight->Direction, 0.0f);
+                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);                    
+                }
+                
+                for(i32 PointLightIndex = 0; PointLightIndex < DstLightBuffer.PointLightCount; PointLightIndex++)
+                {
+                    graphics_point_light* SrcLight = SrcLightBuffer.PointLights + PointLightIndex;
+                    opengl_point_light* DstLight = DstLightBuffer.PointLights + PointLightIndex;
+                    
+                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
+                    DstLight->Position = V4(SrcLight->Position, SrcLight->Radius);                                                           
+                }
+                
+                UploadUBO(OpenGL->LightViewProjectionUBO, sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LightViewProjectionBuffers);
+                UploadUBO(OpenGL->LightUBO, sizeof(opengl_light_buffer), &DstLightBuffer);                
+                
+                glActiveTexture(GL_TEXTURE0+SHADOW_MAP_TEXTURE_UNIT);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->ShadowMapTextureArray);
+                
+                glActiveTexture(GL_TEXTURE0+OMNI_SHADOW_MAP_TEXTURE_UNIT);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->OmniShadowMapTextureArray);
+            } break;
+            
+            case PUSH_COMMAND_MATERIAL:
+            {
+                ASSERT(ForwardPass.Current);
+                push_command_material* PushCommandMaterial = (push_command_material*)Command;
+                ForwardPass.BoundMaterial = PushCommandMaterial->Material;                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_MESH:
+            {    
+                ASSERT(ForwardPass.Current != ShadowPass.Current);
+                if(ForwardPass.Current)
+                {                    
+                    if(ForwardPass.BoundMaterial && (ForwardPass.BoundMaterial != ForwardPass.PrevBoundMaterial))
+                    {
+                        ForwardPass.PrevBoundMaterial = ForwardPass.BoundMaterial;
+                        
+                        graphics_material* BoundMaterial = ForwardPass.BoundMaterial;
+                        if(!BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        {
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {   
+                                lambertian_texture_shader* Shader = &OpenGL->LambertianTextureShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
+                                
+                                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);                                
+                            }
+                            else
+                            {
+                                lambertian_color_shader* Shader = &OpenGL->LambertianColorShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);       
+                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);                                
+                            }
+                        }
+                        else if(BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        {                       
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {   
+                                if(BoundMaterial->Specular.IsTexture)
+                                {
+                                    phong_dtex_stex_shader* Shader = &OpenGL->PhongDTexSTexShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
+                                    
+                                    BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                    BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
+                                }
+                                else
+                                {
+                                    phong_dtex_scon_shader* Shader = &OpenGL->PhongDTexSConShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);
+                                }
+                            }
+                            else
+                            {
+                                if(BoundMaterial->Specular.IsTexture)
+                                {
+                                    phong_dcon_stex_shader* Shader = &OpenGL->PhongDConSTexShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);                                                                                                
+                                    
+                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);                                    
+                                    BindTextureToUnit(Texture->Handle, Shader->SpecularTextureUniform, 0);                                    
+                                }
+                                else
+                                {
+                                    phong_dcon_scon_shader* Shader = &OpenGL->PhongDConSConShader;
+                                    SET_ILLUMINATION_PROGRAM();                                    
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                }
+                            }
+                        }
+                        else if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        {                            
+                            NOT_IMPLEMENTED;
+                        }
+                        else
+                        {                        
+                            NOT_IMPLEMENTED;
+                        }
+                    }
+                }
+                else if(ShadowPass.Current)
+                {               
+                    if(ShadowPass.State == SHADOW_PASS_STATE_DIRECTIONAL)
+                    {
+                        shadow_map_shader* Shader = &OpenGL->ShadowMapShader;
+                        SET_PROGRAM();                        
+                        SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                                
+                    }
+                    else if(ShadowPass.State == SHADOW_PASS_STATE_OMNI_DIRECTIONAL)
+                    {
+                        omni_shadow_map_shader* Shader = &OpenGL->OmniShadowMapShader;
+                        SET_PROGRAM();
+                        SET_VIEW_UNIFORMS();                        
+                        glUniform1f(Shader->FarPlaneDistanceUniform, ShadowPass.FarPlaneDistance);
+                    }
+                    INVALID_ELSE;
+                }
+                
+                push_command_draw_mesh* DrawMesh = (push_command_draw_mesh*)Command;                
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawMesh->MeshID);
+                
+                SetUniformM4(ModelUniform, DrawMesh->WorldTransform);
+                BindVAO(&BoundVAO, Mesh->VAO);
+                DrawTriangles(Mesh, &DrawMesh->DrawInfo);                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_SKELETON_MESH:
+            {
+                NOT_IMPLEMENTED;
+                ASSERT(ForwardPass.Current != ShadowPass.Current);
+                if(ForwardPass.Current)
+                {                    
+                    if(ForwardPass.BoundMaterial && (ForwardPass.BoundMaterial != ForwardPass.PrevBoundMaterial))
+                    {
+                        ForwardPass.PrevBoundMaterial = ForwardPass.BoundMaterial;
+                        
+                        graphics_material* BoundMaterial = ForwardPass.BoundMaterial;
+                        if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        {
+                            NOT_IMPLEMENTED;
+                        }
+                        else if(BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        {                        
+                        }
+                        else if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        {
+                            NOT_IMPLEMENTED;
+                        }
+                        else
+                        {                        
+                            NOT_IMPLEMENTED;
+                        }
+                    }
+                }
+                else if(ShadowPass.Current)
+                {               
+                    if(ShadowPass.State == SHADOW_PASS_STATE_DIRECTIONAL)
+                    {
+                    }
+                    else if(ShadowPass.State == SHADOW_PASS_STATE_OMNI_DIRECTIONAL)
+                    {                        
+                    }
+                    INVALID_ELSE;
+                }
+                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_UNLIT_MESH:
+            {
+                ForwardPass = {};
+                ShadowPass = {};
+                
+                push_command_draw_unlit_mesh* DrawUnlitMesh = (push_command_draw_unlit_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawUnlitMesh->MeshID);
+                if(DrawUnlitMesh->DiffuseSlot.IsTexture)
+                {
+                    if(BindProgram(&BoundProgram, OpenGL->TextureShader.Program))
+                    {
+                        ModelUniform = OpenGL->TextureShader.ModelUniform;
+                        SetUniformM4(OpenGL->TextureShader.ViewProjectionUniform, ViewProjection);
+                    }
+                    
+                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawUnlitMesh->DiffuseSlot.DiffuseID);
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, Texture->Handle);
+                }
+                else
+                {
+                    if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
+                    {
+                        ModelUniform = OpenGL->ColorShader.ModelUniform;
+                        SetUniformM4(OpenGL->ColorShader.ViewProjectionUniform, ViewProjection);
+                    }
+                    
+                    SetUniform3f(OpenGL->ColorShader.ColorUniform, DrawUnlitMesh->DiffuseSlot.Diffuse);
+                }
+                
+                SetUniformM4(ModelUniform, DrawUnlitMesh->WorldTransform);
+                BindVAO(&BoundVAO, Mesh->VAO);                
+                DrawTriangles(Mesh, &DrawUnlitMesh->DrawInfo);                                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_UNLIT_SKELETON_MESH:
+            {
+                NOT_IMPLEMENTED;
+            } break;
+            
+            case PUSH_COMMAND_DRAW_LINE_MESH:            
+            {
+                ForwardPass = {};
+                ShadowPass = {};
+                
+                push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLineMesh->MeshID);
+                
+                if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
+                {
+                    ModelUniform = OpenGL->ColorShader.ModelUniform;
+                    SetUniformM4(OpenGL->ColorShader.ViewProjectionUniform, ViewProjection);                    
+                }
+                
+                SetUniform3f(OpenGL->ColorShader.ColorUniform, DrawLineMesh->Color);
+                SetUniformM4(ModelUniform, DrawLineMesh->WorldTransform);
+                BindVAO(&BoundVAO, Mesh->VAO);
+                DrawLines(Mesh, &DrawLineMesh->DrawInfo);                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_IMGUI_UI:
+            {                
+                ForwardPass = {};     
+                ShadowPass = {};
+                
+                push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                
+                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawImGuiUI->TextureID);
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawImGuiUI->MeshID);
+                ASSERT(Mesh->IsDynamic);
+                
+                if(BindProgram(&BoundProgram, OpenGL->ImGuiShader.Program))                    
+                    SetUniformM4(OpenGL->ImGuiShader.ProjectionUniform, Projection);                                                                    
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, Texture->Handle);                                
+                
+                DrawTriangles(Mesh, &DrawImGuiUI->DrawInfo);   
+            } break;
+            
             case PUSH_COMMAND_CLEAR_COLOR:
             {
                 push_command_clear_color* ClearColorCommand = (push_command_clear_color*)Command;
@@ -815,339 +1214,6 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ViewPosition = ((push_command_view_position*)Command)->Position;
             } break;
             
-            case PUSH_COMMAND_SUBMIT_LIGHT_BUFFER:
-            {
-                graphics_light_buffer SrcLightBuffer = ((push_command_submit_light_buffer*)Command)->LightBuffer;
-                
-                glBindFramebuffer(GL_FRAMEBUFFER, 0);
-                
-                opengl_light_buffer DstLightBuffer = {};
-                DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
-                DstLightBuffer.PointLightCount = SrcLightBuffer.PointLightCount;
-                
-                m4 LightViewProjectionBuffers[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
-                
-                for(i32 DirectionalLightIndex = 0; DirectionalLightIndex < DstLightBuffer.DirectionalLightCount; DirectionalLightIndex++)
-                {
-                    graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
-                    opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
-                    
-                    LightViewProjectionBuffers[DirectionalLightIndex] = SrcLight->ViewProjection;
-                    
-                    DstLight->Direction =  V4(SrcLight->Direction, 0.0f);
-                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);                    
-                }
-                
-                for(i32 PointLightIndex = 0; PointLightIndex < DstLightBuffer.PointLightCount; PointLightIndex++)
-                {
-                    graphics_point_light* SrcLight = SrcLightBuffer.PointLights + PointLightIndex;
-                    opengl_point_light* DstLight = DstLightBuffer.PointLights + PointLightIndex;
-                    
-                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
-                    DstLight->Position = V4(SrcLight->Position, SrcLight->Radius);                                                           
-                }
-                
-                UploadUBO(OpenGL->LightViewProjectionUBO, sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LightViewProjectionBuffers);
-                UploadUBO(OpenGL->LightUBO, sizeof(opengl_light_buffer), &DstLightBuffer);                
-                
-                glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->ShadowMapTextureArray);
-                
-                glActiveTexture(GL_TEXTURE3);
-                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->OmniShadowMapTextureArray);
-            } break;
-            
-            case PUSH_COMMAND_DRAW_COLORED_LINE_MESH:
-            case PUSH_COMMAND_DRAW_COLORED_MESH:
-            {
-                push_command_draw_colored_mesh* DrawColoredMesh = (push_command_draw_colored_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawColoredMesh->MeshID);
-                
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->ColorShader.Program, &OpenGL->ColorShader.MVPUniforms,
-                                         DrawColoredMesh->WorldTransform, ViewProjection);
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                SetUniform4f(OpenGL->ColorShader.ColorUniform, DrawColoredMesh->Color);                
-                
-                GLenum PrimitiveType = (Command->Type == PUSH_COMMAND_DRAW_COLORED_LINE_MESH) ? GL_LINES : GL_TRIANGLES;
-                
-                if(Command->Type == PUSH_COMMAND_DRAW_COLORED_LINE_MESH)
-                    DrawLines(Mesh, &DrawColoredMesh->DrawInfo);
-                else
-                    DrawTriangles(Mesh, &DrawColoredMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_TEXTURED_MESH:
-            {
-                push_command_draw_textured_mesh* DrawTexturedMesh = (push_command_draw_textured_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawTexturedMesh->MeshID);
-                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawTexturedMesh->TextureID);
-                
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->TextureShader.Program, &OpenGL->TextureShader.MVPUniforms,
-                                         DrawTexturedMesh->WorldTransform, ViewProjection);                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glBindTexture(GL_TEXTURE_2D, Texture->Handle);
-                
-                DrawTriangles(Mesh, &DrawTexturedMesh->DrawInfo);
-            } break;
-            
-            case PUSH_COMMAND_DRAW_COLORED_SKINNING_MESH:
-            {
-                push_command_draw_colored_skinning_mesh* DrawColoredSkinningMesh = (push_command_draw_colored_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawColoredSkinningMesh->MeshID);
-                
-                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawColoredSkinningMesh->JointCount, DrawColoredSkinningMesh->Joints);
-                
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->ColorSkinningShader.Program, &OpenGL->ColorSkinningShader.MVPUniforms,
-                                         DrawColoredSkinningMesh->WorldTransform, ViewProjection);
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                SetUniform4f(OpenGL->ColorShader.ColorUniform, DrawColoredSkinningMesh->Color);
-                
-                DrawTriangles(Mesh, &DrawColoredSkinningMesh->DrawInfo);               
-            } break;
-            
-            case PUSH_COMMAND_DRAW_TEXTURED_SKINNING_MESH:
-            {
-                push_command_draw_textured_skinning_mesh* DrawTexturedSkinningMesh = (push_command_draw_textured_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawTexturedSkinningMesh->MeshID);
-                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawTexturedSkinningMesh->TextureID);
-                
-                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawTexturedSkinningMesh->JointCount, DrawTexturedSkinningMesh->Joints);
-                
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->TextureSkinningShader.Program, &OpenGL->TextureSkinningShader.MVPUniforms,
-                                         DrawTexturedSkinningMesh->WorldTransform, ViewProjection);
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glBindTexture(GL_TEXTURE_2D, Texture->Handle);
-                
-                DrawTriangles(Mesh, &DrawTexturedSkinningMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_MESH:
-            {
-                push_command_draw_lambertian_colored_mesh* DrawLambertianColoredMesh = (push_command_draw_lambertian_colored_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianColoredMesh->MeshID);
-                
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianColorShader.Program, &OpenGL->LambertianColorShader.MVPUniforms,
-                                         DrawLambertianColoredMesh->WorldTransform, ViewProjection);
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                SetUniform4f(OpenGL->LambertianColorShader.DiffuseColorUniform, DrawLambertianColoredMesh->DiffuseColor);
-                
-                DrawTriangles(Mesh, &DrawLambertianColoredMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_MESH:
-            {
-                push_command_draw_lambertian_textured_mesh* DrawLambertianTexturedMesh = (push_command_draw_lambertian_textured_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianTexturedMesh->MeshID);
-                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawLambertianTexturedMesh->DiffuseID);
-                
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianTextureShader.Program, &OpenGL->LambertianTextureShader.MVPUniforms,
-                                         DrawLambertianTexturedMesh->WorldTransform, ViewProjection);                
-                BindVAO(&BoundVAO, Mesh->VAO);                                                                
-                
-                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
-                
-                DrawTriangles(Mesh, &DrawLambertianTexturedMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_LAMBERTIAN_COLORED_SKINNING_MESH:
-            {
-                push_command_draw_lambertian_colored_skinning_mesh* DrawLambertianColoredSkinningMesh = (push_command_draw_lambertian_colored_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianColoredSkinningMesh->MeshID);
-                
-                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawLambertianColoredSkinningMesh->JointCount, DrawLambertianColoredSkinningMesh->Joints);
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianColorSkinningShader.Program, &OpenGL->LambertianColorShader.MVPUniforms,
-                                         DrawLambertianColoredSkinningMesh->WorldTransform, ViewProjection);
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                SetUniform4f(OpenGL->LambertianColorSkinningShader.DiffuseColorUniform, DrawLambertianColoredSkinningMesh->DiffuseColor);
-                
-                DrawTriangles(Mesh, &DrawLambertianColoredSkinningMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_LAMBERTIAN_TEXTURED_SKINNING_MESH:
-            {
-                push_command_draw_lambertian_textured_skinning_mesh* DrawLambertianTexturedSkinningMesh = (push_command_draw_lambertian_textured_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLambertianTexturedSkinningMesh->MeshID);
-                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawLambertianTexturedSkinningMesh->DiffuseID);
-                
-                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawLambertianTexturedSkinningMesh->JointCount, DrawLambertianTexturedSkinningMesh->Joints);
-                SetProgramAndMVPUniforms(&BoundProgram, OpenGL->LambertianTextureSkinningShader.Program, &OpenGL->LambertianTextureShader.MVPUniforms,
-                                         DrawLambertianTexturedSkinningMesh->WorldTransform, ViewProjection);
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
-                
-                DrawTriangles(Mesh, &DrawLambertianTexturedSkinningMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_PHONG_COLORED_MESH:
-            {
-                push_command_draw_phong_colored_mesh* DrawPhongColoredMesh = (push_command_draw_phong_colored_mesh*)Command;                                                
-                
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredMesh->MeshID);
-                
-                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorShader.Program, &OpenGL->PhongColorShader.MVPUniforms,
-                                            DrawPhongColoredMesh->WorldTransform, ViewProjection))                
-                    SetUniform3f(OpenGL->PhongColorShader.ViewPositionUniform, ViewPosition);                
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                c4 DiffuseColor = DrawPhongColoredMesh->DiffuseColor;
-                c4 SpecularColor = DrawPhongColoredMesh->SpecularColor;
-                SetUniform4f(OpenGL->PhongColorShader.DiffuseColorUniform,  DiffuseColor);
-                SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
-                glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredMesh->Shininess);
-                
-                DrawTriangles(Mesh, &DrawPhongColoredMesh->DrawInfo);                
-                
-            } break;            
-            
-            case PUSH_COMMAND_DRAW_PHONG_TEXTURED_MESH:
-            {
-                push_command_draw_phong_textured_mesh* DrawPhongTexturedMesh = (push_command_draw_phong_textured_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongTexturedMesh->MeshID);
-                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawPhongTexturedMesh->DiffuseID);
-                opengl_texture* Specular = GetByID(&OpenGL->TexturePool, DrawPhongTexturedMesh->SpecularID);
-                
-                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureShader.Program, &OpenGL->PhongTextureShader.MVPUniforms,
-                                            DrawPhongTexturedMesh->WorldTransform, ViewProjection))
-                {
-                    SetUniform3f(OpenGL->PhongTextureShader.ViewPositionUniform, ViewPosition);                
-                    glUniform1i(OpenGL->PhongTextureShader.ShadowMapUniform, 2);
-                    glUniform1i(OpenGL->PhongTextureShader.OmniShadowMapUniform, 3);
-                }
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniform1i(OpenGL->PhongTextureShader.ShininessUniform, DrawPhongTexturedMesh->Shininess);
-                
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
-                glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, Specular->Handle);
-                
-                glUniform1i(OpenGL->PhongTextureShader.DiffuseUniform, 0);
-                glUniform1i(OpenGL->PhongTextureShader.SpecularUniform, 1);
-                
-                DrawTriangles(Mesh, &DrawPhongTexturedMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_PHONG_COLORED_SKINNING_MESH:
-            {
-                push_command_draw_phong_colored_skinning_mesh* DrawPhongColoredSkinningMesh = (push_command_draw_phong_colored_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongColoredSkinningMesh->MeshID);                
-                
-                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongColoredSkinningMesh->JointCount, DrawPhongColoredSkinningMesh->Joints);
-                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongColorSkinningShader.Program, &OpenGL->PhongColorSkinningShader.MVPUniforms,
-                                            DrawPhongColoredSkinningMesh->WorldTransform, ViewProjection))
-                    SetUniform3f(OpenGL->PhongColorSkinningShader.ViewPositionUniform, ViewPosition);
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                c4 DiffuseColor = DrawPhongColoredSkinningMesh->DiffuseColor;
-                c4 SpecularColor = DrawPhongColoredSkinningMesh->SpecularColor;
-                SetUniform4f(OpenGL->PhongColorShader.DiffuseColorUniform,  DiffuseColor);
-                SetUniform4f(OpenGL->PhongColorShader.SpecularColorUniform, SpecularColor);                
-                glUniform1i(OpenGL->PhongColorShader.ShininessUniform, DrawPhongColoredSkinningMesh->Shininess);
-                
-                DrawTriangles(Mesh, &DrawPhongColoredSkinningMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_PHONG_TEXTURED_SKINNING_MESH:
-            {
-                push_command_draw_phong_textured_skinning_mesh* DrawPhongTexturedSkinningMesh = (push_command_draw_phong_textured_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawPhongTexturedSkinningMesh->MeshID);
-                opengl_texture* Diffuse = GetByID(&OpenGL->TexturePool, DrawPhongTexturedSkinningMesh->DiffuseID);
-                opengl_texture* Specular = GetByID(&OpenGL->TexturePool, DrawPhongTexturedSkinningMesh->SpecularID);
-                
-                UploadSkinningMatrices(&OpenGL->SkinningBuffers, SkinningIndex++, DrawPhongTexturedSkinningMesh->JointCount, DrawPhongTexturedSkinningMesh->Joints);
-                if(SetProgramAndMVPUniforms(&BoundProgram, OpenGL->PhongTextureSkinningShader.Program, &OpenGL->PhongTextureSkinningShader.MVPUniforms,
-                                            DrawPhongTexturedSkinningMesh->WorldTransform, ViewProjection))
-                    SetUniform3f(OpenGL->PhongTextureSkinningShader.ViewPositionUniform, ViewPosition);
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniform1i(OpenGL->PhongTextureSkinningShader.ShininessUniform, DrawPhongTexturedSkinningMesh->Shininess);
-                
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, Diffuse->Handle);
-                glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, Specular->Handle);
-                
-                glUniform1i(OpenGL->PhongTextureSkinningShader.DiffuseUniform, 0);
-                glUniform1i(OpenGL->PhongTextureSkinningShader.SpecularUniform, 1);
-                
-                DrawTriangles(Mesh, &DrawPhongTexturedSkinningMesh->DrawInfo);                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_IMGUI_UI:
-            {
-                push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                
-                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawImGuiUI->TextureID);
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawImGuiUI->MeshID);
-                ASSERT(Mesh->IsDynamic);
-                
-                if(BindProgram(&BoundProgram, OpenGL->ImGuiShader.Program))                    
-                    SetUniformM4(OpenGL->ImGuiShader.ProjectionUniform, Projection);                                                                    
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, Texture->Handle);
-                
-                DrawTriangles(Mesh, &DrawImGuiUI->DrawInfo);                
-                
-            } break;
-            
-            case PUSH_COMMAND_SHADOW_MAP:
-            {                                   
-                if(BindShadowMapFBO(OpenGL->ShadowMapFBO, OpenGL->ShadowMapTextureArray, &ShadowMapCounter))
-                {                    
-                    BindProgram(&BoundProgram, OpenGL->ShadowMapShader.Program);
-                    SetUniformM4(OpenGL->ShadowMapShader.MVPUniforms.ViewProjection, ViewProjection);                 
-                    RenderToOmniShadowMap = false;
-                }
-                INVALID_ELSE;                
-            } break;
-            
-            case PUSH_COMMAND_OMNI_SHADOW_MAP:
-            {
-                push_command_omni_shadow_map* OmniShadowMap = (push_command_omni_shadow_map*)Command;
-                
-                if(BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &OmniShadowMapCounter))
-                {
-                    BindProgram(&BoundProgram, OpenGL->OmniShadowMapShader.Program);
-                    SetUniformM4(OpenGL->OmniShadowMapShader.MVPUniforms.ViewProjection, ViewProjection);
-                    SetUniform3f(OpenGL->OmniShadowMapShader.LightPositionUniform, ViewPosition);    
-                    glUniform1f(OpenGL->OmniShadowMapShader.FarPlaneDistanceUniform, OmniShadowMap->FarPlaneDistance);
-                    RenderToOmniShadowMap = true;
-                }
-                INVALID_ELSE;
-            } break;
-            
-            case PUSH_COMMAND_DRAW_SHADOWED_MESH:
-            {                         
-                ASSERT(BoundProgram == OpenGL->ShadowMapShader.Program || BoundProgram == OpenGL->OmniShadowMapShader.Program);                
-                GLuint ModelUniform = RenderToOmniShadowMap ? OpenGL->OmniShadowMapShader.MVPUniforms.Model : OpenGL->ShadowMapShader.MVPUniforms.Model;
-                
-                push_command_draw_shadowed_mesh* DrawShadowedMesh = (push_command_draw_shadowed_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawShadowedMesh->MeshID);
-                
-                SetUniformM4(ModelUniform, DrawShadowedMesh->WorldTransform);
-                BindVAO(&BoundVAO, Mesh->VAO);                
-                DrawTriangles(Mesh, &DrawShadowedMesh->DrawInfo);
-            } break;
-            
             INVALID_DEFAULT_CASE;                        
         }
     }    
@@ -1167,17 +1233,13 @@ EXPORT INVALIDATE_SHADERS(InvalidateShaders)
 #define INVALIDATE_SHADER(shader) OpenGL->shader.Valid = false
     
     INVALIDATE_SHADER(ImGuiShader);
-    INVALIDATE_SHADER(ColorShader);
-    INVALIDATE_SHADER(ColorSkinningShader);
-    INVALIDATE_SHADER(TextureSkinningShader);
+    INVALIDATE_SHADER(ColorShader);        
     INVALIDATE_SHADER(LambertianColorShader);
-    INVALIDATE_SHADER(LambertianTextureShader);
-    INVALIDATE_SHADER(LambertianColorSkinningShader);
-    INVALIDATE_SHADER(LambertianTextureSkinningShader);
-    INVALIDATE_SHADER(PhongColorShader);
-    INVALIDATE_SHADER(PhongTextureShader);
-    INVALIDATE_SHADER(PhongColorSkinningShader);
-    INVALIDATE_SHADER(PhongTextureSkinningShader);
+    INVALIDATE_SHADER(LambertianTextureShader);                    
+    INVALIDATE_SHADER(PhongDConSConShader);
+    INVALIDATE_SHADER(PhongDConSTexShader);
+    INVALIDATE_SHADER(PhongDTexSConShader);
+    INVALIDATE_SHADER(PhongDTexSTexShader);
     INVALIDATE_SHADER(ShadowMapShader);
     INVALIDATE_SHADER(OmniShadowMapShader);    
 }
