@@ -75,6 +75,8 @@ EXPORT GAME_TICK(Tick)
         
         PlayAudio(Game, &Game->Assets->TestAudio, 1.0f);
         
+        Game->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim);
+        
 #if 0 
         Game->Assets->TestSkeletonMesh = LoadGraphicsMesh(Game->Assets, "TestSkeleton.fbx");
         Game->Assets->TestSkeleton = LoadSkeleton(Game->Assets, "TestSkeleton.fbx");
@@ -195,6 +197,7 @@ EXPORT GAME_TICK(Tick)
     if(NOT_IN_DEVELOPMENT_MODE())
     {   
         world* World = GetCurrentWorld(Game);
-        PushWorldShadingCommands(Graphics, World, &World->Camera, Game->Assets);        
+        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &World->Camera, Game->Assets);        
+        PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Graphics->RenderDim);
     }    
 }

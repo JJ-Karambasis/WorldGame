@@ -202,9 +202,7 @@ struct graphics
     allocate_mesh* AllocateMesh;
     allocate_dynamic_mesh* AllocateDynamicMesh;
     allocate_render_buffer* AllocateRenderBuffer;
-    stream_mesh_data* StreamMeshData;
-    
-    graphics_render_buffer* RenderBuffer;
+    stream_mesh_data* StreamMeshData;        
 };
 
 STREAM_MESH_DATA(Graphics_StreamMeshDataStub)

@@ -2,7 +2,7 @@
 #define GRAPHICS_PUSH_COMMANDS_H
 
 //CONFIRM(JJ): Is this alright to be fixed sized?
-#define MAX_COMMAND_COUNT 2048
+#define MAX_COMMAND_COUNT 4096
 
 enum push_command_type
 {
@@ -14,13 +14,15 @@ enum push_command_type
     PUSH_COMMAND_CULL,
     PUSH_COMMAND_WIREFRAME,
     PUSH_COMMAND_BLEND,
-    PUSH_COMMAND_SCISSOR,    
+    PUSH_COMMAND_SCISSOR,        
+    PUSH_COMMAND_SRGB_RENDER_BUFFER_WRITES,
     PUSH_COMMAND_VIEWPORT,
     PUSH_COMMAND_PROJECTION,
     PUSH_COMMAND_VIEW_PROJECTION,
     PUSH_COMMAND_VIEW_POSITION,    
     PUSH_COMMAND_SHADOW_MAP,
     PUSH_COMMAND_OMNI_SHADOW_MAP,
+    PUSH_COMMAND_RENDER_BUFFER,
     PUSH_COMMAND_LIGHT_BUFFER,
     PUSH_COMMAND_MATERIAL,    
     PUSH_COMMAND_DRAW_MESH,    
@@ -68,6 +70,11 @@ struct push_command_wireframe : public push_command
     b32 Enable;
 };
 
+struct push_command_srgb_render_buffer_writes : public push_command
+{
+    b32 Enable;
+};
+
 struct push_command_blend : public push_command
 {
     b32 Enable;
@@ -96,9 +103,13 @@ struct push_command_omni_shadow_map : public push_command
     f32 FarPlaneDistance;
 };
 
-struct push_command_light_buffer : public push_command
+struct push_command_render_buffer : public push_command
 {
     graphics_render_buffer* RenderBuffer;
+};
+
+struct push_command_light_buffer : public push_command
+{    
     graphics_light_buffer LightBuffer;
 };
 

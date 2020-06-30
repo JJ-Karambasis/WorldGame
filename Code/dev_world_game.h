@@ -119,6 +119,8 @@ struct dev_context
     b32 DrawPlayerCollisionVolume;
     view_mode_type ViewModeType;    
     
+    graphics_render_buffer* RenderBuffer;
+    
     frame_recording FrameRecording;
         
     game_information GameInformation;

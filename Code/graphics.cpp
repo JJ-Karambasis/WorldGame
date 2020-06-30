@@ -82,6 +82,15 @@ void PushWireframe(graphics* Graphics, b32 Enable)
     PushCommand(Graphics, PushCommandWireframe);
 }
 
+void PushSRGBRenderBufferWrites(graphics* Graphics, b32 Enable)
+{
+    push_command_srgb_render_buffer_writes* PushCommandSRGBRenderBufferWrites = PushStruct(push_command_srgb_render_buffer_writes, NoClear, 0);
+    PushCommandSRGBRenderBufferWrites->Type = PUSH_COMMAND_SRGB_RENDER_BUFFER_WRITES;
+    PushCommandSRGBRenderBufferWrites->Enable = Enable;
+    
+    PushCommand(Graphics, PushCommandSRGBRenderBufferWrites);
+}
+
 void PushBlend(graphics* Graphics, b32 Enable, graphics_blend SrcGraphicsBlend=GRAPHICS_BLEND_UNKNOWN, graphics_blend DstGraphicsBlend=GRAPHICS_BLEND_UNKNOWN)
 {
     push_command_blend* PushCommandBlend = PushStruct(push_command_blend, NoClear, 0);
@@ -159,11 +168,18 @@ void PushOmniShadowMap(graphics* Graphics, f32 FarPlaneDistance)
     PushCommand(Graphics, PushCommandOmniShadowMap);
 }
 
-void PushLightBuffer(graphics* Graphics, graphics_light_buffer* LightBuffer, graphics_render_buffer* RenderBuffer)
+void PushRenderBuffer(graphics* Graphics, graphics_render_buffer* RenderBuffer)
+{
+    push_command_render_buffer* PushCommandRenderBuffer = PushStruct(push_command_render_buffer, NoClear, 0);
+    PushCommandRenderBuffer->Type = PUSH_COMMAND_RENDER_BUFFER;
+    PushCommandRenderBuffer->RenderBuffer = RenderBuffer;
+    PushCommand(Graphics, PushCommandRenderBuffer);
+}
+
+void PushLightBuffer(graphics* Graphics, graphics_light_buffer* LightBuffer)
 {
     push_command_light_buffer* PushCommandLightBuffer = PushStruct(push_command_light_buffer, NoClear, 0);
-    PushCommandLightBuffer->Type = PUSH_COMMAND_LIGHT_BUFFER;
-    PushCommandLightBuffer->RenderBuffer = RenderBuffer;
+    PushCommandLightBuffer->Type = PUSH_COMMAND_LIGHT_BUFFER;    
     CopyMemory(&PushCommandLightBuffer->LightBuffer, LightBuffer, sizeof(graphics_light_buffer));
     PushCommand(Graphics, PushCommandLightBuffer);
 }
@@ -278,19 +294,16 @@ void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Hei
     PushScissor(Graphics, X, Y, Width, Height);
 }
 
-void PushCameraCommands(graphics* Graphics, camera* Camera)
+void PushCameraCommands(graphics* Graphics, camera* Camera, v2i RenderDim)
 {    
-    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(RenderDim.width, RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
     m4 View = InverseTransformM4(Camera->Position, Camera->Orientation);
     PushViewPosition(Graphics, Camera->Position);
     PushViewProjection(Graphics, View*Perspective);    
 }
 
-void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, assets* Assets)
-{
-    if(!Graphics->RenderBuffer)    
-        Graphics->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim);
-    
+void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, camera* Camera, assets* Assets)
+{    
     graphics_light_buffer LightBuffer = {};
     LightBuffer.DirectionalLightCount = 0;        
     LightBuffer.DirectionalLights[0] = CreateDirectionalLight(V3(0.0f, 0.0f, 4.0f), White3(), 1.0f, Normalize(V3(0.0f, 0.3f, -0.6f)), 
@@ -308,7 +321,8 @@ void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, 
     LightBuffer.PointLights[8] = CreatePointLight(Green3(), 2.0f, V3( 4.0f, -4.0f, 3.0f), 10.0f);    
     
     PushDepth(Graphics, true);
-        
+    PushSRGBRenderBufferWrites(Graphics, false);
+    
     PushCull(Graphics, GRAPHICS_CULL_MODE_FRONT);
     PushViewportAndScissor(Graphics, 0, 0, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);        
     for(u32 DirectionalLightIndex = 0; DirectionalLightIndex < LightBuffer.DirectionalLightCount; DirectionalLightIndex++)
@@ -352,15 +366,15 @@ void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, 
             }
         }
     }    
-        
-    PushLightBuffer(Graphics, &LightBuffer, Graphics->RenderBuffer);
+    
+    PushSRGBRenderBufferWrites(Graphics, true);
+    PushRenderBuffer(Graphics, RenderBuffer);        
+    PushViewportAndScissor(Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
+    PushClearColorAndDepth(Graphics, Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
-    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderBuffer->Resolution.width, Graphics->RenderBuffer->Resolution.height);
-    PushClearColorAndDepth(Graphics, Black4(), 1.0f);
-    
-    PushCameraCommands(Graphics, Camera);
-    
+    PushLightBuffer(Graphics, &LightBuffer);        
+    PushCameraCommands(Graphics, Camera, RenderBuffer->Resolution);    
     FOR_EACH(Entity, &World->EntityPool)        
     {                
         b32 Flip = false;
@@ -370,7 +384,5 @@ void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, 
             PushMaterial(Graphics, Material);
             PushDrawMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);
         }
-    }
-    
-    PushCopyToOutput(Graphics, Graphics->RenderBuffer, V2i(0, 0), Graphics->RenderBuffer->Resolution);
+    }        
 }

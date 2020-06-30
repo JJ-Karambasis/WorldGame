@@ -628,7 +628,7 @@ void Platform_SwapBuffers(void* PlatformData)
 
 void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length, const GLchar* Message, void* UserData)
 {           
-    if((ID == 131185) || (ID == 131204) || (ID == 131218) || (ID == 131139))        
+    if((ID == 131185) || (ID == 131204) || (ID == 131218) || (ID == 131139) || (ID == 131169))        
         return;
     
     CONSOLE_LOG("GL Debug Message: %s\n", Message);    
@@ -848,7 +848,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     u32 SkinningIndex = 0;            
     
     shadow_pass ShadowPass = {};
-    opengl_forward_pass ForwardPass = {};
+    opengl_forward_pass ForwardPass = {};    
     
     GLint ModelUniform = -1;
     
@@ -860,9 +860,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         {   
             case PUSH_COMMAND_SHADOW_MAP:
             {                
-                ForwardPass = {};                                
+                ForwardPass = {};                                         
                 ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
-                ShadowPass.Current = true;
+                ShadowPass.Current = true;                
                 
                 if(!BindShadowMapFBO(OpenGL->ShadowMapFBO, OpenGL->ShadowMapTextureArray, &ShadowPass.ShadowMapCounter))
                     INVALID_CODE;
@@ -874,16 +874,25 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             {                
                 ForwardPass = {};      
                 ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
-                ShadowPass.Current = true;
-                
-                glDisable(GL_FRAMEBUFFER_SRGB);
-                
+                ShadowPass.Current = true;                     
+                                
                 push_command_omni_shadow_map* OmniShadowMap = (push_command_omni_shadow_map*)Command;                
                 if(!BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &ShadowPass.OmniShadowMapCounter))
                     INVALID_CODE;
                 
                 ShadowPass.State = SHADOW_PASS_STATE_OMNI_DIRECTIONAL;
                 ShadowPass.FarPlaneDistance = OmniShadowMap->FarPlaneDistance;                
+            } break;
+            
+            case PUSH_COMMAND_SRGB_RENDER_BUFFER_WRITES:
+            {
+                (((push_command_srgb_render_buffer_writes*)Command)->Enable) ? glEnable(GL_FRAMEBUFFER_SRGB) : glDisable(GL_FRAMEBUFFER_SRGB);
+            } break;
+            
+            case PUSH_COMMAND_RENDER_BUFFER:
+            {
+                opengl_render_buffer* RenderBuffer = (opengl_render_buffer*)((push_command_render_buffer*)Command)->RenderBuffer;                                
+                glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer->Framebuffer);                
             } break;
             
             case PUSH_COMMAND_LIGHT_BUFFER:
@@ -893,11 +902,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 push_command_light_buffer* CommandLightBuffer = (push_command_light_buffer*)Command;
                 
-                opengl_render_buffer* RenderBuffer = (opengl_render_buffer*)CommandLightBuffer->RenderBuffer;
                 graphics_light_buffer SrcLightBuffer = CommandLightBuffer->LightBuffer;
-                
-                glEnable(GL_FRAMEBUFFER_SRGB);                    
-                glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer->Framebuffer);
                 
                 opengl_light_buffer DstLightBuffer = {};
                 DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
@@ -946,7 +951,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             {    
                 ASSERT(ForwardPass.Current != ShadowPass.Current);
                 if(ForwardPass.Current)
-                {                    
+                {                       
                     if(ForwardPass.BoundMaterial && (ForwardPass.BoundMaterial != ForwardPass.PrevBoundMaterial))
                     {
                         ForwardPass.PrevBoundMaterial = ForwardPass.BoundMaterial;
@@ -1127,7 +1132,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     }
                 }
                 else if(ShadowPass.Current)
-                {
+                {                    
                     if(ShadowPass.LastState != ShadowPass.State)
                     {            
                         ShadowPass.LastState = ShadowPass.State;
@@ -1392,8 +1397,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 
                 glBlitFramebuffer(0, 0, SrcBuffer->Resolution.width, SrcBuffer->Resolution.height, 
                                   CopyToOutput->DstOffset.x, CopyToOutput->DstOffset.y, 
-                                  CopyToOutput->DstResolution.width, CopyToOutput->DstResolution.height, 
-                                  GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+                                  CopyToOutput->DstOffset.x+CopyToOutput->DstResolution.width, CopyToOutput->DstOffset.y+CopyToOutput->DstResolution.height, 
+                                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
                 
             } break;
             

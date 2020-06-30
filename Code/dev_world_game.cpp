@@ -264,6 +264,58 @@ void DrawWireframeWorld(graphics* Graphics, world* World)
     PushWireframe(Graphics, false);
 }
 
+void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, world* World)
+{            
+    camera* Camera = GetProperCamera(DevContext, World);    
+    
+    PushRenderBuffer(DevContext->Graphics, RenderBuffer);
+    switch(DevContext->ViewModeType)
+    {
+        case VIEW_MODE_TYPE_LIT:
+        {                        
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, Camera, DevContext->Game->Assets);                                                         
+        } break;
+        
+        case VIEW_MODE_TYPE_UNLIT:        
+        {
+            PushViewportAndScissor(DevContext->Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
+            PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);            
+            PushCameraCommands(DevContext->Graphics, Camera, RenderBuffer->Resolution);
+            FOR_EACH(Entity, &World->EntityPool)
+            {
+                if(Entity->Mesh)                    
+                {
+                    graphics_material* Material = Entity->Material;                    
+                    PushDrawUnlitMesh(DevContext->Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Material->Diffuse, Entity->Mesh->IndexCount, 0, 0);                                     
+                }
+            }
+        } break;                
+        
+        case VIEW_MODE_TYPE_WIREFRAME:
+        {
+            PushViewportAndScissor(DevContext->Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
+            PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);
+            PushCameraCommands(DevContext->Graphics, Camera, RenderBuffer->Resolution);
+            DrawWireframeWorld(DevContext->Graphics, World);            
+        } break;
+        
+        case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
+        {
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, Camera, DevContext->Game->Assets);
+            DrawWireframeWorld(DevContext->Graphics, World);            
+        } break;
+        
+        INVALID_DEFAULT_CASE;        
+    }
+    
+    if(DevContext->DrawPlayerCollisionVolume)
+    {
+        world_entity* PlayerEntity = GetPlayerEntity(World);
+        DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(DevContext->Game, (player*)PlayerEntity->UserData), Magenta3());
+    }
+    
+}
+
 void DevelopmentRender(dev_context* DevContext)
 {   
     graphics* Graphics = DevContext->Graphics;
@@ -275,53 +327,14 @@ void DevelopmentRender(dev_context* DevContext)
     DevelopmentImGuiUpdate(DevContext);    
     DevelopmentUpdateCamera(DevContext);
     
-    world* World = GetCurrentWorld(Game);
-    camera* Camera = GetProperCamera(DevContext, World);
-        
-    switch(DevContext->ViewModeType)
-    {
-        case VIEW_MODE_TYPE_LIT:
-        {                        
-            PushWorldShadingCommands(Graphics, World, Camera, Game->Assets);                                                         
-        } break;
-        
-        case VIEW_MODE_TYPE_UNLIT:        
-        {
-            PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
-            PushClearColorAndDepth(Graphics, Black4(), 1.0f);
-            
-            PushCameraCommands(Graphics, Camera);
-            FOR_EACH(Entity, &World->EntityPool)
-            {
-                if(Entity->Mesh)                    
-                {
-                    graphics_material* Material = Entity->Material;                    
-                    PushDrawUnlitMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Material->Diffuse, Entity->Mesh->IndexCount, 0, 0);                                     
-                }
-            }
-        } break;                
-        
-        case VIEW_MODE_TYPE_WIREFRAME:
-        {
-            PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
-            PushClearColorAndDepth(Graphics, Black4(), 1.0f);
-            PushCameraCommands(Graphics, Camera);
-            DrawWireframeWorld(Graphics, World);            
-        } break;
-        
-        case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
-        {
-            PushWorldShadingCommands(Graphics, World, Camera, Game->Assets);
-            DrawWireframeWorld(Graphics, World);            
-        } break;
-        
-        INVALID_DEFAULT_CASE;        
-    }
+    world* World = GetCurrentWorld(Game);    
     
-    if(DevContext->DrawPlayerCollisionVolume)
+    DrawWorld(DevContext, Game->RenderBuffer, World);
+    
+    if(DevContext->DrawOtherWorld)
     {
-        world_entity* PlayerEntity = GetPlayerEntity(World);
-        DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(Game, (player*)PlayerEntity->UserData), Magenta3());
+        DrawWorld(DevContext, DevContext->RenderBuffer, GetNotCurrentWorld(Game));        
+        PushRenderBuffer(Graphics, Game->RenderBuffer);        
     }
     
     PushDepth(Graphics, false);    
@@ -360,7 +373,16 @@ void DevelopmentRender(dev_context* DevContext)
     }
     PushDepth(Graphics, true);
     
-    DevelopmentImGuiRender(DevContext);
+    DevelopmentImGuiRender(DevContext);  
+    
+    PushScissor(Graphics, 0, 0, Game->RenderBuffer->Resolution.width, Game->RenderBuffer->Resolution.height);
+    PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Game->RenderBuffer->Resolution);    
+    
+    if(DevContext->DrawOtherWorld)
+    {
+        v2i Offset = Game->RenderBuffer->Resolution - DevContext->RenderBuffer->Resolution;
+        PushCopyToOutput(Graphics, DevContext->RenderBuffer, Offset, DevContext->RenderBuffer->Resolution);    
+    }
 }
 
 void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
@@ -374,6 +396,8 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         DevContext->LogStorage = CreateArena(MEGABYTE(1));
         DevContext->FrameRecording.RecordingPath = AllocateStringStorage(&DevContext->DevStorage, 8092);
         DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);        
+        
+        DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         
         CreateDevLineBoxMesh(DevContext);
         CreateDevLineSphereMesh(DevContext, 60);
