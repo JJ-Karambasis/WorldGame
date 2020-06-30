@@ -1,8 +1,8 @@
 #include "opengl.h"
 #include "opengl_shaders.cpp"
 
-#define SHADOW_MAP_TEXTURE_UNIT 2
-#define OMNI_SHADOW_MAP_TEXTURE_UNIT 3
+#define SHADOW_MAP_TEXTURE_UNIT 3
+#define OMNI_SHADOW_MAP_TEXTURE_UNIT 4
 
 #define SET_PROGRAM() \
 ModelUniform = Shader->ModelUniform; \
@@ -349,6 +349,36 @@ ALLOCATE_MESH(AllocateMesh)
             glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
         } break;        
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV:
+        {
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, N));
+            glVertexAttribPointer(TANGENT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, T));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, UV));
+            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(TANGENT_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+        } break;
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS:
+        {
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, N));
+            glVertexAttribPointer(TANGENT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, T));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, UV));
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, JointW));
+            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(TANGENT_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
+        } break;
         
         INVALID_DEFAULT_CASE;
     }
@@ -747,10 +777,16 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     CHECK_SHADER(TextureShader);        
     CHECK_SHADER(LambertianColorShader);
     CHECK_SHADER(LambertianTextureShader);
+    CHECK_SHADER(LambertianColorNormalMapShader);
+    CHECK_SHADER(LambertianTextureNormalMapShader);
     CHECK_SHADER(PhongDConSConShader);
+    CHECK_SHADER(PhongDConSConNormalMapShader);
     CHECK_SHADER(PhongDConSTexShader);
+    CHECK_SHADER(PhongDConSTexNormalMapShader);
     CHECK_SHADER(PhongDTexSConShader);
+    CHECK_SHADER(PhongDTexSConNormalMapShader);
     CHECK_SHADER(PhongDTexSTexShader);
+    CHECK_SHADER(PhongDTexSTexNormalMapShader);
     CHECK_SHADER(ShadowMapShader);
     CHECK_SHADER(OmniShadowMapShader);
     
@@ -770,8 +806,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     GLuint BoundVAO = (GLuint)-1;
     GLuint WorldTransformUniform = (GLuint)-1;
     
-    u32 SkinningIndex = 0;        
-    u32 DirectionalLightCounter = 0;
+    u32 SkinningIndex = 0;            
     
     shadow_pass ShadowPass = {};
     opengl_forward_pass ForwardPass = {};
@@ -786,7 +821,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         {   
             case PUSH_COMMAND_SHADOW_MAP:
             {                
-                ForwardPass = {};                
+                ForwardPass = {};                                
+                ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
                 ShadowPass.Current = true;
                 
                 if(!BindShadowMapFBO(OpenGL->ShadowMapFBO, OpenGL->ShadowMapTextureArray, &ShadowPass.ShadowMapCounter))
@@ -796,11 +832,12 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             } break;
             
             case PUSH_COMMAND_OMNI_SHADOW_MAP:
-            {
-                glDisable(GL_FRAMEBUFFER_SRGB);
-                
-                ForwardPass = {};                
+            {                
+                ForwardPass = {};      
+                ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
                 ShadowPass.Current = true;
+                
+                glDisable(GL_FRAMEBUFFER_SRGB);
                 
                 push_command_omni_shadow_map* OmniShadowMap = (push_command_omni_shadow_map*)Command;                
                 if(!BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &ShadowPass.OmniShadowMapCounter))
@@ -811,13 +848,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             } break;
             
             case PUSH_COMMAND_LIGHT_BUFFER:
-            {        
-                glEnable(GL_FRAMEBUFFER_SRGB);                    
-                ShadowPass = {};
+            {                                        
+                ShadowPass = {};                
                 ForwardPass.Current = true;
                 
                 graphics_light_buffer SrcLightBuffer = ((push_command_light_buffer*)Command)->LightBuffer;
                 
+                glEnable(GL_FRAMEBUFFER_SRGB);                    
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 
                 opengl_light_buffer DstLightBuffer = {};
@@ -953,31 +990,120 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                             }
                         }
                         else if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
-                        {                            
-                            NOT_IMPLEMENTED;
+                        {   
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {
+                                lambertian_texture_normal_map_shader* Shader = &OpenGL->LambertianTextureNormalMapShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
+                                
+                                opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                
+                                BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);
+                            }
+                            else
+                            {
+                                lambertian_color_normal_map_shader* Shader = &OpenGL->LambertianColorNormalMapShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                
+                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                
+                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);                                
+                            }                                                        
                         }
                         else
-                        {                        
-                            NOT_IMPLEMENTED;
+                        {   
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {
+                                if(BoundMaterial->Specular.IsTexture)
+                                {                   
+                                    phong_dtex_stex_normal_map_shader* Shader = &OpenGL->PhongDTexSTexNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    
+                                    BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                    BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 2);
+                                }
+                                else
+                                {
+                                    phong_dtex_scon_normal_map_shader* Shader = &OpenGL->PhongDTexSConNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    
+                                    BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
+                                }
+                            }
+                            else
+                            {
+                                if(BoundMaterial->Specular.IsTexture)
+                                {
+                                    phong_dcon_stex_normal_map_shader* Shader = &OpenGL->PhongDConSTexNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    
+                                    BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 0);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
+                                }
+                                else
+                                {
+                                    phong_dcon_scon_normal_map_shader* Shader = &OpenGL->PhongDConSConNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);
+                                }
+                            }                                                        
                         }
                     }
                 }
                 else if(ShadowPass.Current)
-                {               
-                    if(ShadowPass.State == SHADOW_PASS_STATE_DIRECTIONAL)
-                    {
-                        shadow_map_shader* Shader = &OpenGL->ShadowMapShader;
-                        SET_PROGRAM();                        
-                        SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                                
+                {
+                    if(ShadowPass.LastState != ShadowPass.State)
+                    {            
+                        ShadowPass.LastState = ShadowPass.State;
+                        if(ShadowPass.State == SHADOW_PASS_STATE_DIRECTIONAL)
+                        {
+                            shadow_map_shader* Shader = &OpenGL->ShadowMapShader;
+                            SET_PROGRAM();                        
+                            SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                                
+                        }
+                        else if(ShadowPass.State == SHADOW_PASS_STATE_OMNI_DIRECTIONAL)
+                        {
+                            omni_shadow_map_shader* Shader = &OpenGL->OmniShadowMapShader;
+                            SET_PROGRAM();
+                            SET_VIEW_UNIFORMS();                        
+                            glUniform1f(Shader->FarPlaneDistanceUniform, ShadowPass.FarPlaneDistance);
+                        }
+                        INVALID_ELSE;
                     }
-                    else if(ShadowPass.State == SHADOW_PASS_STATE_OMNI_DIRECTIONAL)
-                    {
-                        omni_shadow_map_shader* Shader = &OpenGL->OmniShadowMapShader;
-                        SET_PROGRAM();
-                        SET_VIEW_UNIFORMS();                        
-                        glUniform1f(Shader->FarPlaneDistanceUniform, ShadowPass.FarPlaneDistance);
-                    }
-                    INVALID_ELSE;
                 }
                 
                 push_command_draw_mesh* DrawMesh = (push_command_draw_mesh*)Command;                
@@ -1236,10 +1362,16 @@ EXPORT INVALIDATE_SHADERS(InvalidateShaders)
     INVALIDATE_SHADER(ColorShader);        
     INVALIDATE_SHADER(LambertianColorShader);
     INVALIDATE_SHADER(LambertianTextureShader);                    
+    INVALIDATE_SHADER(LambertianColorNormalMapShader);
+    INVALIDATE_SHADER(LambertianTextureNormalMapShader);
     INVALIDATE_SHADER(PhongDConSConShader);
+    INVALIDATE_SHADER(PhongDConSConNormalMapShader);
     INVALIDATE_SHADER(PhongDConSTexShader);
+    INVALIDATE_SHADER(PhongDConSTexNormalMapShader);
     INVALIDATE_SHADER(PhongDTexSConShader);
+    INVALIDATE_SHADER(PhongDTexSConNormalMapShader);
     INVALIDATE_SHADER(PhongDTexSTexShader);
+    INVALIDATE_SHADER(PhongDTexSTexNormalMapShader);
     INVALIDATE_SHADER(ShadowMapShader);
     INVALIDATE_SHADER(OmniShadowMapShader);    
 }

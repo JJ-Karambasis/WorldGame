@@ -21,7 +21,9 @@ enum graphics_vertex_format
     GRAPHICS_VERTEX_FORMAT_P3_N3,
     GRAPHICS_VERTEX_FORMAT_P3_N3_UV,
     GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS,
-    GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS
+    GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS,
+    GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV,
+    GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS
 };
 
 enum graphics_index_format
@@ -231,6 +233,8 @@ GetVertexStride(graphics_vertex_format Format)
         case GRAPHICS_VERTEX_FORMAT_P3_N3_UV: { Result = sizeof(vertex_p3_n3_uv); } break;
         case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS: { Result = sizeof(vertex_p3_n3_weights); } break;
         case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS: { Result = sizeof(vertex_p3_n3_uv_weights); } break;
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV: { Result = sizeof(vertex_p3_n3_t4_uv); } break;
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS: { Result = sizeof(vertex_p3_n3_t4_uv_weights); } break;
         INVALID_DEFAULT_CASE;
     }
     

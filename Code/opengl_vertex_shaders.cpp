@@ -44,6 +44,11 @@ layout (std140) uniform LightViewProjectionBuffer
 out v2f PixelUV;
 #endif
 
+#ifdef HAS_NORMAL_MAPPING
+out v3f PixelWorldTangent;
+out v3f PixelWorldBitangent;
+#endif
+
 void main()
 {
 #ifdef HAS_SKINNING
@@ -83,7 +88,7 @@ void main()
     v3f WorldSpacePosition = v3f(Model*VertexP);
 #ifdef HAS_LIGHTING
     PixelWorldPosition = WorldSpacePosition;
-    PixelWorldNormal = m3(transpose(inverse(Model)))*VertexN;
+    PixelWorldNormal = normalize(m3(transpose(inverse(Model)))*VertexN);    
 
     for(i32 DirectionalLightIndex = 0; DirectionalLightIndex < MAX_DIRECTIONAL_LIGHT_COUNT; DirectionalLightIndex++)    
         PixelLightPositions[DirectionalLightIndex] = LightViewProjection[DirectionalLightIndex]*v4f(WorldSpacePosition, 1.0f);            
@@ -91,6 +96,12 @@ void main()
 
 #ifdef HAS_TEXTURES
     PixelUV = UV;
+#endif
+
+#ifdef HAS_NORMAL_MAPPING
+    PixelWorldTangent = normalize(m3(Model)*Tangent.xyz);    
+    PixelWorldTangent = normalize(PixelWorldTangent - dot(PixelWorldTangent, PixelWorldNormal)*PixelWorldNormal);
+    PixelWorldBitangent = cross(PixelWorldNormal, PixelWorldTangent)*Tangent.w;
 #endif
 
 #ifdef OMNI_SHADOW_MAP

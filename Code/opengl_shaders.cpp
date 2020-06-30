@@ -15,7 +15,7 @@ layout (location = 0) in v2f Position2D;
 layout (location = 0) in v3f Position;
 layout (location = 1) in v3f Normal;
 layout (location = 2) in v2f UV;
-layout (location = 3) in v3f Tangent;
+layout (location = 3) in v4f Tangent;
 layout (location = 4) in c4  Color;
 layout (location = 5) in u32 JointI;
 layout (location = 6) in v4f JointW;
@@ -203,6 +203,12 @@ inline char* ShaderDefinesOmniShadowMap()
     return Result;
 }
 
+inline char* ShaderDefinesNormalMapping()
+{
+    char* Result = "#define HAS_NORMAL_MAPPING\n";
+    return Result;
+}
+
 #define GET_UNIFORM_LOCATION(name) glGetUniformLocation(Program, name)
 #define SET_UNIFORM_BLOCK(index, name) \
 do \
@@ -327,6 +333,58 @@ lambertian_texture_shader CreateLambertianTextureShader()
     return Result;
 }
 
+lambertian_color_normal_map_shader CreateLambertianColorNormalMapShader()
+{
+    lambertian_color_normal_map_shader Result = {};    
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), MaxDirectionalLightString, ShaderDefinesLighting(), ShaderDefinesNormalMapping(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseColor(), ShaderDefinesNormalMapping(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;
+        
+        MVP_UNIFORMS();
+        SHADOW_MAP_UNIFORMS();
+        Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");
+        Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        
+        SET_LIGHT_UNIFORM_BLOCKS();
+    }
+    
+    return Result;
+}
+
+lambertian_texture_normal_map_shader CreateLambertianTextureNormalMapShader()
+{
+    lambertian_texture_normal_map_shader Result = {};    
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);    
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), MaxDirectionalLightString, ShaderDefinesLighting(), ShaderDefinesNormalMapping(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), ShaderDefinesNormalMapping(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;
+        
+        MVP_UNIFORMS();
+        SHADOW_MAP_UNIFORMS();
+        Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
+        Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        
+        SET_LIGHT_UNIFORM_BLOCKS();
+    }
+    
+    return Result;
+}
+
 phong_dcon_scon_shader CreatePhongDConSConShader()
 {
     phong_dcon_scon_shader Result = {};
@@ -349,6 +407,36 @@ phong_dcon_scon_shader CreatePhongDConSConShader()
         Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");
         Result.SpecularColorUniform = GET_UNIFORM_LOCATION("SpecularColor");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");        
+        
+        SET_LIGHT_UNIFORM_BLOCKS();        
+    }    
+    
+    return Result;
+}
+
+phong_dcon_scon_normal_map_shader CreatePhongDConSConNormalMapShader()
+{
+    phong_dcon_scon_normal_map_shader Result = {};
+    
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, ShaderDefinesTextures(), MaxDirectionalLightString, ShaderDefinesLighting(), ShaderDefinesNormalMapping(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesDiffuseColor(), ShaderDefinesSpecularColor(), ShaderDefinesNormalMapping(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;
+        
+        MVP_UNIFORMS();
+        SHADOW_MAP_UNIFORMS();    
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
+        Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");        
+        Result.SpecularColorUniform = GET_UNIFORM_LOCATION("SpecularColor");
+        Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");      
+        Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
         
         SET_LIGHT_UNIFORM_BLOCKS();        
     }    
@@ -385,6 +473,36 @@ phong_dcon_stex_shader CreatePhongDConSTexShader()
     return Result;
 }
 
+phong_dcon_stex_normal_map_shader CreatePhongDConSTexNormalMapShader()
+{
+    phong_dcon_stex_normal_map_shader Result = {};
+    
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);
+    
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesTextures(), ShaderDefinesLighting(), ShaderDefinesNormalMapping(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesNormalMapping(), ShaderDefinesDiffuseColor(), ShaderDefinesSpecularTexture(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;
+        
+        MVP_UNIFORMS();
+        SHADOW_MAP_UNIFORMS();
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
+        Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");
+        Result.SpecularTextureUniform = GET_UNIFORM_LOCATION("SpecularTexture");
+        Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
+        Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        
+        SET_LIGHT_UNIFORM_BLOCKS();        
+    }
+    
+    return Result;
+}
+
 phong_dtex_scon_shader CreatePhongDTexSConShader()
 {
     phong_dtex_scon_shader Result = {};
@@ -413,6 +531,35 @@ phong_dtex_scon_shader CreatePhongDTexSConShader()
     return Result;
 }
 
+phong_dtex_scon_normal_map_shader CreatePhongDTexSConNormalMapShader()
+{
+    phong_dtex_scon_normal_map_shader Result = {};
+    
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesTextures(), ShaderDefinesNormalMapping(), ShaderDefinesLighting(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesTextures(), ShaderDefinesNormalMapping(), ShaderDefinesDiffuseTexture(), ShaderDefinesSpecularColor(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;
+        
+        MVP_UNIFORMS();
+        SHADOW_MAP_UNIFORMS();
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
+        Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
+        Result.SpecularColorUniform = GET_UNIFORM_LOCATION("SpecularColor");
+        Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
+        Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        
+        SET_LIGHT_UNIFORM_BLOCKS();
+    }
+    
+    return Result;
+}
+
 phong_dtex_stex_shader CreatePhongDTexSTexShader()
 {
     phong_dtex_stex_shader Result = {};
@@ -434,6 +581,35 @@ phong_dtex_stex_shader CreatePhongDTexSTexShader()
         Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
         Result.SpecularTextureUniform = GET_UNIFORM_LOCATION("SpecularTexture");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
+        
+        SET_LIGHT_UNIFORM_BLOCKS();
+    }
+    
+    return Result;
+}
+
+phong_dtex_stex_normal_map_shader CreatePhongDTexSTexNormalMapShader()
+{
+    phong_dtex_stex_normal_map_shader Result = {};
+    char* MaxDirectionalLightString = ShaderDefinesMaxDirectionalLightCount(MAX_DIRECTIONAL_LIGHT_COUNT);
+    char* MaxPointLightString = ShaderDefinesMaxPointLightCount(MAX_POINT_LIGHT_COUNT);
+    const GLchar* VertexShaders[] = {Shader_Header, Vertex_Attributes, MaxDirectionalLightString, ShaderDefinesTextures(), ShaderDefinesNormalMapping(), ShaderDefinesLighting(), VertexShader_LocalToClip};
+    const GLchar* FragmentShaders[] = {Shader_Header, ShaderDefinesNormalMapping(), ShaderDefinesTextures(), ShaderDefinesDiffuseTexture(), ShaderDefinesSpecularTexture(), MaxDirectionalLightString, MaxPointLightString, FragmentShader_Lighting};
+    
+    GLuint Program = CreateShaderProgram(VertexShaders, ARRAYCOUNT(VertexShaders), FragmentShaders, ARRAYCOUNT(FragmentShaders));
+    
+    if(Program > 0)
+    {
+        Result.Valid = true;
+        Result.Program = Program;
+        
+        MVP_UNIFORMS();
+        SHADOW_MAP_UNIFORMS();
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
+        Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
+        Result.SpecularTextureUniform = GET_UNIFORM_LOCATION("SpecularTexture");
+        Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
+        Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
         
         SET_LIGHT_UNIFORM_BLOCKS();
     }

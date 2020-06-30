@@ -124,6 +124,7 @@ struct shadow_pass
     u32 ShadowMapCounter;
     u32 OmniShadowMapCounter;
     f32 FarPlaneDistance;    
+    shadow_pass_state LastState;
     shadow_pass_state State;
 };
 
@@ -142,17 +143,23 @@ struct opengl_context
     opengl_mesh_pool MeshPool;
     opengl_texture_pool TexturePool;        
     
-    imgui_shader              ImGuiShader;
-    color_shader              ColorShader;
-    texture_shader            TextureShader;
-    lambertian_color_shader   LambertianColorShader;
-    lambertian_texture_shader LambertianTextureShader;    
-    phong_dcon_scon_shader    PhongDConSConShader;
-    phong_dcon_stex_shader    PhongDConSTexShader;
-    phong_dtex_scon_shader    PhongDTexSConShader;
-    phong_dtex_stex_shader    PhongDTexSTexShader;
-    shadow_map_shader         ShadowMapShader;
-    omni_shadow_map_shader    OmniShadowMapShader;
+    imgui_shader                         ImGuiShader;
+    color_shader                         ColorShader;
+    texture_shader                       TextureShader;
+    lambertian_color_shader              LambertianColorShader;
+    lambertian_texture_shader            LambertianTextureShader;    
+    lambertian_color_normal_map_shader   LambertianColorNormalMapShader;
+    lambertian_texture_normal_map_shader LambertianTextureNormalMapShader;
+    phong_dcon_scon_shader               PhongDConSConShader;
+    phong_dcon_scon_normal_map_shader    PhongDConSConNormalMapShader;
+    phong_dcon_stex_shader               PhongDConSTexShader;
+    phong_dcon_stex_normal_map_shader    PhongDConSTexNormalMapShader;
+    phong_dtex_scon_shader               PhongDTexSConShader;
+    phong_dtex_scon_normal_map_shader    PhongDTexSConNormalMapShader;
+    phong_dtex_stex_shader               PhongDTexSTexShader;
+    phong_dtex_stex_normal_map_shader    PhongDTexSTexNormalMapShader;
+    shadow_map_shader                    ShadowMapShader;
+    omni_shadow_map_shader               OmniShadowMapShader;
     
     GLuint ShadowMapFBO;
     GLuint ShadowMapTextureArray;

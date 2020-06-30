@@ -131,18 +131,25 @@ struct assets
     
     mesh PlayerMesh;
     
-    texture TestMaterial0_Diffuse;
+    texture TestMaterial0_Diffuse;    
+    texture TestMaterial0_Normal;
     texture TestMaterial0_Specular;
     
     texture TestMaterial1_Diffuse;
+    texture TestMaterial1_Normal;
     texture TestMaterial1_Specular;
     
     graphics_material Material_DiffuseC;
     graphics_material Material_DiffuseT;            
     graphics_material Material_DiffuseC_SpecularC;
     graphics_material Material_DiffuseC_SpecularT;
+    graphics_material Material_DiffuseC_Normal;
     graphics_material Material_DiffuseT_SpecularC;
     graphics_material Material_DiffuseT_SpecularT;
+    graphics_material Material_DiffuseT_Normal;
+    graphics_material Material_DiffuseC_SpecularC_Normal;
+    graphics_material Material_DiffuseT_SpecularT_Normal;
+    graphics_material Material_DiffuseT_SpecularT_Normal_2;
     
 #if 0 
     mesh TestSkeletonMesh;

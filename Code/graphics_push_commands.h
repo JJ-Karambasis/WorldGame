@@ -1,6 +1,9 @@
 #ifndef GRAPHICS_PUSH_COMMANDS_H
 #define GRAPHICS_PUSH_COMMANDS_H
 
+//CONFIRM(JJ): Is this alright to be fixed sized?
+#define MAX_COMMAND_COUNT 2048
+
 enum push_command_type
 {
     PUSH_COMMAND_UNKNOWN,
@@ -150,8 +153,6 @@ struct push_command_draw_imgui_ui : public push_command
     graphics_draw_info DrawInfo;
 };
 
-//CONFIRM(JJ): Is this alright to be fixed sized?
-#define MAX_COMMAND_COUNT 1024
 struct push_command_list
 {
     push_command* Ptr[MAX_COMMAND_COUNT];

@@ -81,6 +81,12 @@ uniform sampler2D SpecularTexture;
 uniform i32 Shininess;
 #endif
 
+#ifdef HAS_NORMAL_MAPPING
+in v3f PixelWorldTangent;
+in v3f PixelWorldBitangent;
+uniform sampler2D NormalMap;
+#endif
+
 #define LAMBERTIAN_MODEL (defined(DIFFUSE_COLOR) || defined(DIFFUSE_TEXTURE)) && (!defined(SPECULAR_COLOR) && !defined(SPECULAR_TEXTURE) && !defined(SPECULAR_SHININESS))
 
 struct directional_light
@@ -169,12 +175,13 @@ f32 SampleShadowMap(i32 ShadowMapIndex, v4f FragPosition, v3f N, v3f L)
     ProjPosition = ProjPosition * 0.5f + 0.5f;    
 
     if(ProjPosition.z > 1.0f)
-        return 0;
+        return 1;
 
     f32 ClosestDepth = texture(ShadowMap, v3f(ProjPosition.xy, ShadowMapIndex)).r;
     f32 CurrentDepth = ProjPosition.z;
 
-    f32 Bias = max(0.05f * (1.0f - dot(N, L)), 0.05f);    
+    f32 Bias = max(0.05f * (1.0f - dot(N, L)), 0.005f);        
+    //f32 Bias = 0.005f;
     f32 Result = step(CurrentDepth-Bias, ClosestDepth);
 
     return Result;
@@ -186,7 +193,6 @@ f32 SampleShadowMap(i32 ShadowMapIndex, v4f FragPosition, v3f N, v3f L)
 #define NEGATIVE_Y 3
 #define POSITIVE_Z 4
 #define NEGATIVE_Z 5
-
 i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
 {       
     f32 AbsX = abs(TexCoords.x);
@@ -195,9 +201,7 @@ i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
     
     f32 LargestAxis;
     f32 U, V;
-
     i32 Result;
-
     if((AbsX >= AbsY) && (AbsX >= AbsZ))
     {
         LargestAxis = AbsX;
@@ -214,7 +218,6 @@ i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
             Result = NEGATIVE_X;
         }
     }
-
     if((AbsY >= AbsX) && (AbsY >= AbsZ))
     {
         LargestAxis = AbsY;
@@ -231,7 +234,6 @@ i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
             Result = NEGATIVE_Y;
         }
     }
-
     if((AbsZ >= AbsX) && (AbsZ >= AbsY))
     {
         LargestAxis = AbsZ;
@@ -248,7 +250,6 @@ i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
             Result = NEGATIVE_Z;
         }
     }
-
     OutTexCoords.x = 0.5f * (U / LargestAxis + 1.0f);
     OutTexCoords.y = 0.5f * (V / LargestAxis + 1.0f);
     return Result;
@@ -259,14 +260,11 @@ f32 SampleOmniShadowMap(i32 ShadowMapIndex, v3f PixelWorldPosition, v3f LightWor
     i32 ActualShadowMapIndex = 6*ShadowMapIndex;
     v3f LightToPixel = PixelWorldPosition-LightWorldPosition;
     f32 CurrentDepth = length(LightToPixel);
-
     v2f OutTexCoords;
     i32 FaceIndex = ChooseFaceIndex(LightToPixel, OutTexCoords);
     i32 FinalFaceIndex = ActualShadowMapIndex+FaceIndex;
-
     f32 ClosestDepth = texture(OmniShadowMap, v3f(OutTexCoords, FinalFaceIndex)).r;
     ClosestDepth *= FarPlaneDistance;
-
     f32 Bias = max(0.05f*(1.0f-dot(N, L)), 0.05f);
     f32 Result = step(CurrentDepth-Bias, ClosestDepth);
     return Result;
@@ -274,7 +272,13 @@ f32 SampleOmniShadowMap(i32 ShadowMapIndex, v3f PixelWorldPosition, v3f LightWor
 
 void main()
 {    
+#ifdef HAS_NORMAL_MAPPING
+    v3f N = normalize(texture(NormalMap, PixelUV).xyz);
+    N = N*2.0f - 1.0f;
+    N = normalize(m3(PixelWorldTangent, PixelWorldBitangent, PixelWorldNormal)*N);
+#else
     v3f N = normalize(PixelWorldNormal);
+#endif    
     
 #ifdef DIFFUSE_COLOR
     c3 SurfaceColor = DiffuseColor;
@@ -329,7 +333,7 @@ void main()
 
         c3 LightColor = PointLight.Color.xyz*Falloff;        
         
-        f32 Shadow = SampleOmniShadowMap(PointLightIndex, PixelWorldPosition, PointLight.Position.xyz, LightRadius, N, L);
+        f32 Shadow = SampleOmniShadowMap(PointLightIndex, PixelWorldPosition, PointLight.Position.xyz, LightRadius, N, L);        
 #if LAMBERTIAN_MODEL
         c3 LambertianColor = Lambertian(N, L, LightColor, SurfaceColor);
         FinalColor += Shadow*LambertianColor;
