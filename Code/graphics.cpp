@@ -159,10 +159,11 @@ void PushOmniShadowMap(graphics* Graphics, f32 FarPlaneDistance)
     PushCommand(Graphics, PushCommandOmniShadowMap);
 }
 
-void PushLightBuffer(graphics* Graphics, graphics_light_buffer* LightBuffer)
+void PushLightBuffer(graphics* Graphics, graphics_light_buffer* LightBuffer, graphics_render_buffer* RenderBuffer)
 {
     push_command_light_buffer* PushCommandLightBuffer = PushStruct(push_command_light_buffer, NoClear, 0);
     PushCommandLightBuffer->Type = PUSH_COMMAND_LIGHT_BUFFER;
+    PushCommandLightBuffer->RenderBuffer = RenderBuffer;
     CopyMemory(&PushCommandLightBuffer->LightBuffer, LightBuffer, sizeof(graphics_light_buffer));
     PushCommand(Graphics, PushCommandLightBuffer);
 }
@@ -260,6 +261,17 @@ void PushDrawImGuiUI(graphics* Graphics, i64 MeshID, i64 TextureID, u32 IndexCou
     PushCommand(Graphics, PushCommandDrawImGuiUI);
 }
 
+void PushCopyToOutput(graphics* Graphics, graphics_render_buffer* RenderBuffer, v2i DstOffset, v2i DstResolution)
+{
+    push_command_copy_to_output* PushCommandCopyToOutput = PushStruct(push_command_copy_to_output, NoClear, 0);
+    PushCommandCopyToOutput->Type = PUSH_COMMAND_COPY_TO_OUTPUT;
+    PushCommandCopyToOutput->RenderBuffer = RenderBuffer;
+    PushCommandCopyToOutput->DstOffset = DstOffset;
+    PushCommandCopyToOutput->DstResolution = DstResolution;
+    
+    PushCommand(Graphics, PushCommandCopyToOutput);
+}
+
 void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Height)
 {
     PushViewport(Graphics, X, Y, Width, Height);
@@ -276,6 +288,9 @@ void PushCameraCommands(graphics* Graphics, camera* Camera)
 
 void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, assets* Assets)
 {
+    if(!Graphics->RenderBuffer)    
+        Graphics->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim);
+    
     graphics_light_buffer LightBuffer = {};
     LightBuffer.DirectionalLightCount = 0;        
     LightBuffer.DirectionalLights[0] = CreateDirectionalLight(V3(0.0f, 0.0f, 4.0f), White3(), 1.0f, Normalize(V3(0.0f, 0.3f, -0.6f)), 
@@ -338,10 +353,10 @@ void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, 
         }
     }    
         
-    PushLightBuffer(Graphics, &LightBuffer);
+    PushLightBuffer(Graphics, &LightBuffer, Graphics->RenderBuffer);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
-        
-    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);
+    
+    PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderBuffer->Resolution.width, Graphics->RenderBuffer->Resolution.height);
     PushClearColorAndDepth(Graphics, Black4(), 1.0f);
     
     PushCameraCommands(Graphics, Camera);
@@ -356,4 +371,6 @@ void PushWorldShadingCommands(graphics* Graphics, world* World, camera* Camera, 
             PushDrawMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);
         }
     }
+    
+    PushCopyToOutput(Graphics, Graphics->RenderBuffer, V2i(0, 0), Graphics->RenderBuffer->Resolution);
 }

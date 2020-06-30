@@ -427,6 +427,39 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
     return ResultID;
 }
 
+ALLOCATE_RENDER_BUFFER(AllocateRenderBuffer)
+{
+    opengl_context* OpenGL = (opengl_context*)Graphics;    
+    opengl_render_buffer* Result = PushStruct(&OpenGL->Storage, opengl_render_buffer, Clear, 0);
+    
+    glGenFramebuffers(1, &Result->Framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, Result->Framebuffer);
+    
+    glGenTextures(1, &Result->ColorAttachment);
+    glBindTexture(GL_TEXTURE_2D, Result->ColorAttachment);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, Resolution.width, Resolution.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Result->ColorAttachment, 0);
+    
+    glGenRenderbuffers(1, &Result->DepthStencilAttachment);
+    glBindRenderbuffer(GL_RENDERBUFFER, Result->DepthStencilAttachment);    
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, Resolution.width, Resolution.height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Result->DepthStencilAttachment);    
+    
+    Result->Resolution = Resolution;
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)    
+        Result = NULL;            
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return Result;
+}
+
 STREAM_MESH_DATA(StreamMeshData)
 {
     ASSERT(IsAllocatedID(MeshID));
@@ -610,6 +643,7 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     Graphics->AllocateTexture = AllocateTexture;
     Graphics->AllocateMesh = AllocateMesh;
     Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
+    Graphics->AllocateRenderBuffer = AllocateRenderBuffer;
     Graphics->StreamMeshData = StreamMeshData;        
     
     LOAD_FUNCTION(PFNGLCREATESHADERPROC, glCreateShader);
@@ -656,6 +690,11 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLUNIFORM1FPROC, glUniform1f);
     LOAD_FUNCTION(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatus);
     LOAD_FUNCTION(PFNGLDRAWBUFFERSPROC, glDrawBuffers);
+    LOAD_FUNCTION(PFNGLGENRENDERBUFFERSPROC, glGenRenderbuffers);
+    LOAD_FUNCTION(PFNGLBINDRENDERBUFFERPROC, glBindRenderbuffer);
+    LOAD_FUNCTION(PFNGLRENDERBUFFERSTORAGEPROC, glRenderbufferStorage);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERRENDERBUFFERPROC, glFramebufferRenderbuffer);
+    LOAD_FUNCTION(PFNGLBLITFRAMEBUFFERPROC, glBlitFramebuffer);
     
 #if DEVELOPER_BUILD
     
@@ -852,10 +891,13 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ShadowPass = {};                
                 ForwardPass.Current = true;
                 
-                graphics_light_buffer SrcLightBuffer = ((push_command_light_buffer*)Command)->LightBuffer;
+                push_command_light_buffer* CommandLightBuffer = (push_command_light_buffer*)Command;
+                
+                opengl_render_buffer* RenderBuffer = (opengl_render_buffer*)CommandLightBuffer->RenderBuffer;
+                graphics_light_buffer SrcLightBuffer = CommandLightBuffer->LightBuffer;
                 
                 glEnable(GL_FRAMEBUFFER_SRGB);                    
-                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer->Framebuffer);
                 
                 opengl_light_buffer DstLightBuffer = {};
                 DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
@@ -1338,6 +1380,21 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_VIEW_POSITION:
             {
                 ViewPosition = ((push_command_view_position*)Command)->Position;
+            } break;
+            
+            case PUSH_COMMAND_COPY_TO_OUTPUT:
+            {
+                push_command_copy_to_output* CopyToOutput = (push_command_copy_to_output*)Command;                
+                opengl_render_buffer* SrcBuffer = (opengl_render_buffer*)CopyToOutput->RenderBuffer;
+                
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, SrcBuffer->Framebuffer);
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                
+                glBlitFramebuffer(0, 0, SrcBuffer->Resolution.width, SrcBuffer->Resolution.height, 
+                                  CopyToOutput->DstOffset.x, CopyToOutput->DstOffset.y, 
+                                  CopyToOutput->DstResolution.width, CopyToOutput->DstResolution.height, 
+                                  GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+                
             } break;
             
             INVALID_DEFAULT_CASE;                        

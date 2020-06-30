@@ -56,6 +56,11 @@ global PFNGLFRAMEBUFFERTEXTURELAYERPROC glFramebufferTextureLayer;
 global PFNGLUNIFORM1FPROC glUniform1f;
 global PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
 global PFNGLDRAWBUFFERSPROC glDrawBuffers;
+global PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers;
+global PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
+global PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
+global PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
+global PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer;
 
 #include "opengl_shaders.h"
 
@@ -133,6 +138,13 @@ struct opengl_forward_pass
     b32 Current;
     graphics_material* PrevBoundMaterial;
     graphics_material* BoundMaterial;        
+};
+
+struct opengl_render_buffer : public graphics_render_buffer
+{
+    GLuint Framebuffer;
+    GLuint ColorAttachment;
+    GLuint DepthStencilAttachment;
 };
 
 struct opengl_context

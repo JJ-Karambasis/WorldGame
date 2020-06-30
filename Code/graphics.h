@@ -156,6 +156,11 @@ enum graphics_blend
     GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA
 };
 
+struct graphics_render_buffer
+{
+    v2i Resolution;
+};
+
 #include "graphics_push_commands.h"
 
 struct graphics;
@@ -168,6 +173,9 @@ typedef ALLOCATE_MESH(allocate_mesh);
 
 #define ALLOCATE_DYNAMIC_MESH(name) i64 name(graphics* Graphics, graphics_vertex_format VertexFormat, graphics_index_format IndexFormat)
 typedef ALLOCATE_DYNAMIC_MESH(allocate_dynamic_mesh);
+
+#define ALLOCATE_RENDER_BUFFER(name) graphics_render_buffer* name(graphics* Graphics, v2i Resolution)
+typedef ALLOCATE_RENDER_BUFFER(allocate_render_buffer);
 
 #define STREAM_MESH_DATA(name) void name(graphics* Graphics, i64 MeshID, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
 typedef STREAM_MESH_DATA(stream_mesh_data);
@@ -193,7 +201,10 @@ struct graphics
     allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;
     allocate_dynamic_mesh* AllocateDynamicMesh;
+    allocate_render_buffer* AllocateRenderBuffer;
     stream_mesh_data* StreamMeshData;
+    
+    graphics_render_buffer* RenderBuffer;
 };
 
 STREAM_MESH_DATA(Graphics_StreamMeshDataStub)
