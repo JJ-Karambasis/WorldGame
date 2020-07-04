@@ -124,7 +124,8 @@ struct blocker_list
 #include "player.h"
 
 struct world
-{    
+{   
+    u32 WorldIndex;
     world_entity_pool EntityPool;
     camera Camera;
     player Player;    

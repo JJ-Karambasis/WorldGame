@@ -63,8 +63,9 @@ EXPORT GAME_TICK(Tick)
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {
             world* World = GetWorld(Game, WorldIndex);
+            World->WorldIndex = WorldIndex;
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
-            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(0.35f, 0.35f, 1.0f), WorldIndex == 0 ? Blue() : Red());            
+            CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(PLAYER_RADIUS, PLAYER_RADIUS, PLAYER_HEIGHT), WorldIndex == 0 ? Blue() : Red());            
             
             world_entity* PlayerEntity = GetPlayerEntity(World);
             camera* Camera = &World->Camera;
@@ -85,7 +86,7 @@ EXPORT GAME_TICK(Tick)
         }
         
         CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
+        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
         
         //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.2f, 0.0f, 1.0f), V3(1.0f, 3.0f, 1.0f), V3(0.0f, 0.0f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);                                                        
         
@@ -157,12 +158,7 @@ EXPORT GAME_TICK(Tick)
     }
     
     if(NOT_IN_DEVELOPMENT_MODE())
-    {           
-        PushViewportAndScissor(Graphics, 0, 0, Graphics->RenderDim.width, Graphics->RenderDim.height);        
-        
-        PushClearColorAndDepth(Graphics, Black(), 1.0f);
-        PushDepth(Graphics, true);
-        
-        PushWorldCommands(Graphics, GetCurrentWorld(Game), Game->Assets);        
+    {   
+        PushGameCommands(Graphics, Game);        
     }    
 }

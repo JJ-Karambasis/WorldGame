@@ -18,6 +18,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
+#define DEVELOPER_MUTE __Internal_Dev_Context__->Mute
 
 #define DEBUG_DRAW_POINT(position, color) \
 if(!IsInitialized(&__Internal_Dev_Context__->DebugPoints)) \
@@ -118,13 +119,12 @@ struct dev_context
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
     b32 DrawOtherWorld;
-    b32 SelectObjects;           
-    b32 Mute;
+    b32 SelectObjects;              
+    b32 DrawFrames;
     shading_type ShadingType;
     
     frame_recording FrameRecording;
-    
-    
+        
     game_information GameInformation;
     
     dev_input Input;    
@@ -134,15 +134,18 @@ struct dev_context
     i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
     dev_mesh LineBoxMesh;
-    dev_mesh LineSphereMesh;
-    
-    dev_mesh TriangleBoxMesh;    
+    dev_mesh LineSphereMesh;    
+    dev_mesh TriangleBoxMesh;
+    dev_mesh TriangleSphereMesh;
+    dev_mesh TriangleCylinderMesh;
+    dev_mesh TriangleConeMesh;
+    dev_mesh TriangleArrowMesh;
     
     dynamic_array<debug_point> DebugPoints;
     dynamic_array<debug_edges> DebugEdges;
     dynamic_array<debug_direction_vector> DebugDirectionVectors;
     dynamic_array<debug_quad> DebugQuads;
-
+    
     void* PlatformData;
     b32 Initialized;
     world_entity* SelectedObject;
