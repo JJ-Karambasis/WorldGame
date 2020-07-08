@@ -302,6 +302,18 @@ void PushCameraCommands(graphics* Graphics, camera* Camera, v2i RenderDim)
     PushViewProjection(Graphics, View*Perspective);    
 }
 
+void PushRenderBufferViewportAndScissor(graphics* Graphics, graphics_render_buffer* RenderBuffer)
+{
+    PushRenderBuffer(Graphics, RenderBuffer);        
+    PushViewportAndScissor(Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
+}
+
+void PushRenderBufferCameraViewportAndScissor(graphics* Graphics, graphics_render_buffer* RenderBuffer, camera* Camera)
+{
+    PushRenderBufferViewportAndScissor(Graphics, RenderBuffer);            
+    PushCameraCommands(Graphics, Camera, RenderBuffer->Resolution);
+}
+
 void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, camera* Camera, assets* Assets)
 {    
     graphics_light_buffer LightBuffer = {};
@@ -368,13 +380,11 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     }    
     
     PushSRGBRenderBufferWrites(Graphics, true);
-    PushRenderBuffer(Graphics, RenderBuffer);        
-    PushViewportAndScissor(Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
+    PushRenderBufferCameraViewportAndScissor(Graphics, RenderBuffer, Camera);    
     PushClearColorAndDepth(Graphics, Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
-    PushLightBuffer(Graphics, &LightBuffer);        
-    PushCameraCommands(Graphics, Camera, RenderBuffer->Resolution);    
+    PushLightBuffer(Graphics, &LightBuffer);            
     FOR_EACH(Entity, &World->EntityPool)        
     {                
         b32 Flip = false;

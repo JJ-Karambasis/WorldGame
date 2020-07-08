@@ -1375,16 +1375,19 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_PROJECTION:
             {
                 Projection = ((push_command_4x4_matrix*)Command)->Matrix;                                
+                BoundProgram = (GLuint)-1;
             } break;
             
             case PUSH_COMMAND_VIEW_PROJECTION:
             {
                 ViewProjection = ((push_command_4x4_matrix*)Command)->Matrix;
+                BoundProgram = (GLuint)-1;
             } break;
             
             case PUSH_COMMAND_VIEW_POSITION:
             {
                 ViewPosition = ((push_command_view_position*)Command)->Position;
+                BoundProgram = (GLuint)-1;
             } break;
             
             case PUSH_COMMAND_COPY_TO_OUTPUT:

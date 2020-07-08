@@ -50,7 +50,9 @@ EXPORT GAME_TICK(Tick)
         Game->Assets->BoxWalkableMesh = LoadWalkableMesh(Game->Assets, "Box.fbx");
         Game->Assets->QuadGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Quad.fbx");
         Game->Assets->QuadWalkableMesh = LoadWalkableMesh(Game->Assets, "Quad.fbx");
-        Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "TestPlayerMesh.fbx");
+        Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/meshes/PlayerMesh.fbx");
+        
+        
         Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
         Game->Assets->TestAudio2 = LoadAudio(Game->Assets, "TestSound2.wav");
         

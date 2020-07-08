@@ -254,7 +254,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
 void DrawWireframeWorld(graphics* Graphics, world* World)
 {
     PushWireframe(Graphics, true);
-    PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);    
+    PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);        
     FOR_EACH(Entity, &World->EntityPool)
     {
         if(Entity->Mesh)
@@ -268,7 +268,9 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
 {            
     camera* Camera = GetProperCamera(DevContext, World);    
     
-    PushRenderBuffer(DevContext->Graphics, RenderBuffer);
+    PushRenderBufferCameraViewportAndScissor(DevContext->Graphics, RenderBuffer, Camera);
+    PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);                
+    
     switch(DevContext->ViewModeType)
     {
         case VIEW_MODE_TYPE_LIT:
@@ -277,10 +279,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
-        {
-            PushViewportAndScissor(DevContext->Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
-            PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);            
-            PushCameraCommands(DevContext->Graphics, Camera, RenderBuffer->Resolution);
+        {                                    
             FOR_EACH(Entity, &World->EntityPool)
             {
                 if(Entity->Mesh)                    
@@ -292,17 +291,14 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
         } break;                
         
         case VIEW_MODE_TYPE_WIREFRAME:
-        {
-            PushViewportAndScissor(DevContext->Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
-            PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);
-            PushCameraCommands(DevContext->Graphics, Camera, RenderBuffer->Resolution);
+        {                                    
             DrawWireframeWorld(DevContext->Graphics, World);            
         } break;
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, Camera, DevContext->Game->Assets);
-            DrawWireframeWorld(DevContext->Graphics, World);            
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, Camera, DevContext->Game->Assets);            
+            DrawWireframeWorld(DevContext->Graphics, World);                        
         } break;
         
         INVALID_DEFAULT_CASE;        
@@ -333,8 +329,8 @@ void DevelopmentRender(dev_context* DevContext)
     
     if(DevContext->DrawOtherWorld)
     {
-        DrawWorld(DevContext, DevContext->RenderBuffer, GetNotCurrentWorld(Game));        
-        PushRenderBuffer(Graphics, Game->RenderBuffer);        
+        DrawWorld(DevContext, DevContext->RenderBuffer, GetNotCurrentWorld(Game));                
+        PushRenderBufferCameraViewportAndScissor(Graphics, Game->RenderBuffer, GetProperCamera(DevContext, World));        
     }
     
     PushDepth(Graphics, false);    
