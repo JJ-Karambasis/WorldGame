@@ -46,15 +46,33 @@ struct vertex_p3_n3_index
     u32 Index;
 };
 
+struct vertex_p3_n3_uv_index
+{
+    vertex_p3_n3_uv Vertex;
+    u32 Index;
+};
+
 inline u64 Hash(vertex_p3_n3_index Data, u64 TableSize)
 {
     u64 Result = Hash(Data.Vertex, TableSize);    
     return Result;
 }
 
+inline u64 Hash(vertex_p3_n3_uv_index Data, u64 TableSize)
+{
+    u64 Result = Hash(Data.Vertex, TableSize);
+    return Result;
+}
+
 inline b32 operator!=(vertex_p3_n3_index Left, vertex_p3_n3_index Right)
 {
     b32 Result = Left.Vertex != Right.Vertex;    
+    return Result;
+}
+
+inline b32 operator!=(vertex_p3_n3_uv_index Left, vertex_p3_n3_uv_index Right)
+{
+    b32 Result = Left.Vertex != Right.Vertex;
     return Result;
 }
 

@@ -1,6 +1,116 @@
 #include "opengl.h"
 #include "opengl_shaders.cpp"
 
+#define SHADOW_MAP_TEXTURE_UNIT 3
+#define OMNI_SHADOW_MAP_TEXTURE_UNIT 4
+
+#define SET_PROGRAM() \
+ModelUniform = Shader->ModelUniform; \
+BindProgram(&BoundProgram, Shader->Program)
+
+#define SET_ILLUMINATION_PROGRAM() \
+SET_PROGRAM(); \
+glUniform1i(Shader->ShadowMapUniform, SHADOW_MAP_TEXTURE_UNIT); \
+glUniform1i(Shader->OmniShadowMapUniform, OMNI_SHADOW_MAP_TEXTURE_UNIT)
+
+#define SET_VIEW_UNIFORMS() \
+SetUniformM4(Shader->ViewProjectionUniform, ViewProjection); \
+SetUniform3f(Shader->ViewPositionUniform, ViewPosition)
+
+inline void
+BindTextureToUnit(GLuint Texture, GLint Uniform, GLuint Unit)
+{
+    glActiveTexture(GL_TEXTURE0+Unit);
+    glBindTexture(GL_TEXTURE_2D, Texture);
+    glUniform1i(Uniform, Unit);
+}
+
+inline GLenum GetInternalFormat(graphics_texture_format Format)
+{
+    switch(Format)
+    {
+        case GRAPHICS_TEXTURE_FORMAT_R8:
+        {
+            return GL_R8;
+        } break;
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8:
+        {
+            return GL_RGB8;
+        } 
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB:
+        {
+            return GL_SRGB8;
+        }
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8:
+        {
+            return GL_RGBA8;
+        }
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8:
+        {
+            return GL_SRGB8_ALPHA8;
+        }        
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (GLenum)-1;
+}
+
+inline GLenum GetFormat(graphics_texture_format Format)
+{
+    switch(Format)
+    {
+        case GRAPHICS_TEXTURE_FORMAT_R8:
+        {
+            return GL_RED;
+        } break;
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8:
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB:
+        {
+            return GL_RGB;
+        } 
+        
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8:
+        case GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8:
+        {
+            return GL_RGBA;
+        }
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (GLenum)-1;
+}
+
+inline ptr
+GetIndexTypeSize(GLenum IndexType)
+{        
+    ASSERT((IndexType == GL_UNSIGNED_INT) || (IndexType == GL_UNSIGNED_SHORT));
+    ptr Result = (IndexType == GL_UNSIGNED_INT) ? sizeof(u32) : sizeof(u16);
+    return Result;
+}
+
+inline void 
+DrawTriangles(opengl_mesh* Mesh, graphics_draw_info* DrawInfo)
+{    
+    glDrawElementsBaseVertex(GL_TRIANGLES, DrawInfo->IndexCount, Mesh->IndexType, 
+                             (void*)(DrawInfo->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                             DrawInfo->VertexOffset);
+}
+
+inline void 
+DrawLines(opengl_mesh* Mesh, graphics_draw_info* DrawInfo)
+{    
+    glDrawElementsBaseVertex(GL_LINES, DrawInfo->IndexCount, Mesh->IndexType, 
+                             (void*)(DrawInfo->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
+                             DrawInfo->VertexOffset);
+}
+
 inline GLenum
 GetFilterType(graphics_filter Filter)
 {
@@ -32,16 +142,22 @@ GetBlendFactor(graphics_blend Blend)
     return (GLenum)-1;
 }
 
-b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
-{    
-    if(*BoundVAO != NewVAO)
-    {
-        *BoundVAO = NewVAO;
-        glBindVertexArray(*BoundVAO);
-        return true;
-    }
-    
-    return false;
+inline void
+SetUniformM4(GLint Uniform, m4 Value)
+{
+    glUniformMatrix4fv(Uniform, 1, GL_FALSE, Value.M);
+}
+
+inline void 
+SetUniform4f(GLint Uniform, v4f Value)
+{
+    glUniform4f(Uniform, Value.x, Value.y, Value.z, Value.w);
+}
+
+inline void 
+SetUniform3f(GLint Uniform, v3f Value)
+{
+    glUniform3f(Uniform, Value.x, Value.y, Value.z);
 }
 
 b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
@@ -56,6 +172,69 @@ b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
     return false;
 }
 
+b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
+{    
+    if(*BoundVAO != NewVAO)
+    {
+        *BoundVAO = NewVAO;
+        glBindVertexArray(*BoundVAO);
+        return true;
+    }
+    
+    return false;
+}
+
+GLuint AllocateShadowMapArray(u32 ArrayCount)
+{
+    GLuint Result;
+    glGenTextures(1, &Result);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, Result);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT, ArrayCount, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    
+    c4 BorderColor = White4();
+    glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, (f32*)&BorderColor);            
+    
+    return Result;
+}
+
+GLuint AllocateUBO(ptr UBOSize, u32 UBOIndex)
+{
+    GLuint Result;
+    glGenBuffers(1, &Result);
+    glBindBuffer(GL_UNIFORM_BUFFER, Result);
+    glBufferData(GL_UNIFORM_BUFFER, UBOSize, NULL, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);    
+    glBindBufferBase(GL_UNIFORM_BUFFER, UBOIndex, Result); 
+    return Result;
+}
+
+inline void 
+UploadUBO(GLuint UBO, ptr UploadSize, void* Data)
+{
+    glBindBuffer(GL_UNIFORM_BUFFER, UBO);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, UploadSize, Data);                                
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+}
+
+void UploadSkinningMatrices(opengl_buffer_list* SkinningBuffers, u32 SkinningIndex, u32 JointCount, m4* Joints)
+{    
+    ASSERT(SkinningIndex <= SkinningBuffers->Count);    
+    
+    if(SkinningIndex == SkinningBuffers->Count)
+    {                    
+        ASSERT(SkinningBuffers->Count < SkinningBuffers->Capacity);
+        GLuint SkinningUBO = AllocateUBO(sizeof(m4)*MAX_JOINT_COUNT, SKINNING_BUFFER_INDEX);         
+        SkinningBuffers->Ptr[SkinningBuffers->Count++] = SkinningUBO;                                                                                                    
+    }
+    
+    UploadUBO(SkinningBuffers->Ptr[SkinningIndex], sizeof(m4)*JointCount, Joints);    
+}
+
 inline GLenum
 GetIndexType(graphics_index_format IndexFormat)
 {    
@@ -64,19 +243,11 @@ GetIndexType(graphics_index_format IndexFormat)
     return IndexType;
 }
 
-inline ptr
-GetIndexTypeSize(GLenum IndexType)
-{        
-    ASSERT((IndexType == GL_UNSIGNED_INT) || (IndexType == GL_UNSIGNED_SHORT));
-    ptr Result = (IndexType == GL_UNSIGNED_INT) ? sizeof(u32) : sizeof(u16);
-    return Result;
-}
-
 ALLOCATE_TEXTURE(AllocateTexture)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    i64 ResultID = AllocateFromPool(&OpenGL->TexturePool);
+    graphics_texture_id ResultID = AllocateFromPool(&OpenGL->TexturePool);
     opengl_texture* Texture = GetByID(&OpenGL->TexturePool, ResultID);
     
     GLenum MinFilter = GetFilterType(SamplerInfo->MinFilter);
@@ -87,7 +258,11 @@ ALLOCATE_TEXTURE(AllocateTexture)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, MinFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, MagFilter);
     
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Dimensions.width, Dimensions.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Data);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    GLint InternalFormat = GetInternalFormat(TextureFormat);    
+    GLint Format = GetFormat(TextureFormat);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, InternalFormat, Dimensions.width, Dimensions.height, 0, Format, GL_UNSIGNED_BYTE, Data);
     
     glBindTexture(GL_TEXTURE_2D, 0);
     
@@ -116,49 +291,93 @@ ALLOCATE_MESH(AllocateMesh)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, Mesh->EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, IndexDataSize, IndexData, GL_STATIC_DRAW);
     
+    GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
     switch(VertexFormat)
     {
         case GRAPHICS_VERTEX_FORMAT_P3:
-        {
-            GLuint PAttribute = 0;
+        {                                    
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3, P));
             
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3, P));
-            
-            glEnableVertexAttribArray(PAttribute);
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
         } break;
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3:
-        {
-            GLuint PAttribute = 0;
-            GLuint NAttribute = 1;
+        {                        
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, N));            
             
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, P));
-            glVertexAttribPointer(NAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, N));            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
             
-            glEnableVertexAttribArray(PAttribute);
-            glEnableVertexAttribArray(NAttribute);            
+        } break; 
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV:
+        {            
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, N));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, UV)); 
             
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
         } break;
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS:
+        {                        
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, N));            
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointW));
+            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
+        } break;
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS:
         {
-            GLuint PAttribute = 0;
-            GLuint NAttribute = 1;
-            GLuint JointIAttribute = 2;
-            GLuint JointWAttribute = 3;
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, N));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, UV)); 
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointW));
             
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
-            glVertexAttribPointer(PAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, P));
-            glVertexAttribPointer(NAttribute, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, N));            
-            glVertexAttribIPointer(JointIAttribute, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointI));                        
-            glVertexAttribPointer(JointWAttribute, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointW));
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
+        } break;        
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV:
+        {
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, N));
+            glVertexAttribPointer(TANGENT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, T));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, UV));
             
-            glEnableVertexAttribArray(PAttribute);
-            glEnableVertexAttribArray(NAttribute);
-            glEnableVertexAttribArray(JointIAttribute);
-            glEnableVertexAttribArray(JointWAttribute);
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(TANGENT_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+        } break;
+        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS:
+        {
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, N));
+            glVertexAttribPointer(TANGENT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, T));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, UV));
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, JointW));
+            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(TANGENT_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
         } break;
         
         INVALID_DEFAULT_CASE;
@@ -191,25 +410,54 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
     {
         case GRAPHICS_VERTEX_FORMAT_P2_UV_C:
         {
-            GLuint PAttribute = 0;
-            GLuint UVAttribute = 1;
-            GLuint CAttribute = 2;
             
-            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);
+            GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);            
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX,  2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, P));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, UV));
+            glVertexAttribPointer(COLOR_ATTRIBUTE_INDEX,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, C));
             
-            glVertexAttribPointer(PAttribute,  2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, P));
-            glVertexAttribPointer(UVAttribute, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, UV));
-            glVertexAttribPointer(CAttribute,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, C));
-            
-            glEnableVertexAttribArray(PAttribute);
-            glEnableVertexAttribArray(UVAttribute);
-            glEnableVertexAttribArray(CAttribute);
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(COLOR_ATTRIBUTE_INDEX);
         } break;
     }
     
     glBindVertexArray(0);
     
     return ResultID;
+}
+
+ALLOCATE_RENDER_BUFFER(AllocateRenderBuffer)
+{
+    opengl_context* OpenGL = (opengl_context*)Graphics;    
+    opengl_render_buffer* Result = PushStruct(&OpenGL->Storage, opengl_render_buffer, Clear, 0);
+    
+    glGenFramebuffers(1, &Result->Framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, Result->Framebuffer);
+    
+    glGenTextures(1, &Result->ColorAttachment);
+    glBindTexture(GL_TEXTURE_2D, Result->ColorAttachment);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, Resolution.width, Resolution.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, Result->ColorAttachment, 0);
+    
+    glGenRenderbuffers(1, &Result->DepthStencilAttachment);
+    glBindRenderbuffer(GL_RENDERBUFFER, Result->DepthStencilAttachment);    
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, Resolution.width, Resolution.height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Result->DepthStencilAttachment);    
+    
+    Result->Resolution = Resolution;
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)    
+        Result = NULL;            
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return Result;
 }
 
 STREAM_MESH_DATA(StreamMeshData)
@@ -230,61 +478,6 @@ STREAM_MESH_DATA(StreamMeshData)
     glBindVertexArray(0);    
 }
 
-GLuint CreateShaderProgram(const GLchar** VSCode, u32 VSCodeCount, const GLchar** FSCode, u32 FSCodeCount)
-{    
-    GLuint VertexShader   = glCreateShader(GL_VERTEX_SHADER);
-    GLuint FragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    
-    glShaderSource(VertexShader,   VSCodeCount, VSCode, 0);
-    glShaderSource(FragmentShader, FSCodeCount, FSCode, 0);
-    
-    glCompileShader(VertexShader);
-    glCompileShader(FragmentShader);
-    
-    GLint VSCompiled, FSCompiled;    
-    glGetShaderiv(VertexShader, GL_COMPILE_STATUS, &VSCompiled);
-    glGetShaderiv(FragmentShader, GL_COMPILE_STATUS, &FSCompiled);
-    
-    if(!VSCompiled || !FSCompiled)
-    {
-        char VSError[4096];
-        char FSError[4096];
-        
-        glGetShaderInfoLog(VertexShader,   sizeof(VSError), NULL, VSError);
-        glGetShaderInfoLog(FragmentShader, sizeof(FSError), NULL, FSError);
-        
-        CONSOLE_LOG("%s\n", VSError);
-        CONSOLE_LOG("%s\n", FSError);
-        
-        INVALID_CODE;
-    }
-    
-    GLuint Program = glCreateProgram();
-    glAttachShader(Program, VertexShader);
-    glAttachShader(Program, FragmentShader);
-    glLinkProgram(Program);
-    glValidateProgram(Program);
-    
-    GLint Linked;
-    glGetProgramiv(Program, GL_LINK_STATUS, &Linked);
-    
-    if(!Linked)
-    {
-        char ProgramError[4096];
-        glGetProgramInfoLog(Program, sizeof(ProgramError), NULL, ProgramError);
-        
-        CONSOLE_LOG("%s\n", ProgramError);
-        
-        INVALID_CODE;
-    }
-    
-    glDetachShader(Program, VertexShader);
-    glDetachShader(Program, FragmentShader);
-    
-    return Program;
-}
-
-
 #ifdef OS_WINDOWS
 
 void* Platform_LoadProc(char* FunctionName)
@@ -301,28 +494,88 @@ void* Platform_LoadProc(char* FunctionName)
     return Function;
 }
 
-b32 Platform_InitOpenGL(void* PlatformData)
+b32 Platform_InitOpenGL(void** PlatformData)
 {
-    HWND Window = (HWND)PlatformData;
+    HWND Window = (HWND)PlatformData[0];
+    HINSTANCE Instance = (HINSTANCE)PlatformData[1];
+    char ClassName[256];
+    GetClassName(Window, ClassName, sizeof(ClassName));
+    
+    HWND TempWindow = CreateWindow(ClassName, "Temp", WS_SYSMENU, 0, 0, 1, 1, NULL, NULL, Instance, NULL);
+    BOOL_CHECK_AND_HANDLE(TempWindow, "Failed to create the temporary window.");
+    
+    PIXELFORMATDESCRIPTOR TempPixelFormatDescriptor = 
+    {
+        sizeof(PIXELFORMATDESCRIPTOR),
+        1, 
+        PFD_SUPPORT_OPENGL
+    };
+    
+    HDC TempDeviceContext = GetDC(TempWindow);
+    
+    i32 TempPixelFormatIndex = ChoosePixelFormat(TempDeviceContext, &TempPixelFormatDescriptor);
+    BOOL_CHECK_AND_HANDLE(TempPixelFormatIndex, "Failed to get the temporary pixel format index.");
+    BOOL_CHECK_AND_HANDLE(SetPixelFormat(TempDeviceContext, TempPixelFormatIndex, &TempPixelFormatDescriptor),
+                          "Failed to set the temporary pixel format.");
+    
+    HGLRC TempRenderingContext = wglCreateContext(TempDeviceContext);
+    BOOL_CHECK_AND_HANDLE(TempRenderingContext, "Failed to create the temporary rendering context.");    
+    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(TempDeviceContext, TempRenderingContext), "Failed to set the temporary context's as the current context.");
+    
+    PFNWGLGETEXTENSIONSSTRINGARBPROC wglGetExtensionsStringARB = (PFNWGLGETEXTENSIONSSTRINGARBPROC)wglGetProcAddress("wglGetExtensionsStringARB");
+    BOOL_CHECK_AND_HANDLE(wglGetExtensionsStringARB, "wglGetExtensionsStringARB function not found");
+    
+    char* Extensions = (char*)wglGetExtensionsStringARB(TempDeviceContext);
+    char* Iter = Extensions;
+    
+    b32 wglPixelFormatExtensionFound = false;
+    b32 wglSRBExtensionFound = false;
+    b32 wglSwapControlExtensionFound = false;
+    
+    while(*Iter)
+    {
+        char* End = ProcessToken(Iter);
+        
+        if(StringEquals("WGL_ARB_pixel_format", Iter, End-Iter)) wglPixelFormatExtensionFound = true;        
+        if(StringEquals("WGL_EXT_swap_control", Iter, End-Iter)) wglSwapControlExtensionFound = true;
+        if(StringEquals("WGL_ARB_framebuffer_sRGB", Iter, End-Iter)) wglSRBExtensionFound = true;
+        if(StringEquals("WGL_EXT_framebuffer_sRGB", Iter, End-Iter)) wglSRBExtensionFound = true;        
+        
+        Iter = EatWhitespace(End);        
+    }
+    
+    BOOL_CHECK_AND_HANDLE(wglPixelFormatExtensionFound, "WGL_ARB_pixel_format extension not found");
+    BOOL_CHECK_AND_HANDLE(wglSwapControlExtensionFound, "WGL_EXT_swap_control extension not found");
+    BOOL_CHECK_AND_HANDLE(wglSRBExtensionFound, "WGL_ARB_framebuffer_sRGB or WGL_EXT_framebuffer_sRGB extension not found");
+    
+    PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)wglGetProcAddress("wglChoosePixelFormatARB");
+    BOOL_CHECK_AND_HANDLE(wglChoosePixelFormatARB, "wglChoosePixelFormatARB function not found");
+    
+    int PixelFormatAttributes[] = 
+    {
+        WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
+        WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
+        WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
+        WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB, 
+        WGL_COLOR_BITS_ARB, 32, 
+        WGL_DEPTH_BITS_ARB, 24, 
+        WGL_STENCIL_BITS_ARB, 8,
+        WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB, GL_TRUE,
+        0
+    };
+    
     HDC DeviceContext = GetDC(Window);
     
-    PIXELFORMATDESCRIPTOR PixelFormat = {};
-    PixelFormat.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-    PixelFormat.nVersion = 1;
-    PixelFormat.dwFlags = PFD_DOUBLEBUFFER|PFD_SUPPORT_OPENGL|PFD_DRAW_TO_WINDOW;
-    PixelFormat.iPixelType = PFD_TYPE_RGBA;
-    PixelFormat.cColorBits = 32;
-    PixelFormat.cDepthBits = 32;
-    PixelFormat.iLayerType = PFD_MAIN_PLANE;
+    UINT NumFormat;
+    i32 PixelFormatIndex;
+    BOOL_CHECK_AND_HANDLE(wglChoosePixelFormatARB(DeviceContext, PixelFormatAttributes, NULL, 1, &PixelFormatIndex, &NumFormat) || !NumFormat,
+                          "Failed to choose an actual pixel format and retrieve its index.");
     
-    int PixelFormatIndex = ChoosePixelFormat(DeviceContext, &PixelFormat);
-    BOOL_CHECK_AND_HANDLE(PixelFormatIndex, "Failed to find a valid win32 pixel format.");
-    
-    BOOL_CHECK_AND_HANDLE(SetPixelFormat(DeviceContext, PixelFormatIndex, &PixelFormat),
-                          "Failed to set the win32 pixel format.");
-    
-    HGLRC TempContext = wglCreateContext(DeviceContext);
-    wglMakeCurrent(DeviceContext, TempContext);
+    PIXELFORMATDESCRIPTOR PixelFormatDescriptor = {};
+    BOOL_CHECK_AND_HANDLE(DescribePixelFormat(DeviceContext, PixelFormatIndex, sizeof(PIXELFORMATDESCRIPTOR), &PixelFormatDescriptor),
+                          "Failed to get a description of the actual pixel format descriptor.");
+    BOOL_CHECK_AND_HANDLE(SetPixelFormat(DeviceContext, PixelFormatIndex, &PixelFormatDescriptor), 
+                          "Failed to set the actual pixel format descriptor.");
     
     int AttribFlags = 0;
 #if DEVELOPER_BUILD
@@ -344,18 +597,21 @@ b32 Platform_InitOpenGL(void* PlatformData)
     HGLRC RenderingContext = wglCreateContextAttribsARB(DeviceContext, 0, Attribs);
     BOOL_CHECK_AND_HANDLE(RenderingContext, "Failed to create the opengl rendering context.");
     
-    wglMakeCurrent(NULL, NULL);
-    wglDeleteContext(TempContext);
-    wglMakeCurrent(DeviceContext, RenderingContext);
+    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(NULL, NULL), "Failed to unset the current contexts.");
+    BOOL_CHECK_AND_HANDLE(wglDeleteContext(TempRenderingContext), "Failed to delete the rendering temporary context.");
+    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(DeviceContext, RenderingContext), "Failed to set the actual context as the current context.");
     
     PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
     BOOL_CHECK_AND_HANDLE(wglSwapIntervalEXT, "Failed to load the wglSwapIntervalEXT function.");
     
     wglSwapIntervalEXT(1);
     
+    DestroyWindow(TempWindow);
+    
     return true;
     
     handle_error:
+    
     return false;
 }
 
@@ -372,7 +628,7 @@ void Platform_SwapBuffers(void* PlatformData)
 
 void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLsizei Length, const GLchar* Message, void* UserData)
 {           
-    if((ID == 131185) || (ID == 131204) || (ID == 131218) || (ID == 131139))        
+    if((ID == 131185) || (ID == 131204) || (ID == 131218) || (ID == 131139) || (ID == 131169))        
         return;
     
     CONSOLE_LOG("GL Debug Message: %s\n", Message);    
@@ -382,23 +638,13 @@ void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLs
 #endif
 
 extern "C"
-EXPORT INIT_GRAPHICS(InitGraphics)
-{
-    Global_Platform = Platform;
-    InitMemory(Platform->TempArena, Platform->AllocateMemory, Platform->FreeMemory);
-    
-    arena GraphicsStorage = CreateArena(KILOBYTE(128));    
-    opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
-    
-    OpenGL->Storage = GraphicsStorage;
-    OpenGL->MeshPool = CreatePool<opengl_mesh>(&OpenGL->Storage, 128);
-    OpenGL->TexturePool = CreatePool<opengl_texture>(&OpenGL->Storage, 128);
-    
-    graphics* Graphics = &OpenGL->Graphics;
-    
-    Graphics->PlatformData = PlatformData;
-    
-    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(Graphics->PlatformData), "Failed to initialize opengl.");
+EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
+{       
+    Graphics->AllocateTexture = AllocateTexture;
+    Graphics->AllocateMesh = AllocateMesh;
+    Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
+    Graphics->AllocateRenderBuffer = AllocateRenderBuffer;
+    Graphics->StreamMeshData = StreamMeshData;        
     
     LOAD_FUNCTION(PFNGLCREATESHADERPROC, glCreateShader);
     LOAD_FUNCTION(PFNGLSHADERSOURCEPROC, glShaderSource);
@@ -430,6 +676,25 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     LOAD_FUNCTION(PFNGLBINDBUFFERBASEPROC, glBindBufferBase);
     LOAD_FUNCTION(PFNGLBUFFERSUBDATAPROC, glBufferSubData);
     LOAD_FUNCTION(PFNGLVERTEXATTRIBIPOINTERPROC, glVertexAttribIPointer);
+    LOAD_FUNCTION(PFNGLDELETESHADERPROC, glDeleteShader);
+    LOAD_FUNCTION(PFNGLDELETEPROGRAMPROC, glDeleteProgram);
+    LOAD_FUNCTION(PFNGLUNIFORM1IPROC, glUniform1i);
+    LOAD_FUNCTION(PFNGLACTIVETEXTUREPROC, glActiveTexture);
+    LOAD_FUNCTION(PFNGLUNIFORM3FPROC, glUniform3f);
+    LOAD_FUNCTION(PFNGLGENFRAMEBUFFERSPROC, glGenFramebuffers);
+    LOAD_FUNCTION(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D);
+    LOAD_FUNCTION(PFNGLTEXIMAGE3DPROC, glTexImage3D);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERTEXTURE3DPROC, glFramebufferTexture3D);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERTEXTURELAYERPROC, glFramebufferTextureLayer);
+    LOAD_FUNCTION(PFNGLUNIFORM1FPROC, glUniform1f);
+    LOAD_FUNCTION(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatus);
+    LOAD_FUNCTION(PFNGLDRAWBUFFERSPROC, glDrawBuffers);
+    LOAD_FUNCTION(PFNGLGENRENDERBUFFERSPROC, glGenRenderbuffers);
+    LOAD_FUNCTION(PFNGLBINDRENDERBUFFERPROC, glBindRenderbuffer);
+    LOAD_FUNCTION(PFNGLRENDERBUFFERSTORAGEPROC, glRenderbufferStorage);
+    LOAD_FUNCTION(PFNGLFRAMEBUFFERRENDERBUFFERPROC, glFramebufferRenderbuffer);
+    LOAD_FUNCTION(PFNGLBLITFRAMEBUFFERPROC, glBlitFramebuffer);
     
 #if DEVELOPER_BUILD
     
@@ -443,12 +708,54 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     glDebugMessageCallback((GLDEBUGPROC)glDebugCallback, NULL);
     glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
     
-#endif    
+#endif        
     
-    Graphics->AllocateTexture = AllocateTexture;
-    Graphics->AllocateMesh = AllocateMesh;
-    Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
-    Graphics->StreamMeshData = StreamMeshData;
+    return true;
+    
+    handle_error:
+    return false;
+}
+
+extern "C"
+EXPORT INIT_GRAPHICS(InitGraphics)
+{
+    Global_Platform = Platform;
+    InitMemory(Platform->TempArena, Platform->AllocateMemory, Platform->FreeMemory);
+    
+    arena GraphicsStorage = CreateArena(KILOBYTE(128));    
+    opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
+    
+    OpenGL->Storage = GraphicsStorage;
+    OpenGL->MeshPool = CreatePool<opengl_mesh>(&OpenGL->Storage, 128);
+    OpenGL->TexturePool = CreatePool<opengl_texture>(&OpenGL->Storage, 128);
+    
+    graphics* Graphics = &OpenGL->Graphics;
+    Graphics->PlatformData = PlatformData;
+    
+    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(PlatformData), "Failed to initialize opengl.");
+    
+    PFNGLGETSTRINGIPROC glGetStringi = (PFNGLGETSTRINGIPROC)Platform_LoadProc("glGetStringi");
+    BOOL_CHECK_AND_HANDLE(glGetStringi, "Failed to load the glGetStringi function.");
+    
+    b32 GeometryShaderExtensionFound = false;
+    for(u32 ExtensionIndex = 0; ; ExtensionIndex++)
+    {
+        const char* Extension = (const char*)glGetStringi(GL_EXTENSIONS, ExtensionIndex);
+        if(!Extension)
+            break;
+        
+        if(StringEquals("GL_ARB_geometry_shader4", Extension)) GeometryShaderExtensionFound = true;        
+    }
+    
+    //CONFIRM(JJ): Do we need a geometry shader?
+    //BOOL_CHECK_AND_HANDLE(GeometryShaderExtensionFound, "Failed GL_ARB_geometry_shader4 extension not found.");
+    
+    BindGraphicsFunctions(Graphics);
+    
+    glGenFramebuffers(1, &OpenGL->ShadowMapFBO);
+    glGenFramebuffers(1, &OpenGL->OmniShadowMapFBO);
+    OpenGL->ShadowMapTextureArray     = AllocateShadowMapArray(MAX_DIRECTIONAL_LIGHT_COUNT);
+    OpenGL->OmniShadowMapTextureArray = AllocateShadowMapArray(MAX_POINT_LIGHT_COUNT*6);
     
     return Graphics;
     
@@ -456,107 +763,548 @@ EXPORT INIT_GRAPHICS(InitGraphics)
     return NULL;
 }
 
+#define CHECK_SHADER(shader) \
+do \
+{ \
+    if(!OpenGL->##shader.Valid) \
+       { \
+           auto Shader = Create##shader(); \
+           if(Shader.Valid) \
+           { \
+               glDeleteProgram(OpenGL->##shader.Program); \
+                               OpenGL->##shader = Shader; \
+           } \
+           else \
+           { \
+               ASSERT(OpenGL->##shader.Program > 0); \
+                      OpenGL->##shader.Valid = true; \
+           } \
+       } \
+} while(0)
+
+b32 BindShadowMapFBO(GLuint FBO, GLuint TextureArray, u32* Counter)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, TextureArray);                
+    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, TextureArray, 0, *Counter);                
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);                
+    
+    b32 Result = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    
+    (*Counter)++;
+    return Result;
+}
+
 extern "C"
 EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {
+    SET_DEVELOPER_CONTEXT(DevContext);
+    
+    Global_Platform = Platform;        
+    InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     opengl_context* OpenGL = (opengl_context*)Graphics;
-    
-    if(!OpenGL->StandardPhongShader.Program)
-    {
-        const GLchar* VertexShader[] = { Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 1, 0, 0) };
-        const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_StandardPhongShading };
-        
-        OpenGL->StandardPhongShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->StandardPhongShader.ProjectionLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "Projection");
-        OpenGL->StandardPhongShader.ViewLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "View");
-        OpenGL->StandardPhongShader.ModelLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "Model");
-        OpenGL->StandardPhongShader.ColorLocation = glGetUniformLocation(OpenGL->StandardPhongShader.Program, "Color");        
-    }
-    
-    if(!OpenGL->StandardColorShader.Program)
-    {
-        const GLchar* VertexShader[] = { Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 0, 1, 0) };
-        const GLchar* FragmentShader[] = { Shader_Header, FragmentShader_SimpleColor };
-        
-        OpenGL->StandardColorShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->StandardColorShader.ProjectionLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "Projection");
-        OpenGL->StandardColorShader.ViewLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "View");
-        OpenGL->StandardColorShader.ModelLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "Model");
-        OpenGL->StandardColorShader.ColorLocation = glGetUniformLocation(OpenGL->StandardColorShader.Program, "Color");        
-    }
-    
-    if(!OpenGL->ImGuiShader.Program)
-    {
-        const GLchar* VertexShader[] = {Shader_Header, VertexShader_ImGui};
-        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_ImGui};
-        
-        OpenGL->ImGuiShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->ImGuiShader.ProjectionLocation = glGetUniformLocation(OpenGL->ImGuiShader.Program, "Projection");
-    }
-    
-    if(!OpenGL->QuadShader.Program)
-    {
-        const GLchar* VertexShader[] = {Shader_Header, VertexShader_Quad};
-        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_SimpleColor};
-        
-        OpenGL->QuadShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->QuadShader.ProjectionLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "Projection");
-        OpenGL->QuadShader.ViewLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "View");
-        OpenGL->QuadShader.ColorLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "Color");
-        OpenGL->QuadShader.PositionLocation = glGetUniformLocation(OpenGL->QuadShader.Program, "Positions");
-    }
-    
-    if(!OpenGL->StandardSkinningPhongShader.Program)
-    {
-        const GLchar* VertexShader[] = {Shader_Header, FormatString(VertexShader_StandardWorldSpaceToClipSpace, 0, 0, 1, MAX_JOINT_COUNT)};
-        const GLchar* FragmentShader[] = {Shader_Header, FragmentShader_StandardPhongShading};
-        
-        OpenGL->StandardSkinningPhongShader.Program = CreateShaderProgram(VertexShader, ARRAYCOUNT(VertexShader), FragmentShader, ARRAYCOUNT(FragmentShader));
-        OpenGL->StandardSkinningPhongShader.ProjectionLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "Projection");
-        OpenGL->StandardSkinningPhongShader.ViewLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "View");
-        OpenGL->StandardSkinningPhongShader.ModelLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "Model");
-        OpenGL->StandardSkinningPhongShader.ColorLocation = glGetUniformLocation(OpenGL->StandardSkinningPhongShader.Program, "Color");
-        
-        OpenGL->StandardSkinningPhongShader.SkinningIndex = glGetUniformBlockIndex(OpenGL->StandardSkinningPhongShader.Program, "SkinningBuffer");
-        glUniformBlockBinding(OpenGL->StandardSkinningPhongShader.Program, OpenGL->StandardSkinningPhongShader.SkinningIndex, 0);
-    }
     
     if(!OpenGL->SkinningBuffers.Ptr)
     {
         OpenGL->SkinningBuffers.Capacity = 32;
         OpenGL->SkinningBuffers.Ptr = PushArray(&OpenGL->Storage, OpenGL->SkinningBuffers.Capacity, GLuint, Clear, 0);
-    }
+    }    
     
-    m4 Projection = IdentityM4();
-    m4 CameraView = IdentityM4();
+    CHECK_SHADER(ImGuiShader);
+    CHECK_SHADER(ColorShader);
+    CHECK_SHADER(TextureShader);        
+    CHECK_SHADER(LambertianColorShader);
+    CHECK_SHADER(LambertianTextureShader);
+    CHECK_SHADER(LambertianColorNormalMapShader);
+    CHECK_SHADER(LambertianTextureNormalMapShader);
+    CHECK_SHADER(PhongDConSConShader);
+    CHECK_SHADER(PhongDConSConNormalMapShader);
+    CHECK_SHADER(PhongDConSTexShader);
+    CHECK_SHADER(PhongDConSTexNormalMapShader);
+    CHECK_SHADER(PhongDTexSConShader);
+    CHECK_SHADER(PhongDTexSConNormalMapShader);
+    CHECK_SHADER(PhongDTexSTexShader);
+    CHECK_SHADER(PhongDTexSTexNormalMapShader);
+    CHECK_SHADER(ShadowMapShader);
+    CHECK_SHADER(OmniShadowMapShader);
     
-    glEnable(GL_SCISSOR_TEST);
+    m4 Projection = IdentityM4();    
+    m4 ViewProjection = IdentityM4();
+    v3f ViewPosition = V3();    
+    
+    if(!OpenGL->LightUBO)
+        OpenGL->LightUBO = AllocateUBO(sizeof(opengl_light_buffer), LIGHT_BUFFER_INDEX);
+    
+    if(!OpenGL->LightViewProjectionUBO)
+        OpenGL->LightViewProjectionUBO = AllocateUBO(sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LIGHT_VIEW_PROJECTION_INDEX);
+    
+    glEnable(GL_SCISSOR_TEST);        
     
     GLuint BoundProgram = (GLuint)-1;
     GLuint BoundVAO = (GLuint)-1;
+    GLuint WorldTransformUniform = (GLuint)-1;
     
-    u32 SkinningIndex = 0;
+    u32 SkinningIndex = 0;            
     
-    push_command_list* CommandList = &Graphics->CommandList;        
+    shadow_pass ShadowPass = {};
+    opengl_forward_pass ForwardPass = {};    
+    
+    GLint ModelUniform = -1;
+    
+    push_command_list* CommandList = &Graphics->CommandList;            
     for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
     {
         push_command* Command = CommandList->Ptr[CommandIndex];
         switch(Command->Type)
         {   
+            case PUSH_COMMAND_SHADOW_MAP:
+            {                
+                ForwardPass = {};                                         
+                ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
+                ShadowPass.Current = true;                
+                
+                if(!BindShadowMapFBO(OpenGL->ShadowMapFBO, OpenGL->ShadowMapTextureArray, &ShadowPass.ShadowMapCounter))
+                    INVALID_CODE;
+                
+                ShadowPass.State = SHADOW_PASS_STATE_DIRECTIONAL;                
+            } break;
+            
+            case PUSH_COMMAND_OMNI_SHADOW_MAP:
+            {                
+                ForwardPass = {};      
+                ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
+                ShadowPass.Current = true;                     
+                                
+                push_command_omni_shadow_map* OmniShadowMap = (push_command_omni_shadow_map*)Command;                
+                if(!BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &ShadowPass.OmniShadowMapCounter))
+                    INVALID_CODE;
+                
+                ShadowPass.State = SHADOW_PASS_STATE_OMNI_DIRECTIONAL;
+                ShadowPass.FarPlaneDistance = OmniShadowMap->FarPlaneDistance;                
+            } break;
+            
+            case PUSH_COMMAND_SRGB_RENDER_BUFFER_WRITES:
+            {
+                (((push_command_srgb_render_buffer_writes*)Command)->Enable) ? glEnable(GL_FRAMEBUFFER_SRGB) : glDisable(GL_FRAMEBUFFER_SRGB);
+            } break;
+            
+            case PUSH_COMMAND_RENDER_BUFFER:
+            {
+                opengl_render_buffer* RenderBuffer = (opengl_render_buffer*)((push_command_render_buffer*)Command)->RenderBuffer;                                
+                glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer->Framebuffer);                
+            } break;
+            
+            case PUSH_COMMAND_LIGHT_BUFFER:
+            {                                        
+                ShadowPass = {};                
+                ForwardPass.Current = true;
+                
+                push_command_light_buffer* CommandLightBuffer = (push_command_light_buffer*)Command;
+                
+                graphics_light_buffer SrcLightBuffer = CommandLightBuffer->LightBuffer;
+                
+                opengl_light_buffer DstLightBuffer = {};
+                DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
+                DstLightBuffer.PointLightCount = SrcLightBuffer.PointLightCount;
+                
+                m4 LightViewProjectionBuffers[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
+                
+                for(i32 DirectionalLightIndex = 0; DirectionalLightIndex < DstLightBuffer.DirectionalLightCount; DirectionalLightIndex++)
+                {
+                    graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
+                    opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
+                    
+                    LightViewProjectionBuffers[DirectionalLightIndex] = SrcLight->ViewProjection;
+                    
+                    DstLight->Direction =  V4(SrcLight->Direction, 0.0f);
+                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);                    
+                }
+                
+                for(i32 PointLightIndex = 0; PointLightIndex < DstLightBuffer.PointLightCount; PointLightIndex++)
+                {
+                    graphics_point_light* SrcLight = SrcLightBuffer.PointLights + PointLightIndex;
+                    opengl_point_light* DstLight = DstLightBuffer.PointLights + PointLightIndex;
+                    
+                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
+                    DstLight->Position = V4(SrcLight->Position, SrcLight->Radius);                                                           
+                }
+                
+                UploadUBO(OpenGL->LightViewProjectionUBO, sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LightViewProjectionBuffers);
+                UploadUBO(OpenGL->LightUBO, sizeof(opengl_light_buffer), &DstLightBuffer);                
+                
+                glActiveTexture(GL_TEXTURE0+SHADOW_MAP_TEXTURE_UNIT);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->ShadowMapTextureArray);
+                
+                glActiveTexture(GL_TEXTURE0+OMNI_SHADOW_MAP_TEXTURE_UNIT);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, OpenGL->OmniShadowMapTextureArray);
+            } break;
+            
+            case PUSH_COMMAND_MATERIAL:
+            {
+                ASSERT(ForwardPass.Current);
+                push_command_material* PushCommandMaterial = (push_command_material*)Command;
+                ForwardPass.BoundMaterial = PushCommandMaterial->Material;                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_MESH:
+            {    
+                ASSERT(ForwardPass.Current != ShadowPass.Current);
+                if(ForwardPass.Current)
+                {                       
+                    if(ForwardPass.BoundMaterial && (ForwardPass.BoundMaterial != ForwardPass.PrevBoundMaterial))
+                    {
+                        ForwardPass.PrevBoundMaterial = ForwardPass.BoundMaterial;
+                        
+                        graphics_material* BoundMaterial = ForwardPass.BoundMaterial;
+                        if(!BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        {
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {   
+                                lambertian_texture_shader* Shader = &OpenGL->LambertianTextureShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
+                                
+                                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);                                
+                            }
+                            else
+                            {
+                                lambertian_color_shader* Shader = &OpenGL->LambertianColorShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);       
+                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);                                
+                            }
+                        }
+                        else if(BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        {                       
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {   
+                                if(BoundMaterial->Specular.IsTexture)
+                                {
+                                    phong_dtex_stex_shader* Shader = &OpenGL->PhongDTexSTexShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
+                                    
+                                    BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                    BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
+                                }
+                                else
+                                {
+                                    phong_dtex_scon_shader* Shader = &OpenGL->PhongDTexSConShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);
+                                }
+                            }
+                            else
+                            {
+                                if(BoundMaterial->Specular.IsTexture)
+                                {
+                                    phong_dcon_stex_shader* Shader = &OpenGL->PhongDConSTexShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);                                                                                                
+                                    
+                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);                                    
+                                    BindTextureToUnit(Texture->Handle, Shader->SpecularTextureUniform, 0);                                    
+                                }
+                                else
+                                {
+                                    phong_dcon_scon_shader* Shader = &OpenGL->PhongDConSConShader;
+                                    SET_ILLUMINATION_PROGRAM();                                    
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                }
+                            }
+                        }
+                        else if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        {   
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {
+                                lambertian_texture_normal_map_shader* Shader = &OpenGL->LambertianTextureNormalMapShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
+                                
+                                opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                
+                                BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);
+                            }
+                            else
+                            {
+                                lambertian_color_normal_map_shader* Shader = &OpenGL->LambertianColorNormalMapShader;
+                                SET_ILLUMINATION_PROGRAM();
+                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                
+                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                
+                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);                                
+                            }                                                        
+                        }
+                        else
+                        {   
+                            if(BoundMaterial->Diffuse.IsTexture)
+                            {
+                                if(BoundMaterial->Specular.IsTexture)
+                                {                   
+                                    phong_dtex_stex_normal_map_shader* Shader = &OpenGL->PhongDTexSTexNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    
+                                    BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                    BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 2);
+                                }
+                                else
+                                {
+                                    phong_dtex_scon_normal_map_shader* Shader = &OpenGL->PhongDTexSConNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    
+                                    BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
+                                }
+                            }
+                            else
+                            {
+                                if(BoundMaterial->Specular.IsTexture)
+                                {
+                                    phong_dcon_stex_normal_map_shader* Shader = &OpenGL->PhongDConSTexNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    
+                                    BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 0);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
+                                }
+                                else
+                                {
+                                    phong_dcon_scon_normal_map_shader* Shader = &OpenGL->PhongDConSConNormalMapShader;
+                                    SET_ILLUMINATION_PROGRAM();
+                                    SET_VIEW_UNIFORMS();
+                                    
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);
+                                }
+                            }                                                        
+                        }
+                    }
+                }
+                else if(ShadowPass.Current)
+                {                    
+                    if(ShadowPass.LastState != ShadowPass.State)
+                    {            
+                        ShadowPass.LastState = ShadowPass.State;
+                        if(ShadowPass.State == SHADOW_PASS_STATE_DIRECTIONAL)
+                        {
+                            shadow_map_shader* Shader = &OpenGL->ShadowMapShader;
+                            SET_PROGRAM();                        
+                            SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                                
+                        }
+                        else if(ShadowPass.State == SHADOW_PASS_STATE_OMNI_DIRECTIONAL)
+                        {
+                            omni_shadow_map_shader* Shader = &OpenGL->OmniShadowMapShader;
+                            SET_PROGRAM();
+                            SET_VIEW_UNIFORMS();                        
+                            glUniform1f(Shader->FarPlaneDistanceUniform, ShadowPass.FarPlaneDistance);
+                        }
+                        INVALID_ELSE;
+                    }
+                }
+                
+                push_command_draw_mesh* DrawMesh = (push_command_draw_mesh*)Command;                
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawMesh->MeshID);
+                
+                SetUniformM4(ModelUniform, DrawMesh->WorldTransform);
+                BindVAO(&BoundVAO, Mesh->VAO);
+                DrawTriangles(Mesh, &DrawMesh->DrawInfo);                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_SKELETON_MESH:
+            {
+                NOT_IMPLEMENTED;
+                ASSERT(ForwardPass.Current != ShadowPass.Current);
+                if(ForwardPass.Current)
+                {                    
+                    if(ForwardPass.BoundMaterial && (ForwardPass.BoundMaterial != ForwardPass.PrevBoundMaterial))
+                    {
+                        ForwardPass.PrevBoundMaterial = ForwardPass.BoundMaterial;
+                        
+                        graphics_material* BoundMaterial = ForwardPass.BoundMaterial;
+                        if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        {
+                            NOT_IMPLEMENTED;
+                        }
+                        else if(BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        {                        
+                        }
+                        else if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        {
+                            NOT_IMPLEMENTED;
+                        }
+                        else
+                        {                        
+                            NOT_IMPLEMENTED;
+                        }
+                    }
+                }
+                else if(ShadowPass.Current)
+                {               
+                    if(ShadowPass.State == SHADOW_PASS_STATE_DIRECTIONAL)
+                    {
+                    }
+                    else if(ShadowPass.State == SHADOW_PASS_STATE_OMNI_DIRECTIONAL)
+                    {                        
+                    }
+                    INVALID_ELSE;
+                }
+                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_UNLIT_MESH:
+            {
+                ForwardPass = {};
+                ShadowPass = {};
+                
+                push_command_draw_unlit_mesh* DrawUnlitMesh = (push_command_draw_unlit_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawUnlitMesh->MeshID);
+                if(DrawUnlitMesh->DiffuseSlot.IsTexture)
+                {
+                    if(BindProgram(&BoundProgram, OpenGL->TextureShader.Program))
+                    {
+                        ModelUniform = OpenGL->TextureShader.ModelUniform;
+                        SetUniformM4(OpenGL->TextureShader.ViewProjectionUniform, ViewProjection);
+                    }
+                    
+                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawUnlitMesh->DiffuseSlot.DiffuseID);
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, Texture->Handle);
+                }
+                else
+                {
+                    if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
+                    {
+                        ModelUniform = OpenGL->ColorShader.ModelUniform;
+                        SetUniformM4(OpenGL->ColorShader.ViewProjectionUniform, ViewProjection);
+                    }
+                    
+                    SetUniform3f(OpenGL->ColorShader.ColorUniform, DrawUnlitMesh->DiffuseSlot.Diffuse);
+                }
+                
+                SetUniformM4(ModelUniform, DrawUnlitMesh->WorldTransform);
+                BindVAO(&BoundVAO, Mesh->VAO);                
+                DrawTriangles(Mesh, &DrawUnlitMesh->DrawInfo);                                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_UNLIT_SKELETON_MESH:
+            {
+                NOT_IMPLEMENTED;
+            } break;
+            
+            case PUSH_COMMAND_DRAW_LINE_MESH:            
+            {
+                ForwardPass = {};
+                ShadowPass = {};
+                
+                push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLineMesh->MeshID);
+                
+                if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
+                {
+                    ModelUniform = OpenGL->ColorShader.ModelUniform;
+                    SetUniformM4(OpenGL->ColorShader.ViewProjectionUniform, ViewProjection);                    
+                }
+                
+                SetUniform3f(OpenGL->ColorShader.ColorUniform, DrawLineMesh->Color);
+                SetUniformM4(ModelUniform, DrawLineMesh->WorldTransform);
+                BindVAO(&BoundVAO, Mesh->VAO);
+                DrawLines(Mesh, &DrawLineMesh->DrawInfo);                
+            } break;
+            
+            case PUSH_COMMAND_DRAW_IMGUI_UI:
+            {                
+                ForwardPass = {};     
+                ShadowPass = {};
+                
+                push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                
+                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawImGuiUI->TextureID);
+                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawImGuiUI->MeshID);
+                ASSERT(Mesh->IsDynamic);
+                
+                if(BindProgram(&BoundProgram, OpenGL->ImGuiShader.Program))                    
+                    SetUniformM4(OpenGL->ImGuiShader.ProjectionUniform, Projection);                                                                    
+                
+                BindVAO(&BoundVAO, Mesh->VAO);
+                
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, Texture->Handle);                                
+                
+                DrawTriangles(Mesh, &DrawImGuiUI->DrawInfo);   
+            } break;
+            
             case PUSH_COMMAND_CLEAR_COLOR:
             {
                 push_command_clear_color* ClearColorCommand = (push_command_clear_color*)Command;
                 
-                glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+                glClear(GL_COLOR_BUFFER_BIT);
                 glClearColor(ClearColorCommand->R, ClearColorCommand->G, ClearColorCommand->B, ClearColorCommand->A);                                
+            } break;
+            
+            case PUSH_COMMAND_CLEAR_DEPTH:
+            {
+                push_command_clear_depth* ClearDepthCommand = (push_command_clear_depth*)Command;
+                
+                glClearDepth(ClearDepthCommand->Depth);
+                glClear(GL_DEPTH_BUFFER_BIT);                
             } break;
             
             case PUSH_COMMAND_CLEAR_COLOR_AND_DEPTH:
             {
                 push_command_clear_color_and_depth* ClearColorAndDepthCommand = (push_command_clear_color_and_depth*)Command;                
-                glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
                 glClearColor(ClearColorAndDepthCommand->R, ClearColorAndDepthCommand->G, ClearColorAndDepthCommand->B, ClearColorAndDepthCommand->A);
                 glClearDepth(ClearColorAndDepthCommand->Depth);                
+                glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);                
             } break;
             
             case PUSH_COMMAND_DEPTH:
@@ -574,10 +1322,16 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             case PUSH_COMMAND_CULL:
             {
                 push_command_cull* CommandCull = (push_command_cull*)Command;
-                if(CommandCull->Enable) 
-                    glEnable(GL_CULL_FACE);                
-                else
+                if(CommandCull->CullMode == GRAPHICS_CULL_MODE_NONE)
                     glDisable(GL_CULL_FACE);
+                else
+                {
+                    glEnable(GL_CULL_FACE);
+                    if(CommandCull->CullMode == GRAPHICS_CULL_MODE_FRONT)                        
+                        glCullFace(GL_FRONT);
+                    else
+                        glCullFace(GL_BACK);
+                }                
             } break;
             
             case PUSH_COMMAND_WIREFRAME:
@@ -620,163 +1374,38 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_PROJECTION:
             {
-                Projection = ((push_command_4x4_matrix*)Command)->Matrix;
+                Projection = ((push_command_4x4_matrix*)Command)->Matrix;                                
+                BoundProgram = (GLuint)-1;
             } break;
             
-            case PUSH_COMMAND_CAMERA_VIEW:
+            case PUSH_COMMAND_VIEW_PROJECTION:
             {
-                CameraView = ((push_command_4x4_matrix*)Command)->Matrix;
+                ViewProjection = ((push_command_4x4_matrix*)Command)->Matrix;
+                BoundProgram = (GLuint)-1;
             } break;
             
-            case PUSH_COMMAND_DRAW_SHADED_COLORED_MESH:
+            case PUSH_COMMAND_VIEW_POSITION:
             {
-                push_command_draw_shaded_colored_mesh* DrawShadedColoredMesh = (push_command_draw_shaded_colored_mesh*)Command;                                                
-                
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawShadedColoredMesh->MeshID);
-                
-                if(BindProgram(&BoundProgram, OpenGL->StandardPhongShader.Program))
-                {                                        
-                    glUniformMatrix4fv(OpenGL->StandardPhongShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardPhongShader.ViewLocation, 1, GL_FALSE, CameraView.M);                    
-                }
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniformMatrix4fv(OpenGL->StandardPhongShader.ModelLocation, 1, GL_FALSE, DrawShadedColoredMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardPhongShader.ColorLocation, DrawShadedColoredMesh->R, DrawShadedColoredMesh->G, DrawShadedColoredMesh->B, DrawShadedColoredMesh->A);
-                
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawShadedColoredMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawShadedColoredMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawShadedColoredMesh->VertexOffset);
-                
-            } break;            
-            
-            case PUSH_COMMAND_DRAW_SHADED_COLORED_SKINNING_MESH:
-            {
-                push_command_draw_shaded_colored_skinning_mesh* DrawShadedColoredSkinningMesh = (push_command_draw_shaded_colored_skinning_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawShadedColoredSkinningMesh->MeshID);                
-                
-                opengl_buffer_list* BufferList = &OpenGL->SkinningBuffers;      
-                ASSERT(SkinningIndex <= BufferList->Count);
-                
-                if(SkinningIndex == BufferList->Count)
-                {                    
-                    ASSERT(BufferList->Count < BufferList->Capacity);
-                    GLuint SkinningUBO; 
-                    
-                    glGenBuffers(1, &SkinningUBO);
-                    glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
-                    glBufferData(GL_UNIFORM_BUFFER, sizeof(m4)*MAX_JOINT_COUNT, NULL, GL_STATIC_DRAW);
-                    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-                    
-                    glBindBufferBase(GL_UNIFORM_BUFFER, 0, SkinningUBO);                    
-                    
-                    BufferList->Ptr[BufferList->Count++] = SkinningUBO;                                                                                                    
-                }
-                
-                GLuint SkinningUBO = BufferList->Ptr[SkinningIndex];
-                glBindBuffer(GL_UNIFORM_BUFFER, SkinningUBO);
-                glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(m4)*DrawShadedColoredSkinningMesh->JointCount, DrawShadedColoredSkinningMesh->Joints);                                
-                glBindBuffer(GL_UNIFORM_BUFFER, 0);
-                
-                if(BindProgram(&BoundProgram, OpenGL->StandardSkinningPhongShader.Program))
-                {
-                    glUniformMatrix4fv(OpenGL->StandardSkinningPhongShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardSkinningPhongShader.ViewLocation, 1, GL_FALSE, CameraView.M);
-                }
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniformMatrix4fv(OpenGL->StandardSkinningPhongShader.ModelLocation, 1, GL_FALSE, DrawShadedColoredSkinningMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardSkinningPhongShader.ColorLocation, DrawShadedColoredSkinningMesh->R, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->G, DrawShadedColoredSkinningMesh->A);
-                
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawShadedColoredSkinningMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawShadedColoredSkinningMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawShadedColoredSkinningMesh->VertexOffset);
-                
-                SkinningIndex++;
+                ViewPosition = ((push_command_view_position*)Command)->Position;
+                BoundProgram = (GLuint)-1;
             } break;
             
-            case PUSH_COMMAND_DRAW_IMGUI_UI:
+            case PUSH_COMMAND_COPY_TO_OUTPUT:
             {
-                push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                
-                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawImGuiUI->TextureID);
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawImGuiUI->MeshID);
-                ASSERT(Mesh->IsDynamic);
+                push_command_copy_to_output* CopyToOutput = (push_command_copy_to_output*)Command;                
+                opengl_render_buffer* SrcBuffer = (opengl_render_buffer*)CopyToOutput->RenderBuffer;
                 
-                if(BindProgram(&BoundProgram, OpenGL->ImGuiShader.Program))                    
-                    glUniformMatrix4fv(OpenGL->ImGuiShader.ProjectionLocation, 1, GL_FALSE, Projection.M);                                                                    
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, SrcBuffer->Framebuffer);
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
                 
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glBindTexture(GL_TEXTURE_2D, Texture->Handle);
-                
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawImGuiUI->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawImGuiUI->IndexOffset*GetIndexTypeSize(Mesh->IndexType)), 
-                                         DrawImGuiUI->VertexOffset);
+                glBlitFramebuffer(0, 0, SrcBuffer->Resolution.width, SrcBuffer->Resolution.height, 
+                                  CopyToOutput->DstOffset.x, CopyToOutput->DstOffset.y, 
+                                  CopyToOutput->DstOffset.x+CopyToOutput->DstResolution.width, CopyToOutput->DstOffset.y+CopyToOutput->DstResolution.height, 
+                                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
                 
             } break;
             
-            case PUSH_COMMAND_DRAW_QUAD:
-            {
-                push_command_draw_quad* DrawQuad = (push_command_draw_quad*)Command;
-                
-                if(BindProgram(&BoundProgram, OpenGL->QuadShader.Program))
-                {
-                    glUniformMatrix4fv(OpenGL->QuadShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->QuadShader.ViewLocation, 1, GL_FALSE, CameraView.M);
-                }
-                
-                glUniform3fv(OpenGL->QuadShader.PositionLocation, 4, (f32*)DrawQuad->P);
-                glUniform4f(OpenGL->QuadShader.ColorLocation, DrawQuad->R, DrawQuad->G, DrawQuad->B, DrawQuad->A);
-                
-                glDrawArrays(GL_TRIANGLES, 0, 6);
-            } break;
-            
-            case PUSH_COMMAND_DRAW_LINE_MESH:
-            {
-                push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;                
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLineMesh->MeshID);                
-                
-                if(BindProgram(&BoundProgram, OpenGL->StandardColorShader.Program))
-                {                    
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ViewLocation, 1, GL_FALSE, CameraView.M);
-                }
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniformMatrix4fv(OpenGL->StandardColorShader.ModelLocation, 1, GL_FALSE, DrawLineMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardColorShader.ColorLocation, DrawLineMesh->R, DrawLineMesh->G, DrawLineMesh->B, DrawLineMesh->A);
-                
-                glDrawElementsBaseVertex(GL_LINES, DrawLineMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawLineMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawLineMesh->VertexOffset);
-                
-            } break;
-            
-            case PUSH_COMMAND_DRAW_FILLED_MESH:
-            {
-                push_command_draw_filled_mesh* DrawFilledMesh = (push_command_draw_filled_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawFilledMesh->MeshID);
-                
-                if(BindProgram(&BoundProgram, OpenGL->StandardColorShader.Program))
-                {                    
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ProjectionLocation, 1, GL_FALSE, Projection.M);
-                    glUniformMatrix4fv(OpenGL->StandardColorShader.ViewLocation, 1, GL_FALSE, CameraView.M);
-                }
-                
-                BindVAO(&BoundVAO, Mesh->VAO);
-                
-                glUniformMatrix4fv(OpenGL->StandardColorShader.ModelLocation, 1, GL_FALSE, DrawFilledMesh->WorldTransform.M);
-                glUniform4f(OpenGL->StandardColorShader.ColorLocation, DrawFilledMesh->R, DrawFilledMesh->G, DrawFilledMesh->B, DrawFilledMesh->A);
-                
-                glDrawElementsBaseVertex(GL_TRIANGLES, DrawFilledMesh->IndexCount, Mesh->IndexType, 
-                                         (void*)(DrawFilledMesh->IndexOffset*GetIndexTypeSize(Mesh->IndexType)),
-                                         DrawFilledMesh->VertexOffset);                
-            } break;
-            
-            INVALID_DEFAULT_CASE;
+            INVALID_DEFAULT_CASE;                        
         }
     }    
     
@@ -785,5 +1414,29 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     
     CommandList->Count = 0;        
     
-    Platform_SwapBuffers(Graphics->PlatformData);    
+    Platform_SwapBuffers(Graphics->PlatformData[0]);    
+}
+
+extern "C"
+EXPORT INVALIDATE_SHADERS(InvalidateShaders)
+{
+    opengl_context* OpenGL = (opengl_context*)Graphics;
+#define INVALIDATE_SHADER(shader) OpenGL->shader.Valid = false
+    
+    INVALIDATE_SHADER(ImGuiShader);
+    INVALIDATE_SHADER(ColorShader);        
+    INVALIDATE_SHADER(LambertianColorShader);
+    INVALIDATE_SHADER(LambertianTextureShader);                    
+    INVALIDATE_SHADER(LambertianColorNormalMapShader);
+    INVALIDATE_SHADER(LambertianTextureNormalMapShader);
+    INVALIDATE_SHADER(PhongDConSConShader);
+    INVALIDATE_SHADER(PhongDConSConNormalMapShader);
+    INVALIDATE_SHADER(PhongDConSTexShader);
+    INVALIDATE_SHADER(PhongDConSTexNormalMapShader);
+    INVALIDATE_SHADER(PhongDTexSConShader);
+    INVALIDATE_SHADER(PhongDTexSConNormalMapShader);
+    INVALIDATE_SHADER(PhongDTexSTexShader);
+    INVALIDATE_SHADER(PhongDTexSTexNormalMapShader);
+    INVALIDATE_SHADER(ShadowMapShader);
+    INVALIDATE_SHADER(OmniShadowMapShader);    
 }

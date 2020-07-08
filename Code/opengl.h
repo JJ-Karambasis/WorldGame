@@ -2,12 +2,13 @@
 #define OPENGL_H
 
 #include "graphics.h"
+#include "dev_world_game.h"
 
 #include "opengl/gl.h"
 #include "opengl/glext.h"
 #include "opengl/glcorearb.h"
-
 #ifdef OS_WINDOWS
+
 #include "opengl/wglext.h"
 #endif
 
@@ -41,40 +42,27 @@ global PFNGLUNIFORMBLOCKBINDINGPROC glUniformBlockBinding;
 global PFNGLBINDBUFFERBASEPROC glBindBufferBase;
 global PFNGLBUFFERSUBDATAPROC glBufferSubData;
 global PFNGLVERTEXATTRIBIPOINTERPROC glVertexAttribIPointer;
+global PFNGLDELETESHADERPROC glDeleteShader;
+global PFNGLDELETEPROGRAMPROC glDeleteProgram;
+global PFNGLUNIFORM1IPROC glUniform1i;
+global PFNGLACTIVETEXTUREPROC glActiveTexture;
+global PFNGLUNIFORM3FPROC glUniform3f;
+global PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
+global PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
+global PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
+global PFNGLTEXIMAGE3DPROC glTexImage3D;
+global PFNGLFRAMEBUFFERTEXTURE3DPROC glFramebufferTexture3D;
+global PFNGLFRAMEBUFFERTEXTURELAYERPROC glFramebufferTextureLayer;
+global PFNGLUNIFORM1FPROC glUniform1f;
+global PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
+global PFNGLDRAWBUFFERSPROC glDrawBuffers;
+global PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers;
+global PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
+global PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
+global PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
+global PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer;
 
-struct standard_color_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-    GLint ViewLocation;
-    GLint ModelLocation;
-    GLint ColorLocation;
-};
-
-struct standard_color_skinning_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-    GLint ViewLocation;
-    GLint ModelLocation;
-    GLint ColorLocation;    
-    GLint SkinningIndex;
-};
-
-struct imgui_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-};
-
-struct quad_shader
-{
-    GLuint Program;
-    GLint ProjectionLocation;
-    GLint ViewLocation;
-    GLint ColorLocation;
-    GLint PositionLocation;
-};
+#include "opengl_shaders.h"
 
 //TODO(JJ): When we are formalizing the asset/resource loading process, it would probably
 //be best to manage the memory of meshes in one VBO|EBO|VAO per vertex format and then use a draw call 
@@ -108,6 +96,57 @@ struct opengl_buffer_list
     GLuint* Ptr;
 };
 
+struct opengl_directional_light
+{
+    v4f Direction;
+    c4 Color;
+};
+
+struct opengl_point_light
+{
+    v4f Position;
+    c4 Color;
+};
+
+struct opengl_light_buffer
+{
+    opengl_directional_light DirectionalLights[MAX_DIRECTIONAL_LIGHT_COUNT];
+    opengl_point_light PointLights[MAX_POINT_LIGHT_COUNT];
+    i32 DirectionalLightCount;
+    i32 PointLightCount;
+};
+
+enum shadow_pass_state
+{
+    SHADOW_PASS_STATE_NONE,
+    SHADOW_PASS_STATE_DIRECTIONAL,
+    SHADOW_PASS_STATE_OMNI_DIRECTIONAL
+};
+
+struct shadow_pass
+{
+    b32 Current;    
+    u32 ShadowMapCounter;
+    u32 OmniShadowMapCounter;
+    f32 FarPlaneDistance;    
+    shadow_pass_state LastState;
+    shadow_pass_state State;
+};
+
+struct opengl_forward_pass
+{
+    b32 Current;
+    graphics_material* PrevBoundMaterial;
+    graphics_material* BoundMaterial;        
+};
+
+struct opengl_render_buffer : public graphics_render_buffer
+{
+    GLuint Framebuffer;
+    GLuint ColorAttachment;
+    GLuint DepthStencilAttachment;
+};
+
 struct opengl_context
 {
     graphics Graphics;
@@ -116,11 +155,32 @@ struct opengl_context
     opengl_mesh_pool MeshPool;
     opengl_texture_pool TexturePool;        
     
-    standard_color_shader StandardPhongShader;        
-    standard_color_shader StandardColorShader;
-    imgui_shader ImGuiShader;
-    quad_shader QuadShader;        
-    standard_color_skinning_shader StandardSkinningPhongShader;
+    imgui_shader                         ImGuiShader;
+    color_shader                         ColorShader;
+    texture_shader                       TextureShader;
+    lambertian_color_shader              LambertianColorShader;
+    lambertian_texture_shader            LambertianTextureShader;    
+    lambertian_color_normal_map_shader   LambertianColorNormalMapShader;
+    lambertian_texture_normal_map_shader LambertianTextureNormalMapShader;
+    phong_dcon_scon_shader               PhongDConSConShader;
+    phong_dcon_scon_normal_map_shader    PhongDConSConNormalMapShader;
+    phong_dcon_stex_shader               PhongDConSTexShader;
+    phong_dcon_stex_normal_map_shader    PhongDConSTexNormalMapShader;
+    phong_dtex_scon_shader               PhongDTexSConShader;
+    phong_dtex_scon_normal_map_shader    PhongDTexSConNormalMapShader;
+    phong_dtex_stex_shader               PhongDTexSTexShader;
+    phong_dtex_stex_normal_map_shader    PhongDTexSTexNormalMapShader;
+    shadow_map_shader                    ShadowMapShader;
+    omni_shadow_map_shader               OmniShadowMapShader;
+    
+    GLuint ShadowMapFBO;
+    GLuint ShadowMapTextureArray;
+    
+    GLuint OmniShadowMapFBO;
+    GLuint OmniShadowMapTextureArray;
+    
+    GLuint LightUBO;    
+    GLuint LightViewProjectionUBO;
     
     opengl_buffer_list SkinningBuffers;    
 };

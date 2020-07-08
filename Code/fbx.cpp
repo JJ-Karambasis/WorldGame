@@ -142,6 +142,18 @@ fbx_context FBX_LoadFile(const char* Path)
     return {};
 }
 
+b32 ValidateMappingMode(FbxLayerElement::EMappingMode MappingMode)
+{
+    b32 Result = (MappingMode == FbxGeometryElement::eByPolygonVertex) || (MappingMode == FbxGeometryElement::eByControlPoint);
+    return Result;
+}
+
+b32 ValidateReferenceMode(FbxLayerElement::EReferenceMode ReferenceMode)
+{
+    b32 Result = (ReferenceMode == FbxGeometryElement::eDirect) || (ReferenceMode == FbxGeometryElement::eIndexToDirect);
+    return Result;
+}
+
 mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
 {
     if(Context->MeshNodes.Count == 0)
@@ -159,18 +171,24 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     FbxGeometryElementNormal* ElementNormals = Mesh->GetElementNormal(0);
     BOOL_CHECK_AND_HANDLE(ElementNormals, "Mesh did not have any normals.");                        
     
-    FbxLayerElement::EMappingMode MappingMode = ElementNormals->GetMappingMode();
-    BOOL_CHECK_AND_HANDLE((MappingMode == FbxGeometryElement::eByPolygonVertex) || (MappingMode == FbxGeometryElement::eByControlPoint),
-                          "Mapping mode for normals is not supported. Must be by polygon vertex or control point.");                                                                              
+    FbxLayerElement::EMappingMode NormalMappingMode = ElementNormals->GetMappingMode();
+    BOOL_CHECK_AND_HANDLE(ValidateMappingMode(NormalMappingMode), "Mapping mode for normals is not supported. Must be by polygon vertex or control point.");                                                                              
     
-    FbxLayerElement::EReferenceMode ReferenceMode = ElementNormals->GetReferenceMode();
-    BOOL_CHECK_AND_HANDLE((ReferenceMode == FbxGeometryElement::eDirect) || (ReferenceMode == FbxGeometryElement::eIndexToDirect),
-                          "Reference mode for normals is not supported. Must be direct or index to direct.");
+    FbxLayerElement::EReferenceMode NormalReferenceMode = ElementNormals->GetReferenceMode();
+    BOOL_CHECK_AND_HANDLE(ValidateReferenceMode(NormalReferenceMode), "Reference mode for normals is not supported. Must be direct or index to direct.");        
     
+    FbxGeometryElementUV* ElementUVs = Mesh->GetElementUV(0);
+    BOOL_CHECK_AND_HANDLE(ElementUVs, "Mesh  did not have any uvs supplied.");
+    
+    FbxLayerElement::EMappingMode UVMappingMode = ElementUVs->GetMappingMode();
+    BOOL_CHECK_AND_HANDLE(ValidateMappingMode(UVMappingMode), "Mapping mode for uvs is not supported. Must be by polygon vertex or control point.");
+    
+    FbxLayerElement::EReferenceMode UVReferenceMode = ElementUVs->GetReferenceMode();
+    BOOL_CHECK_AND_HANDLE(ValidateReferenceMode(UVReferenceMode), "Reference mode for uvs is not supported. Must be direct or index to direct.");    
+                                                  
     u32 ControlPointCount = Mesh->GetControlPointsCount();
     FbxVector4* ControlPoints = Mesh->GetControlPoints();                        
-    
-    
+        
     u32 SkinCount = Mesh->GetDeformerCount(FbxDeformer::eSkin);                        
     
     control_point_joint_data* JointsData = NULL;
@@ -240,13 +258,13 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     
     mesh Result = {};
     
-    hash_table<vertex_p3_n3_index> HashTable = CreateHashTable<vertex_p3_n3_index>(FBX_HASH_SIZE);     
+    hash_table<vertex_p3_n3_uv_index> HashTable = CreateHashTable<vertex_p3_n3_uv_index>(FBX_HASH_SIZE*4);     
     
     void* VertexData;
     if(JointsData)
-        VertexData = PushArray(IndexCount, vertex_p3_n3_weights, Clear, 0);
+        VertexData = PushArray(IndexCount, vertex_p3_n3_uv_weights, Clear, 0);
     else
-        VertexData = PushArray(IndexCount, vertex_p3_n3, Clear, 0);
+        VertexData = PushArray(IndexCount, vertex_p3_n3_uv, Clear, 0);
     
     for(u32 PolygonIndex = 0; PolygonIndex < PolygonCount; PolygonIndex++)
     {
@@ -260,34 +278,53 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
             
             i32 ControlPointIndex = Mesh->GetPolygonVertex(PolygonIndex, VertexIndex);
             i32 NormalIndex = -1;
+            i32 UVIndex = -1;
             
-            if(MappingMode == FbxGeometryElement::eByPolygonVertex)
+            if(NormalMappingMode == FbxGeometryElement::eByPolygonVertex)
             {
-                if(ReferenceMode == FbxGeometryElement::eDirect)                    
+                if(NormalReferenceMode == FbxGeometryElement::eDirect)                    
                     NormalIndex = VertexId;                
-                else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)                
+                else if(NormalReferenceMode == FbxGeometryElement::eIndexToDirect)                
                     NormalIndex = ElementNormals->GetIndexArray().GetAt(VertexId);                
-                 INVALID_ELSE;
+                INVALID_ELSE;
             }
-            else if(MappingMode == FbxGeometryElement::eByControlPoint)
+            else if(NormalMappingMode == FbxGeometryElement::eByControlPoint)
             {
-                if(ReferenceMode == FbxGeometryElement::eDirect)
+                if(NormalReferenceMode == FbxGeometryElement::eDirect)
                     NormalIndex = ControlPointIndex;
-                else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)
+                else if(NormalReferenceMode == FbxGeometryElement::eIndexToDirect)
                     NormalIndex = ElementNormals->GetIndexArray().GetAt(ControlPointIndex);
                 INVALID_ELSE;
                     
             }
             INVALID_ELSE;
             
+            if(UVMappingMode == FbxGeometryElement::eByPolygonVertex)
+            {
+                if(UVReferenceMode == FbxGeometryElement::eDirect)
+                    UVIndex = VertexId;
+                else if(UVReferenceMode == FbxGeometryElement::eIndexToDirect)
+                    UVIndex = ElementUVs->GetIndexArray().GetAt(VertexId);
+                INVALID_ELSE;
+            }
+            else if(UVMappingMode == FbxGeometryElement::eByControlPoint)
+            {
+                if(UVReferenceMode == FbxGeometryElement::eDirect)
+                    UVIndex = ControlPointIndex;
+                else if(UVReferenceMode == FbxGeometryElement::eIndexToDirect)
+                    UVIndex = ElementUVs->GetIndexArray().GetAt(ControlPointIndex);
+                INVALID_ELSE;
+            }
+            
             TriangleP[VertexIndex] = V3(ControlPoints[ControlPointIndex].Buffer());
-            vertex_p3_n3 Vertex = 
+            vertex_p3_n3_uv Vertex = 
             {
                 TriangleP[VertexIndex],
-                V3(ElementNormals->GetDirectArray().GetAt(NormalIndex).Buffer())
+                V3(ElementNormals->GetDirectArray().GetAt(NormalIndex).Buffer()),
+                V2(ElementUVs->GetDirectArray().GetAt(UVIndex).Buffer())
             };
             
-            vertex_p3_n3_index Entry = {Vertex, VertexCount};
+            vertex_p3_n3_uv_index Entry = {Vertex, VertexCount};
             if(HashTable[Entry])
             {
                 IndexData[VertexId] = HashTable.Table[HashTable.GetHashIndex(Entry)].Key.Index;
@@ -297,16 +334,16 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
                 if(JointsData)
                 {
                     control_point_joint_data JointData = JointsData[ControlPointIndex];
-                    ((vertex_p3_n3_weights*)VertexData)[VertexCount] = 
+                    ((vertex_p3_n3_uv_weights*)VertexData)[VertexCount] = 
                     {
-                        V3(V4(Vertex.P, 1.0f)*Transform), Vertex.N*NormalTransform, 
+                        Vertex.P, Vertex.N, Vertex.UV,
                         JointData.Indices[0], JointData.Indices[1], JointData.Indices[2], JointData.Indices[3], 
                         (f32)JointData.Weights[0], (f32)JointData.Weights[1], (f32)JointData.Weights[2], (f32)JointData.Weights[3]
                     };
                 }
                 else
                 {
-                    ((vertex_p3_n3*)VertexData)[VertexCount] = {V3(V4(Vertex.P, 1.0f)*Transform), Vertex.N*NormalTransform};                                                                                       
+                    ((vertex_p3_n3_uv*)VertexData)[VertexCount] = {Vertex.P, Vertex.N, Vertex.UV};                                                                                       
                 }
                 
                 IndexData[VertexId] = VertexCount;                                    
@@ -315,17 +352,148 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
         }                                            
     }                                                
     
-    Result.VertexCount = VertexCount;    
+    Result.VertexCount = VertexCount;        
     if(JointsData)
     {
-        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS;
-        Result.Vertices = PushWriteArray(Storage, VertexData, VertexCount, vertex_p3_n3_weights, 0);
+        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS;
         
+        vertex_p3_n3_uv_weights* Src = (vertex_p3_n3_uv_weights*)VertexData;
+        v3f* Tangents = PushArray(VertexCount, v3f, Clear, 0);
+        v3f* Bitangents = PushArray(VertexCount, v3f, Clear, 0);
+        for(u32 TriangleIndex = 0; TriangleIndex < (IndexCount/3); TriangleIndex++)
+        {
+            u32 VertexIndex0 = IndexData[(TriangleIndex*3)+0];
+            u32 VertexIndex1 = IndexData[(TriangleIndex*3)+1];
+            u32 VertexIndex2 = IndexData[(TriangleIndex*3)+2];
+            
+            v3f V0 = Src[VertexIndex0].P;
+            v3f V1 = Src[VertexIndex1].P;
+            v3f V2 = Src[VertexIndex2].P;
+            
+            v2f UV0 = Src[VertexIndex0].UV;
+            v2f UV1 = Src[VertexIndex1].UV;
+            v2f UV2 = Src[VertexIndex2].UV;
+            
+            v3f Edge0 = V1-V0;
+            v3f Edge1 = V2-V0;
+                        
+            float S0 = UV1.x - UV0.x;
+            float S1 = UV2.x - UV0.x;
+            float T0 = UV1.y - UV0.y;
+            float T1 = UV2.y - UV0.y;
+            
+            float R = 1.0f/(S0*T1 - S1*T0);
+            
+            v3f TanDir = V3((T1*Edge0.x - T0*Edge1.x)*R,
+                            (T1*Edge0.y - T0*Edge1.y)*R,
+                            (T1*Edge0.z - T0*Edge1.z)*R);
+            
+            v3f BiDir = V3((S0*Edge1.x - S1*Edge0.x)*R,
+                           (S0*Edge1.y - S1*Edge0.y)*R,
+                           (S0*Edge1.z - S1*Edge0.z)*R);
+            
+            Tangents[VertexIndex0] += TanDir;
+            Tangents[VertexIndex1] += TanDir;
+            Tangents[VertexIndex2] += TanDir;                   
+            
+            Bitangents[VertexIndex0] += BiDir;
+            Bitangents[VertexIndex1] += BiDir;
+            Bitangents[VertexIndex2] += BiDir;            
+        }
+        
+        Result.Vertices = PushArray(Storage, VertexCount, vertex_p3_n3_t4_uv_weights, Clear, 0);
+        Src = (vertex_p3_n3_uv_weights*)VertexData;
+        vertex_p3_n3_t4_uv_weights* Dst = (vertex_p3_n3_t4_uv_weights*)Result.Vertices;
+        for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+        {
+            vertex_p3_n3_uv_weights* SrcVertex = Src + VertexIndex;
+            vertex_p3_n3_t4_uv_weights* DstVertex = Dst + VertexIndex;                                                                        
+            
+            v3f T = Normalize(Tangents[VertexIndex]);
+            
+            DstVertex->P = SrcVertex->P;
+            DstVertex->N = Normalize(SrcVertex->N);
+            DstVertex->T = V4(Normalize(T - DstVertex->N * Dot(DstVertex->N, T)),
+                              (Dot(Cross(DstVertex->N, T), Bitangents[VertexIndex]) < 0.0f) ? -1.0f : 1.0f);
+            DstVertex->UV = SrcVertex->UV;           
+            
+            DstVertex->P = V3(V4(DstVertex->P, 1.0f)*Transform);
+            DstVertex->N = Normalize(DstVertex->N*NormalTransform);
+            DstVertex->T.xyz = Normalize(DstVertex->T.xyz*M3(Transform));
+            
+            CopyMemory(DstVertex->JointI, SrcVertex->JointI, sizeof(DstVertex->JointI));
+            CopyMemory(DstVertex->JointW, SrcVertex->JointW, sizeof(DstVertex->JointW));
+        }                
     }
     else
     {
-        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3;
-        Result.Vertices = PushWriteArray(Storage, VertexData, VertexCount, vertex_p3_n3, 0);
+        Result.VertexFormat = GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV;        
+        
+        vertex_p3_n3_uv* Src = (vertex_p3_n3_uv*)VertexData;
+        
+        v3f* Tangents = PushArray(VertexCount, v3f, Clear, 0);
+        v3f* Bitangents = PushArray(VertexCount, v3f, Clear, 0);        
+        for(u32 TriangleIndex = 0; TriangleIndex < (IndexCount/3); TriangleIndex++)
+        {
+            u32 Index0 = IndexData[(TriangleIndex*3)+0];
+            u32 Index1 = IndexData[(TriangleIndex*3)+1];
+            u32 Index2 = IndexData[(TriangleIndex*3)+2];
+            
+            v3f V0 = Src[Index0].P;
+            v3f V1 = Src[Index1].P;
+            v3f V2 = Src[Index2].P;
+            
+            v2f UV0 = Src[Index0].UV;
+            v2f UV1 = Src[Index1].UV;
+            v2f UV2 = Src[Index2].UV;
+            
+            v3f Edge0 = V1-V0;
+            v3f Edge1 = V2-V0;
+            
+            float S0 = UV1.x - UV0.x;
+            float S1 = UV2.x - UV0.x;
+            float T0 = UV1.y - UV0.y;
+            float T1 = UV2.y - UV0.y;
+            
+            float R = 1.0f/(S0*T1 - S1*T0);
+            
+            v3f TanDir = V3((T1*Edge0.x - T0*Edge1.x)*R,
+                            (T1*Edge0.y - T0*Edge1.y)*R,
+                            (T1*Edge0.z - T0*Edge1.z)*R);
+            
+            v3f BiDir = V3((S0*Edge1.x - S1*Edge0.x)*R,
+                           (S0*Edge1.y - S1*Edge0.y)*R,
+                           (S0*Edge1.z - S1*Edge0.z)*R);
+            
+            Tangents[Index0] += TanDir;
+            Tangents[Index1] += TanDir;
+            Tangents[Index2] += TanDir;                   
+            
+            Bitangents[Index0] += BiDir;
+            Bitangents[Index1] += BiDir;
+            Bitangents[Index2] += BiDir;            
+        }
+        
+        Result.Vertices = PushArray(Storage, VertexCount, vertex_p3_n3_t4_uv, Clear, 0);
+        Src = (vertex_p3_n3_uv*)VertexData;
+        vertex_p3_n3_t4_uv* Dst = (vertex_p3_n3_t4_uv*)Result.Vertices;
+        for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+        {
+            vertex_p3_n3_uv* SrcVertex = Src + VertexIndex;
+            vertex_p3_n3_t4_uv* DstVertex = Dst + VertexIndex;                                                                        
+            
+            v3f T = Normalize(Tangents[VertexIndex]);
+            
+            DstVertex->P = SrcVertex->P;
+            DstVertex->N = Normalize(SrcVertex->N);
+            DstVertex->T = V4(Normalize(T - DstVertex->N * Dot(DstVertex->N, T)),
+                              (Dot(Cross(DstVertex->N, T), Bitangents[VertexIndex]) < 0.0f) ? -1.0f : 1.0f);
+            DstVertex->UV = SrcVertex->UV;           
+            
+            DstVertex->P = V3(V4(DstVertex->P, 1.0f)*Transform);
+            DstVertex->N = Normalize(DstVertex->N*NormalTransform);
+            DstVertex->T.xyz = Normalize(DstVertex->T.xyz*M3(Transform));
+        }                   
     }
     
     Result.IndexCount = IndexCount;

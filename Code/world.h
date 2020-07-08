@@ -65,7 +65,8 @@ struct world_entity
         };
     };
     
-    c4 Color;
+    graphics_material* Material;
+    
     v3f Velocity;        
     
     v3f CollidedNormal;
