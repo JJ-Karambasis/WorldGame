@@ -1070,7 +1070,7 @@ b32 IsLineIntersectingTriangle3D(v3f LineOrigin, v3f LineDirection, v3f Vertex0,
 
     det = Dot(edge1, pvec);
 
-    if(det < FLT_EPSILON)
+    if(det == 0)
         return false;
     
     tvec = LineOrigin - Vertex0;
