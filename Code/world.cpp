@@ -149,7 +149,7 @@ void FreeEntity(game* Game, world_entity_id ID)
 }
 
 world_entity_id
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, c4 Color, mesh* Mesh, walkable_mesh* WalkableMesh = NULL, void* UserData=NULL)
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, graphics_material* Material, mesh* Mesh, walkable_mesh* WalkableMesh = NULL, void* UserData=NULL)
 {
     world* World = GetWorld(Game, WorldIndex);
     
@@ -160,7 +160,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     
     Entity->Type = Type;    
     Entity->Transform = CreateSQT(Position, Scale, Euler);
-    Entity->Color = Color;
+    Entity->Material = Material;
     Entity->Mesh = Mesh;
     Entity->WalkableMesh = WalkableMesh;
     Entity->UserData = UserData;    
@@ -170,30 +170,30 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh0, mesh* Mesh1, walkable_mesh* WalkableMesh0=NULL, walkable_mesh* WalkableMesh1=NULL)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, graphics_material* Material0, graphics_material* Material1, mesh* Mesh0, mesh* Mesh1, walkable_mesh* WalkableMesh0=NULL, walkable_mesh* WalkableMesh1=NULL)
 {
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh0, WalkableMesh0);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh1, WalkableMesh1);    
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Material0, Mesh0, WalkableMesh0);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Material1, Mesh1, WalkableMesh1);    
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color0, c4 Color1, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, graphics_material* Material0, graphics_material* Material1, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
 {
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color0, Mesh, WalkableMesh);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color1, Mesh, WalkableMesh);    
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Material0, Mesh, WalkableMesh);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Material1, Mesh, WalkableMesh);    
 }
 
 inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, c4 Color, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
+CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, graphics_material* Material, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
 {
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Color, Mesh, WalkableMesh);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Color, Mesh, WalkableMesh);    
+    CreateEntity(Game, Type, 0, Position, Scale, Euler, Material, Mesh, WalkableMesh);
+    CreateEntity(Game, Type, 1, Position, Scale, Euler, Material, Mesh, WalkableMesh);    
 }
 
 world_entity_id 
-CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Dim, c4 Color)
+CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Dim, graphics_material* Material)
 {
-    world_entity_id Result = CreateEntity(Game, Type, WorldIndex, Position, Dim, V3(), Color, &Game->Assets->BoxGraphicsMesh);    
+    world_entity_id Result = CreateEntity(Game, Type, WorldIndex, Position, Dim, V3(), Material, &Game->Assets->BoxGraphicsMesh);    
     world_entity* Entity = GetEntity(Game, Result);
     
     Entity->Collider.Type = COLLIDER_TYPE_ALIGNED_BOX;
@@ -241,8 +241,8 @@ UpdateWorld(game* Game)
 {                
     world* World = GetWorld(Game, Game->CurrentWorldIndex);         
     
-    DEBUG_DRAW_QUAD(World->JumpingQuads[0].CenterP, Global_WorldZAxis, World->JumpingQuads[0].Dimensions, Yellow());    
-    DEBUG_DRAW_QUAD(World->JumpingQuads[1].CenterP, Global_WorldZAxis, World->JumpingQuads[1].Dimensions, Yellow());
+    DEBUG_DRAW_QUAD(World->JumpingQuads[0].CenterP, Global_WorldZAxis, World->JumpingQuads[0].Dimensions, Yellow3());    
+    DEBUG_DRAW_QUAD(World->JumpingQuads[1].CenterP, Global_WorldZAxis, World->JumpingQuads[1].Dimensions, Yellow3());
     
     FOR_EACH(Entity, &World->EntityPool)
     {        

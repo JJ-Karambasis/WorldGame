@@ -1166,6 +1166,24 @@ b32 IsRayIntersectingEntity(v3f RayOrigin, v3f RayDirection, world_entity* Entit
         {
             ASSERT(false);
         }
+        if(Entity->Mesh->VertexFormat == GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV)
+        {
+            vertex_p3_n3_t4_uv TVertex1 = *(vertex_p3_n3_t4_uv*)((u8*)Entity->Mesh->Vertices + (Index1*MyVertexStride));
+            vertex_p3_n3_t4_uv TVertex2 = *(vertex_p3_n3_t4_uv*)((u8*)Entity->Mesh->Vertices + (Index2*MyVertexStride));
+            vertex_p3_n3_t4_uv TVertex3 = *(vertex_p3_n3_t4_uv*)((u8*)Entity->Mesh->Vertices + (Index3*MyVertexStride));
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;
+        }
+        if(Entity->Mesh->VertexFormat == GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS)
+        {
+            vertex_p3_n3_t4_uv_weights TVertex1 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Entity->Mesh->Vertices + (Index1*MyVertexStride));
+            vertex_p3_n3_t4_uv_weights TVertex2 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Entity->Mesh->Vertices + (Index2*MyVertexStride));
+            vertex_p3_n3_t4_uv_weights TVertex3 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Entity->Mesh->Vertices + (Index3*MyVertexStride));
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;
+        }
 
         triangle3D Triangle = CreateTriangle3D(Vertex1, Vertex2, Vertex3);
         ray3D Ray;

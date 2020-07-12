@@ -42,6 +42,7 @@ struct game
     assets* Assets;
     audio_output* AudioOutput;
     input* Input;  
+    graphics_render_buffer* RenderBuffer;    
     
     arena GameStorage;
     

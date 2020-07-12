@@ -43,7 +43,9 @@ struct win32_graphics_code
 {    
     win32_hot_loaded_library GraphicsLibrary;
     execute_render_commands* ExecuteRenderCommands;
+    bind_graphics_functions* BindGraphicsFunctions;    
     init_graphics* InitGraphics;
+    invalidate_shaders* InvalidateShaders;    
 };
 
 struct platform_file_handle

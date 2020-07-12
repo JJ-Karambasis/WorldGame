@@ -1,10 +1,10 @@
 void 
-CreatePlayer(game* Game, u32 WorldIndex, v3f Position, v3f Radius, c4 Color)
+CreatePlayer(game* Game, u32 WorldIndex, v3f Position, v3f Radius, graphics_material* Material, mesh* PlayerMesh)
 {    
     player* Player = GetPlayer(Game, WorldIndex);    
     //Player->AnimationController = CreateAnimationController(&Game->GameStorage, &Game->Assets->TestSkeleton);    
     //Player->AnimationController.PlayingAnimation.Clip = &Game->Assets->TestAnimation;
-    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Color, &Game->Assets->PlayerMesh, NULL, Player);    
+    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Material, PlayerMesh, NULL, Player);    
     Player->Radius = Radius;    
 }
 
@@ -246,7 +246,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
         v2f Min = JumpingQuad->CenterP.xy - HalfDim;
         v2f Max = JumpingQuad->CenterP.xy + HalfDim;
         
-        c4 QuadColor = Red();
+        c3 QuadColor = Red3();
         if(PlayerEntity->Position.xy >= Min && PlayerEntity->Position.xy <= Max)
         {
             if(Abs(PlayerEntity->Position.z - JumpingQuad->CenterP.z) < 1e-2f)
@@ -257,7 +257,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
                     break;                    
                     
                 }                
-                QuadColor = Yellow();
+                QuadColor = Yellow3();
             }
         }       
         

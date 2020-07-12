@@ -104,6 +104,20 @@ inline b32 IsAssetValid(animation_clip* Clip)
     return Result;
 }
 
+struct texture
+{
+    void* Texels;
+    v2i Dimensions;
+    graphics_texture_format Format;
+    graphics_texture_id GDIHandle;
+};
+
+inline b32 IsAssetValid(texture* Texture)
+{
+    b32 Result = (Texture->Texels && Texture->Dimensions.width && Texture->Dimensions.height);
+    return Result;
+}
+
 struct assets
 {
     arena Storage;
@@ -116,6 +130,26 @@ struct assets
     walkable_mesh QuadWalkableMesh;
     
     mesh PlayerMesh;
+    
+    texture TestMaterial0_Diffuse;    
+    texture TestMaterial0_Normal;
+    texture TestMaterial0_Specular;
+    
+    texture TestMaterial1_Diffuse;
+    texture TestMaterial1_Normal;
+    texture TestMaterial1_Specular;
+    
+    graphics_material Material_DiffuseC;
+    graphics_material Material_DiffuseT;            
+    graphics_material Material_DiffuseC_SpecularC;
+    graphics_material Material_DiffuseC_SpecularT;
+    graphics_material Material_DiffuseC_Normal;
+    graphics_material Material_DiffuseT_SpecularC;
+    graphics_material Material_DiffuseT_SpecularT;
+    graphics_material Material_DiffuseT_Normal;
+    graphics_material Material_DiffuseC_SpecularC_Normal;
+    graphics_material Material_DiffuseT_SpecularT_Normal;
+    graphics_material Material_DiffuseT_SpecularT_Normal_2;
     
 #if 0 
     mesh TestSkeletonMesh;
