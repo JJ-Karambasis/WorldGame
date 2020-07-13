@@ -203,6 +203,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
 {    
     dev_input* Input = &DevContext->Input;
     game* Game = DevContext->Game;
+    graphics* Graphics = DevContext->Graphics;
     
     world* World = GetCurrentWorld(Game);
     camera* Camera = &World->Camera;
@@ -226,7 +227,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
             
             if(Abs(Input->Scroll) > 0.0f)            
                 Camera->Velocity.z -= Input->Scroll*Game->dt*CAMERA_SCROLL_ACCELERATION;                                            
-        }                
+        }            
         
         Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
         v3f Eulers = (Camera->AngularVelocity*Game->dt);            
@@ -248,7 +249,53 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
             Camera->Distance = CAMERA_MIN_DISTANCE;
         
         Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
-    }        
+    }
+    
+    if(DevContext->SelectObjects)
+    {
+        if(!IsDown(Input->Alt))
+        {
+            if(IsPressed(Input->LMB))
+            {
+                //For not just getting the player entity. need to change to cast the ray and get the intersected object
+                i32 Height = Graphics->RenderDim.height;
+                i32 Width = Graphics->RenderDim.width;
+                f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
+                f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
+                f32 z = 1.0f;
+                v3f ray_nds = V3(x, y, z);
+                v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
+                m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+                v4f ray_eye =  ray_clip * Inverse(Perspective);
+                ray_eye = V4(ray_eye.xy, -1.0, 0.0);
+                v3f ray_wor =  (ray_eye * TransformM4(Camera->Position, Camera->Orientation)).xyz;
+                ray_wor = Normalize(ray_wor);
+                
+
+                f32 t = INFINITY;
+                FOR_EACH(Entity, &World->EntityPool)
+                {
+                    f32 tempt = INFINITY, tempu = INFINITY, tempv = INFINITY;
+                    if(Entity->Mesh)
+                    {
+                        if(IsRayIntersectingEntity(Camera->Position, ray_wor, Entity, &tempt, &tempu, &tempv))
+                        {
+                            if(tempt < t)
+                            {
+                                t = tempt;
+                                DevContext->SelectedObject = Entity;
+                            }
+                        }
+                    }
+                }
+                DevContext->InspectRay = ray_wor;
+            }
+            if(IsPressed(Input->MMB))
+            {
+                DevContext->SelectedObject = nullptr;
+            }
+        }    
+    }    
 }
 
 void DrawWireframeWorld(graphics* Graphics, world* World)
@@ -309,6 +356,10 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
         world_entity* PlayerEntity = GetPlayerEntity(World);
         DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(DevContext->Game, (player*)PlayerEntity->UserData), Magenta3());
     }
+
+    v3f alexX, alexY;
+    CreateBasis(DevContext->InspectRay, &alexX, &alexY);       
+    DrawOrientedBox(DevContext, Camera->Position + 0.2f * DevContext->InspectRay, V3(0.01f, 0.01f, 10.0f), alexX, alexY, DevContext->InspectRay, White3()); 
     
 }
 
@@ -412,7 +463,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     
     if(IsInDevelopmentMode(DevContext))
     {        
-        Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, Game->dt);        
+        Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, Game->dt, DevContext);        
         DevelopmentRender(DevContext);        
     }
     

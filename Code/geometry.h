@@ -195,6 +195,12 @@ struct plane3D
     f32 D;
 };
 
+struct ray3D
+{
+    v3f Origin;
+    v3f Direction;
+};
+
 //NOTE(EVERYONE): Inline 3D functions
 
 inline edge3D CreateEdge3D(v3f P0, v3f P1)
@@ -335,6 +341,14 @@ inline void GetTriangleEdges2D(edge2D* Edges, triangle3D Triangle)
     Edges[0] = CreateEdge2D(Triangle.P[0], Triangle.P[1]);
     Edges[1] = CreateEdge2D(Triangle.P[1], Triangle.P[2]);
     Edges[2] = CreateEdge2D(Triangle.P[2], Triangle.P[0]);
+}
+
+inline ray3D CreateRay3D(v3f RayOrigin, v3f RayDirection)
+{
+    ray3D Result;
+    Result.Origin = RayOrigin;
+    Result.Direction = Normalize(RayDirection);
+    return Result;
 }
 
 //NOTE(EVERYONE): All other structures and inline functions

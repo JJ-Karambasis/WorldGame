@@ -114,7 +114,8 @@ struct dev_context
     arena DevStorage;
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
-    b32 DrawOtherWorld;    
+    b32 DrawOtherWorld;
+    b32 SelectObjects;              
     b32 DrawFrames;
     b32 DrawPlayerCollisionVolume;
     view_mode_type ViewModeType;    
@@ -146,10 +147,13 @@ struct dev_context
     
     void** PlatformData;
     b32 Initialized;
+    struct world_entity* SelectedObject;
+    v3f InspectRay;
+    char DebugMessage[100];
 };
 
 void Platform_InitImGui(void* PlatformData);
-void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt);
+void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* DevContext);
 string Platform_OpenFileDialog(char* Extension);
 string Platform_FindNewFrameRecordingPath();
 

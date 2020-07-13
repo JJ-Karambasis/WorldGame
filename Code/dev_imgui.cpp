@@ -83,6 +83,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
     ImGui::Checkbox("Draw Frames", (bool*)&DevContext->DrawFrames);
     ImGui::Checkbox("Draw Player Collision Volume", (bool*)&DevContext->DrawPlayerCollisionVolume);
+    ImGui::Checkbox("Inspect Objects", (bool*)&DevContext->SelectObjects);  
     
     if(ImGui::CollapsingHeader("Game Information"))
     {
@@ -108,6 +109,39 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         
         ImGui::Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
         ImGui::Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
+    }
+
+    if(ImGui::CollapsingHeader("SelectedObject"))
+    {
+        game_information* GameInformation = &DevContext->GameInformation;
+        if(DevContext->SelectedObject != nullptr)
+        {
+            v3f ObjectPosition = DevContext->SelectedObject->Position;
+            v3f ObjectVelocity = DevContext->SelectedObject->Velocity;
+            
+            ImGui::Text("Selected Object Position: (%.2f, %.2f, %.2f)", ObjectPosition.x, ObjectPosition.y, ObjectPosition.z);
+            ImGui::Text("Selected Object Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
+            ImGui::Text("Selected Object Type: (%d)", DevContext->SelectedObject->Type);
+            ImGui::Text("Selected Object ID: (%d)", DevContext->SelectedObject->ID.ID);
+            ImGui::Text("Selected Object WorldIndex: (%d)", DevContext->SelectedObject->ID.WorldIndex);
+            if(!IsInvalidEntityID(DevContext->SelectedObject->LinkID))
+            {
+                ImGui::Text("Selected Object Link ID: (%d)", DevContext->SelectedObject->LinkID.ID);
+                ImGui::Text("Selected Object Link WorldIndex: (%d)", DevContext->SelectedObject->LinkID.WorldIndex);
+            }
+            else
+            {
+                ImGui::Text("Selected Object Link ID: (%s)", "No Linked Entity");
+                ImGui::Text("Selected Object Link WorldIndex: (%s)", "No Linked Entity");
+            }
+            ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);
+            
+        }
+        else
+        {
+            ImGui::Text("No object selected");
+            ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);
+        }
     }
     
     if(ImGui::CollapsingHeader("Debug Logs"))
