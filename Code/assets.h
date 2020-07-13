@@ -118,6 +118,70 @@ inline b32 IsAssetValid(texture* Texture)
     return Result;
 }
 
+struct convex_vertex;
+struct convex_face;
+
+struct convex_edge
+{
+    convex_vertex* Vertex;
+    convex_edge* Pair;
+    convex_edge* Face;
+    convex_edge* Next;
+};
+
+struct convex_vertex
+{
+    v3f V;
+    convex_edge* Edge;
+};
+
+struct convex_face
+{
+    convex_edge* Edge;
+};
+
+struct convex_hull
+{
+    u32 VertexCount;
+    u32 EdgeCount;
+    u32 FaceCount;
+    
+    convex_vertex* Vertices;
+    convex_edge* Edges;
+    convex_face* Faces;
+};
+
+struct triangle
+{
+    u32 V0;
+    u32 V1;
+    u32 V2;
+    
+    triangle* AdjTriangles[3];
+};
+
+struct triangle_mesh
+{
+    v3f* Vertices;
+    triangle* Triangles;
+};
+
+enum asset_type
+{
+    ASSET_TYPE_UNKNOWN,
+    ASSET_TYPE_MESH
+};
+
+struct asset
+{
+    asset_type Type;
+};
+
+struct mesh_asset : public asset
+{
+    
+};
+
 struct assets
 {
     arena Storage;
@@ -151,6 +215,9 @@ struct assets
     graphics_material Material_DiffuseT_SpecularT_Normal;
     graphics_material Material_DiffuseT_SpecularT_Normal_2;
     
+    triangle_mesh BoxTriangleMesh;
+    convex_hull BoxConvexHull;
+    
 #if 0 
     mesh TestSkeletonMesh;
     skeleton TestSkeleton;    
@@ -162,7 +229,5 @@ struct assets
     audio TestAudio;
     audio TestAudio2;
 };
-
-
 
 #endif

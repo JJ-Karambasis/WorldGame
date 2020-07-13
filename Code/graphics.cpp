@@ -294,12 +294,17 @@ void PushViewportAndScissor(graphics* Graphics, i32 X, i32 Y, i32 Width, i32 Hei
     PushScissor(Graphics, X, Y, Width, Height);
 }
 
-void PushCameraCommands(graphics* Graphics, camera* Camera, v2i RenderDim)
+void PushViewCommands(graphics* Graphics, v2i Resolution, v3f ViewPosition, m3 ViewOrientation, f32 FieldOfView, f32 ZNear, f32 ZFar)
 {    
-    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(RenderDim.width, RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
-    m4 View = InverseTransformM4(Camera->Position, Camera->Orientation);
-    PushViewPosition(Graphics, Camera->Position);
+    m4 Perspective = PerspectiveM4(FieldOfView, SafeRatio(Resolution.width, Resolution.height), ZNear, ZFar);
+    m4 View = InverseTransformM4(ViewPosition, ViewOrientation);
+    PushViewPosition(Graphics, ViewPosition);
     PushViewProjection(Graphics, View*Perspective);    
+}
+
+void PushViewCommands(graphics* Graphics, v2i Resolution, view_settings* CameraSettings)
+{    
+    PushViewCommands(Graphics, Resolution, CameraSettings->Position, CameraSettings->Orientation, CameraSettings->FieldOfView, CameraSettings->ZNear, CameraSettings->ZFar);    
 }
 
 void PushRenderBufferViewportAndScissor(graphics* Graphics, graphics_render_buffer* RenderBuffer)
@@ -308,20 +313,20 @@ void PushRenderBufferViewportAndScissor(graphics* Graphics, graphics_render_buff
     PushViewportAndScissor(Graphics, 0, 0, RenderBuffer->Resolution.width, RenderBuffer->Resolution.height);
 }
 
-void PushRenderBufferCameraViewportAndScissor(graphics* Graphics, graphics_render_buffer* RenderBuffer, camera* Camera)
+void PushRenderBufferViewportScissorAndView(graphics* Graphics, graphics_render_buffer* RenderBuffer, view_settings* View)
 {
     PushRenderBufferViewportAndScissor(Graphics, RenderBuffer);            
-    PushCameraCommands(Graphics, Camera, RenderBuffer->Resolution);
+    PushViewCommands(Graphics, RenderBuffer->Resolution, View);
 }
 
-void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, camera* Camera, assets* Assets)
+void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, view_settings* Camera, assets* Assets)
 {    
     graphics_light_buffer LightBuffer = {};
     LightBuffer.DirectionalLightCount = 0;        
     LightBuffer.DirectionalLights[0] = CreateDirectionalLight(V3(0.0f, 0.0f, 4.0f), White3(), 1.0f, Normalize(V3(0.0f, 0.3f, -0.6f)), 
                                                               -5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
     
-    LightBuffer.PointLightCount = 9;
+    LightBuffer.PointLightCount = 1;
     LightBuffer.PointLights[0] = CreatePointLight(White3(),  5.0f, V3(-1.0f,  1.0f, 3.0f), 10.0f);
     LightBuffer.PointLights[1] = CreatePointLight(Red3(),   2.0f, V3(-4.0f,  4.0f, 3.0f), 10.0f);
     LightBuffer.PointLights[2] = CreatePointLight(Green3(), 2.0f, V3(-4.0f, -4.0f, 3.0f), 10.0f);
@@ -380,7 +385,7 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     }    
     
     PushSRGBRenderBufferWrites(Graphics, true);
-    PushRenderBufferCameraViewportAndScissor(Graphics, RenderBuffer, Camera);    
+    PushRenderBufferViewportScissorAndView(Graphics, RenderBuffer, Camera);    
     PushClearColorAndDepth(Graphics, Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     

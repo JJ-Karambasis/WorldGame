@@ -8,6 +8,7 @@
 #include "geometry.h"
 #include "graphics.h"
 #include "assets.h"
+#include "collision_detection.h"
 #include "audio.h"
 #include "camera.h"
 #include "animation.h"

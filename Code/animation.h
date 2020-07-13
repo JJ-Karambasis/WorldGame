@@ -1,13 +1,6 @@
 #ifndef ANIMATION_H
 #define ANIMATION_H
 
-struct pose
-{
-    skeleton* Skeleton;
-    joint_pose* LocalPoses;
-    m4* GlobalPoses;
-};
-
 struct playing_animation
 {
     animation_clip* Clip;   

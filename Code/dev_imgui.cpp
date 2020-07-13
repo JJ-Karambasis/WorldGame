@@ -3,9 +3,11 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
+using namespace ImGui;
+
 i64 AllocateImGuiFont(graphics* Graphics)
 {    
-    ImGuiIO* IO = &ImGui::GetIO();
+    ImGuiIO* IO = &GetIO();
     void* ImGuiFontData;
     v2i ImGuiFontDimensions;
     
@@ -37,27 +39,28 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
     
-    ImGui::NewFrame();
+    NewFrame();
     
     //IMPORTANT(EVERYONE): If you need help figuring out how to use ImGui you can always switch this to 1 and look at the imgui demo window
     //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start
 #if 0
     local bool demo_window;
-    ImGui::ShowDemoWindow(&demo_window);
+    ShowDemoWindow(&demo_window);
 #endif
     
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/3.0f, (f32)Graphics->RenderDim.y));    
+    SetNextWindowPos(ImVec2(0, 0));
+    SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/3.0f, (f32)Graphics->RenderDim.y));    
     
     local bool open = true;
-    ImGui::Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse);    
+    Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize);    
     
-    ImGui::Text("FPS: %f", 1.0f/Game->dt);        
+    Text("FPS: %f", 1.0f/Game->dt);        
     
-    if(ImGui::Checkbox("Debug Camera", (bool*)&DevContext->UseDevCamera))
+    if(Checkbox("Debug Camera", (bool*)&DevContext->UseDevCamera))
     {
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-        {                    
+        {           
+#if 0 
             camera* Camera = &Game->Worlds[WorldIndex].Camera;
             camera* DevCamera = &DevContext->Cameras[WorldIndex];
             
@@ -66,26 +69,28 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             DevCamera->Orientation = IdentityM3();
             DevCamera->FocalPoint = Camera->FocalPoint;
             DevCamera->Distance = Magnitude(DevCamera->FocalPoint-DevCamera->Position);
+#endif
         }
     }    
     
     //const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading", "Wireframe on Normal Shading"};
     
     const char* ViewModeTypes[] = {"Lit", "Unlit", "Wireframe", "Wireframe on Lit"};
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("View Modes");
-    ImGui::SameLine();
-    ImGui::Combo("", (int*)&DevContext->ViewModeType, ViewModeTypes, ARRAYCOUNT(ViewModeTypes));
+    AlignTextToFramePadding();
+    Text("View Modes");
+    SameLine();
+    Combo("", (int*)&DevContext->ViewModeType, ViewModeTypes, ARRAYCOUNT(ViewModeTypes));
    
-    DevelopmentFrameRecording(DevContext);
-        
+    DevelopmentFrameRecording(DevContext);    
+    
     ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
     ImGui::Checkbox("Draw Frames", (bool*)&DevContext->DrawFrames);
     ImGui::Checkbox("Draw Player Collision Volume", (bool*)&DevContext->DrawPlayerCollisionVolume);
     ImGui::Checkbox("Inspect Objects", (bool*)&DevContext->SelectObjects);  
     
-    if(ImGui::CollapsingHeader("Game Information"))
+    local b32 Open = true;
+    if(CollapsingHeader("Game Information", ImGuiTreeNodeFlags_DefaultOpen))
     {
         game_information* GameInformation = &DevContext->GameInformation;
         
@@ -100,15 +105,55 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         
         v3f CollisionNormal = PlayerEntity0->CollidedNormal;
         
-        ImGui::Text("Player 0 Position: (%.2f, %.2f, %.2f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
-        ImGui::Text("Player 0 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity0.x, PlayerVelocity0.y, PlayerVelocity0.z);
-        ImGui::Text("Collided Normal: (%.2f, %.2f, %.2f)", CollisionNormal.x, CollisionNormal.y, CollisionNormal.z);
+        Text("Player 0 Position: (%.2f, %.2f, %.2f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
+        Text("Player 0 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity0.x, PlayerVelocity0.y, PlayerVelocity0.z);
+        Text("Collided Normal: (%.2f, %.2f, %.2f)", CollisionNormal.x, CollisionNormal.y, CollisionNormal.z);
         
-        ImGui::Text("Player 1 Position: (%.2f, %.2f, %.2f)", PlayerPosition1.x, PlayerPosition1.y, PlayerPosition1.z);
-        ImGui::Text("Player 1 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity1.x, PlayerVelocity1.y, PlayerVelocity1.z);
+        Text("Player 1 Position: (%.2f, %.2f, %.2f)", PlayerPosition1.x, PlayerPosition1.y, PlayerPosition1.z);
+        Text("Player 1 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity1.x, PlayerVelocity1.y, PlayerVelocity1.z);
         
-        ImGui::Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
-        ImGui::Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
+        Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
+        Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
+        
+        if(!DevContext->UseDevCamera)
+        {            
+            for(u32 WorldIndex = 0; WorldIndex < ARRAYCOUNT(Game->Worlds); WorldIndex++)
+            {                                
+                game_camera* Camera = &Game->Worlds[WorldIndex].Camera;
+                
+                NewLine();
+                
+                Text("Camera %d Settings:", WorldIndex);                                
+                
+                PushID(WorldIndex*6+0);
+                DragFloat("Radius", &Camera->Coordinates.Radius, 0.01f, 0.001f, 50.0f, "%.3f");
+                PopID();                                
+                
+                PushID(WorldIndex*6+1);
+                f32 AzimuthDegree = TO_DEGREE(Camera->Coordinates.Azimuth);
+                DragFloat("Azimuth", &AzimuthDegree, 1.0f, -180.0f, 180.0f, "%.1f");
+                Camera->Coordinates.Azimuth = TO_RAD(AzimuthDegree);
+                PopID();
+                
+                PushID(WorldIndex*6+2);
+                f32 InclinationDegree = TO_DEGREE(Camera->Coordinates.Inclination);
+                DragFloat("Inclination", &InclinationDegree, 1.0f, -180.0f, 180.0f, "%.1f");
+                Camera->Coordinates.Inclination = TO_RAD(InclinationDegree);
+                PopID();
+                
+                PushID(WorldIndex*6 + 3);
+                SliderAngle("Field Of View", &Camera->FieldOfView, 0.0f, 90.0f);        
+                PopID();
+                
+                PushID(WorldIndex*6 + 4);
+                DragFloat("Near Plane", &Camera->ZNear, 0.001f, 0.001f, 1.0f, "%.3f");
+                PopID();
+                
+                PushID(WorldIndex*6 + 5);
+                DragFloat("Far Plane", &Camera->ZFar, 0.01f, Camera->ZNear, 10000.0f, "%.3f");                                                  
+                PopID();                
+            }
+        }
     }
 
     if(ImGui::CollapsingHeader("SelectedObject"))
@@ -144,27 +189,27 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         }
     }
     
-    if(ImGui::CollapsingHeader("Debug Logs"))
+    if(CollapsingHeader("Debug Logs"))
     {
-        if(ImGui::Button("Clear"))
+        if(Button("Clear"))
         {
             DevContext->Logs.Size = 0;
             ResetArena(&DevContext->LogStorage);
         }        
         
-        ImGui::SameLine();
+        SameLine();
         
-        if(ImGui::Button("Copy")) ImGui::LogToClipboard();       
+        if(Button("Copy")) LogToClipboard();       
         
         for(u32 LogIndex = 0; LogIndex < DevContext->Logs.Size; LogIndex++)
         {
             string Log = DevContext->Logs[LogIndex];
-            ImGui::TextUnformatted(Log.Data, Log.Data+Log.Length);
+            TextUnformatted(Log.Data, Log.Data+Log.Length);
         }
     }
     
-    ImGui::End();        
-    ImGui::Render();        
+    End();        
+    Render();        
 }
 
 void DevelopmentImGuiRender(dev_context* DevContext)
@@ -181,7 +226,7 @@ void DevelopmentImGuiRender(dev_context* DevContext)
     PushProjection(Graphics, Orthographic);
     
     ptr IndexSize = sizeof(ImDrawIdx);    
-    ImDrawData* DrawData = ImGui::GetDrawData();        
+    ImDrawData* DrawData = GetDrawData();        
     
     u32 LastImGuiMeshCount = DevContext->ImGuiMeshCount;
     DevContext->ImGuiMeshCount = DrawData->CmdListsCount;

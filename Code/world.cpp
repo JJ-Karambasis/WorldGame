@@ -258,10 +258,6 @@ UpdateWorld(game* Game)
     
     world_entity* PlayerEntity = GetEntity(World, World->Player.EntityID);    
     
-    camera* Camera = &World->Camera;
-    
-    Camera->Position = PlayerEntity->Position;
-    Camera->FocalPoint = PlayerEntity->Position;
-    Camera->Position.z += 6.0f;
-    Camera->Orientation = IdentityM3();    
+    game_camera* Camera = &World->Camera;    
+    Camera->Target = PlayerEntity->Position;        
 }

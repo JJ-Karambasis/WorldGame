@@ -190,13 +190,26 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
     DrawSphere(DevContext, Position, 0.04f, White3());    
 }
 
-inline camera* 
-GetProperCamera(dev_context* DevContext, world* World)
-{
-    camera* Camera = &World->Camera;
+inline view_settings
+GetViewSettings(dev_context* DevContext, world* World)
+{    
     if(DevContext->UseDevCamera)
-        Camera = DevContext->Cameras + World->WorldIndex;
-    return Camera;
+    {   
+        camera* Camera = DevContext->Cameras + World->WorldIndex;
+        
+        view_settings Result = {};    
+        Result.Position = Camera->Position;
+        Result.Orientation = Camera->Orientation;
+        Result.FieldOfView = CAMERA_FIELD_OF_VIEW;
+        Result.ZNear = CAMERA_ZNEAR;
+        Result.ZFar = CAMERA_ZFAR;
+        return Result;
+    }
+    else
+    {
+        view_settings Result = GetViewSettings(&World->Camera);        
+        return Result;        
+    }        
 }
 
 void DevelopmentUpdateCamera(dev_context* DevContext)
@@ -205,11 +218,10 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     game* Game = DevContext->Game;
     graphics* Graphics = DevContext->Graphics;
     
-    world* World = GetCurrentWorld(Game);
-    camera* Camera = &World->Camera;
+    world* World = GetCurrentWorld(Game);    
     if(DevContext->UseDevCamera)
     {
-        Camera = &DevContext->Cameras[Game->CurrentWorldIndex];
+        camera* Camera = DevContext->Cameras + Game->CurrentWorldIndex;
         
         if(IsDown(Input->Alt))
         {                                    
@@ -249,52 +261,6 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
             Camera->Distance = CAMERA_MIN_DISTANCE;
         
         Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
-    }
-    
-    if(DevContext->SelectObjects)
-    {
-        if(!IsDown(Input->Alt))
-        {
-            if(IsPressed(Input->LMB))
-            {
-                //For not just getting the player entity. need to change to cast the ray and get the intersected object
-                i32 Height = Graphics->RenderDim.height;
-                i32 Width = Graphics->RenderDim.width;
-                f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
-                f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
-                f32 z = 1.0f;
-                v3f ray_nds = V3(x, y, z);
-                v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
-                m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
-                v4f ray_eye =  ray_clip * Inverse(Perspective);
-                ray_eye = V4(ray_eye.xy, -1.0, 0.0);
-                v3f ray_wor =  (ray_eye * TransformM4(Camera->Position, Camera->Orientation)).xyz;
-                ray_wor = Normalize(ray_wor);
-                
-
-                f32 t = INFINITY;
-                FOR_EACH(Entity, &World->EntityPool)
-                {
-                    f32 tempt = INFINITY, tempu = INFINITY, tempv = INFINITY;
-                    if(Entity->Mesh)
-                    {
-                        if(IsRayIntersectingEntity(Camera->Position, ray_wor, Entity, &tempt, &tempu, &tempv))
-                        {
-                            if(tempt < t)
-                            {
-                                t = tempt;
-                                DevContext->SelectedObject = Entity;
-                            }
-                        }
-                    }
-                }
-                DevContext->InspectRay = ray_wor;
-            }
-            if(IsPressed(Input->MMB))
-            {
-                DevContext->SelectedObject = nullptr;
-            }
-        }    
     }    
 }
 
@@ -313,16 +279,16 @@ void DrawWireframeWorld(graphics* Graphics, world* World)
 
 void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, world* World)
 {            
-    camera* Camera = GetProperCamera(DevContext, World);    
+    view_settings ViewSettings = GetViewSettings(DevContext, World);    
     
-    PushRenderBufferCameraViewportAndScissor(DevContext->Graphics, RenderBuffer, Camera);
+    PushRenderBufferViewportScissorAndView(DevContext->Graphics, RenderBuffer, &ViewSettings);
     PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);                
     
     switch(DevContext->ViewModeType)
     {
         case VIEW_MODE_TYPE_LIT:
         {                        
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, Camera, DevContext->Game->Assets);                                                         
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets);                                                         
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
@@ -344,7 +310,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, Camera, DevContext->Game->Assets);            
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets);            
             DrawWireframeWorld(DevContext->Graphics, World);                        
         } break;
         
@@ -355,18 +321,14 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
     {
         world_entity* PlayerEntity = GetPlayerEntity(World);
         DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(DevContext->Game, (player*)PlayerEntity->UserData), Magenta3());
-    }
-
-    v3f alexX, alexY;
-    CreateBasis(DevContext->InspectRay, &alexX, &alexY);       
-    DrawOrientedBox(DevContext, Camera->Position + 0.2f * DevContext->InspectRay, V3(0.01f, 0.01f, 10.0f), alexX, alexY, DevContext->InspectRay, White3()); 
-    
+    }    
 }
 
 void DevelopmentRender(dev_context* DevContext)
 {   
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
+    dev_input* Input = &DevContext->Input;
     
     if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
         return;
@@ -376,13 +338,60 @@ void DevelopmentRender(dev_context* DevContext)
     
     world* World = GetCurrentWorld(Game);    
     
-    DrawWorld(DevContext, Game->RenderBuffer, World);
+    view_settings ViewSettings = GetViewSettings(DevContext, World);
     
+    DrawWorld(DevContext, Game->RenderBuffer, World);    
     if(DevContext->DrawOtherWorld)
     {
-        DrawWorld(DevContext, DevContext->RenderBuffer, GetNotCurrentWorld(Game));                
-        PushRenderBufferCameraViewportAndScissor(Graphics, Game->RenderBuffer, GetProperCamera(DevContext, World));        
-    }
+        DrawWorld(DevContext, DevContext->RenderBuffer, GetNotCurrentWorld(Game));                      
+        PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
+    }    
+    
+    if(DevContext->SelectObjects)
+    {
+        if(!IsDown(Input->Alt))
+        {
+            if(IsPressed(Input->LMB))
+            {
+                //For not just getting the player entity. need to change to cast the ray and get the intersected object
+                i32 Height = Graphics->RenderDim.height;
+                i32 Width = Graphics->RenderDim.width;
+                f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
+                f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
+                f32 z = 1.0f;
+                v3f ray_nds = V3(x, y, z);
+                v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
+                m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+                v4f ray_eye =  ray_clip * Inverse(Perspective);
+                ray_eye = V4(ray_eye.xy, -1.0, 0.0);
+                v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
+                ray_wor = Normalize(ray_wor);
+                
+                
+                f32 t = INFINITY;
+                FOR_EACH(Entity, &World->EntityPool)
+                {
+                    f32 tempt = INFINITY, tempu = INFINITY, tempv = INFINITY;
+                    if(Entity->Mesh)
+                    {
+                        if(IsRayIntersectingEntity(ViewSettings.Position, ray_wor, Entity, &tempt, &tempu, &tempv))
+                        {
+                            if(tempt < t)
+                            {
+                                t = tempt;
+                                DevContext->SelectedObject = Entity;
+                            }
+                        }
+                    }
+                }
+                DevContext->InspectRay = ray_wor;
+            }
+            if(IsPressed(Input->MMB))
+            {
+                DevContext->SelectedObject = nullptr;
+            }
+        }    
+    }        
     
     PushDepth(Graphics, false);    
     for(u32 PrimitiveIndex = 0; PrimitiveIndex < DevContext->DebugPrimitives.Size; PrimitiveIndex++)

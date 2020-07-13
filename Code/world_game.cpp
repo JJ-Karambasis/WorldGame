@@ -93,12 +93,15 @@ EXPORT GAME_TICK(Tick)
             CreatePlayer(Game, WorldIndex, V3(-1.0f, 0.0f, 0.0f), V3(PLAYER_RADIUS, PLAYER_RADIUS, PLAYER_HEIGHT), &Game->Assets->Material_DiffuseC_SpecularC, &Game->Assets->PlayerMesh);
             
             world_entity* PlayerEntity = GetPlayerEntity(World);
-            camera* Camera = &World->Camera;
+            game_camera* Camera = &World->Camera;
             
-            Camera->Position = PlayerEntity->Position;
-            Camera->FocalPoint = PlayerEntity->Position;
-            Camera->Position.z += 6.0f;
-            Camera->Orientation = IdentityM3();                
+            Camera->Target = PlayerEntity->Position;
+            
+            Camera->Coordinates = SphericalCoordinates(6, TO_RAD(-90.0f), TO_RAD(35.0f));
+            
+            Camera->FieldOfView = TO_RAD(65.0f);                        
+            Camera->ZNear = CAMERA_ZNEAR;
+            Camera->ZFar = CAMERA_ZFAR;
             
             World->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
             World->JumpingQuads[0].Dimensions = V2(1.0f, 2.0f);
@@ -198,8 +201,10 @@ EXPORT GAME_TICK(Tick)
     
     if(NOT_IN_DEVELOPMENT_MODE())
     {   
-        world* World = GetCurrentWorld(Game);
-        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &World->Camera, Game->Assets);        
+        world* World = GetCurrentWorld(Game);        
+        view_settings ViewSettings = GetViewSettings(&World->Camera);        
+        
+        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &ViewSettings, Game->Assets);        
         PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Graphics->RenderDim);
     }    
 }

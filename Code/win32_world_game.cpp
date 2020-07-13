@@ -888,10 +888,10 @@ char* Win32_ConvertToStandard(wchar_t* String)
 void Platform_InitImGui(void* PlatformData)
 {    
     IMGUI_CHECKVERSION();
-    ImGuiContext* Context = ImGui::CreateContext();
-    ImGui::StyleColorsDark();
+    ImGuiContext* Context = CreateContext();
+    StyleColorsDark();
     
-    ImGuiIO& IO = ImGui::GetIO();
+    ImGuiIO& IO = GetIO();
     IO.BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
     IO.BackendPlatformName = "world_game_win32_platform";
     IO.ImeWindowHandle = (HWND)PlatformData;
@@ -923,7 +923,7 @@ void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* 
 {
     HWND Window = (HWND)PlatformData;
     
-    ImGuiIO* IO = &ImGui::GetIO();
+    ImGuiIO* IO = &GetIO();
     
     IO->DisplaySize = ImVec2((f32)RenderDim.width, (f32)RenderDim.height);
     IO->DeltaTime = dt;
@@ -1035,10 +1035,10 @@ string Platform_FindNewFrameRecordingPath()
 
 b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
-    if(!ImGui::GetCurrentContext())
+    if(!GetCurrentContext())
         return false;
     
-    ImGuiIO& IO = ImGui::GetIO();
+    ImGuiIO& IO = GetIO();
     
     switch(Message)
     {
@@ -1052,7 +1052,7 @@ b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             if (Message == WM_RBUTTONDOWN || Message == WM_RBUTTONDBLCLK) { button = 1; }
             if (Message == WM_MBUTTONDOWN || Message == WM_MBUTTONDBLCLK) { button = 2; }
             if (Message == WM_XBUTTONDOWN || Message == WM_XBUTTONDBLCLK) { button = (GET_XBUTTON_WPARAM(WParam) == XBUTTON1) ? 3 : 4; }
-            if (!ImGui::IsAnyMouseDown() && GetCapture() == NULL)
+            if (!IsAnyMouseDown() && GetCapture() == NULL)
                 SetCapture(Window);
             IO.MouseDown[button] = true;                    
         } break;
@@ -1068,7 +1068,7 @@ b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             if (Message == WM_MBUTTONUP) { Button = 2; }
             if (Message == WM_XBUTTONUP) { Button = (GET_XBUTTON_WPARAM(WParam) == XBUTTON1) ? 3 : 4; }
             IO.MouseDown[Button] = false;
-            if (!ImGui::IsAnyMouseDown() && GetCapture() == Window)
+            if (!IsAnyMouseDown() && GetCapture() == Window)
                 ReleaseCapture();                                        
         } break;
         

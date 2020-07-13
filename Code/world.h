@@ -128,7 +128,7 @@ struct world
 {   
     u32 WorldIndex;
     world_entity_pool EntityPool;
-    camera Camera;
+    game_camera Camera;
     player Player;    
     
     jumping_quad JumpingQuads[2];

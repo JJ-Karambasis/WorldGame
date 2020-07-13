@@ -8,10 +8,19 @@
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
 #define MAX_POINT_LIGHT_COUNT 9
 
-#define SHADOW_MAP_WIDTH 1024
-#define SHADOW_MAP_HEIGHT 1024
+#define SHADOW_MAP_WIDTH 512
+#define SHADOW_MAP_HEIGHT 512
 
 typedef i64 graphics_texture_id;
+
+struct view_settings
+{
+    v3f Position;
+    m3 Orientation;
+    f32 FieldOfView;
+    f32 ZNear;
+    f32 ZFar;
+};
 
 enum graphics_vertex_format
 {
