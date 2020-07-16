@@ -8,8 +8,8 @@
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
 #define MAX_POINT_LIGHT_COUNT 9
 
-#define SHADOW_MAP_WIDTH 512
-#define SHADOW_MAP_HEIGHT 512
+#define SHADOW_MAP_WIDTH (512*2)
+#define SHADOW_MAP_HEIGHT (512*2)
 
 typedef i64 graphics_texture_id;
 

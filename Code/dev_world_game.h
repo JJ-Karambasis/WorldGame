@@ -26,6 +26,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #include "imgui/imgui.h"
 #include "camera.h"
 #include "input.h"
+#include "assets.h"
 #include "dev_frame_recording.h"
 
 struct dev_input
@@ -56,6 +57,14 @@ struct dev_mesh
 {
     i64 MeshID;
     u32 IndexCount;
+};
+
+struct dev_capsule_mesh
+{    
+    i64 MeshID;
+    u32 CapIndexCount;
+    u32 CapVertexCount;
+    u32 BodyIndexCount;    
 };
 
 struct debug_point
@@ -117,13 +126,13 @@ struct dev_context
     b32 DrawOtherWorld;
     b32 SelectObjects;              
     b32 DrawFrames;
-    b32 DrawPlayerCollisionVolume;
+    b32 DrawColliders;
     view_mode_type ViewModeType;    
     
     graphics_render_buffer* RenderBuffer;
     
     frame_recording FrameRecording;
-        
+    
     game_information GameInformation;
     
     dev_input Input;    
@@ -132,6 +141,8 @@ struct dev_context
     u32 ImGuiMeshCount;
     i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
+    dev_capsule_mesh LineCapsuleMesh;
+    
     dev_mesh LineBoxMesh;
     dev_mesh LineSphereMesh;    
     dev_mesh TriangleBoxMesh;
@@ -139,7 +150,7 @@ struct dev_context
     dev_mesh TriangleCylinderMesh;
     dev_mesh TriangleConeMesh;
     dev_mesh TriangleArrowMesh;
-    
+        
     dynamic_array<debug_primitive> DebugPrimitives;
     
     arena LogStorage;
@@ -207,6 +218,13 @@ inline void DebugLog(dev_context* DevContext, char* Format, ...)
     Append(&DevContext->Logs, FormatString(Format, Args, &DevContext->LogStorage));    
     va_end(Args);
     CONSOLE_LOG(DevContext->Logs[DevContext->Logs.Size-1].Data);
+}
+
+inline u32 
+ConvexHullIndexCount(convex_hull* Hull)
+{
+    u32 Result = Hull->FaceCount*3*2;
+    return Result;
 }
 
 #else

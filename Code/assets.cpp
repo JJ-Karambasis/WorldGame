@@ -41,6 +41,45 @@ animation_clip LoadAnimation(assets* Assets, char* File)
     return Result;
 }
 
+convex_hull LoadConvexHull(assets* Assets, char* File)
+{
+    ASSERT(StringEquals(GetFileExtension(File), "fbx"));
+    fbx_context FBX = FBX_LoadFile(File);
+    convex_hull Result = FBX_LoadFirstConvexHull(&FBX, &Assets->Storage);    
+    ASSERT(IsAssetValid(&Result));
+    
+#if DEVELOPER_BUILD    
+    graphics* Graphics = Assets->Graphics;
+    v3f* Vertices = PushArray(Result.VertexCount, v3f, Clear, 0);    
+    u32 IndexCount = ConvexHullIndexCount(&Result);
+    u16* Indices = PushArray(IndexCount, u16, Clear, 0);
+    
+    for(u32 VertexIndex = 0; VertexIndex < Result.VertexCount; VertexIndex++)
+        Vertices[VertexIndex] = Result.Vertices[VertexIndex].V;
+    
+    u32 Index = 0;
+    for(u32 FaceIndex = 0; FaceIndex < Result.FaceCount; FaceIndex++)
+    {
+        convex_face* Face = Result.Faces + FaceIndex;
+        
+        i32 Edge = Face->Edge;
+        do
+        {
+            Indices[Index++] = (u16)Result.Edges[Edge].Vertex;
+            Indices[Index++] = (u16)Result.Edges[Result.Edges[Edge].EdgePair].Vertex;
+            Edge = Result.Edges[Edge].NextEdge;
+        } while (Edge != Face->Edge);        
+    }
+    
+    ASSERT(Index == IndexCount);        
+    Result.GDIHandle = Graphics->AllocateMesh(Graphics, Vertices, sizeof(v3f)*Result.VertexCount, GRAPHICS_VERTEX_FORMAT_P3, 
+                                              Indices, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);    
+    
+#endif
+    
+    return Result;
+}
+
 audio 
 LoadAudio(assets* Assets, char* File)
 {

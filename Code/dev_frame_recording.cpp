@@ -13,8 +13,8 @@ void ReadFrame(dev_context* DevContext, u32 FrameIndex)
     Game->dt = Frame->dt;
     *Game->Input = Frame->Input;
     
-    world_entity* PlayerEntity0 = GetPlayerEntity(Game, 0);
-    world_entity* PlayerEntity1 = GetPlayerEntity(Game, 1);
+    world_entity* PlayerEntity0 = GetWorld(Game, 0)->PlayerEntity;
+    world_entity* PlayerEntity1 = GetWorld(Game, 1)->PlayerEntity;
     
     PlayerEntity0->Position       = Frame->PlayerPosition[0];
     PlayerEntity0->Velocity       = Frame->PlayerVelocity[0];
@@ -167,8 +167,8 @@ void DevelopmentRecordFrame(dev_context* DevContext, game* Game)
         Frame.dt = Game->dt;
         Frame.Input = *Input; 
         
-        world_entity* PlayerEntity0 = GetPlayerEntity(Game, 0);
-        world_entity* PlayerEntity1 = GetPlayerEntity(Game, 1);
+        world_entity* PlayerEntity0 = GetWorld(Game, 0)->PlayerEntity;
+        world_entity* PlayerEntity1 = GetWorld(Game, 1)->PlayerEntity;
         
         Frame.PlayerPosition[0] = PlayerEntity0->Position;
         Frame.PlayerPosition[1] = PlayerEntity1->Position;

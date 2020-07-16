@@ -27,12 +27,12 @@ struct camera
     f32 Distance;
 };
 
-inline rigid_transform 
+inline rigid_transform_matrix 
 GetCameraTransform(game_camera* Camera)
 {
-    rigid_transform Result = {};
-    Result.Position = Camera->Target+ToCartesianCoordinates(Camera->Coordinates);
-    Result.Orientation = CreateBasis(Normalize(Result.Position-Camera->Target));    
+    rigid_transform_matrix Result = {};
+    Result.Translation = Camera->Target+ToCartesianCoordinates(Camera->Coordinates);
+    Result.Orientation = CreateBasis(Normalize(Result.Translation-Camera->Target));       
     return Result;
 }
 
@@ -40,8 +40,8 @@ inline view_settings
 GetViewSettings(game_camera* Camera)
 {
     view_settings Result = {};
-    rigid_transform CameraTransform = GetCameraTransform(Camera);            
-    Result.Position = CameraTransform.Position;
+    rigid_transform_matrix CameraTransform = GetCameraTransform(Camera);            
+    Result.Position = CameraTransform.Translation;
     Result.Orientation = CameraTransform.Orientation;
     Result.FieldOfView = Camera->FieldOfView;
     Result.ZNear = Camera->ZNear;

@@ -85,8 +85,8 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     
     ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
-    ImGui::Checkbox("Draw Frames", (bool*)&DevContext->DrawFrames);
-    ImGui::Checkbox("Draw Player Collision Volume", (bool*)&DevContext->DrawPlayerCollisionVolume);
+    ImGui::Checkbox("Draw Frames", (bool*)&DevContext->DrawFrames);    
+    ImGui::Checkbox("Draw colliders", (bool*)&DevContext->DrawColliders);    
     ImGui::Checkbox("Inspect Objects", (bool*)&DevContext->SelectObjects);  
     
     local b32 Open = true;
@@ -94,8 +94,8 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     {
         game_information* GameInformation = &DevContext->GameInformation;
         
-        world_entity* PlayerEntity0 = GetPlayerEntity(&Game->Worlds[0]);
-        world_entity* PlayerEntity1 = GetPlayerEntity(&Game->Worlds[1]);
+        world_entity* PlayerEntity0 = Game->Worlds[0].PlayerEntity;
+        world_entity* PlayerEntity1 = Game->Worlds[1].PlayerEntity;
         
         v3f PlayerPosition0 = PlayerEntity0->Position;
         v3f PlayerPosition1 = PlayerEntity1->Position;

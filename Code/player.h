@@ -2,7 +2,7 @@
 #define PLAYER_H
 
 #define PLAYER_RADIUS 0.35f
-#define PLAYER_HEIGHT 1.0f
+#define PLAYER_HEIGHT 1.3f
 
 struct player
 {    
@@ -10,14 +10,6 @@ struct player
     v3f Radius;        
     b32 IsJumping;
     //animation_controller AnimationController;        
-};
-
-struct collision_result
-{
-    b32 FoundCollision;    
-    v3f ContactPoint;
-    plane3D SlidingPlane;
-    f32 t;
 };
 
 struct jumping_quad

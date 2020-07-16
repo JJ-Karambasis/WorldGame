@@ -2,6 +2,7 @@
 #include "audio.cpp"
 #include "geometry.cpp"
 #include "animation.cpp"
+#include "collision_detection.cpp"
 #include "world.cpp"
 #include "player.cpp"
 
@@ -733,6 +734,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     dev_context DevContext = {};
     DevContext.InDevelopmentMode = true;
     DevContext.PlatformData = PlatformData;
+    DevContext.Graphics = Graphics;
+    DevContext.Game = &Game;
     
     DevPointer = &DevContext;
 #endif

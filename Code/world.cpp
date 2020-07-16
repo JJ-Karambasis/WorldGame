@@ -50,13 +50,6 @@ IsCurrentWorldIndex(game* Game, u32 WorldIndex)
     return Result;
 }
 
-inline player* 
-GetPlayer(game* Game, u32 WorldIndex)
-{
-    player* Player = &Game->Worlds[WorldIndex].Player;
-    return Player;
-}
-
 inline i64 
 GetIndex(world_entity_pool* Pool, i64 ID)
 {
@@ -113,21 +106,6 @@ GetEntityOrNull(game* Game, world_entity_id EntityID)
     return Result;    
 }
 
-inline world_entity*
-GetPlayerEntity(world* World)
-{    
-    world_entity* Result = GetEntity(World, World->Player.EntityID);
-    return Result;
-}
-
-inline world_entity*
-GetPlayerEntity(game* Game, u32 WorldIndex)
-{
-    world* World = GetWorld(Game, WorldIndex);        
-    world_entity* Result = GetPlayerEntity(World);
-    return Result;
-}
-
 inline v3f
 GetPlayerPosition(game* Game, player* Player)
 {
@@ -148,6 +126,42 @@ void FreeEntity(game* Game, world_entity_id ID)
     FreeFromPool(&World->EntityPool, ID.ID);
 }
 
+world_entity*
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Euler, graphics_material* Material, mesh* Mesh, collision_volume CollisionVolume, void* UserData=NULL)
+{
+    world* World = GetWorld(Game, WorldIndex);
+    
+    i64 EntityID = AllocateFromPool(&World->EntityPool);
+    world_entity* Entity = GetByID(&World->EntityPool, EntityID);
+    
+    Entity->ID = MakeEntityID(EntityID, WorldIndex);
+    
+    Entity->Type = Type;
+    Entity->Transform = CreateRigidTransform(Position, Euler);
+    Entity->Material = Material;
+    Entity->Mesh = Mesh;
+    Entity->CollisionVolume = CollisionVolume;
+    Entity->UserData = UserData;
+    Entity->LinkID = InvalidEntityID();
+    
+    return Entity;
+}
+
+world_entity*
+CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, graphics_material* Material, mesh* Mesh, collision_volume CollisionVolume, void* UserData=NULL)
+{
+    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_STATIC, WorldIndex, Position, Euler, Material, Mesh, CollisionVolume, UserData);
+    return Result;
+}
+
+world_entity* 
+CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, graphics_material* Material, mesh* Mesh)
+{
+    collision_volume Volume = CreateCapsuleCollisionVolume(V3(), Radius, Height);
+    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(PI*0.2f, 0.0f, 0.0f), Material, Mesh, Volume);
+    return Result;    
+}
+
 world_entity_id
 CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, graphics_material* Material, mesh* Mesh, walkable_mesh* WalkableMesh = NULL, void* UserData=NULL)
 {
@@ -159,7 +173,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     Entity->ID = MakeEntityID(EntityID, WorldIndex);
     
     Entity->Type = Type;    
-    Entity->Transform = CreateSQT(Position, Scale, Euler);
+    Entity->Transform = CreateRigidTransform(Position, Euler);
     Entity->Material = Material;
     Entity->Mesh = Mesh;
     Entity->WalkableMesh = WalkableMesh;
@@ -190,39 +204,6 @@ CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f S
     CreateEntity(Game, Type, 1, Position, Scale, Euler, Material, Mesh, WalkableMesh);    
 }
 
-world_entity_id 
-CreateBoxEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Dim, graphics_material* Material)
-{
-    world_entity_id Result = CreateEntity(Game, Type, WorldIndex, Position, Dim, V3(), Material, &Game->Assets->BoxGraphicsMesh);    
-    world_entity* Entity = GetEntity(Game, Result);
-    
-    Entity->Collider.Type = COLLIDER_TYPE_ALIGNED_BOX;
-    Entity->Collider.AlignedBox.CenterP = {};
-    Entity->Collider.AlignedBox.CenterP.z = 0.5f;
-    Entity->Collider.AlignedBox.Dim = V3(1.0f, 1.0f, 1.0f);    
-    
-    return Result;
-}
-
-inline blocker*
-CreateBlocker(game* Game, u32 WorldIndex, v3f P0, f32 Height0, v3f P1, f32 Height1)
-{
-    blocker* Blocker = AllocateListEntry(&GetWorld(Game, WorldIndex)->Blockers, &Game->GameStorage);
-    Blocker->P0 = P0;
-    Blocker->P1 = P1;
-    Blocker->Height0 = Height0;
-    Blocker->Height1 = Height1;
-    
-    return Blocker;
-}
-
-inline void 
-CreateBlockersInBothWorlds(game* Game, v3f P0, f32 Height0, v3f P1, f32 Height1)
-{
-    CreateBlocker(Game, 0, P0, Height0, P1, Height1);
-    CreateBlocker(Game, 1, P0, Height0, P1, Height1);
-}
-
 inline f32 
 TrueHeight(f32 Height, f32 Radius)
 {
@@ -233,7 +214,7 @@ TrueHeight(f32 Height, f32 Radius)
 void 
 OnWorldSwitch(game* Game, u32 LastWorldIndex, u32 CurrentWorldIndex)
 {    
-    GetPlayerEntity(Game, LastWorldIndex)->Velocity = {};
+    GetWorld(Game, LastWorldIndex)->PlayerEntity->Velocity = {};    
 }
 
 void 
@@ -249,14 +230,13 @@ UpdateWorld(game* Game)
         switch(Entity->Type)
         {
             case WORLD_ENTITY_TYPE_PLAYER:
-            {
-                ASSERT(Entity->UserData);
+            {                
                 UpdatePlayer(Game, Entity);                
             } break;                        
         }                        
     }    
     
-    world_entity* PlayerEntity = GetEntity(World, World->Player.EntityID);    
+    world_entity* PlayerEntity = World->PlayerEntity;
     
     game_camera* Camera = &World->Camera;    
     Camera->Target = PlayerEntity->Position;        

@@ -11,34 +11,10 @@ enum world_entity_type
     WORLD_ENTITY_TYPE_PUSHABLE
 };
 
-enum collider_type 
+enum world_entity_state
 {
-    COLLIDER_TYPE_UNKNOWN,
-    COLLIDER_TYPE_ALIGNED_BOX,
-    COLLIDER_TYPE_VERTICAL_CAPSULE
-};
-
-struct vertical_capsule
-{
-    v3f P;            
-    f32 Radius;
-    f32 Height;
-};
-
-struct aligned_box
-{
-    v3f CenterP;
-    v3f Dim;
-};
-
-struct collider
-{
-    collider_type Type;
-    union
-    {
-        aligned_box AlignedBox;
-        vertical_capsule VerticalCapsule;        
-    };
+    WORLD_ENTITY_STATE_NOTHING,
+    WORLD_ENTITY_STATE_JUMPING
 };
 
 struct world_entity_id
@@ -54,26 +30,28 @@ inline b32 IsInvalidEntityID(world_entity_id ID) { return (ID.ID == 0) || ((ID.W
 struct world_entity
 {
     world_entity_type Type;            
+    
     union
     {
-        sqt Transform;
+        rigid_transform Transform;
         struct
         {
-            quaternion Orientation;
             v3f Position;
-            v3f Scale;
+            quaternion Orientation;
         };
     };
     
-    graphics_material* Material;
-    
-    v3f Velocity;        
-    
+    graphics_material* Material;    
+    v3f Velocity;            
     v3f CollidedNormal;
-    collider Collider;
+    
+    //TODO(JJ): Multiple collision volumes
+    collision_volume CollisionVolume;    
     
     world_entity_id ID;
     world_entity_id LinkID;        
+    
+    world_entity_state State;
     
     mesh* Mesh;
     walkable_mesh* WalkableMesh;
@@ -92,34 +70,10 @@ enum player_state
     PLAYER_STATE_PUSHING
 };
 
-struct time_of_impact_result
-{
-    time_result_2D TimeResult;
-    world_entity_id HitEntityID;    
-};
-
 struct pushing_state
 {
     world_entity_id EntityID;    
     v2f Direction;
-};
-
-struct blocker
-{
-    v3f P0;
-    f32 Height0;
-    v3f P1;
-    f32 Height1;
-    
-    blocker* Next;
-    blocker* Prev;
-};
-
-struct blocker_list
-{
-    blocker* First;
-    blocker* Last;
-    u32 Count;
 };
 
 #include "player.h"
@@ -128,12 +82,9 @@ struct world
 {   
     u32 WorldIndex;
     world_entity_pool EntityPool;
-    game_camera Camera;
-    player Player;    
-    
-    jumping_quad JumpingQuads[2];
-    
-    list<blocker> Blockers;    
+    game_camera Camera;    
+    world_entity* PlayerEntity;        
+    jumping_quad JumpingQuads[2];        
 };
 
 

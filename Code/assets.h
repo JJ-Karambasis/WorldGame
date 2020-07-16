@@ -123,21 +123,21 @@ struct convex_face;
 
 struct convex_edge
 {
-    convex_vertex* Vertex;
-    convex_edge* Pair;
-    convex_edge* Face;
-    convex_edge* Next;
+    i32 Vertex;
+    i32 EdgePair;
+    i32 Face;
+    i32 NextEdge;    
 };
 
 struct convex_vertex
-{
+{    
     v3f V;
-    convex_edge* Edge;
+    i32 Edge;    
 };
 
 struct convex_face
 {
-    convex_edge* Edge;
+    i32 Edge;    
 };
 
 struct convex_hull
@@ -148,50 +148,34 @@ struct convex_hull
     
     convex_vertex* Vertices;
     convex_edge* Edges;
-    convex_face* Faces;
+    convex_face* Faces;    
+        
+#if DEVELOPER_BUILD
+    i64 GDIHandle;
+#endif
 };
 
-struct triangle
+inline b32 IsAssetValid(convex_hull* Hull)
 {
-    u32 V0;
-    u32 V1;
-    u32 V2;
-    
-    triangle* AdjTriangles[3];
-};
-
-struct triangle_mesh
-{
-    v3f* Vertices;
-    triangle* Triangles;
-};
-
-enum asset_type
-{
-    ASSET_TYPE_UNKNOWN,
-    ASSET_TYPE_MESH
-};
-
-struct asset
-{
-    asset_type Type;
-};
-
-struct mesh_asset : public asset
-{
-    
-};
+    b32 Result = Hull->VertexCount && Hull->EdgeCount && Hull->FaceCount;
+    return Result;
+}
 
 struct assets
 {
     arena Storage;
     graphics* Graphics;
     
-    mesh BoxGraphicsMesh;
+    mesh BoxMesh;
     walkable_mesh BoxWalkableMesh;
     
     mesh QuadGraphicsMesh;
     walkable_mesh QuadWalkableMesh;
+    
+    mesh FloorMesh;
+    walkable_mesh FloorWalkableMesh;
+    
+    mesh TorusMesh;
     
     mesh PlayerMesh;
     
@@ -215,7 +199,6 @@ struct assets
     graphics_material Material_DiffuseT_SpecularT_Normal;
     graphics_material Material_DiffuseT_SpecularT_Normal_2;
     
-    triangle_mesh BoxTriangleMesh;
     convex_hull BoxConvexHull;
     
 #if 0 

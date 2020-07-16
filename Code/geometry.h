@@ -291,13 +291,20 @@ inline plane3D CreatePlane3D(triangle3D Triangle)
     return Result;
 }
 
+inline f32 FindPlaneDistance(v3f Origin, v3f Normal)
+{
+    f32 Result = -(Normal.x*Origin.x + Normal.y*Origin.y + Normal.z*Origin.z);
+    return Result;
+}
+
 inline plane3D CreatePlane3D(v3f Origin, v3f Normal)
 {
     plane3D Result;
     Result.Normal = Normalize(Normal);
-    Result.D = -(Result.Normal.x*Origin.x + Result.Normal.y*Origin.y + Result.Normal.z*Origin.z);
+    Result.D = FindPlaneDistance(Origin, Result.Normal);    
     return Result;
 }
+
 
 inline triangle3D InvalidTriangle3D()
 {
@@ -324,6 +331,21 @@ inline triangle3D TransformTriangle3D(v3f* P, sqt Transform)
 }
 
 inline triangle3D TransformTriangle3D(triangle3D Triangle, sqt Transform)
+{
+    triangle3D Result = TransformTriangle3D(Triangle.P, Transform);    
+    return Result;
+}
+
+inline triangle3D TransformTriangle3D(v3f* P, rigid_transform Transform)
+{
+    triangle3D Result;
+    Result.P[0] = TransformV3(P[0], Transform);
+    Result.P[1] = TransformV3(P[1], Transform);
+    Result.P[2] = TransformV3(P[2], Transform);
+    return Result;
+}
+
+inline triangle3D TransformTriangle3D(triangle3D Triangle, rigid_transform Transform)
 {
     triangle3D Result = TransformTriangle3D(Triangle.P, Transform);    
     return Result;

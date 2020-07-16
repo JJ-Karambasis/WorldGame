@@ -71,6 +71,44 @@ void CreateDevTriangleArrowMesh(dev_context* DevContext, u16 CircleSampleCount, 
     DevContext->TriangleArrowMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
 }
 
+void CreateDevLineCapsuleMesh(dev_context* DevContext, f32 Radius, u16 CircleSampleCount)
+{    
+    mesh_generation_result CapResult = GenerateLineHemisphere(GetDefaultArena(), Radius, CircleSampleCount);    
+    mesh_generation_result BodyResult = AllocateMeshGenerationResult(GetDefaultArena(), 8, 8);
+    
+    BodyResult.Vertices[0] = {V3( 1.0f*Radius,  0.0f, -0.5f)};
+    BodyResult.Vertices[1] = {V3( 1.0f*Radius,  0.0f,  0.5f)};
+    BodyResult.Vertices[2] = {V3( 0.0f,  1.0f*Radius, -0.5f)};
+    BodyResult.Vertices[3] = {V3( 0.0f,  1.0f*Radius,  0.5f)};
+    BodyResult.Vertices[4] = {V3(-1.0f*Radius,  0.0f, -0.5f)};
+    BodyResult.Vertices[5] = {V3(-1.0f*Radius,  0.0f,  0.5f)};
+    BodyResult.Vertices[6] = {V3( 0.0f, -1.0f*Radius, -0.5f)};
+    BodyResult.Vertices[7] = {V3( 0.0f, -1.0f*Radius,  0.5f)};
+    
+    BodyResult.Indices[0] = 0;
+    BodyResult.Indices[1] = 1;
+    BodyResult.Indices[2] = 2;
+    BodyResult.Indices[3] = 3;
+    BodyResult.Indices[4] = 4;
+    BodyResult.Indices[5] = 5;
+    BodyResult.Indices[6] = 6;
+    BodyResult.Indices[7] = 7;
+    
+    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(GetDefaultArena(), CapResult.VertexCount+BodyResult.VertexCount, 
+                                                                               CapResult.IndexCount+BodyResult.IndexCount);
+    
+    ptr CapResultVerticesSize = sizeof(vertex_p3)*CapResult.VertexCount;
+    ptr CapResultIndicesSize = sizeof(u16)*CapResult.IndexCount;
+    CopyMemory(MeshGenerationResult.Vertices, CapResult.Vertices, CapResultVerticesSize);
+    CopyMemory(MeshGenerationResult.Indices, CapResult.Indices, CapResultIndicesSize);
+    CopyMemory((u8*)MeshGenerationResult.Vertices+CapResultVerticesSize, BodyResult.Vertices, sizeof(vertex_p3)*BodyResult.VertexCount);
+    CopyMemory((u8*)MeshGenerationResult.Indices+CapResultIndicesSize, BodyResult.Indices, sizeof(u16)*BodyResult.IndexCount);
+    
+    DevContext->LineCapsuleMesh.CapIndexCount = CapResult.IndexCount;
+    DevContext->LineCapsuleMesh.CapVertexCount = CapResult.VertexCount;
+    DevContext->LineCapsuleMesh.BodyIndexCount = BodyResult.IndexCount;
+    DevContext->LineCapsuleMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+}
 
 void DrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
 {
@@ -122,6 +160,26 @@ void DrawLineBoxMinMax(dev_context* DevContext, v3f Min, v3f Max, c3 Color)
     v3f Dim = Max-Min;
     v3f P = V3(Min.xy + Dim.xy*0.5f, Min.z);    
     DrawLineBox(DevContext, P, Dim, Color);    
+}
+
+void DrawLineCapsule(dev_context* DevContext, v3f P0, v3f P1, f32 Radius, c3 Color)
+{
+    v3f ZAxis = P0-P1;
+    f32 ZScale = Magnitude(ZAxis);
+    ZAxis /= ZScale;
+    
+    dev_capsule_mesh* Mesh = &DevContext->LineCapsuleMesh;
+    
+    
+    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, TransformM4(P0, CreateBasis(ZAxis), V3(Radius, Radius, Radius)), 
+                     Color, Mesh->CapIndexCount, 0, 0);
+    
+    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, TransformM4(P1, CreateBasis(-ZAxis), V3(Radius, Radius, Radius)), 
+                     Color, Mesh->CapIndexCount, 0, 0);
+    
+    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, TransformM4(P1 + (ZAxis*ZScale*0.5f), CreateBasis(ZAxis), V3(Radius, Radius, ZScale)),
+                     Color, Mesh->BodyIndexCount, Mesh->CapIndexCount, Mesh->CapVertexCount);
+    
 }
 
 void DrawLineEllipsoid(dev_context* DevContext, v3f CenterP, v3f Radius, c3 Color)
@@ -317,11 +375,46 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
         INVALID_DEFAULT_CASE;        
     }
     
+    PushDepth(DevContext->Graphics, false);
+    
+#if 1 
+    if(DevContext->DrawColliders)
+    {
+        FOR_EACH(Entity, &World->EntityPool)
+        {            
+            dev_mesh Mesh = {};                        
+            switch(Entity->CollisionVolume.Type)
+            {
+                case COLLISION_VOLUME_TYPE_SPHERE:
+                {
+                    
+                } break;
+                
+                case COLLISION_VOLUME_TYPE_CAPSULE:
+                {
+                    capsule Capsule = TransformCapsule(&Entity->CollisionVolume.Capsule, Entity->Transform);
+                    DrawLineCapsule(DevContext, Capsule.P0, Capsule.P1, Capsule.Radius, Blue3());
+                    
+                    
+                } break;
+                
+                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                {
+                } break;
+                
+                INVALID_DEFAULT_CASE;
+            }
+        }                        
+    }   
+#endif
+    PushDepth(DevContext->Graphics, true);
+#if 0 
     if(DevContext->DrawPlayerCollisionVolume)
     {
         world_entity* PlayerEntity = GetPlayerEntity(World);
         DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(DevContext->Game, (player*)PlayerEntity->UserData), Magenta3());
     }    
+#endif
 }
 
 void DevelopmentRender(dev_context* DevContext)
@@ -424,7 +517,7 @@ void DevelopmentRender(dev_context* DevContext)
         FOR_EACH(Entity, &World->EntityPool)
         {
             m3 Orientation = ToMatrix3(Entity->Transform.Orientation);
-            DrawFrame(DevContext, Entity->Transform.Position, Orientation.XAxis, Orientation.YAxis, Orientation.ZAxis);
+            DrawFrame(DevContext, Entity->Transform.Translation, Orientation.XAxis, Orientation.YAxis, Orientation.ZAxis);
         }        
     }
     PushDepth(Graphics, true);
@@ -455,6 +548,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         
+        CreateDevLineCapsuleMesh(DevContext, 1.0f, 60);
         CreateDevLineBoxMesh(DevContext);
         CreateDevLineSphereMesh(DevContext, 60);
         CreateDevTriangleBoxMesh(DevContext);

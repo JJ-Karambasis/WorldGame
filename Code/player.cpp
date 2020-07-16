@@ -1,20 +1,10 @@
-void 
-CreatePlayer(game* Game, u32 WorldIndex, v3f Position, v3f Radius, graphics_material* Material, mesh* PlayerMesh)
-{    
-    player* Player = GetPlayer(Game, WorldIndex);    
-    //Player->AnimationController = CreateAnimationController(&Game->GameStorage, &Game->Assets->TestSkeleton);    
-    //Player->AnimationController.PlayingAnimation.Clip = &Game->Assets->TestAnimation;
-    Player->EntityID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f), V3(), Material, PlayerMesh, NULL, Player);    
-    Player->Radius = Radius;    
-}
-
 ellipsoid3D
 GetPlayerEllipsoid(game* Game, player* Player)
 {   
     world_entity* PlayerEntity = GetEntity(Game, Player->EntityID);
     
     ellipsoid3D Result;
-    Result.Radius = Player->Radius * PlayerEntity->Scale;    
+    Result.Radius = Player->Radius;    
     Result.CenterP = V3(PlayerEntity->Position.xy, PlayerEntity->Position.z + Result.Radius.z);        
     return Result;
 }
@@ -22,7 +12,7 @@ GetPlayerEllipsoid(game* Game, player* Player)
 void SetPlayerEllipsoidP(game* Game, player* Player, v3f CenterP)
 {
     world_entity* PlayerEntity = GetEntity(Game, Player->EntityID);
-    f32 ZDim = Player->Radius.z * PlayerEntity->Scale.z;    
+    f32 ZDim = Player->Radius.z;    
     PlayerEntity->Position = V3(CenterP.xy, CenterP.z - ZDim);    
 }
 
@@ -222,7 +212,7 @@ collision_result WorldEllipsoidCollisions(world* World, v3f Position, v3f Radius
     }    
     
     if(Result.FoundCollision)    
-        Result.SlidingPlane = CreatePlane3D(Result.ContactPoint, (Position + Delta*Result.t)-Result.ContactPoint);    
+        Result.Normal = Normalize((Position + Delta*Result.t)-Result.ContactPoint);    
     
     return Result;
 }
@@ -263,8 +253,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
         
         DEBUG_DRAW_QUAD(JumpingQuad->CenterP, Global_WorldZAxis, JumpingQuad->Dimensions, QuadColor);    
     }
-    
-    
+        
     f32 dt = Game->dt;    
     f32 JumpGravity = 20.0f;        
     if(StartJumping)
@@ -283,7 +272,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
         Player->IsJumping = true;
     }
         
-    if(Player->IsJumping)    
+    if(PlayerEntity->State == WORLD_ENTITY_STATE_JUMPING)    
     {
         PlayerEntity->Velocity.z -= (JumpGravity*dt);            
     }
@@ -312,11 +301,14 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
         PlayerEntity->Velocity *= VelocityDamping;
         
         f32 GravityStrength = 60.0f;    
-        PlayerEntity->Velocity.z -= GravityStrength*dt;
+        //PlayerEntity->Velocity.z -= GravityStrength*dt;
     }
     
     v3f MoveDelta = PlayerEntity->Velocity*dt;               
     
+    PlayerEntity->Position += MoveDelta;
+    
+#if 0     
     b32 HasCollided = false;
     {
         ellipsoid3D PlayerEllipsoid = GetPlayerEllipsoid(Game, Player);    
@@ -327,7 +319,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
             v3f DestinationPoint = ESpacePosition + ESpaceMoveDelta;
             plane3D FirstPlane = InvalidPlane3D();        
             for(u32 Iterations = 0; Iterations < 3; Iterations++)
-            {
+            {                
                 collision_result CollisionResult = WorldEllipsoidCollisions(World, ESpacePosition, PlayerEllipsoid.Radius, ESpaceMoveDelta);
                 if(!CollisionResult.FoundCollision)
                 {
@@ -342,21 +334,23 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
                     f32 ShortenDistance = MaximumF32(Distance-VERY_CLOSE_DISTANCE, 0.0f);                                                
                     ESpacePosition += (Normalize(ESpaceMoveDelta)*ShortenDistance);
                     
+                    plane3D SlidingPlane = CreateSlidingPlane(&CollisionResult);
+                    
                     //NOTE(EVERYONE): Increase the gravity strength by a large amount to prevent climbing on walls that are too steep
-                    if(Dot(CollisionResult.SlidingPlane.Normal, Global_WorldZAxis) < 0.95f)
+                    if(Dot(SlidingPlane.Normal, Global_WorldZAxis) < 0.95f)
                         MoveDelta.z *= 4;                    
                     
                     if(Iterations == 0)
                     {
                         f32 LongRadius = 1.0f + VERY_CLOSE_DISTANCE;
-                        FirstPlane = CollisionResult.SlidingPlane;
+                        FirstPlane = SlidingPlane;
                         
                         DestinationPoint -= (SignedDistance(DestinationPoint, FirstPlane) - LongRadius)*FirstPlane.Normal;
                         ESpaceMoveDelta = DestinationPoint - ESpacePosition;
                     }
                     else if(Iterations == 1)
-                    {
-                        plane3D SecondPlane = CollisionResult.SlidingPlane;
+                    {                        
+                        plane3D SecondPlane = CreateSlidingPlane(&CollisionResult);
                         
                         v3f Crease = Cross(FirstPlane.Normal, SecondPlane.Normal);
                         f32 Displacement = Dot((DestinationPoint - ESpacePosition), Crease);
@@ -367,7 +361,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
                 }
             }                
         }
-                
+        
         {
             v3f ESpaceMoveDelta = V3(0.0f, 0.0f, MoveDelta.z/PlayerEllipsoid.Radius.z);
             v3f DestinationPoint = ESpacePosition + ESpaceMoveDelta;            
@@ -387,19 +381,19 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
                     f32 ShortenDistance = MaximumF32(Distance-VERY_CLOSE_DISTANCE, 0.0f);                
                     
                     //NOTE(EVERYONE): Only apply gravity when collide if the collider is a wall (wall is too steep)
-                    if(Dot(CollisionResult.SlidingPlane.Normal, Global_WorldZAxis) < 0.95f)
+                    if(Dot(CollisionResult.Normal, Global_WorldZAxis) < 0.95f)
                     {                                                            
                         if(Iterations == 0)
                         {
                             f32 LongRadius = 1.0f + VERY_CLOSE_DISTANCE;
-                            FirstPlane = CollisionResult.SlidingPlane;
+                            FirstPlane = CreateSlidingPlane(&CollisionResult);
                             
                             DestinationPoint -= (SignedDistance(DestinationPoint, FirstPlane) - LongRadius)*FirstPlane.Normal;
                             ESpaceMoveDelta = DestinationPoint - ESpacePosition;
                         }
                         else if(Iterations == 1)
                         {
-                            plane3D SecondPlane = CollisionResult.SlidingPlane;
+                            plane3D SecondPlane = CreateSlidingPlane(&CollisionResult);
                             
                             v3f Crease = Cross(FirstPlane.Normal, SecondPlane.Normal);
                             f32 Displacement = Dot((DestinationPoint - ESpacePosition), Crease);
@@ -415,7 +409,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
                     }
                 }
             }
-        }
+        }        
         SetPlayerEllipsoidP(Game, Player, ESpacePosition*PlayerEllipsoid.Radius);    
     }
     
@@ -424,8 +418,6 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
         Player->IsJumping = false;
     }
     
-#if 0 
-        
     animation_controller* Controller = &Player->AnimationController;
     playing_animation* PlayingAnimation = &Controller->PlayingAnimation;    
     skeleton* Skeleton = Controller->Skeleton;

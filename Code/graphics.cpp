@@ -192,16 +192,26 @@ void PushMaterial(graphics* Graphics, graphics_material* Material)
     PushCommand(Graphics, PushCommandMaterial);
 }
 
-void PushDrawMesh(graphics* Graphics, i64 MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawMesh(graphics* Graphics, i64 MeshID, m4 Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_mesh* PushCommandDrawMesh = PushStruct(push_command_draw_mesh, NoClear, 0);
     PushCommandDrawMesh->Type = PUSH_COMMAND_DRAW_MESH;
     PushCommandDrawMesh->MeshID = MeshID;
-    PushCommandDrawMesh->WorldTransform = TransformM4(Transform);
+    PushCommandDrawMesh->WorldTransform = Transform;
     
     DRAW_INFO(PushCommandDrawMesh);
     
     PushCommand(Graphics, PushCommandDrawMesh);
+}
+
+void PushDrawMesh(graphics* Graphics, i64 MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    PushDrawMesh(Graphics, MeshID, TransformM4(Transform), IndexCount, IndexOffset, VertexOffset);
+}
+
+void PushDrawMesh(graphics* Graphics, i64 MeshID, rigid_transform Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    PushDrawMesh(Graphics, MeshID, TransformM4(Transform), IndexCount, IndexOffset, VertexOffset);
 }
 
 void PushDrawSkeletonMesh(graphics* Graphics, i64 MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset, m4* Joints, u32 JointCount)
@@ -235,6 +245,11 @@ void PushDrawUnlitMesh(graphics* Graphics, i64 MeshID, sqt Transform, graphics_d
     PushDrawUnlitMesh(Graphics, MeshID, TransformM4(Transform), DiffuseSlot, IndexCount, IndexOffset, VertexOffset);
 }
 
+void PushDrawUnlitMesh(graphics* Graphics, i64 MeshID, rigid_transform Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    PushDrawUnlitMesh(Graphics, MeshID, TransformM4(Transform), DiffuseSlot, IndexCount, IndexOffset, VertexOffset);
+}
+
 void PushDrawUnlitSkeletonMesh(graphics* Graphics, i64 MeshID, sqt Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset, m4* Joints, u32 JointCount)
 {
     push_command_draw_unlit_skeleton_mesh* PushCommandDrawUnlitSkeletonMesh = PushStruct(push_command_draw_unlit_skeleton_mesh, NoClear, 0);
@@ -261,6 +276,11 @@ void PushDrawLineMesh(graphics* Graphics, i64 MeshID, m4 Transform, c3 Color, u3
 }
 
 void PushDrawLineMesh(graphics* Graphics, i64 MeshID, sqt Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+{
+    PushDrawLineMesh(Graphics, MeshID, TransformM4(Transform), Color, IndexCount, IndexOffset, VertexOffset);
+}
+
+void PushDrawLineMesh(graphics* Graphics, i64 MeshID, rigid_transform Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     PushDrawLineMesh(Graphics, MeshID, TransformM4(Transform), Color, IndexCount, IndexOffset, VertexOffset);
 }

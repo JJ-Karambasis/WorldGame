@@ -37,7 +37,8 @@ struct fbx_context
 {
     FbxScene* Scene;
     node_list MeshNodes;
-    skeleton_list Skeletons;
+    node_list ConvexHullNodes;
+    skeleton_list Skeletons;    
 };
 
 struct vertex_p3_n3_index

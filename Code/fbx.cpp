@@ -119,7 +119,12 @@ fbx_context FBX_LoadFile(const char* Path)
             FBX_AddNode(&SkeletonNodes, Node);
         
         if(FBX_HasAttribute(Node, FbxNodeAttribute::eMesh))
-            FBX_AddNode(&Result.MeshNodes, Node);        
+        {
+            if(BeginsWith(Node->GetName(), "Convex_Hull"))
+                FBX_AddNode(&Result.ConvexHullNodes, Node);
+            else                
+                FBX_AddNode(&Result.MeshNodes, Node);        
+        }
     }
     
     for(u32 SkeletonNodeIndex = 0; SkeletonNodeIndex < SkeletonNodes.Count; SkeletonNodeIndex++)
@@ -154,6 +159,128 @@ b32 ValidateReferenceMode(FbxLayerElement::EReferenceMode ReferenceMode)
     return Result;
 }
 
+convex_hull FBX_LoadFirstConvexHull(fbx_context* Context, arena* Storage)
+{
+    if(Context->ConvexHullNodes.Count == 0)
+        return {};
+    
+    FbxNode* Node = Context->ConvexHullNodes.Ptr[0];
+    
+    v3f GeometricTranslation = V3(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());    
+    m3 Transform = M3(M4(Node->EvaluateGlobalTransform()));
+    
+    FbxMesh* Mesh = Node->GetMesh();
+    
+    u32 VertexCount = Mesh->GetControlPointsCount();        
+    FbxVector4* ControlPoints = Mesh->GetControlPoints();
+    
+    u32 FaceCount = Mesh->GetPolygonCount();
+    u32 EdgeCount = Mesh->GetMeshEdgeCount()*2;
+    
+    convex_hull Result = {};
+    Result.VertexCount = VertexCount;
+    Result.FaceCount = FaceCount;
+    Result.EdgeCount = EdgeCount;
+    
+    Result.Vertices = PushArray(Storage, VertexCount, convex_vertex, Clear, 0);
+    Result.Faces = PushArray(Storage, FaceCount, convex_face, Clear, 0);
+    Result.Edges = PushArray(Storage, EdgeCount, convex_edge, Clear, 0);
+    
+    for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+    {
+        Result.Vertices[VertexIndex].V = (V3(ControlPoints[VertexIndex].Buffer())*Transform) - GeometricTranslation;
+        Result.Vertices[VertexIndex].Edge = -1;
+    }    
+    
+    for(u32 FaceIndex = 0; FaceIndex < FaceCount; FaceIndex++)    
+        Result.Faces[FaceIndex].Edge = -1;    
+    
+    for(u32 EdgeIndex = 0; EdgeIndex < EdgeCount; EdgeIndex++)
+    {
+        Result.Edges[EdgeIndex].Vertex = -1;
+        Result.Edges[EdgeIndex].EdgePair = -1;
+        Result.Edges[EdgeIndex].Face = -1;
+        Result.Edges[EdgeIndex].NextEdge = -1;
+    }
+    
+    hash_map<int_pair, i32> EdgeMap = CreateHashMap<int_pair, i32>(8191);
+    
+    u32 EdgeIndex = 0;
+    for(u32 FaceIndex = 0; FaceIndex < FaceCount; FaceIndex++)
+    {
+        BOOL_CHECK_AND_HANDLE(Mesh->GetPolygonSize(FaceIndex) == 3, "Convex hull must be triangulated.");    
+        convex_face* Face = Result.Faces + FaceIndex;
+        
+        i32 FaceVertices[3] = 
+        {
+            Mesh->GetPolygonVertex(FaceIndex, 0),
+            Mesh->GetPolygonVertex(FaceIndex, 1),
+            Mesh->GetPolygonVertex(FaceIndex, 2)
+        };
+        
+        i32 FaceEdgeIndices[3] = {-1, -1, -1};
+        for(u32 i = 2, j = 0; j < 3; i = j++)
+        {
+            i32 v0 = FaceVertices[i];
+            i32 v1 = FaceVertices[j];
+            
+            convex_vertex* Vertex0 = Result.Vertices + v0;
+            convex_vertex* Vertex1 = Result.Vertices + v1;
+            
+            i32 e0 = -1;
+            i32 e1 = -1;
+            if(EdgeMap.Find({v0,v1}, &e0))
+            {
+                e1 = Result.Edges[e0].EdgePair;
+            }
+            else
+            {
+                e0 = EdgeIndex++;
+                e1 = EdgeIndex++;
+                
+                Result.Edges[e0].EdgePair = e1;
+                Result.Edges[e1].EdgePair = e0;
+                
+                EdgeMap.Insert({v0, v1}, e0);
+                EdgeMap.Insert({v1, v0}, e1);                
+            }
+            
+            convex_edge* Edge0 = Result.Edges + e0;
+            convex_edge* Edge1 = Result.Edges + e1;
+            
+            if(Edge0->Vertex == -1)
+                Edge0->Vertex = v1;
+            
+            if(Edge1->Vertex == -1)
+                Edge1->Vertex = v0;
+            
+            if(Edge0->Face == -1)
+                Edge0->Face = FaceIndex;
+            
+            if(Vertex0->Edge == -1)
+                Vertex0->Edge = e0;
+            
+            if(Face->Edge == -1)
+                Face->Edge = e0;
+            
+            FaceEdgeIndices[i] = e0;           
+        }
+                
+        for(u32 i = 2, j = 0; j < 3; i = j++)
+        {
+            i32 e0 = FaceEdgeIndices[i];
+            i32 e1 = FaceEdgeIndices[j];            
+            Result.Edges[e0].NextEdge = e1;
+        }
+    }
+    
+    ASSERT(EdgeIndex == EdgeCount);
+    return Result;
+    
+    handle_error:
+    return {};
+}
+
 mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
 {
     if(Context->MeshNodes.Count == 0)
@@ -161,11 +288,10 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     
     FbxNode* Node = Context->MeshNodes.Ptr[0];
     
-    v3f GeometricTranslation = V3(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
-    m4 Transform = M4(Node->EvaluateGlobalTransform());
-    Transform.Translation.xyz -= GeometricTranslation;
-    m3 NormalTransform = M3(Transpose(InverseTransformM4(Transform)));
-        
+    v3f GeometricTranslation = V3(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());    
+    m3 Transform = M3(M4(Node->EvaluateGlobalTransform()));        
+    m3 NormalTransform = Transpose(InverseTransformM3(Transform));
+    
     FbxMesh* Mesh = Node->GetMesh();
     
     FbxGeometryElementNormal* ElementNormals = Mesh->GetElementNormal(0);
@@ -185,10 +311,10 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     
     FbxLayerElement::EReferenceMode UVReferenceMode = ElementUVs->GetReferenceMode();
     BOOL_CHECK_AND_HANDLE(ValidateReferenceMode(UVReferenceMode), "Reference mode for uvs is not supported. Must be direct or index to direct.");    
-                                                  
+    
     u32 ControlPointCount = Mesh->GetControlPointsCount();
     FbxVector4* ControlPoints = Mesh->GetControlPoints();                        
-        
+    
     u32 SkinCount = Mesh->GetDeformerCount(FbxDeformer::eSkin);                        
     
     control_point_joint_data* JointsData = NULL;
@@ -295,7 +421,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
                 else if(NormalReferenceMode == FbxGeometryElement::eIndexToDirect)
                     NormalIndex = ElementNormals->GetIndexArray().GetAt(ControlPointIndex);
                 INVALID_ELSE;
-                    
+                
             }
             INVALID_ELSE;
             
@@ -376,7 +502,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
             
             v3f Edge0 = V1-V0;
             v3f Edge1 = V2-V0;
-                        
+            
             float S0 = UV1.x - UV0.x;
             float S1 = UV2.x - UV0.x;
             float T0 = UV1.y - UV0.y;
@@ -417,9 +543,9 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
                               (Dot(Cross(DstVertex->N, T), Bitangents[VertexIndex]) < 0.0f) ? -1.0f : 1.0f);
             DstVertex->UV = SrcVertex->UV;           
             
-            DstVertex->P = V3(V4(DstVertex->P, 1.0f)*Transform);
+            DstVertex->P = DstVertex->P*Transform - GeometricTranslation;
             DstVertex->N = Normalize(DstVertex->N*NormalTransform);
-            DstVertex->T.xyz = Normalize(DstVertex->T.xyz*M3(Transform));
+            DstVertex->T.xyz = Normalize(DstVertex->T.xyz*Transform);
             
             CopyMemory(DstVertex->JointI, SrcVertex->JointI, sizeof(DstVertex->JointI));
             CopyMemory(DstVertex->JointW, SrcVertex->JointW, sizeof(DstVertex->JointW));
@@ -490,9 +616,9 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
                               (Dot(Cross(DstVertex->N, T), Bitangents[VertexIndex]) < 0.0f) ? -1.0f : 1.0f);
             DstVertex->UV = SrcVertex->UV;           
             
-            DstVertex->P = V3(V4(DstVertex->P, 1.0f)*Transform);
+            DstVertex->P = DstVertex->P*Transform - GeometricTranslation;
             DstVertex->N = Normalize(DstVertex->N*NormalTransform);
-            DstVertex->T.xyz = Normalize(DstVertex->T.xyz*M3(Transform));
+            DstVertex->T.xyz = Normalize(DstVertex->T.xyz*Transform);
         }                   
     }
     
@@ -525,8 +651,7 @@ walkable_mesh FBX_LoadFirstWalkableMesh(fbx_context* Context, arena* Storage)
     FbxNode* Node = Context->MeshNodes.Ptr[0];
     
     v3f GeometricTranslation = V3(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
-    m4 Transform = M4(Node->EvaluateGlobalTransform());        
-    Transform.Translation.xyz -= GeometricTranslation;
+    m3 Transform = M3(M4(Node->EvaluateGlobalTransform()));            
     FbxMesh* Mesh = Node->GetMesh();
     
     u32 ControlPointCount = Mesh->GetControlPointsCount();
@@ -592,7 +717,7 @@ walkable_mesh FBX_LoadFirstWalkableMesh(fbx_context* Context, arena* Storage)
         {
             u32 VertexId = (TriangleIndex*3) + VertexIndex;           
             i32 ControlPointIndex = Mesh->GetPolygonVertex(TriangleIndex, VertexIndex);            
-            Triangle->P[VertexIndex] = V3(V4(V3(ControlPoints[ControlPointIndex].Buffer()), 1.0f)*Transform);            
+            Triangle->P[VertexIndex] = V3(ControlPoints[ControlPointIndex].Buffer())*Transform - GeometricTranslation;            
         }                                    
     }                                                
     
@@ -665,7 +790,7 @@ animation_clip FBX_LoadSkeletonAnimation(fbx_context* Context, fbx_skeleton* Ske
             m4 Transform = M4(Skeleton->Joints[JointIndex]->EvaluateLocalTransform(CurrentTime));
             sqt SQT = CreateSQT(Transform);
             
-            Frame->JointPoses[JointIndex].Translation = SQT.Position;
+            Frame->JointPoses[JointIndex].Translation = SQT.Translation;
             Frame->JointPoses[JointIndex].Orientation = SQT.Orientation;
         }
     }
