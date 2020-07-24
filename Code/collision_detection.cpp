@@ -35,6 +35,14 @@ capsule TransformCapsule(capsule* Capsule, rigid_transform Transform)
     return Result;
 }
 
+sphere TransformSphere(sphere* Sphere, rigid_transform Transform)
+{
+    sphere Result = {};
+    Result.Radius = Sphere->Radius;
+    Result.CenterP = Sphere->CenterP + Transform.Translation;    
+    return Result;
+}
+
 plane3D CreateSlidingPlane(collision_result* CollisionResult)
 {
     plane3D Result = {CollisionResult->Normal, FindPlaneDistance(CollisionResult->ContactPoint, CollisionResult->Normal)}; 
@@ -70,9 +78,11 @@ collision_result HandleWorldCollisions(world* World, world_entity* AEntity)
     {
         if((BEntity != AEntity) && (BEntity->CollisionVolume.Type != COLLISION_VOLUME_TYPE_NONE))
         {
-            collision_result CollisionResult = ColliderTest(&AEntity->CollisionVolume, &BEntity->CollisionVolume);
-            if(CollisionResult.t < Result.t)
-                Result = CollisionResult;
+            {
+                collision_result CollisionResult = ColliderTest(&AEntity->CollisionVolume, &BEntity->CollisionVolume);
+                if(CollisionResult.t < Result.t)
+                    Result = CollisionResult;
+            }
         }
     }
     

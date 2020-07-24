@@ -158,7 +158,7 @@ world_entity*
 CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, graphics_material* Material, mesh* Mesh)
 {
     collision_volume Volume = CreateCapsuleCollisionVolume(V3(), Radius, Height);
-    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(PI*0.2f, 0.0f, 0.0f), Material, Mesh, Volume);
+    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(), Material, Mesh, Volume);
     return Result;    
 }
 

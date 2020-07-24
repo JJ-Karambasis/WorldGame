@@ -387,7 +387,8 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
             {
                 case COLLISION_VOLUME_TYPE_SPHERE:
                 {
-                    
+                    sphere Sphere = TransformSphere(&Entity->CollisionVolume.Sphere, Entity->Transform);                    
+                    DrawLineEllipsoid(DevContext, Sphere.CenterP, V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), Blue3());
                 } break;
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
@@ -400,6 +401,10 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
+                    rigid_transform Transform = RigidTransform(Entity->CollisionVolume.Transform, Entity->Transform);
+                    m4 Model = TransformM4(Transform);
+                    PushDrawLineMesh(DevContext->Graphics, Entity->CollisionVolume.ConvexHull->GDIHandle, Model, Blue3(), 
+                                     ConvexHullIndexCount(Entity->CollisionVolume.ConvexHull), 0, 0);
                 } break;
                 
                 INVALID_DEFAULT_CASE;

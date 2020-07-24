@@ -175,7 +175,7 @@ struct assets
     mesh FloorMesh;
     walkable_mesh FloorWalkableMesh;
     
-    mesh TorusMesh;
+    mesh SphereMesh;
     
     mesh PlayerMesh;
     

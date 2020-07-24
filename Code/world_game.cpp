@@ -55,7 +55,7 @@ EXPORT GAME_TICK(Tick)
         Game->Assets->FloorWalkableMesh = LoadWalkableMesh(Game->Assets, "assets/raw/fbx/FloorMesh.fbx");
         
         Game->Assets->BoxMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
-        Game->Assets->TorusMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/TorusMesh.fbx");
+        Game->Assets->SphereMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/SphereMesh.fbx");
         Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/PlayerMesh.fbx");
         
         Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
@@ -118,7 +118,7 @@ EXPORT GAME_TICK(Tick)
         }
         
         collision_volume SphereVolume = CreateSphereCollisionVolume(V3(0.0f, 0.0f, 0.0f), 1.0f);
-        CreateStaticEntity(Game, 0, V3(2.5f, 0.0f, 0.0f), V3(), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->TorusMesh, SphereVolume);
+        CreateStaticEntity(Game, 0, V3(2.5f, 0.0f, 0.0f), V3(), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->SphereMesh, SphereVolume);
         
         collision_volume ConvexVolume = CreateConvexHullCollisionVolume(&Game->Assets->BoxConvexHull, V3(), IdentityQuaternion());
         CreateStaticEntity(Game, 0, V3(-2.5f, 0.0f, 0.0f), V3(), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->BoxMesh, ConvexVolume);
