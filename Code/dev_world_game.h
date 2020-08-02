@@ -128,6 +128,7 @@ struct dev_context
     b32 DrawFrames;
     b32 DrawColliders;
     view_mode_type ViewModeType;    
+    b32 DrawGrid;
     
     graphics_render_buffer* RenderBuffer;
     

@@ -143,6 +143,19 @@ void DrawEdge(dev_context* DevContext, v3f P0, v3f P1, c3 Color)
     DrawOrientedBox(DevContext, P0, V3(0.025f, 0.025f, ZLength), XAxis, YAxis, ZAxis, Color);
 }
 
+void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTopBound, int yBottomBound, c3 Color)
+{
+    for(int x = xLeftBound; x <= xRightBound; x++)
+    {
+        DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Color);
+    }
+
+    for(int y = yTopBound; y <= yBottomBound; y++)
+    {
+        DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Color);
+    }
+}
+
 void DrawSphere(dev_context* DevContext, v3f CenterP, f32 Radius, c3 Color)
 {
     m4 Model = TransformM4(CenterP, V3(Radius, Radius, Radius));
@@ -248,6 +261,8 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
     DrawSphere(DevContext, Position, 0.04f, White3());    
 }
 
+
+
 inline view_settings
 GetViewSettings(dev_context* DevContext, world* World)
 {    
@@ -258,9 +273,9 @@ GetViewSettings(dev_context* DevContext, world* World)
         view_settings Result = {};    
         Result.Position = Camera->Position;
         Result.Orientation = Camera->Orientation;
-        Result.FieldOfView = CAMERA_FIELD_OF_VIEW;
-        Result.ZNear = CAMERA_ZNEAR;
-        Result.ZFar = CAMERA_ZFAR;
+        Result.FieldOfView = World->Camera.FieldOfView;
+        Result.ZNear = World->Camera.ZNear;
+        Result.ZFar = World->Camera.ZFar;
         return Result;
     }
     else
@@ -401,7 +416,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
-                    rigid_transform Transform = RigidTransform(Entity->CollisionVolume.Transform, Entity->Transform);
+                    rigid_transform Transform = Entity->CollisionVolume.Transform * Entity->Transform;
                     m4 Model = TransformM4(Transform);
                     PushDrawLineMesh(DevContext->Graphics, Entity->CollisionVolume.ConvexHull->GDIHandle, Model, Blue3(), 
                                      ConvexHullIndexCount(Entity->CollisionVolume.ConvexHull), 0, 0);
@@ -525,7 +540,13 @@ void DevelopmentRender(dev_context* DevContext)
             DrawFrame(DevContext, Entity->Transform.Translation, Orientation.XAxis, Orientation.YAxis, Orientation.ZAxis);
         }        
     }
+
     PushDepth(Graphics, true);
+
+    if(DevContext->DrawGrid)
+    {
+        DrawGrid(DevContext, -10, 10, -10, 10, Red3());
+    }
     
     DevelopmentImGuiRender(DevContext);  
     
@@ -552,6 +573,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);        
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
+        DevContext->DrawGrid = true;
         
         CreateDevLineCapsuleMesh(DevContext, 1.0f, 60);
         CreateDevLineBoxMesh(DevContext);

@@ -60,16 +60,18 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     {
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {           
-#if 0 
-            camera* Camera = &Game->Worlds[WorldIndex].Camera;
+ 
+            game_camera* Camera = &(Game->Worlds[WorldIndex].Camera);
             camera* DevCamera = &DevContext->Cameras[WorldIndex];
+
+            rigid_transform_matrix CameraTransform = GetCameraTransform(Camera);  
             
-            DevCamera->Position = Camera->Position;
+            DevCamera->Position = CameraTransform.Translation;
             DevCamera->AngularVelocity = {};
-            DevCamera->Orientation = IdentityM3();
-            DevCamera->FocalPoint = Camera->FocalPoint;
-            DevCamera->Distance = Magnitude(DevCamera->FocalPoint-DevCamera->Position);
-#endif
+            DevCamera->Orientation = CameraTransform.Orientation;
+            DevCamera->FocalPoint = Camera->Target;
+            DevCamera->Distance = Camera->Coordinates.Radius;
+
         }
     }    
     
@@ -88,6 +90,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     ImGui::Checkbox("Draw Frames", (bool*)&DevContext->DrawFrames);    
     ImGui::Checkbox("Draw colliders", (bool*)&DevContext->DrawColliders);    
     ImGui::Checkbox("Inspect Objects", (bool*)&DevContext->SelectObjects);  
+    ImGui::Checkbox("Draw Grid", (bool*)&DevContext->DrawGrid);  
     
     local b32 Open = true;
     if(CollapsingHeader("Game Information", ImGuiTreeNodeFlags_DefaultOpen))
