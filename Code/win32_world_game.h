@@ -2,6 +2,7 @@
 #define WIN32_PROJECTWORLD_H
 
 #include <Windows.h>
+#include <excpt.h>
 #include <DSound.h>
 #include "world_game.h"
 

@@ -6,6 +6,7 @@ struct frame
     f32 dt;
     input Input;    
     v3f PlayerPosition[2];
+    quaternion PlayerOrientation[2];
     v3f PlayerVelocity[2];
     v3f CollidedNormal[2];
 };

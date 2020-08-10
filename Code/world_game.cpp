@@ -1,5 +1,4 @@
 #include "world_game.h"
-#include "geometry.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
 #include "collision_detection.cpp"
@@ -46,13 +45,14 @@ EXPORT GAME_TICK(Tick)
     if(!Game->Initialized)
     {                
         Game->GameStorage = CreateArena(MEGABYTE(16));        
-                
+        
         Game->Assets->BoxWalkableMesh = LoadWalkableMesh(Game->Assets, "Box.fbx");
         Game->Assets->QuadGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Quad.fbx");
         Game->Assets->QuadWalkableMesh = LoadWalkableMesh(Game->Assets, "Quad.fbx");        
         Game->Assets->BoxConvexHull = LoadConvexHull(Game->Assets, "assets/raw/fbx/BoxConvexHull.fbx");
         Game->Assets->FloorMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/FloorMesh.fbx");
         Game->Assets->FloorWalkableMesh = LoadWalkableMesh(Game->Assets, "assets/raw/fbx/FloorMesh.fbx");
+        Game->Assets->FloorConvexHull = LoadConvexHull(Game->Assets, "assets/raw/fbx/FloorConvexHull.fbx");
         
         Game->Assets->BoxMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
         Game->Assets->SphereMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/SphereMesh.fbx");
@@ -96,9 +96,10 @@ EXPORT GAME_TICK(Tick)
             World->WorldIndex = WorldIndex;
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
             
-            World->PlayerEntity = CreatePlayerEntity(Game, WorldIndex, V3(0.0f, 0.0f, 0.0f), PLAYER_RADIUS, PLAYER_HEIGHT, &Game->Assets->Material_DiffuseC_SpecularC, &Game->Assets->PlayerMesh);            
+            collision_volume Volume = CreateCapsuleCollisionVolume(V3(), PLAYER_RADIUS, PLAYER_HEIGHT);            
+            World->PlayerEntity = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, V3(0.0f, 0.0f, 0.0f), V3(PI*0.0f, 0.0f*PI, 0.0f*PI), &Game->Assets->Material_DiffuseC_SpecularC, &Game->Assets->PlayerMesh, Volume);
             game_camera* Camera = &World->Camera;
-            
+                        
             Camera->Target = World->PlayerEntity->Position;
             
             Camera->Coordinates = SphericalCoordinates(6, TO_RAD(-90.0f), TO_RAD(35.0f));
@@ -117,25 +118,17 @@ EXPORT GAME_TICK(Tick)
             World->JumpingQuads[1].OtherQuad = &World->JumpingQuads[0];
         }
         
-        collision_volume SphereVolume = CreateSphereCollisionVolume(V3(0.0f, 0.0f, 0.0f), 1.0f);
-        CreateStaticEntity(Game, 0, V3(2.5f, 0.0f, 0.0f), V3(), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->SphereMesh, SphereVolume);
+        collision_volume BoxConvexVolume = CreateConvexHullCollisionVolume(&Game->Assets->BoxConvexHull, V3(), IdentityQuaternion());
+        collision_volume FloorConvexVolume = CreateConvexHullCollisionVolume(&Game->Assets->FloorConvexHull, V3(), IdentityQuaternion());        
         
-        collision_volume ConvexVolume = CreateConvexHullCollisionVolume(&Game->Assets->BoxConvexHull, V3(), IdentityQuaternion());
-        CreateStaticEntity(Game, 0, V3(-2.5f, 0.0f, 0.0f), V3(), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->BoxMesh, ConvexVolume);
-#if 0 
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_STATIC, V3(2.2f, -4.5f, 1.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_SpecularT_Normal_2, &Game->Assets->TorusMesh);                
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_SpecularT_Normal_2, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseC_SpecularC_Normal, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_Normal, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-1.0f, 5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_SpecularT, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.0f, 4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT_SpecularC, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(1.5f, 2.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseC_Normal, &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);
-        CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(0.0f, 0.0f, 0.0f), V3(1.0f, 30.0f, 30.0f), V3(0.0f, 0.0f, 0.0f), &Game->Assets->Material_DiffuseT, &Game->Assets->FloorMesh, &Game->Assets->FloorWalkableMesh);                                                        
-#endif
-        //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-3.5f, 0.0f, 0.0f), V3(1.0f, 3.0f, 3.0f), V3(0.0f, -0.5f*PI, PI*0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->QuadGraphicsMesh, &Game->Assets->QuadWalkableMesh);                                                        
-        
-        //CreateEntityInBothWorlds(Game, WORLD_ENTITY_TYPE_WALKABLE, V3(-2.2f, 0.0f, 1.0f), V3(1.0f, 3.0f, 1.0f), V3(0.0f, 0.0f*PI, 0.0f), RGBA(0.25f, 0.25f, 0.25f, 1.0f), RGBA(0.45f, 0.45f, 0.45f, 1.0f), &Game->Assets->BoxGraphicsMesh, &Game->Assets->BoxWalkableMesh);                                                                
+        CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(0.0f, 0.0f, PI*0.0f), &Game->Assets->Material_DiffuseT, &Game->Assets->FloorMesh, FloorConvexVolume);                                                                
+        CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(0.0f, 0.0f, PI*0.1f), &Game->Assets->Material_DiffuseT_SpecularT_Normal_2, &Game->Assets->BoxMesh, BoxConvexVolume);
+        CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(0.0f, 0.0f, PI*0.25f), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);
+        CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(0.0f, 0.0f, PI*0.33f), &Game->Assets->Material_DiffuseC_SpecularC_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);
+        CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(0.0f, 0.0f, PI*0.0f), &Game->Assets->Material_DiffuseT_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);
+        CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(0.0f, 0.0f, PI*0.2f), &Game->Assets->Material_DiffuseT_SpecularT, &Game->Assets->BoxMesh, BoxConvexVolume);
+        CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(0.0f, 0.0f, PI*0.6f), &Game->Assets->Material_DiffuseT_SpecularC, &Game->Assets->BoxMesh, BoxConvexVolume);
+        CreateStaticEntity(Game, 0, V3(1.5f, 2.5f, 0.0f),   V3(0.0f, 0.0f, PI*0.5f), &Game->Assets->Material_DiffuseC_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);                
         
         Game->Initialized = true;
     }        

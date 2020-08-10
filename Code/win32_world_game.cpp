@@ -1,6 +1,5 @@
 #include "win32_world_game.h"
 #include "audio.cpp"
-#include "geometry.cpp"
 #include "animation.cpp"
 #include "collision_detection.cpp"
 #include "world.cpp"
@@ -645,8 +644,7 @@ Win32_AudioThread(void* Paramter)
     }    
 }
 
-int CALLBACK 
-WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
+int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
 { 
     QueryPerformanceFrequency(&Global_Frequency);    
     Global_Platform = Win32_GetPlatformStruct();
@@ -866,6 +864,24 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     MessageBox(NULL, "Error has occurred, please see Errors.log file.", NULL, MB_OK);     
     return -1;
 } 
+
+int CALLBACK 
+WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
+{
+    int Result;
+    __try
+    {        
+        Result = Win32_GameMain(Instance, PrevInstance, CmdLineArgs, CmdLineOpts);
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER)
+    {        
+        //TODO(JJ): When errors occur (like failed assertions or any unhandled exceptions occur) lets output the last set of frames (about 30 seconds worth) 
+        //to a file so we can playback later
+        Result = -1;
+    }
+    
+    return Result;
+}
 
 #if DEVELOPER_BUILD
 #include <shobjidl_core.h>

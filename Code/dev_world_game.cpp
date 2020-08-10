@@ -201,11 +201,6 @@ void DrawLineEllipsoid(dev_context* DevContext, v3f CenterP, v3f Radius, c3 Colo
     PushDrawLineMesh(DevContext->Graphics, DevContext->LineSphereMesh.MeshID, Model, Color, DevContext->LineSphereMesh.IndexCount, 0, 0); 
 }
 
-void DrawLineEllipsoid(dev_context* DevContext, ellipsoid3D Ellipsoid, c3 Color)
-{
-    DrawLineEllipsoid(DevContext, Ellipsoid.CenterP, Ellipsoid.Radius, Color);
-}
-
 void DrawCylinder(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c3 Color)
 {
     v3f X, Y;
@@ -337,6 +332,52 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     }    
 }
 
+world_entity* GetSelectedObject(dev_context* DevContext)
+{
+    graphics* Graphics = DevContext->Graphics;
+    game* Game = DevContext->Game;
+    dev_input* Input = &DevContext->Input;
+    world* World = GetCurrentWorld(Game);        
+    
+    view_settings ViewSettings = GetViewSettings(DevContext, World);
+    
+    //For not just getting the player entity. need to change to cast the ray and get the intersected object
+    i32 Height = Graphics->RenderDim.height;
+    i32 Width = Graphics->RenderDim.width;
+    f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
+    f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
+    f32 z = 1.0f;
+    v3f ray_nds = V3(x, y, z);
+    v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
+    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+    v4f ray_eye =  ray_clip * Inverse(Perspective);
+    ray_eye = V4(ray_eye.xy, -1.0, 0.0);
+    v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
+    ray_wor = Normalize(ray_wor);
+    
+    f32 tBest = INFINITY;
+    world_entity* Result = NULL;
+    
+    FOR_EACH(Entity, &World->EntityPool)
+    {        
+        if(Entity->Mesh)
+        {
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Entity->Mesh, Entity->Transform);
+            if(IntersectionResult.FoundCollision)
+            {
+                if(tBest > IntersectionResult.t)
+                {
+                    tBest = IntersectionResult.t;
+                    Result = Entity;
+                }
+            }            
+        }
+    }    
+    DevContext->InspectRay = ray_wor;
+    
+    return Result;
+}
+
 void DrawWireframeWorld(graphics* Graphics, world* World)
 {
     PushWireframe(Graphics, true);
@@ -415,8 +456,8 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                 } break;
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
-                {
-                    rigid_transform Transform = Entity->CollisionVolume.Transform * Entity->Transform;
+                {                    
+                    rigid_transform Transform = Entity->CollisionVolume.Transform*Entity->Transform;                    
                     m4 Model = TransformM4(Transform);
                     PushDrawLineMesh(DevContext->Graphics, Entity->CollisionVolume.ConvexHull->GDIHandle, Model, Blue3(), 
                                      ConvexHullIndexCount(Entity->CollisionVolume.ConvexHull), 0, 0);
@@ -451,7 +492,7 @@ void DevelopmentRender(dev_context* DevContext)
     
     world* World = GetCurrentWorld(Game);    
     
-    view_settings ViewSettings = GetViewSettings(DevContext, World);
+    view_settings ViewSettings = GetViewSettings(DevContext, World);    
     
     DrawWorld(DevContext, Game->RenderBuffer, World);    
     if(DevContext->DrawOtherWorld)
@@ -466,38 +507,7 @@ void DevelopmentRender(dev_context* DevContext)
         {
             if(IsPressed(Input->LMB))
             {
-                //For not just getting the player entity. need to change to cast the ray and get the intersected object
-                i32 Height = Graphics->RenderDim.height;
-                i32 Width = Graphics->RenderDim.width;
-                f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
-                f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
-                f32 z = 1.0f;
-                v3f ray_nds = V3(x, y, z);
-                v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
-                m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
-                v4f ray_eye =  ray_clip * Inverse(Perspective);
-                ray_eye = V4(ray_eye.xy, -1.0, 0.0);
-                v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
-                ray_wor = Normalize(ray_wor);
-                
-                
-                f32 t = INFINITY;
-                FOR_EACH(Entity, &World->EntityPool)
-                {
-                    f32 tempt = INFINITY, tempu = INFINITY, tempv = INFINITY;
-                    if(Entity->Mesh)
-                    {
-                        if(IsRayIntersectingEntity(ViewSettings.Position, ray_wor, Entity, &tempt, &tempu, &tempv))
-                        {
-                            if(tempt < t)
-                            {
-                                t = tempt;
-                                DevContext->SelectedObject = Entity;
-                            }
-                        }
-                    }
-                }
-                DevContext->InspectRay = ray_wor;
+                DevContext->SelectedObject = GetSelectedObject(DevContext);                
             }
             if(IsPressed(Input->MMB))
             {
@@ -574,6 +584,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         DevContext->DrawGrid = true;
+        DevContext->DrawColliders = true;        
         
         CreateDevLineCapsuleMesh(DevContext, 1.0f, 60);
         CreateDevLineBoxMesh(DevContext);

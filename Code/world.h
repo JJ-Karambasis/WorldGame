@@ -1,14 +1,12 @@
 #ifndef WORLD_H
 #define WORLD_H
 
-#define VERY_CLOSE_DISTANCE 0.005f
+#define VERY_CLOSE_DISTANCE 0.0001f
 
 enum world_entity_type
 {
     WORLD_ENTITY_TYPE_STATIC,
-    WORLD_ENTITY_TYPE_PLAYER,
-    WORLD_ENTITY_TYPE_WALKABLE,
-    WORLD_ENTITY_TYPE_PUSHABLE
+    WORLD_ENTITY_TYPE_PLAYER        
 };
 
 enum world_entity_state
@@ -43,6 +41,7 @@ struct world_entity
     
     graphics_material* Material;    
     v3f Velocity;            
+    v3f MoveDelta;    
     v3f CollidedNormal;
     
     //TODO(JJ): Multiple collision volumes
@@ -54,9 +53,7 @@ struct world_entity
     world_entity_state State;
     
     mesh* Mesh;
-    walkable_mesh* WalkableMesh;
-    
-    void* UserData;
+    walkable_mesh* WalkableMesh;        
 };
 
 typedef pool<world_entity> world_entity_pool;

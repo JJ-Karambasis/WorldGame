@@ -140,8 +140,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     Entity->Transform = CreateRigidTransform(Position, Euler);
     Entity->Material = Material;
     Entity->Mesh = Mesh;
-    Entity->CollisionVolume = CollisionVolume;
-    Entity->UserData = UserData;
+    Entity->CollisionVolume = CollisionVolume;    
     Entity->LinkID = InvalidEntityID();
     
     return Entity;
@@ -152,14 +151,6 @@ CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, graphics
 {
     world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_STATIC, WorldIndex, Position, Euler, Material, Mesh, CollisionVolume, UserData);
     return Result;
-}
-
-world_entity* 
-CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Height, graphics_material* Material, mesh* Mesh)
-{
-    collision_volume Volume = CreateCapsuleCollisionVolume(V3(), Radius, Height);
-    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(), Material, Mesh, Volume);
-    return Result;    
 }
 
 world_entity_id
@@ -176,8 +167,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     Entity->Transform = CreateRigidTransform(Position, Euler);
     Entity->Material = Material;
     Entity->Mesh = Mesh;
-    Entity->WalkableMesh = WalkableMesh;
-    Entity->UserData = UserData;    
+    Entity->WalkableMesh = WalkableMesh;    
     Entity->LinkID = InvalidEntityID();
     
     return Entity->ID;

@@ -1,551 +1,943 @@
-/* Original Author: Armand (JJ) Karambasis */
-
-inline 
-v3f GetBarycentricPoint(v3f Point, f32 Barycentric, f32 BarycentricRatio)
+#define GJK_RELATIVE_ERROR 1e-6f
+struct gjk_vertex
 {
-    v3f Result = Point*(BarycentricRatio*Barycentric);
-    return Result;
+    v3f W;
+    v3f V;
+    v3f A;
+    v3f B;
+};
+
+template <typename typeA, typename typeB>
+gjk_vertex GetSupport(typeA* ObjectA, typeB* ObjectB, v3f V)
+{
+    gjk_vertex Vertex;
+    Vertex.V = V;
+    Vertex.A = ObjectA->Support(-V);
+    Vertex.B = ObjectB->Support( V);
+    Vertex.W = Vertex.A-Vertex.B;
+    return Vertex;
 }
 
-inline f32 
-GetInvTotalBarycentric(f32* Barycentric, u32 VertexCount)
+template <typename typeA, typename typeB>
+gjk_vertex GetSupport2(typeA* ObjectA, typeB* ObjectB, v3f V)
 {
-    f32 Result = 0.0f;
-    for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
-        Result += Barycentric[VertexIndex];
-    Result = 1.0f/Result;
-    return Result;
+    gjk_vertex Vertex;
+    Vertex.V = V;
+    Vertex.A = ObjectA->Support( V);
+    Vertex.B = ObjectB->Support(-V);
+    Vertex.W = Vertex.A-Vertex.B;
+    return Vertex;
 }
 
-b32 FindDuplicateSupports(gjk_simplex_vertex* Vertices, u32 VertexCount,
-                          v3f ASupportPos, v3f BSupportPos)
+struct gjk_simplex_usage
 {
-    for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+    b32 UsedVertex0;
+    b32 UsedVertex1;
+    b32 UsedVertex2;
+    b32 UsedVertex3;
+};
+
+struct gjk_simplex_barycentric
+{
+    v3f ClosestPoint;
+    gjk_simplex_usage Usage;
+    f32 U, V, W, X;    
+    b32 IsDegenerate;
+    
+    void Set(f32 A = 0.0f, f32 B = 0.0f, f32 C = 0.0f, f32 D = 0.0f)
     {
-        if(Vertices[VertexIndex].ASupportPos != ASupportPos) continue;
-        if(Vertices[VertexIndex].BSupportPos != BSupportPos) continue;        
-        return true;
-    }    
-    return false;
-}
-
-b32 AreGettingCloser(gjk_simplex* Simplex)
-{    
-    f32 BarycentricRatio = GetInvTotalBarycentric(Simplex->Barycentric, Simplex->VertexCount);        
-    v3f Point = {};
-    switch(Simplex->VertexCount)
-    {
-        case 1:
-        {         
-            Point = Simplex->Vertices[0].CsoD;                
-        } break;
-        
-        case 2:
-        {
-            v3f A = GetBarycentricPoint(Simplex->Vertices[0].CsoD, Simplex->Barycentric[0], BarycentricRatio);
-            v3f B = GetBarycentricPoint(Simplex->Vertices[1].CsoD, Simplex->Barycentric[1], BarycentricRatio);
-            Point = A+B;
-        } break;
-        
-        case 3:
-        {
-            v3f A = GetBarycentricPoint(Simplex->Vertices[0].CsoD, Simplex->Barycentric[0], BarycentricRatio);
-            v3f B = GetBarycentricPoint(Simplex->Vertices[1].CsoD, Simplex->Barycentric[1], BarycentricRatio);
-            v3f C = GetBarycentricPoint(Simplex->Vertices[2].CsoD, Simplex->Barycentric[2], BarycentricRatio);
-            Point = A+B+C;
-        } break;
-        
-        case 4:
-        {
-            v3f A = GetBarycentricPoint(Simplex->Vertices[0].CsoD, Simplex->Barycentric[0], BarycentricRatio);
-            v3f B = GetBarycentricPoint(Simplex->Vertices[1].CsoD, Simplex->Barycentric[1], BarycentricRatio);
-            v3f C = GetBarycentricPoint(Simplex->Vertices[2].CsoD, Simplex->Barycentric[2], BarycentricRatio);
-            v3f D = GetBarycentricPoint(Simplex->Vertices[3].CsoD, Simplex->Barycentric[3], BarycentricRatio);
-            Point = A+B+C+D;
-        } break;
-        
-        INVALID_DEFAULT_CASE;
+        U = A;
+        V = B;
+        W = C;
+        X = D;        
     }
     
-    f32 Distance = SquareMagnitude(Point);
-    if(Distance >= Simplex->ClosestDistance) return false;
+    b32 IsValid()
+    {
+        b32 Result = ((U >= 0) && (V >= 0) && (W >= 0) && (X >= 0));
+        return Result;
+    }
+};
+
+b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_barycentric* Barycentric)
+{
+    Barycentric->Usage = {};
     
-    Simplex->ClosestDistance = Distance;
+    v3f AB = B-A;
+    v3f AC = C-A;
+    v3f AP = P-A;
+    
+    f32 D1 = Dot(AB, AP);
+    f32 D2 = Dot(AC, AP);
+    
+    if((D1 <= 0.0f) && (D2 <= 0.0f))
+    {
+        Barycentric->ClosestPoint = A;
+        Barycentric->Usage.UsedVertex0 = true;
+        Barycentric->Set(1, 0, 0);
+        return true;
+    }
+    
+    v3f BP = P-B;
+    f32 D3 = Dot(AB, BP);
+    f32 D4 = Dot(AC, BP);
+    if((D3 >= 0.0f) &&  (D4 <= D3))
+    {
+        Barycentric->ClosestPoint = B;
+        Barycentric->Usage.UsedVertex1 = true;
+        Barycentric->Set(0, 1, 0);
+        return true;
+    }
+    
+    f32 VC = D1*D4 - D3*D2;
+    if((VC <= 0.0f) && (D1 >= 0.0f) && (D3 <= 0.0f))
+    {
+        f32 V = D1 / (D1-D3);
+        Barycentric->ClosestPoint = A + V*AB;
+        Barycentric->Usage.UsedVertex0 = true;
+        Barycentric->Usage.UsedVertex1 = true;
+        Barycentric->Set(1-V, V, 0);
+        return true;
+    }
+    
+    v3f CP = P-C;
+    f32 D5 = Dot(AB, CP);
+    f32 D6 = Dot(AC, CP);
+    if((D6 >= 0.0f) && (D5 <= D6))
+    {
+        Barycentric->ClosestPoint = C;
+        Barycentric->Usage.UsedVertex2 = true;
+        Barycentric->Set(0, 0, 1);
+        return true;
+    }
+    
+    f32 VB = D5*D2 - D1*D6;
+    if((VB <= 0.0f) && (D2 >= 0.0f) && (D6 <= 0.0f))
+    {
+        f32 W = D2/(D2-D6);
+        Barycentric->ClosestPoint = A + W*AC;
+        Barycentric->Usage.UsedVertex0 = true;
+        Barycentric->Usage.UsedVertex2 = true;
+        Barycentric->Set(1-W, 0, W);
+        return true;
+    }
+    
+    f32 VA = D3*D6 - D5*D4;
+    if((VA <= 0.0f) && ((D4-D3) >= 0.0f) && ((D5-D6) >= 0.0f))
+    {
+        f32 W = (D4-D3) / ((D4-D3) + (D5-D6));
+        Barycentric->ClosestPoint = B + W*(C-B);
+        Barycentric->Usage.UsedVertex1 = true;
+        Barycentric->Usage.UsedVertex2 = true;
+        Barycentric->Set(0, 1-W, W);
+        return true;
+    }
+    
+    f32 Denominator = 1.0f / (VA+VB+VC);
+    f32 V = VB*Denominator;
+    f32 W = VC*Denominator;
+    
+    Barycentric->ClosestPoint = A + AB*V + AC*W;
+    Barycentric->Usage.UsedVertex0 = true;
+    Barycentric->Usage.UsedVertex1 = true;
+    Barycentric->Usage.UsedVertex2 = true;
+    Barycentric->Set(1-V-W, V, W);
     return true;
 }
 
-v3f NewSearchDirection(gjk_simplex* Simplex)
-{    
-    v3f Result = {};
-    switch(Simplex->VertexCount)
+int IsPointOutsidePlane(v3f P, v3f A, v3f B, v3f C, v3f D)
+{
+    v3f Normal = Cross(B-A, C-A);
+    
+    f32 SignP = Dot(P-A, Normal);
+    f32 SignD = Dot(D-A, Normal);
+    
+    if(Square(SignD) < (Square(1e-4f)))
+        return -1;
+    
+    int Result = (SignP*SignD) < 0.0f;
+    return Result;
+}
+
+b32 ClosestPointFromPointToTetrahedron(v3f P, v3f A, v3f B, v3f C, v3f D, gjk_simplex_barycentric* Barycentric)
+{
+    gjk_simplex_barycentric TempBarycentric;
+    
+    Barycentric->ClosestPoint = P;
+    Barycentric->Usage = {true, true, true, true};
+    
+    int IsPointOutsideABC = IsPointOutsidePlane(P, A, B, C, D);
+    int IsPointOutsideACD = IsPointOutsidePlane(P, A, C, D, B);
+    int IsPointOutsideADB = IsPointOutsidePlane(P, A, D, B, C);
+    int IsPointOutsideBDC = IsPointOutsidePlane(P, B, D, C, A);
+    
+    if((IsPointOutsideABC < 0) || (IsPointOutsideACD < 0) || (IsPointOutsideADB < 0) || (IsPointOutsideBDC < 0))
     {
-        case 1:
-        {
-            Result = -Simplex->Vertices[0].CsoD;
-        } break;
+        Barycentric->IsDegenerate = true;
+        return false;
+    }
+    
+    if(!IsPointOutsideABC && !IsPointOutsideACD && !IsPointOutsideADB && !IsPointOutsideBDC)
+        return false;
+    
+    f32 BestSqrDistance = FLT_MAX;
+    if(IsPointOutsideABC)
+    {
+        ClosestPointFromPointToTriangle(P, A, B, C, &TempBarycentric);
+        v3f Q = TempBarycentric.ClosestPoint;
+        f32 SqrDistance = SquareMagnitude(Q-P);
         
-        case 2:
+        if(SqrDistance < BestSqrDistance)
         {
-            v3f A = Simplex->Vertices[1].CsoD - Simplex->Vertices[0].CsoD;
-            v3f B = -Simplex->Vertices[1].CsoD;
-            Result = Cross(Cross(A, B), A);
-        } break;
+            BestSqrDistance = SqrDistance;
+            Barycentric->ClosestPoint = Q;
+            Barycentric->Usage = {};
+            
+            Barycentric->Usage.UsedVertex0 = TempBarycentric.Usage.UsedVertex0;
+            Barycentric->Usage.UsedVertex1 = TempBarycentric.Usage.UsedVertex1;
+            Barycentric->Usage.UsedVertex2 = TempBarycentric.Usage.UsedVertex2;
+            
+            Barycentric->Set(TempBarycentric.U, TempBarycentric.V, TempBarycentric.W, 0);
+        }
+    }
+    
+    if(IsPointOutsideACD)
+    {
+        ClosestPointFromPointToTriangle(P, A, C, D, &TempBarycentric);
+        v3f Q = TempBarycentric.ClosestPoint;
+        f32 SqrDistance = SquareMagnitude(Q-P);
         
-        case 3:
+        if(SqrDistance < BestSqrDistance)
         {
-            v3f A = Simplex->Vertices[1].CsoD - Simplex->Vertices[0].CsoD;
-            v3f B = Simplex->Vertices[2].CsoD - Simplex->Vertices[0].CsoD;
-            v3f N = Cross(A, B);
-            Result = (Dot(N, Simplex->Vertices[0].CsoD) <= 0.0f) ? N : -N;                    
-        } break;
+            BestSqrDistance = SqrDistance;
+            Barycentric->ClosestPoint = Q;
+            Barycentric->Usage = {};
+            
+            Barycentric->Usage.UsedVertex0 = TempBarycentric.Usage.UsedVertex0;
+            Barycentric->Usage.UsedVertex2 = TempBarycentric.Usage.UsedVertex1;
+            Barycentric->Usage.UsedVertex3 = TempBarycentric.Usage.UsedVertex2;
+            
+            Barycentric->Set(TempBarycentric.U, 0, TempBarycentric.V, TempBarycentric.W);
+        }
+    }
+    
+    if(IsPointOutsideADB)
+    {
+        ClosestPointFromPointToTriangle(P, A, D, B, &TempBarycentric);
+        v3f Q = TempBarycentric.ClosestPoint;
+        f32 SqrDistance = SquareMagnitude(Q-P);
         
-        INVALID_DEFAULT_CASE;
-    }           
+        if(SqrDistance < BestSqrDistance)
+        {
+            BestSqrDistance = SqrDistance;
+            Barycentric->ClosestPoint = Q;
+            Barycentric->Usage = {};
+            
+            Barycentric->Usage.UsedVertex0 = TempBarycentric.Usage.UsedVertex0;
+            Barycentric->Usage.UsedVertex1 = TempBarycentric.Usage.UsedVertex2;
+            Barycentric->Usage.UsedVertex3 = TempBarycentric.Usage.UsedVertex1;
+            
+            Barycentric->Set(TempBarycentric.U, TempBarycentric.W, 0, TempBarycentric.V);            
+        }
+    }
+    
+    if(IsPointOutsideBDC)
+    {
+        ClosestPointFromPointToTriangle(P, B, D, C, &TempBarycentric);
+        v3f Q = TempBarycentric.ClosestPoint;
+        f32 SqrDistance = SquareMagnitude(Q-P);
+        
+        if(SqrDistance < BestSqrDistance)
+        {
+            BestSqrDistance = SqrDistance;
+            Barycentric->ClosestPoint = Q;
+            Barycentric->Usage = {};
+            
+            Barycentric->Usage.UsedVertex1 = TempBarycentric.Usage.UsedVertex0;
+            Barycentric->Usage.UsedVertex2 = TempBarycentric.Usage.UsedVertex2;
+            Barycentric->Usage.UsedVertex3 = TempBarycentric.Usage.UsedVertex1;
+            
+            Barycentric->Set(0, TempBarycentric.U, TempBarycentric.W, TempBarycentric.V);            
+        }            
+    }
+    
+    return true;
+}
+
+struct gjk_distance_simplex
+{    
+    u32 VertexCount;
+    v3f Vertex[4];
+    v3f AVertex[4];
+    v3f BVertex[4];
+    v3f LastVertex;
+    gjk_simplex_barycentric Barycentric;
+    
+    b32 NeedsUpdate;
+    v3f V;
+    v3f CP[2];
+    
+    void Reset()
+    {
+        LastVertex = InvalidV3();
+        NeedsUpdate = true;
+        VertexCount = 0;
+        Barycentric = {};
+    }
+    
+    b32 HasVertex(v3f W)
+    {
+        for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+        {
+            if(Vertex[VertexIndex] == W)
+                return true;
+        }
+        
+        if(W == LastVertex)
+            return true;
+        
+        return false;
+    }
+    
+    void RemoveVertex(u32 Index)
+    {
+        ASSERT(VertexCount > 0);
+        VertexCount--;
+        
+        Vertex[Index]  = Vertex[VertexCount];
+        AVertex[Index] = AVertex[VertexCount];
+        BVertex[Index] = BVertex[VertexCount];
+    }
+    
+    void ReduceVertices(gjk_simplex_usage Usage)
+    {        
+        if((VertexCount >= 4) && (!Usage.UsedVertex3))
+            RemoveVertex(3);
+        
+        if((VertexCount >= 3) && (!Usage.UsedVertex2))
+            RemoveVertex(2);
+        
+        if((VertexCount >= 2) && (!Usage.UsedVertex1))
+            RemoveVertex(1);
+        
+        if((VertexCount >= 1) && (!Usage.UsedVertex0))
+            RemoveVertex(0);
+    }
+    
+    void AddVertex(gjk_vertex* SupportVertex)
+    {
+        NeedsUpdate = true;
+        LastVertex = SupportVertex->W;
+        
+        Vertex[VertexCount]  = SupportVertex->W;
+        AVertex[VertexCount] = SupportVertex->A;
+        BVertex[VertexCount] = SupportVertex->B;
+        
+        VertexCount++;
+        
+        ASSERT(VertexCount < 5);
+    }
+    
+    b32 UpdateVectorAndPoints()
+    {
+        b32 Result = true;
+        
+        if(NeedsUpdate)
+        {                        
+            NeedsUpdate = false;
+            
+            Barycentric = {};            
+            
+            switch(VertexCount)
+            {
+                case 1:
+                {
+                    CP[0] = AVertex[0];
+                    CP[1] = BVertex[0];
+                    V = Vertex[0];
+                    Barycentric.Set(1.0f);                                        
+                } break;                
+                
+                case 2:
+                {                                           
+                    v3f P0 = -Vertex[0];
+                    v3f P1 = Vertex[1]-Vertex[0];
+                    f32 t = Dot(P1, P0);
+                    
+                    if(t > 0)
+                    {
+                        f32 P1Sqr = SquareMagnitude(P1);
+                        if(t < P1Sqr)
+                        {
+                            t /= P1Sqr;
+                            Barycentric.Usage.UsedVertex0 = true;
+                            Barycentric.Usage.UsedVertex1 = true;
+                        }
+                        else
+                        {
+                            t = 1;               
+                            Barycentric.Usage.UsedVertex1 = true;
+                        }
+                    }
+                    else
+                    {
+                        t = 0;
+                        Barycentric.Usage.UsedVertex0 = true;
+                    }
+                    
+                    Barycentric.Set(1-t, t);
+                    
+                    CP[0] = AVertex[0] + t*(AVertex[1] - AVertex[0]);
+                    CP[1] = BVertex[0] + t*(BVertex[1] - BVertex[0]);
+                    V = CP[0] - CP[1];
+                    
+                    ReduceVertices(Barycentric.Usage);                    
+                } break;
+                
+                case 3:
+                {
+                    v3f A = Vertex[0];
+                    v3f B = Vertex[1];
+                    v3f C = Vertex[2];
+                    
+                    ClosestPointFromPointToTriangle(V3(), A, B, C, &Barycentric);
+                    
+                    CP[0] = ((AVertex[0] * Barycentric.U) + (AVertex[1] * Barycentric.V) + (AVertex[2] * Barycentric.W));                    
+                    CP[1] = ((BVertex[0] * Barycentric.U) + (BVertex[1] * Barycentric.V) + (BVertex[2] * Barycentric.W));
+                    
+                    V = CP[0] - CP[1];
+                    
+                    ReduceVertices(Barycentric.Usage);
+                } break;
+                
+                case 4:
+                {
+                    v3f A = Vertex[0];
+                    v3f B = Vertex[1];
+                    v3f C = Vertex[2];
+                    v3f D = Vertex[3];
+                    
+                    b32 NotIntersected = ClosestPointFromPointToTetrahedron(V3(), A, B, C, D, &Barycentric);
+                    
+                    if(NotIntersected)
+                    {
+                        CP[0] = ((AVertex[0]*Barycentric.U) + (AVertex[1]*Barycentric.V) + (AVertex[2]*Barycentric.W) + (AVertex[3]*Barycentric.X));
+                        CP[1] = ((BVertex[0]*Barycentric.U) + (BVertex[1]*Barycentric.V) + (BVertex[2]*Barycentric.W) + (BVertex[3]*Barycentric.X));
+                        
+                        V = CP[0] - CP[1];
+                        ReduceVertices(Barycentric.Usage);
+                    }
+                    else
+                    {
+                        if(Barycentric.IsDegenerate)
+                            return false;
+                        else
+                            V = V3();
+                    }
+                    
+                } break;
+                
+                INVALID_DEFAULT_CASE;
+            }
+        }
+        
+        return Barycentric.IsValid();        
+    }
+    
+    void GetClosestPoints(v3f* A, v3f* B)
+    {
+        UpdateVectorAndPoints();
+        *A = CP[0];
+        *B = CP[1];
+    }    
+    
+    b32 GetClosestPointToOrigin(v3f* P)
+    {
+        b32 Result = UpdateVectorAndPoints();
+        *P = V;      
+        return Result;
+    }
+};
+
+enum gjk_distance_status
+{
+    GJK_DISTANCE_STATUS_NONE,
+    GJK_DISTANCE_STATUS_ALREADY_IN_SIMPLEX, 
+    GJK_DISTANCE_STATUS_NOT_GETTING_CLOSER,
+    GJK_DISTANCE_STATUS_NOT_GETTING_CLOSER_2,
+    GJK_DISTANCE_STATUS_DIRECTION_CLOSE_TO_ORIGIN,
+    GJK_DISTANCE_STATUS_INVALID_SIMPLEX    
+};
+
+struct gjk_distance
+{    
+    gjk_distance_simplex Simplex;
+    gjk_distance_status Status;
+    v3f V;
+    f32 SquareDistance;
+    
+    void GetClosestPoints(v3f* A, v3f* B)
+    {
+        Simplex.GetClosestPoints(A, B);
+    }
+};
+
+template <typename typeA, typename typeB>
+gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
+{    
+    v3f V = Global_WorldXAxis;
+    
+    gjk_distance_simplex Simplex = {};    
+    Simplex.Reset();
+    gjk_distance_status Status = GJK_DISTANCE_STATUS_NONE;
+    
+    f32 SqrDistance = FLT_MAX;
+    
+    u32 Iterations = 0;
+    for(;;)
+    {
+        Iterations++;
+        
+        gjk_vertex Support = GetSupport(ObjectA, ObjectB, V);
+        
+        if(Simplex.HasVertex(Support.W))
+        {
+            Status = GJK_DISTANCE_STATUS_ALREADY_IN_SIMPLEX;
+            break;
+        }
+        
+        f32 Delta = Dot(V, Support.W);
+        
+        if((SqrDistance - Delta) <= (SqrDistance * GJK_RELATIVE_ERROR))
+        {
+            Status = GJK_DISTANCE_STATUS_NOT_GETTING_CLOSER;
+            break;
+        }
+        
+        Simplex.AddVertex(&Support);
+        
+        v3f NewV;
+        if(!Simplex.GetClosestPointToOrigin(&NewV))
+        {
+            Status = GJK_DISTANCE_STATUS_INVALID_SIMPLEX;
+            break;
+        }
+        
+        f32 PrevSqrDistance = SqrDistance;
+        SqrDistance = SquareMagnitude(NewV);
+        if(SqrDistance < GJK_RELATIVE_ERROR)
+        {
+            V = NewV;
+            Status = GJK_DISTANCE_STATUS_DIRECTION_CLOSE_TO_ORIGIN;
+            break;
+        }
+        
+        if((PrevSqrDistance - SqrDistance) <= (FLT_EPSILON*PrevSqrDistance))
+        {
+            Status = GJK_DISTANCE_STATUS_NOT_GETTING_CLOSER_2;
+            break;
+        }
+        
+        V = NewV;
+        
+        ASSERT(Simplex.VertexCount < 4);        
+    }
+    
+    ASSERT(Status != GJK_DISTANCE_STATUS_NONE);
+    
+    gjk_distance Result;
+    Result.Status         = Status;
+    Result.Simplex        = Simplex;
+    Result.V              = V;
+    Result.SquareDistance = SquareMagnitude(V);
+    
+    DEVELOPER_MAX_GJK_ITERATIONS(Iterations);
+    
+    return Result;    
+}
+
+struct gjk_simplex
+{
+    gjk_vertex Vertex[4];     
+    i32 LastIndex;
+    
+    inline void Add(gjk_vertex* Support)
+    {
+        LastIndex++;
+        Vertex[LastIndex] = *Support;        
+    }
+    
+    inline u32 GetVertexCount()
+    {
+        return LastIndex+1;
+    }
+};
+
+gjk_simplex InitSimplex()
+{
+    gjk_simplex Result = {};
+    Result.LastIndex = -1;
+    return Result;
+}
+
+i32 PerformLineTest(gjk_simplex* Simplex, v3f* V)
+{
+    v3f A = Simplex->Vertex[Simplex->LastIndex].W;
+    v3f B = Simplex->Vertex[0].W;    
+    v3f AB = B-A;
+    v3f AO =  -A;
+    
+    f32 DotResult = Dot(AB, AO);
+    v3f Temp = Cross(AB, AO);
+    if(IsFuzzyZero(SquareMagnitude(Temp)) && (DotResult > 0))
+        return 1;
+    
+    if(IsFuzzyZero(DotResult) || (DotResult < 0))
+    {
+        Simplex->Vertex[0] = Simplex->Vertex[Simplex->LastIndex];
+        Simplex->LastIndex = 0;
+        *V = AO;
+    }
+    else
+    {
+        *V = Cross(Cross(AB, AO), AB);
+    }
+    
+    return 0;
+}
+
+i32 SignCCD(f32 Value)
+{
+    if(IsFuzzyZero(Value))
+        return 0;
+    else if(Value < 0)
+        return -1;
+    else
+        return 1;
+}
+
+b32 EqualScalarsCCD(f32 a, f32 b)
+{
+    f32 ab = Abs(a-b);
+    if(ab < FLT_EPSILON)
+        return true;
+    
+    f32 aAbs = Abs(a);
+    f32 bAbs = Abs(b);
+    if(bAbs > aAbs)
+    {
+        return ab < FLT_EPSILON*bAbs;
+    }
+    else
+    {
+        return ab < FLT_EPSILON*aAbs;
+    }
+}
+
+inline b32 
+EqualVec3CCD(v3f A, v3f B)
+{
+    b32 Result = EqualScalarsCCD(A.x, B.x) && EqualScalarsCCD(A.y, B.y) && EqualScalarsCCD(A.z, B.z);
+    return Result;
+}
+
+b32 EqualScalarsCCD64(f64 a, f64 b)
+{
+    f64 ab = Abs(a-b);
+    if(ab < DBL_EPSILON)
+        return true;
+    
+    f64 aAbs = Abs(a);
+    f64 bAbs = Abs(b);
+    if(bAbs > aAbs)
+    {
+        return ab < DBL_EPSILON*bAbs;
+    }
+    else
+    {
+        return ab < DBL_EPSILON*aAbs;
+    }
+}
+
+f32 PointSegmentDistance(v3f P, v3f A, v3f B)
+{
+    v3f AB = B-A;
+    v3f PA = A-P;
+    
+    f32 t = -1 * Dot(PA, AB);
+    t /= SquareMagnitude(AB);
+    
+    f32 Result;
+    if(t < 0 || IsFuzzyZero(t))
+    {
+        Result = SquareMagnitude(A-P);
+    }
+    else if(t > 1 || EqualScalarsCCD(t, 1))
+    {
+        Result = SquareMagnitude(B-P);
+    }
+    else
+    {
+        AB *= t;
+        AB += PA;
+        Result = SquareMagnitude(AB);
+    }
     
     return Result;
 }
 
-void LineTest(gjk_simplex* Simplex)
+f32 PointTriangleDistance(v3f P, v3f A, v3f B, v3f C)
 {
-    v3f A = Simplex->Vertices[0].CsoD;
-    v3f B = Simplex->Vertices[1].CsoD;
+    v3f AB = B-A;
+    v3f AC = C-A;
+    v3f PA = A-P;
     
-    v3f AB = A-B;
-    v3f BA = B-A;
+    //IMPORTANT(EVERYONE): There are a lot of rounding and precision errors with these values so we made them
+    //f64 bit floats  otherwise they can report a zero distance which is completely wrong. Maybe there is a better way
+    f64 u = SquareMagnitude(PA);
+    f64 v = SquareMagnitude(AB);
+    f64 w = SquareMagnitude(AC);
+    f64 p = Dot(PA, AB);
+    f64 q = Dot(PA, AC);
+    f64 r = Dot(AB, AC);
     
-    f32 U = Dot(BA, B);
-    f32 V = Dot(AB, A);
+    f64 s = (q*r - w*p) / (w*v - r*r);
+    f64 t = (-s*r - q) / w;
     
-    if(V <= 0.0f)
+    f64 Result;
+    if((IsFuzzyZero(s) || (s > 0)) && 
+       (EqualScalarsCCD64(s, 1) || s < 1) &&
+       (IsFuzzyZero(t) || (t > 0)) &&
+       (EqualScalarsCCD64(t, 1) || t < 1) &&
+       (EqualScalarsCCD64(t+s, 1) || (t+s < 1)))
     {
-        Simplex->VertexCount = 1;
-        Simplex->Barycentric[0] = 1.0f;
-        return;
+        Result = s*s*v;
+        Result += t*t*w;
+        Result += 2*s*t*r;
+        Result += 2*s*p;
+        Result += 2*t*q;
+        Result += u;
+    }
+    else
+    {
+        Result = PointSegmentDistance(P, A, B);
+        f32 Dist1 = PointSegmentDistance(P, A, C);
+        
+        if(Result > Dist1)        
+            Result = Dist1;        
+        
+        f32 Dist2 = PointSegmentDistance(P, B, C);
+        if(Result > Dist2)
+            Result = Dist2;                
     }
     
-    if(U <= 0.0f)
-    {
-        Simplex->VertexCount = 1;
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->Vertices[0] = Simplex->Vertices[1];
-        return;
-    }
-    
-    Simplex->Barycentric[0] = U;
-    Simplex->Barycentric[1] = V;
-    Simplex->VertexCount = 2;
+    return (f32)Result;
 }
 
-void TriangleTest(gjk_simplex* Simplex)
+i32 PerformTriangleTest(gjk_simplex* Simplex, v3f* V)
 {
-    v3f A = Simplex->Vertices[0].CsoD;
-    v3f B = Simplex->Vertices[1].CsoD;
-    v3f C = Simplex->Vertices[2].CsoD;
+    v3f A = Simplex->Vertex[Simplex->LastIndex].W;
+    v3f B = Simplex->Vertex[1].W;
+    v3f C = Simplex->Vertex[0].W;
     
-    v3f AB = A-B;
-    v3f BA = B-A;
-    v3f BC = B-C;
-    v3f CB = C-B;
-    v3f CA = C-A;
-    v3f AC = A-C;
+    f32 Distance = PointTriangleDistance(V3(), A, B, C);
+    if(IsFuzzyZero(Distance))
+        return 1;
     
-    f32 U_AB = Dot(BA, B);
-    f32 V_AB = Dot(AB, A);
+    if(EqualVec3CCD(A, B) || EqualVec3CCD(A, C))
+        return -1;
     
-    f32 U_BC = Dot(CB, C);
-    f32 V_BC = Dot(BC, B);
+    v3f AO = -A;
+    v3f AB = B-A;
+    v3f AC = C-A;
+    v3f ABC = Cross(AB, AC);
+    v3f Temp = Cross(ABC, AC);
+    f32 DotResult = Dot(Temp, AO);
     
-    f32 U_CA = Dot(AC, A);
-    f32 V_CA = Dot(CA, C);
-    
-    if((V_AB <= 0.0f) && (U_CA <= 0.0f))
+    if(IsFuzzyZero(DotResult) || (DotResult > 0))
     {
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->VertexCount = 1;
-        return;
+        DotResult = Dot(AC, AO);
+        if(IsFuzzyZero(DotResult) || (DotResult > 0))
+        {
+            Simplex->Vertex[1] = Simplex->Vertex[Simplex->LastIndex];
+            Simplex->LastIndex = 1;
+            *V = Cross(Cross(AC, AO), AC);
+        }
+        else
+        {
+            DotResult = Dot(AB, AO);
+            if(IsFuzzyZero(DotResult) || (DotResult > 0))
+            {
+                Simplex->Vertex[0] = Simplex->Vertex[1];
+                Simplex->Vertex[1] = Simplex->Vertex[Simplex->LastIndex];
+                Simplex->LastIndex = 1;
+                *V = Cross(Cross(AB, AO), AB);
+            }
+            else
+            {
+                Simplex->Vertex[0] = Simplex->Vertex[Simplex->LastIndex];
+                Simplex->LastIndex = 0;
+                *V = AO;
+            }
+        }
+    }
+    else
+    {
+        DotResult = Dot(ABC, AO);
+        if(IsFuzzyZero(DotResult) || (DotResult > 0))
+            *V = ABC;
+        else
+        {
+            gjk_vertex TempVertex = Simplex->Vertex[0];
+            Simplex->Vertex[0] = Simplex->Vertex[1];
+            Simplex->Vertex[1] = TempVertex;            
+            *V = -ABC;
+        }
     }
     
-    if((U_AB <= 0.0f) && (V_BC <= 0.0f))
-    {
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->VertexCount = 1;
-        Simplex->Vertices[0] = Simplex->Vertices[1];
-        return;
-    }
-    
-    if((U_BC <= 0.0f) && (V_CA <= 0.0f))
-    {
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->VertexCount = 1;
-        Simplex->Vertices[0] = Simplex->Vertices[2];
-        return;
-    }
-    
-    v3f N[4] = { Cross(BA, CA), Cross(B, C), Cross(C, A), Cross(A, B) };
-    
-    f32 U = Dot(N[1], N[0]);
-    f32 V = Dot(N[2], N[0]);
-    f32 W = Dot(N[3], N[0]);
-    
-    if((U_AB > 0.0f) && (V_AB > 0.0f) && (W <= 0.0f))
-    {
-        Simplex->Barycentric[0] = U_AB;
-        Simplex->Barycentric[1] = V_AB;
-        Simplex->VertexCount = 2;
-        return;
-    }
-    
-    if((U_BC > 0.0f) && (V_BC > 0.0f) && (U <= 0.0f))
-    {
-        Simplex->Barycentric[0] = U_BC;
-        Simplex->Barycentric[1] = V_BC;
-        Simplex->VertexCount = 2;
-        Simplex->Vertices[0] = Simplex->Vertices[1];
-        Simplex->Vertices[1] = Simplex->Vertices[2];
-        return;
-    }
-    
-    if((U_CA > 0.0f) && (V_CA > 0.0f) && (V <= 0.0f))
-    {
-        Simplex->Barycentric[0] = U_CA;
-        Simplex->Barycentric[1] = V_CA;
-        Simplex->VertexCount = 2;
-        Simplex->Vertices[1] = Simplex->Vertices[0];
-        Simplex->Vertices[0] = Simplex->Vertices[2];
-        return;
-    }
-    
-    Simplex->Barycentric[0] = U;
-    Simplex->Barycentric[1] = V;
-    Simplex->Barycentric[2] = W;
-    Simplex->VertexCount = 3;
+    return 0;    
 }
 
-void TetrahedronTest(gjk_simplex* Simplex)
+i32 PerformTetrahedronTest(gjk_simplex* Simplex, v3f* V)
 {
-    v3f A = Simplex->Vertices[0].CsoD;
-    v3f B = Simplex->Vertices[1].CsoD;
-    v3f C = Simplex->Vertices[2].CsoD;
-    v3f D = Simplex->Vertices[3].CsoD;
+    v3f A = Simplex->Vertex[Simplex->LastIndex].W;
+    v3f B = Simplex->Vertex[2].W;
+    v3f C = Simplex->Vertex[1].W;
+    v3f D = Simplex->Vertex[0].W;
     
-    v3f AB = A-B;
-    v3f BA = B-A;
-    v3f BC = B-C;
-    v3f CB = C-B;
-    v3f CA = C-A;
-    v3f AC = A-C;
+    f32 Distance = PointTriangleDistance(A, B, C, D);
+    if(IsFuzzyZero(Distance))
+        return -1;
     
-    v3f DB = D-B;
-    v3f BD = B-D;
-    v3f DC = D-C;
-    v3f CD = C-D;
-    v3f DA = D-A;
-    v3f AD = A-D;
+    Distance = PointTriangleDistance(V3(), A, B, C);
+    if(IsFuzzyZero(Distance))
+        return 1;
     
-    f32 U_AB = Dot(BA, B);
-    f32 V_AB = Dot(AB, A);
+    Distance = PointTriangleDistance(V3(), A, C, D);
+    if(IsFuzzyZero(Distance))
+        return 1;
     
-    f32 U_BC = Dot(CB, C);
-    f32 V_BC = Dot(BC, B);
+    Distance = PointTriangleDistance(V3(), A, B, D);
+    if(IsFuzzyZero(Distance))
+        return 1;
     
-    f32 U_CA = Dot(AC, A);
-    f32 V_CA = Dot(CA, C);
+    Distance = PointTriangleDistance(V3(), B, C, D);
+    if(IsFuzzyZero(Distance))
+        return 1;
     
-    f32 U_BD = Dot(DB, D);
-    f32 V_BD = Dot(BD, B);
+    v3f AO  =  -A;
+    v3f AB  = B-A;
+    v3f AC  = C-A;
+    v3f AD  = D-A;
+    v3f ABC = Cross(AB, AC);
+    v3f ACD = Cross(AC, AD);
+    v3f ADB = Cross(AD, AB);
     
-    f32 U_DC = Dot(CD, C);
-    f32 V_DC = Dot(DC, D);
+    i32 IsBOnACD = SignCCD(Dot(ACD, AB));
+    i32 IsCOnADB = SignCCD(Dot(ADB, AC));
+    i32 IsDOnABC = SignCCD(Dot(ABC, AD));
     
-    f32 U_AD = Dot(DA, D);
-    f32 V_AD = Dot(AD, A);
+    b32 AB_O = SignCCD(Dot(ACD, AO)) == IsBOnACD;
+    b32 AC_O = SignCCD(Dot(ADB, AO)) == IsCOnADB;
+    b32 AD_O = SignCCD(Dot(ABC, AO)) == IsDOnABC;
     
-    if((V_AB <= 0.0f) && (U_CA <= 0.0f) && (V_AD <= 0.0f))
+    if(AB_O && AC_O && AD_O)    
+        return 1;
+    else if(!AB_O)
     {
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->VertexCount = 1;
-        return;
+        Simplex->Vertex[2] = Simplex->Vertex[Simplex->LastIndex];
+        Simplex->LastIndex = 2;
     }
-    
-    if((U_AB <= 0.0f) && (V_BC <= 0.0f) && (V_BD <= 0.0f))
+    else if(!AC_O)
     {
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->VertexCount = 1;
-        Simplex->Vertices[0] = Simplex->Vertices[1];
-        return;
+        Simplex->Vertex[1] = Simplex->Vertex[0];
+        Simplex->Vertex[0] = Simplex->Vertex[2];
+        Simplex->Vertex[2] = Simplex->Vertex[Simplex->LastIndex];
+        Simplex->LastIndex = 2;
     }
-    
-    if((U_BC <= 0.0f) && (V_CA <= 0.0f) && (U_DC <= 0.0f))
-    {
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->VertexCount = 1;
-        Simplex->Vertices[0] = Simplex->Vertices[2];
-        return;
-    }
-    
-    if((U_BD <= 0.0f) && (V_DC <= 0.0f) && (U_AD <= 0.0f))
-    {
-        Simplex->Barycentric[0] = 1.0f;
-        Simplex->VertexCount = 1;
-        Simplex->Vertices[0] = Simplex->Vertices[3];
-        return;
-    }
-    
-    v3f N[4];
-    N[0] = Cross(DA, BA);
-    N[1] = Cross(D, B);
-    N[2] = Cross(B, A);
-    N[3] = Cross(A, D);
-    
-    f32 U_ADB = Dot(N[1], N[0]);
-    f32 V_ADB = Dot(N[2], N[0]);
-    f32 W_ADB = Dot(N[3], N[0]);
-    
-    N[0] = Cross(CA, DA);
-    N[1] = Cross(C, D);
-    N[2] = Cross(D, A);
-    N[3] = Cross(A, C);
-    
-    f32 U_ACD = Dot(N[1], N[0]);
-    f32 V_ACD = Dot(N[2], N[0]);
-    f32 W_ACD = Dot(N[3], N[0]);
-    
-    N[0] = Cross(BC, DC);
-    N[1] = Cross(B, D);
-    N[2] = Cross(D, C);
-    N[3] = Cross(C, B);
-    
-    f32 U_CBD = Dot(N[1], N[0]);
-    f32 V_CBD = Dot(N[2], N[0]);
-    f32 W_CBD = Dot(N[3], N[0]);
-    
-    N[0] = Cross(BA, CA);
-    N[1] = Cross(B, C);
-    N[2] = Cross(C, A);
-    N[3] = Cross(A, B);
-    
-    f32 U_ABC = Dot(N[1], N[0]);
-    f32 V_ABC = Dot(N[2], N[0]);
-    f32 W_ABC = Dot(N[3], N[0]);
-    
-    if((W_ABC <= 0.0f) && (V_ADB <= 0.0f) && (U_AB > 0.0f) && (V_AB > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_AB;
-        Simplex->Barycentric[1] = V_AB;
-        Simplex->VertexCount = 2;
-        return;
-    }
-    
-    if((U_ABC <= 0.0f) && (W_CBD <= 0.0f) && (U_BC > 0.0f) && (V_BC > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_BC;
-        Simplex->Barycentric[1] = V_BC;
-        Simplex->VertexCount = 2;
-        Simplex->Vertices[0] = Simplex->Vertices[1];
-        Simplex->Vertices[1] = Simplex->Vertices[2];
-        return;
-    }   
-    
-    if((V_ABC <= 0.0f) && (W_ACD <= 0.0f) && (U_CA > 0.0f) && (V_CA > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_CA;
-        Simplex->Barycentric[1] = V_CA;
-        Simplex->VertexCount = 2;
-        Simplex->Vertices[1] = Simplex->Vertices[0];
-        Simplex->Vertices[0] = Simplex->Vertices[2];
-        return;
-    }
-    
-    if((V_CBD <= 0.0f) && (U_ACD <= 0.0f) && (U_DC > 0.0f) && (V_DC > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_DC;
-        Simplex->Barycentric[1] = V_DC;
-        Simplex->VertexCount = 2;
-        Simplex->Vertices[0] = Simplex->Vertices[3];
-        Simplex->Vertices[1] = Simplex->Vertices[2];
-        return;
-    }
-    
-    if((V_ACD <= 0.0f) && (W_ADB <= 0.0f) && (U_AD > 0.0f) && (V_AD > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_AD;
-        Simplex->Barycentric[1] = V_AD;
-        Simplex->VertexCount = 2;
-        Simplex->Vertices[1] = Simplex->Vertices[3];
-        return;
-    }
-    
-    if((U_CBD <= 0.0f) && (U_ADB <= 0.0f) && (U_BD > 0.0f) && (V_BD > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_BD;
-        Simplex->Barycentric[1] = V_BD;
-        Simplex->VertexCount = 2;
-        Simplex->Vertices[0] = Simplex->Vertices[1];
-        Simplex->Vertices[1] = Simplex->Vertices[3];
-        return;
-    }
-    
-#define BOX_VOLUME(A, B, C) Dot(Cross(A, B), C)
-    
-    f32 Volume = BOX_VOLUME(CB, AB, DB);
-    f32 InvVolume = (Volume == 0) ? 1.0f : 1.0f/Volume;
-    
-    f32 U = BOX_VOLUME(C, D, B) * InvVolume;
-    f32 V = BOX_VOLUME(C, A, D) * InvVolume;
-    f32 W = BOX_VOLUME(D, A, B) * InvVolume;
-    f32 X = BOX_VOLUME(B, A, C) * InvVolume;
-    
-    if((X <= 0.0f) && (U_ABC > 0.0f) && (V_ABC > 0.0f) && (W_ABC > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_ABC;
-        Simplex->Barycentric[1] = V_ABC;
-        Simplex->Barycentric[2] = W_ABC;
-        Simplex->VertexCount = 3;
-        return;
-    }
-    
-    if((U <= 0.0f) && (U_CBD > 0.0f) && (V_CBD > 0.0f) && (W_CBD > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_CBD;
-        Simplex->Barycentric[1] = V_CBD;
-        Simplex->Barycentric[2] = W_CBD;
-        Simplex->VertexCount = 3;
-        Simplex->Vertices[0] = Simplex->Vertices[2];
-        Simplex->Vertices[2] = Simplex->Vertices[3];
-        return;
-    }
-    
-    if((V <= 0.0f) && (U_ACD > 0.0f) && (V_ACD > 0.0f) && (W_ACD > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_ACD;
-        Simplex->Barycentric[1] = V_ACD;
-        Simplex->Barycentric[2] = W_ACD;
-        Simplex->VertexCount = 3;
-        Simplex->Vertices[1] = Simplex->Vertices[2];
-        Simplex->Vertices[2] = Simplex->Vertices[3];
-        return;
-    }
-    
-    if((W <= 0.0f) && (U_ADB > 0.0f) && (V_ADB > 0.0f) && (W_ADB > 0.0f))
-    {
-        Simplex->Barycentric[0] = U_ADB;
-        Simplex->Barycentric[1] = V_ADB;
-        Simplex->Barycentric[2] = W_ADB;
-        Simplex->VertexCount = 3;
-        Simplex->Vertices[2] = Simplex->Vertices[1];
-        Simplex->Vertices[1] = Simplex->Vertices[3];
-        return;
-    }
-    
-    Simplex->Barycentric[0] = U;
-    Simplex->Barycentric[1] = V;
-    Simplex->Barycentric[2] = W;
-    Simplex->Barycentric[3] = X;
-    Simplex->VertexCount = 4;    
-#undef BOX_VOLUME
-}
-
-gjk_result GJK(support_function* SupportA, void* SupportAData, 
-               support_function* SupportB, void* SupportBData)
-{
-    gjk_result Result = {};
-    Result.Intersected = false;
-    
-    gjk_simplex Simplex = {};    
-    Simplex.ClosestDistance = FLT_MAX;
-
-    v3f CsoD = V3(1.0f, 0.0f, 0.0f);    
-    
-    //TODO(JJ): Cap this out
-    for(u32 Iteration = 0; ; Iteration++)
+    else
     {        
-        DEVELOPER_MAX_GJK_ITERATIONS(Iteration);           
-        
-        v3f ASupportPos = SupportA(SupportAData, -CsoD);
-        v3f BSupportPos = SupportB(SupportBData,  CsoD);
-        CsoD = BSupportPos - ASupportPos;
-        
-        if(FindDuplicateSupports(Simplex.Vertices, Simplex.VertexCount, ASupportPos, BSupportPos))
-            break;
-        
-        gjk_simplex_vertex* Vertex = &Simplex.Vertices[Simplex.VertexCount];
-        Vertex->ASupportPos = ASupportPos;
-        Vertex->BSupportPos = BSupportPos;        
-        Vertex->CsoD = CsoD;
-        
-        Simplex.Barycentric[Simplex.VertexCount++] = 1.0f;
-        switch(Simplex.VertexCount)
-        {
-            case 2:
-            {
-                LineTest(&Simplex);
-            } break;
-            
-            case 3:
-            {
-                TriangleTest(&Simplex);
-            } break;
-            
-            case 4:
-            {
-                TetrahedronTest(&Simplex);
-            } break;
-        }
-        
-        if(Simplex.VertexCount == 4)
-        {            
-            Result.Intersected = true;
-            return Result;            
-        }
-        
-        if(!AreGettingCloser(&Simplex))        
-            break;
-        
-        CsoD = NewSearchDirection(&Simplex);
-        
-        if(SquareMagnitude(CsoD) < (GJK_EPSILON*GJK_EPSILON))
-            break;                
+        Simplex->Vertex[0] = Simplex->Vertex[1];
+        Simplex->Vertex[1] = Simplex->Vertex[2];
+        Simplex->Vertex[2] = Simplex->Vertex[Simplex->LastIndex];
+        Simplex->LastIndex = 2;
     }
+    
+    return PerformTriangleTest(Simplex, V);
+}
 
-    f32 BarycentricRatio = GetInvTotalBarycentric(Simplex.Barycentric, Simplex.VertexCount);
-    switch(Simplex.VertexCount)
+i32 PerformSimplexTest(gjk_simplex* Simplex, v3f* V)
+{
+    switch(Simplex->GetVertexCount())
     {
-        case 1:
-        {
-            Result.ClosestPoints[0] = Simplex.Vertices[0].ASupportPos;
-            Result.ClosestPoints[1] = Simplex.Vertices[0].BSupportPos;
-        } break;
-        
         case 2:
-        {                        
-            v3f A = GetBarycentricPoint(Simplex.Vertices[0].ASupportPos, Simplex.Barycentric[0], BarycentricRatio);
-            v3f B = GetBarycentricPoint(Simplex.Vertices[1].ASupportPos, Simplex.Barycentric[1], BarycentricRatio);
-            v3f C = GetBarycentricPoint(Simplex.Vertices[0].BSupportPos, Simplex.Barycentric[0], BarycentricRatio);
-            v3f D = GetBarycentricPoint(Simplex.Vertices[1].BSupportPos, Simplex.Barycentric[1], BarycentricRatio);
-            
-            Result.ClosestPoints[0] = A+B;
-            Result.ClosestPoints[1] = C+D;
+        {
+            return PerformLineTest(Simplex, V);
         } break;
         
         case 3:
-        {            
-            v3f A = GetBarycentricPoint(Simplex.Vertices[0].ASupportPos, Simplex.Barycentric[0], BarycentricRatio);
-            v3f B = GetBarycentricPoint(Simplex.Vertices[1].ASupportPos, Simplex.Barycentric[1], BarycentricRatio);
-            v3f C = GetBarycentricPoint(Simplex.Vertices[2].ASupportPos, Simplex.Barycentric[2], BarycentricRatio);
-            
-            v3f D = GetBarycentricPoint(Simplex.Vertices[0].BSupportPos, Simplex.Barycentric[0], BarycentricRatio);
-            v3f E = GetBarycentricPoint(Simplex.Vertices[1].BSupportPos, Simplex.Barycentric[1], BarycentricRatio);
-            v3f F = GetBarycentricPoint(Simplex.Vertices[2].BSupportPos, Simplex.Barycentric[2], BarycentricRatio);
-            
-            Result.ClosestPoints[0] = A+B+C;
-            Result.ClosestPoints[1] = D+E+F;            
+        {
+            return PerformTriangleTest(Simplex, V);
         } break;
         
         case 4:
         {
-            //TODO(JJ): Do we need to handle this case?
-            ASSERT(false);
+            return PerformTetrahedronTest(Simplex, V);
         } break;
+        
+        INVALID_DEFAULT_CASE;        
+    }
+    
+    return -1;
+}
+
+template <typename typeA, typename typeB>
+b32 GJKIntersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
+{    
+    v3f V = Global_WorldXAxis;     
+    *Simplex = InitSimplex();
+    
+    gjk_vertex Support = GetSupport2(ObjectA, ObjectB, V);    
+    Simplex->Add(&Support);
+    
+    V = -Support.W;
+    
+    u32 Iterations = 0;
+    for(;;)
+    {
+        DEVELOPER_MAX_GJK_ITERATIONS(Iterations);
+        Iterations++;                        
+        Support = GetSupport2(ObjectA, ObjectB, V);
+        
+        f32 Delta = Dot(V, Support.W);
+        
+        if(Delta < 0)        
+            return false;        
+        
+        Simplex->Add(&Support);
+        
+        i32 SimplexResult = PerformSimplexTest(Simplex, &V);
+        if(SimplexResult == 1)
+            return true;
+        else if(SimplexResult == -1)
+            return false;
+        
+        if(IsFuzzyZero(SquareMagnitude(V)))
+            return false;
     }    
+}
+
+template <typename typeA, typename typeB>
+b32 GJKIntersected(typeA* ObjectA, typeB* ObjectB)
+{
+    gjk_simplex Simplex;
+    return GJKIntersected(ObjectA, ObjectB, &Simplex);
+}
+
+template <typename typeA, typename typeB>
+b32 GJKQuadraticIntersected(typeA* ObjectA, typeB* ObjectB, f32 Radius)
+{
+    gjk_distance Distance = GJKDistance(ObjectA, ObjectB);
+    b32 Result = Distance.SquareDistance <= Square(Radius);
     return Result;
 }

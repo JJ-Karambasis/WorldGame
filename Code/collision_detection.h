@@ -17,17 +17,37 @@ struct sphere
 
 struct capsule
 {
-    v3f P0;
-    v3f P1;
+    union
+    {
+        v3f P[2];
+        struct
+        {
+            v3f P0;
+            v3f P1;
+        };
+    };
     f32 Radius;
+};
+
+struct ray_mesh_intersection_result
+{
+    b32 FoundCollision;
+    f32 t;
+    f32 u;
+    f32 v;
+};
+
+struct penetration
+{    
+    v3f Normal;
+    f32 Distance;
 };
 
 struct collision_result
 {
-    b32 FoundCollision;    
-    v3f ContactPoint;
-    v3f Normal;    
     f32 t;
+    struct world_entity* HitEntity;    
+    penetration Penetration;    
 };
 
 struct collision_volume
@@ -44,14 +64,5 @@ struct collision_volume
         };
     };
 };
-
-inline collision_result
-InvalidCollisionResult()
-{
-    collision_result Result = {};
-    Result.t = INFINITY;
-    Result.ContactPoint = Result.Normal = InvalidV3();
-    return Result;
-}
 
 #endif

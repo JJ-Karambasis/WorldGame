@@ -108,7 +108,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         
         v3f CollisionNormal = PlayerEntity0->CollidedNormal;
         
-        Text("Player 0 Position: (%.2f, %.2f, %.2f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
+        Text("Player 0 Position: (%.2f, %.2f, %.6f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
         Text("Player 0 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity0.x, PlayerVelocity0.y, PlayerVelocity0.z);
         Text("Collided Normal: (%.2f, %.2f, %.2f)", CollisionNormal.x, CollisionNormal.y, CollisionNormal.z);
         

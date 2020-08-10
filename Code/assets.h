@@ -149,7 +149,7 @@ struct convex_hull
     convex_vertex* Vertices;
     convex_edge* Edges;
     convex_face* Faces;    
-        
+    
 #if DEVELOPER_BUILD
     i64 GDIHandle;
 #endif
@@ -200,6 +200,7 @@ struct assets
     graphics_material Material_DiffuseT_SpecularT_Normal_2;
     
     convex_hull BoxConvexHull;
+    convex_hull FloorConvexHull;    
     
 #if 0 
     mesh TestSkeletonMesh;

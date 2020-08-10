@@ -5,7 +5,6 @@
 
 #include "platform.h"
 #include "input.h"
-#include "geometry.h"
 #include "graphics.h"
 #include "assets.h"
 #include "collision_detection.h"

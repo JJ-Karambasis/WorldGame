@@ -6,8 +6,7 @@
 
 struct player
 {    
-    world_entity_id EntityID;
-    v3f Radius;        
+    world_entity_id EntityID;    
     b32 IsJumping;
     //animation_controller AnimationController;        
 };
