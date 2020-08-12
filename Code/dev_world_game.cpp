@@ -555,7 +555,39 @@ void DevelopmentRender(dev_context* DevContext)
 
     if(DevContext->DrawGrid)
     {
-        DrawGrid(DevContext, -10, 10, -10, 10, Red3());
+        m4 Perspective = PerspectiveM4(World->Camera.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), World->Camera.ZNear, World->Camera.ZFar);
+        v3f FrustumCorners[8];
+        GetFrustumCorners(FrustumCorners, Perspective);
+        TransformVectors(FrustumCorners, 8, TransformM4(ViewSettings.Position, ViewSettings.Orientation));
+        f32 minX, maxX, minY, maxY;
+        minX = FrustumCorners[0].x;
+        maxX = FrustumCorners[0].x;
+        minY = FrustumCorners[0].y;
+        maxY = FrustumCorners[0].y;
+        for(int i = 0; i < 8; i++)
+        {
+            if(FrustumCorners[i].x < minX)
+            {
+                minX = FrustumCorners[i].x;
+            }
+
+            if(FrustumCorners[i].x > maxX)
+            {
+                maxX = FrustumCorners[i].x;
+            }
+
+            if(FrustumCorners[i].y < minY)
+            {
+                minY = FrustumCorners[i].y;
+            }
+
+            if(FrustumCorners[i].y > maxY)
+            {
+                maxY = FrustumCorners[i].y;
+            }
+        }
+
+        DrawGrid(DevContext, Floor(minX), Ceil(maxX), Floor(minY), Ceil(maxY), Red3());
     }
     
     DevelopmentImGuiRender(DevContext);  
