@@ -1,7 +1,7 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-#include "AKCommon/common.h"
+#include "AKCommon/ak_common.h"
 #include "platform.h"
 
 #define MAX_JOINT_COUNT 256

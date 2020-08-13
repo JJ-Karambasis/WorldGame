@@ -859,7 +859,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     }
     
     handle_error:
-    string ErrorMessage = GetString(GetGlobalErrorStream());
+    string ErrorMessage = GetGlobalErrorStream()->GetString();
     Global_Platform->WriteEntireFile("Errors.log", ErrorMessage.Data, SafeU32(ErrorMessage.Length));
     MessageBox(NULL, "Error has occurred, please see Errors.log file.", NULL, MB_OK);     
     return -1;

@@ -409,7 +409,7 @@ inline f32
 GetBisectionMid(v3f DeltaA, v3f DeltaB, f32 tStart, f32 tEnd)
 {
     v3f Delta = DeltaA-DeltaB;    
-    if(AreEqual(Delta*tStart, Delta*tEnd, BISECTION_EPSILON))
+    if(AreNearlyEqualV3(Delta*tStart, Delta*tEnd, BISECTION_EPSILON))
         return tStart;
     
     return (tStart+tEnd)*0.5f;    

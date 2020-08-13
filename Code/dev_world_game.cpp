@@ -147,12 +147,26 @@ void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTop
 {
     for(int x = xLeftBound; x <= xRightBound; x++)
     {
-        DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Color);
+        if(x != 0)
+        {
+            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Color);
+        }
+        else
+        {
+            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Red3());
+        }
     }
 
     for(int y = yTopBound; y <= yBottomBound; y++)
     {
-        DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Color);
+        if(y != 0)
+        {
+            DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Color);
+        }
+        else
+        {
+           DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Green3()); 
+        }
     }
 }
 
@@ -558,7 +572,7 @@ void DevelopmentRender(dev_context* DevContext)
         m4 Perspective = PerspectiveM4(World->Camera.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), World->Camera.ZNear, World->Camera.ZFar);
         v3f FrustumCorners[8];
         GetFrustumCorners(FrustumCorners, Perspective);
-        TransformVectors(FrustumCorners, 8, TransformM4(ViewSettings.Position, ViewSettings.Orientation));
+        TransformPoints(FrustumCorners, 8, TransformM4(ViewSettings.Position, ViewSettings.Orientation));
         f32 minX, maxX, minY, maxY;
         minX = FrustumCorners[0].x;
         maxX = FrustumCorners[0].x;
@@ -566,28 +580,13 @@ void DevelopmentRender(dev_context* DevContext)
         maxY = FrustumCorners[0].y;
         for(int i = 0; i < 8; i++)
         {
-            if(FrustumCorners[i].x < minX)
-            {
-                minX = FrustumCorners[i].x;
-            }
-
-            if(FrustumCorners[i].x > maxX)
-            {
-                maxX = FrustumCorners[i].x;
-            }
-
-            if(FrustumCorners[i].y < minY)
-            {
-                minY = FrustumCorners[i].y;
-            }
-
-            if(FrustumCorners[i].y > maxY)
-            {
-                maxY = FrustumCorners[i].y;
-            }
+            minX = MinimumF32(minX, FrustumCorners[i].x);
+            maxX = MaximumF32(maxX, FrustumCorners[i].x);
+            minY = MinimumF32(minY, FrustumCorners[i].y);
+            maxY = MaximumF32(maxY, FrustumCorners[i].y);
         }
 
-        DrawGrid(DevContext, Floor(minX), Ceil(maxX), Floor(minY), Ceil(maxY), Red3());
+        DrawGrid(DevContext, Floor(minX), Ceil(maxX), Floor(minY), Ceil(maxY), RGB(0.1f, 0.1f, 0.1f));
     }
     
     DevelopmentImGuiRender(DevContext);  
