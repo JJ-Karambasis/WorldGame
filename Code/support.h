@@ -3,26 +3,43 @@
 
 inline u32 
 ConvexHullSupport(convex_hull* ConvexHull, v3f Direction)
-{           
-    //TODO(JJ): Use the adjacency information in the convex hull to perform this query. 
-    //It will be O(log(N)) instead of O(N)
+{               
+    u32 BestVertexIndex = 0;
+    half_vertex* BestVertex = ConvexHull->Vertices + BestVertexIndex;
+    f32 BestDot = Dot(BestVertex->V, Direction);
     
-    f32 BestDot = -FLT_MAX;
-    u32 BestVertex = (u32)-1;    
-    
-    for(u32 VertexIndex = 0; VertexIndex < ConvexHull->VertexCount; VertexIndex++)
+    for(;;)
     {
-        convex_vertex* Vertex = ConvexHull->Vertices + VertexIndex;
-        f32 DotResult = Dot(Vertex->V, Direction);
+        i32 E = BestVertex->Edge;
+        i32 StartEdge = E;
+        f32 OldBestDot = BestDot;
         
-        if(DotResult > BestDot)
+        do
         {
-            BestVertex = VertexIndex;
-            BestDot = DotResult;
-        }
+            half_edge* Edge = ConvexHull->Edges + E;
+            
+            i32 VertexIndex = Edge->Vertex;
+            half_vertex* Vertex = ConvexHull->Vertices + VertexIndex;
+            
+            f32 TempDot = Dot(Direction, Vertex->V);
+            if(TempDot > BestDot)
+            {
+                BestVertexIndex = VertexIndex;
+                BestVertex = Vertex;
+                BestDot = TempDot;
+            }
+            
+            E = ConvexHull->Edges[Edge->EdgePair].NextEdge;     
+            if(E == -1)
+                E = Edge->NextEdge;
+            
+        } while(StartEdge != E);     
+        
+        if(BestDot == OldBestDot)
+            break;
     }
     
-    return BestVertex;
+    return BestVertexIndex;
 }
 
 inline v3f ConvexHullSupportPoint(convex_hull* ConvexHull, sqt Transform, v3f D)

@@ -1,11 +1,12 @@
 //TODO(JJ): Should actually be changed into the actual game name
 #define GAME_NAME "WorldGame"
 
-#include "AKCommon/ak_common.h"
+#include <ak_common.h>
 
 #include "platform.h"
 #include "input.h"
 #include "graphics.h"
+#include "assets/assets.h"
 #include "assets.h"
 #include "collision_detection.h"
 #include "audio.h"
@@ -37,8 +38,10 @@ struct block_puzzle
 };
 
 struct game
-{
+{        
     b32 Initialized;
+    assets_2 Assets2;
+    
     assets* Assets;
     audio_output* AudioOutput;
     input* Input;  
@@ -48,6 +51,8 @@ struct game
     
     f32 dt;
     u32 CurrentWorldIndex;
+    
+    free_list<collision_volume> CollisionVolumeStorage;
     
     world Worlds[2];                
     block_puzzle TestPuzzle;

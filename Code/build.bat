@@ -12,14 +12,17 @@ IF NOT EXIST ..\din mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data
 IF NOT EXIST ..\data\frame_recordings mkdir ..\data\frame_recordings
 
-
-
 set COMPILE_PLATFORM=1
 set COMPILE_GRAPHICS=1
 set COMPILE_GAME=1
+set COMPILE_ASSET_BUILDER=1
 
 pushd ..\Bin
 del *.pdb > NUL 2> NUL
+
+if %COMPILE_ASSET_BUILDER% == 1 (
+    %Compiler% %Common% %Warnings% %FBXPath% -DOS_WINDOWS ..\code\assets\asset_builder\asset_builder.cpp -link libfbxsdk-mt.lib -opt:ref -incremental:no -out:Asset_Builder.exe
+)
 
 if %COMPILE_GAME% == 1 (
     %Compiler% %Common% %Warnings% -LD %FBXPath% -DOS_WINDOWS ..\code\world_game.cpp -link libfbxsdk-mt.lib -opt:ref -incremental:no -pdb:World_Game_%RANDOM%.pdb -out:World_Game.dll

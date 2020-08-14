@@ -57,12 +57,18 @@ struct collision_volume
     { 
         sphere Sphere;
         capsule Capsule;        
-        struct
-        {
-            convex_hull* ConvexHull;        
-            rigid_transform Transform;
-        };
+        convex_hull* ConvexHull;        
     };
+    
+    collision_volume* Next;
+};
+
+struct time_of_impact_result
+{
+    f32 t;
+    world_entity* HitEntity;
+    collision_volume* VolumeA;
+    collision_volume* VolumeB;
 };
 
 #endif

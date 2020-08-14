@@ -1,10 +1,39 @@
 /* Original Author: Armand (JJ) Karambasis */
 #include "dev_imgui.cpp"
 
-i64 AllocateMesh(graphics* Graphics, mesh_generation_result* Mesh)
+graphics_mesh_id AllocateConvexHullMesh(graphics* Graphics, convex_hull* ConvexHull)
 {
-    i64 Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
-                                        Mesh->Indices, Mesh->IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
+    v3f* Vertices = PushArray(ConvexHull->Header.VertexCount, v3f, Clear, 0);    
+    u32 IndexCount = ConvexHullIndexCount(ConvexHull);
+    u16* Indices = PushArray(IndexCount, u16, Clear, 0);
+    
+    for(u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
+        Vertices[VertexIndex] = ConvexHull->Vertices[VertexIndex].V;
+    
+    u32 Index = 0;
+    for(u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
+    {
+        half_face* Face = ConvexHull->Faces + FaceIndex;
+        
+        i32 Edge = Face->Edge;
+        do
+        {
+            Indices[Index++] = (u16)ConvexHull->Edges[Edge].Vertex;
+            Indices[Index++] = (u16)ConvexHull->Edges[ConvexHull->Edges[Edge].EdgePair].Vertex;
+            Edge = ConvexHull->Edges[Edge].NextEdge;
+        } while (Edge != Face->Edge);        
+    }
+    
+    ASSERT(Index == IndexCount);
+    graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Vertices, sizeof(v3f)*ConvexHull->Header.VertexCount, GRAPHICS_VERTEX_FORMAT_P3,
+                                                     Indices, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
+    return Result;
+}
+
+graphics_mesh_id AllocateMesh(graphics* Graphics, mesh_generation_result* Mesh)
+{
+    graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
+                                                     Mesh->Indices, Mesh->IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
     return Result;
 }
 
@@ -156,7 +185,7 @@ void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTop
             DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Red3());
         }
     }
-
+    
     for(int y = yTopBound; y <= yBottomBound; y++)
     {
         if(y != 0)
@@ -374,9 +403,14 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     
     FOR_EACH(Entity, &World->EntityPool)
     {        
-        if(Entity->Mesh)
-        {
-            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Entity->Mesh, Entity->Transform);
+        if(Entity->MeshID != INVALID_MESH_ID)
+        {   
+            mesh_info* MeshInfo = GetMeshInfo(&DevContext->Game->Assets2, Entity->MeshID);
+            mesh* Mesh = GetMesh(&DevContext->Game->Assets2, Entity->MeshID);
+            if(!Mesh)
+                Mesh = LoadMesh(&DevContext->Game->Assets2, Entity->MeshID);
+            
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Mesh, MeshInfo, Entity->Transform);
             if(IntersectionResult.FoundCollision)
             {
                 if(tBest > IntersectionResult.t)
@@ -392,54 +426,62 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     return Result;
 }
 
-void DrawWireframeWorld(graphics* Graphics, world* World)
+void DrawWireframeWorld(graphics* Graphics, world* World, assets_2* Assets)
 {
     PushWireframe(Graphics, true);
     PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);        
     FOR_EACH(Entity, &World->EntityPool)
     {
-        if(Entity->Mesh)
-            PushDrawUnlitMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, CreateDiffuseMaterialSlot(Cyan3()), Entity->Mesh->IndexCount, 0, 0);
+        if(Entity->MeshID != INVALID_MESH_ID)
+        {
+            graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
+            PushDrawUnlitMesh(Graphics, MeshHandle, Entity->Transform, CreateDiffuseMaterialSlot(Cyan3()), 
+                              GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
+        }
     }
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     PushWireframe(Graphics, false);
 }
 
 void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, world* World)
-{            
+{           
     view_settings ViewSettings = GetViewSettings(DevContext, World);    
     
     PushRenderBufferViewportScissorAndView(DevContext->Graphics, RenderBuffer, &ViewSettings);
     PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);                
     
+    assets_2* Assets = &DevContext->Game->Assets2;
+    
     switch(DevContext->ViewModeType)
     {
         case VIEW_MODE_TYPE_LIT:
         {                        
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets);                                                         
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets, Assets);                                                         
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
         {                                    
             FOR_EACH(Entity, &World->EntityPool)
             {
-                if(Entity->Mesh)                    
+                if(Entity->MeshID != INVALID_MESH_ID)                    
                 {
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, DevContext->Graphics, Entity->MeshID);
+                    
                     graphics_material* Material = Entity->Material;                    
-                    PushDrawUnlitMesh(DevContext->Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Material->Diffuse, Entity->Mesh->IndexCount, 0, 0);                                     
+                    PushDrawUnlitMesh(DevContext->Graphics, MeshHandle, Entity->Transform, Material->Diffuse, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);                                     
                 }
             }
         } break;                
         
         case VIEW_MODE_TYPE_WIREFRAME:
         {                                    
-            DrawWireframeWorld(DevContext->Graphics, World);            
+            DrawWireframeWorld(DevContext->Graphics, World, Assets);            
         } break;
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets);            
-            DrawWireframeWorld(DevContext->Graphics, World);                        
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets, Assets);            
+            DrawWireframeWorld(DevContext->Graphics, World, Assets);                        
         } break;
         
         INVALID_DEFAULT_CASE;        
@@ -451,34 +493,65 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
     if(DevContext->DrawColliders)
     {
         FOR_EACH(Entity, &World->EntityPool)
-        {            
-            dev_mesh Mesh = {};                        
-            switch(Entity->CollisionVolume.Type)
+        {   
+            mesh_convex_hull_gdi* ConvexHullGDI = NULL; 
+            if(Entity->MeshID != INVALID_MESH_ID)
             {
-                case COLLISION_VOLUME_TYPE_SPHERE:
+                ConvexHullGDI = DevContext->MeshConvexHulls + Entity->MeshID;
+                
+                if(ConvexHullGDI->Count == (u32)-1)
                 {
-                    sphere Sphere = TransformSphere(&Entity->CollisionVolume.Sphere, Entity->Transform);                    
-                    DrawLineEllipsoid(DevContext, Sphere.CenterP, V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), Blue3());
-                } break;
-                
-                case COLLISION_VOLUME_TYPE_CAPSULE:
-                {
-                    capsule Capsule = TransformCapsule(&Entity->CollisionVolume.Capsule, Entity->Transform);
-                    DrawLineCapsule(DevContext, Capsule.P0, Capsule.P1, Capsule.Radius, Blue3());
+                    mesh_info* MeshInfo = GetMeshInfo(Assets, Entity->MeshID);                
+                    ConvexHullGDI->Count = MeshInfo->Header.ConvexHullCount;
                     
-                    
-                } break;
-                
-                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
-                {                    
-                    rigid_transform Transform = Entity->CollisionVolume.Transform*Entity->Transform;                    
-                    m4 Model = TransformM4(Transform);
-                    PushDrawLineMesh(DevContext->Graphics, Entity->CollisionVolume.ConvexHull->GDIHandle, Model, Blue3(), 
-                                     ConvexHullIndexCount(Entity->CollisionVolume.ConvexHull), 0, 0);
-                } break;
-                
-                INVALID_DEFAULT_CASE;
+                    if(ConvexHullGDI->Count > 0)
+                    {
+                        ConvexHullGDI->Meshes = PushArray(&DevContext->DevStorage, ConvexHullGDI->Count, graphics_mesh_id, Clear, 0);
+                        for(u32 ConvexHullIndex = 0; ConvexHullIndex < ConvexHullGDI->Count; ConvexHullIndex++)
+                        {
+                            convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;                            
+                            ConvexHullGDI->Meshes[ConvexHullIndex] = AllocateConvexHullMesh(DevContext->Graphics, ConvexHull);                            
+                        }
+                    }
+                }                                
             }
+            
+            u32 ConvexHullIndex = 0;
+            for(collision_volume* Volume = Entity->CollisionVolumes; Volume; Volume = Volume->Next)
+            {                
+                switch(Volume->Type)
+                {
+                    case COLLISION_VOLUME_TYPE_SPHERE:
+                    {
+                        sphere Sphere = TransformSphere(&Volume->Sphere, Entity->Transform);                    
+                        DrawLineEllipsoid(DevContext, Sphere.CenterP, V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), Blue3());
+                    } break;
+                    
+                    case COLLISION_VOLUME_TYPE_CAPSULE:
+                    {
+                        capsule Capsule = TransformCapsule(&Volume->Capsule, Entity->Transform);
+                        DrawLineCapsule(DevContext, Capsule.P0, Capsule.P1, Capsule.Radius, Blue3());                                                
+                    } break;
+                    
+                    case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                    {                           
+                        ASSERT(Entity->MeshID != INVALID_MESH_ID && ConvexHullGDI);
+                        ASSERT(ConvexHullGDI->Count != 0);
+                        
+                        sqt Transform = Volume->ConvexHull->Header.Transform*Entity->Transform;                                                
+                        m4 Model = TransformM4(Transform);
+                        
+                        PushDrawLineMesh(DevContext->Graphics, ConvexHullGDI->Meshes[ConvexHullIndex], Model, Blue3(), 
+                                         ConvexHullIndexCount(Volume->ConvexHull), 0, 0);
+                        
+                        ConvexHullIndex++;
+                    } break;
+                    
+                    INVALID_DEFAULT_CASE;
+                }
+            }
+            
+            ASSERT(ConvexHullGDI ? ConvexHullIndex == ConvexHullGDI->Count : true);
         }                        
     }   
 #endif
@@ -573,20 +646,20 @@ void DevelopmentRender(dev_context* DevContext)
         v3f FrustumCorners[8];
         GetFrustumCorners(FrustumCorners, Perspective);
         TransformPoints(FrustumCorners, 8, TransformM4(ViewSettings.Position, ViewSettings.Orientation));
-        f32 minX, maxX, minY, maxY;
-        minX = FrustumCorners[0].x;
-        maxX = FrustumCorners[0].x;
-        minY = FrustumCorners[0].y;
-        maxY = FrustumCorners[0].y;
+        
+        f32 MinX = FrustumCorners[0].x;
+        f32 MaxX = FrustumCorners[0].x;
+        f32 MinY = FrustumCorners[0].y;
+        f32 MaxY = FrustumCorners[0].y;
         for(int i = 0; i < 8; i++)
         {
-            minX = MinimumF32(minX, FrustumCorners[i].x);
-            maxX = MaximumF32(maxX, FrustumCorners[i].x);
-            minY = MinimumF32(minY, FrustumCorners[i].y);
-            maxY = MaximumF32(maxY, FrustumCorners[i].y);
+            MinX = MinimumF32(FrustumCorners[i].x, MinX);                                             
+            MaxX = MaximumF32(FrustumCorners[i].x, MaxX);
+            MinY = MinimumF32(FrustumCorners[i].y, MinY);
+            MaxY = MaximumF32(FrustumCorners[i].y, MaxY);            
         }
-
-        DrawGrid(DevContext, Floor(minX), Ceil(maxX), Floor(minY), Ceil(maxY), RGB(0.1f, 0.1f, 0.1f));
+        
+        DrawGrid(DevContext, Floor(MinX), Ceil(MaxX), Floor(MinY), Ceil(MaxY), RGB(0.1f, 0.1f, 0.1f));        
     }
     
     DevelopmentImGuiRender(DevContext);  
@@ -616,6 +689,9 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         DevContext->DrawGrid = true;
         DevContext->DrawColliders = true;        
+        
+        for(u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
+            DevContext->MeshConvexHulls[MeshIndex].Count = (u32)-1;
         
         CreateDevLineCapsuleMesh(DevContext, 1.0f, 60);
         CreateDevLineBoxMesh(DevContext);

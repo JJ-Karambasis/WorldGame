@@ -1,5 +1,6 @@
 #ifndef ASSETS_H
 #define ASSETS_H
+#include "assets/asset_types.h"
 
 struct samples
 {
@@ -21,7 +22,7 @@ inline b32 IsAssetValid(audio* Audio)
     return Result;
 }
 
-struct mesh
+struct mesh_2
 {
     void* Vertices;
     void* Indices;
@@ -32,7 +33,7 @@ struct mesh
     i64 GDIHandle;
 };
 
-inline b32 IsAssetValid(mesh* Mesh)
+inline b32 IsAssetValid(mesh_2* Mesh)
 {
     b32 Result = (Mesh->Vertices && Mesh->Indices && 
                   (Mesh->VertexFormat != GRAPHICS_VERTEX_FORMAT_UNKNOWN) && 
@@ -118,66 +119,19 @@ inline b32 IsAssetValid(texture* Texture)
     return Result;
 }
 
-struct convex_vertex;
-struct convex_face;
-
-struct convex_edge
-{
-    i32 Vertex;
-    i32 EdgePair;
-    i32 Face;
-    i32 NextEdge;    
-};
-
-struct convex_vertex
-{    
-    v3f V;
-    i32 Edge;    
-};
-
-struct convex_face
-{
-    i32 Edge;    
-};
-
-struct convex_hull
-{
-    u32 VertexCount;
-    u32 EdgeCount;
-    u32 FaceCount;
-    
-    convex_vertex* Vertices;
-    convex_edge* Edges;
-    convex_face* Faces;    
-    
-#if DEVELOPER_BUILD
-    i64 GDIHandle;
-#endif
-};
-
-inline b32 IsAssetValid(convex_hull* Hull)
-{
-    b32 Result = Hull->VertexCount && Hull->EdgeCount && Hull->FaceCount;
-    return Result;
-}
-
 struct assets
 {
     arena Storage;
     graphics* Graphics;
     
-    mesh BoxMesh;
+    
     walkable_mesh BoxWalkableMesh;
     
-    mesh QuadGraphicsMesh;
+    
     walkable_mesh QuadWalkableMesh;
     
-    mesh FloorMesh;
+    
     walkable_mesh FloorWalkableMesh;
-    
-    mesh SphereMesh;
-    
-    mesh PlayerMesh;
     
     texture TestMaterial0_Diffuse;    
     texture TestMaterial0_Normal;

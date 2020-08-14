@@ -805,6 +805,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
+    platform_time Start = Global_Platform->Clock();
+    
     if(!OpenGL->SkinningBuffers.Ptr)
     {
         OpenGL->SkinningBuffers.Capacity = 32;
@@ -1413,6 +1415,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     glBindTexture(GL_TEXTURE_2D, 0);
     
     CommandList->Count = 0;        
+    
+    platform_time End = Global_Platform->Clock();
+    CONSOLE_LOG("Elapsed Rendering Time %f\n", Global_Platform->ElapsedTime(End, Start)*1000.0);
     
     Platform_SwapBuffers(Graphics->PlatformData[0]);    
 }

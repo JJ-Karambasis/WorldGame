@@ -123,11 +123,23 @@ GetPlayerVelocity(game* Game, player* Player)
 void FreeEntity(game* Game, world_entity_id ID)
 {
     world* World = GetWorld(Game, ID);
+    
+    world_entity* Entity = GetEntity(World, ID);
+        
+    collision_volume* Volume = Entity->CollisionVolumes;
+    while(Volume)
+    {
+        collision_volume* VolumeToFree = Volume;
+        Volume = Volume->Next;
+        *VolumeToFree = {};
+        FreeListEntry(&Game->CollisionVolumeStorage, VolumeToFree);
+    }                
+        
     FreeFromPool(&World->EntityPool, ID.ID);
 }
 
 world_entity*
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Euler, graphics_material* Material, mesh* Mesh, collision_volume CollisionVolume, void* UserData=NULL)
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id MeshID, graphics_material* Material, void* UserData=NULL)
 {
     world* World = GetWorld(Game, WorldIndex);
     
@@ -137,61 +149,30 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     Entity->ID = MakeEntityID(EntityID, WorldIndex);
     
     Entity->Type = Type;
-    Entity->Transform = CreateRigidTransform(Position, Euler);
+    Entity->Transform = CreateSQT(Position, Scale, Euler);
     Entity->Material = Material;
-    Entity->Mesh = Mesh;
-    Entity->CollisionVolume = CollisionVolume;    
+    Entity->MeshID = MeshID;
+    
+    if(MeshID != INVALID_MESH_ID)
+    {
+        mesh_info* MeshInfo = GetMeshInfo(&Game->Assets2, MeshID);
+        for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
+        {
+            convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;                        
+            AddCollisionVolume(Game, Entity, ConvexHull);            
+        }        
+    }
+    
     Entity->LinkID = InvalidEntityID();
     
     return Entity;
 }
 
 world_entity*
-CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, graphics_material* Material, mesh* Mesh, collision_volume CollisionVolume, void* UserData=NULL)
+CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id Mesh, graphics_material* Material, void* UserData=NULL)
 {
-    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_STATIC, WorldIndex, Position, Euler, Material, Mesh, CollisionVolume, UserData);
+    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_STATIC, WorldIndex, Position, Scale, Euler, Mesh, Material, UserData);
     return Result;
-}
-
-world_entity_id
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, graphics_material* Material, mesh* Mesh, walkable_mesh* WalkableMesh = NULL, void* UserData=NULL)
-{
-    world* World = GetWorld(Game, WorldIndex);
-    
-    i64 EntityID = AllocateFromPool(&World->EntityPool);
-    world_entity* Entity = GetByID(&World->EntityPool, EntityID);
-    
-    Entity->ID = MakeEntityID(EntityID, WorldIndex);
-    
-    Entity->Type = Type;    
-    Entity->Transform = CreateRigidTransform(Position, Euler);
-    Entity->Material = Material;
-    Entity->Mesh = Mesh;
-    Entity->WalkableMesh = WalkableMesh;    
-    Entity->LinkID = InvalidEntityID();
-    
-    return Entity->ID;
-}
-
-inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, graphics_material* Material0, graphics_material* Material1, mesh* Mesh0, mesh* Mesh1, walkable_mesh* WalkableMesh0=NULL, walkable_mesh* WalkableMesh1=NULL)
-{
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Material0, Mesh0, WalkableMesh0);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Material1, Mesh1, WalkableMesh1);    
-}
-
-inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, graphics_material* Material0, graphics_material* Material1, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
-{
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Material0, Mesh, WalkableMesh);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Material1, Mesh, WalkableMesh);    
-}
-
-inline void
-CreateEntityInBothWorlds(game* Game, world_entity_type Type, v3f Position, v3f Scale, v3f Euler, graphics_material* Material, mesh* Mesh, walkable_mesh* WalkableMesh = NULL)
-{
-    CreateEntity(Game, Type, 0, Position, Scale, Euler, Material, Mesh, WalkableMesh);
-    CreateEntity(Game, Type, 1, Position, Scale, Euler, Material, Mesh, WalkableMesh);    
 }
 
 inline f32 

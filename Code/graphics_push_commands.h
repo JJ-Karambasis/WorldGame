@@ -2,7 +2,7 @@
 #define GRAPHICS_PUSH_COMMANDS_H
 
 //CONFIRM(JJ): Is this alright to be fixed sized?
-#define MAX_COMMAND_COUNT 4096
+#define MAX_COMMAND_COUNT 8192
 
 enum push_command_type
 {
@@ -120,14 +120,14 @@ struct push_command_material : public push_command
 
 struct push_command_draw_mesh : public push_command
 {
-    i64 MeshID;
+    graphics_mesh_id MeshID;
     m4 WorldTransform;    
     graphics_draw_info DrawInfo;    
 };
 
 struct push_command_draw_skeleton_mesh : public push_command
 {
-    i64 MeshID;
+    graphics_mesh_id MeshID;
     m4 WorldTransform;    
     graphics_draw_info DrawInfo;        
     m4 Joints[MAX_JOINT_COUNT];
@@ -135,7 +135,7 @@ struct push_command_draw_skeleton_mesh : public push_command
 
 struct push_command_draw_unlit_mesh : public push_command
 {
-    i64 MeshID;
+    graphics_mesh_id MeshID;
     m4 WorldTransform;
     graphics_diffuse_material_slot DiffuseSlot;
     graphics_draw_info DrawInfo;
@@ -143,7 +143,7 @@ struct push_command_draw_unlit_mesh : public push_command
 
 struct push_command_draw_unlit_skeleton_mesh : public push_command
 {
-    i64 MeshID;
+    graphics_mesh_id MeshID;
     m4 WorldTransform;
     graphics_diffuse_material_slot DiffuseSlot;
     graphics_draw_info DrawInfo;    
@@ -152,7 +152,7 @@ struct push_command_draw_unlit_skeleton_mesh : public push_command
 
 struct push_command_draw_line_mesh : public push_command
 {
-    i64 MeshID;
+    graphics_mesh_id MeshID;
     m4 WorldTransform;
     c3 Color;
     graphics_draw_info DrawInfo;        
@@ -160,8 +160,8 @@ struct push_command_draw_line_mesh : public push_command
 
 struct push_command_draw_imgui_ui : public push_command
 {
-    i64 MeshID;
-    i64 TextureID;
+    graphics_mesh_id MeshID;
+    graphics_texture_id TextureID;
     
     graphics_draw_info DrawInfo;
 };

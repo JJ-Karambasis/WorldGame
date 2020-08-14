@@ -178,13 +178,13 @@ convex_hull FBX_LoadFirstConvexHull(fbx_context* Context, arena* Storage)
     u32 EdgeCount = Mesh->GetMeshEdgeCount()*2;
     
     convex_hull Result = {};
-    Result.VertexCount = VertexCount;
-    Result.FaceCount = FaceCount;
-    Result.EdgeCount = EdgeCount;
+    Result.Header.VertexCount = VertexCount;
+    Result.Header.FaceCount = FaceCount;
+    Result.Header.EdgeCount = EdgeCount;
     
-    Result.Vertices = PushArray(Storage, VertexCount, convex_vertex, Clear, 0);
-    Result.Faces = PushArray(Storage, FaceCount, convex_face, Clear, 0);
-    Result.Edges = PushArray(Storage, EdgeCount, convex_edge, Clear, 0);
+    Result.Vertices = PushArray(Storage, VertexCount, half_vertex, Clear, 0);
+    Result.Faces = PushArray(Storage, FaceCount, half_face, Clear, 0);
+    Result.Edges = PushArray(Storage, EdgeCount, half_edge, Clear, 0);
     
     for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
     {
@@ -209,7 +209,7 @@ convex_hull FBX_LoadFirstConvexHull(fbx_context* Context, arena* Storage)
     for(u32 FaceIndex = 0; FaceIndex < FaceCount; FaceIndex++)
     {
         BOOL_CHECK_AND_HANDLE(Mesh->GetPolygonSize(FaceIndex) == 3, "Convex hull must be triangulated.");    
-        convex_face* Face = Result.Faces + FaceIndex;
+        half_face* Face = Result.Faces + FaceIndex;
         
         i32 FaceVertices[3] = 
         {
@@ -224,8 +224,8 @@ convex_hull FBX_LoadFirstConvexHull(fbx_context* Context, arena* Storage)
             i32 v0 = FaceVertices[i];
             i32 v1 = FaceVertices[j];
             
-            convex_vertex* Vertex0 = Result.Vertices + v0;
-            convex_vertex* Vertex1 = Result.Vertices + v1;
+            half_vertex* Vertex0 = Result.Vertices + v0;
+            half_vertex* Vertex1 = Result.Vertices + v1;
             
             i32 e0 = -1;
             i32 e1 = -1;
@@ -245,8 +245,8 @@ convex_hull FBX_LoadFirstConvexHull(fbx_context* Context, arena* Storage)
                 EdgeMap.Insert({v1, v0}, e1);                
             }
             
-            convex_edge* Edge0 = Result.Edges + e0;
-            convex_edge* Edge1 = Result.Edges + e1;
+            half_edge* Edge0 = Result.Edges + e0;
+            half_edge* Edge1 = Result.Edges + e1;
             
             if(Edge0->Vertex == -1)
                 Edge0->Vertex = v1;
@@ -281,7 +281,7 @@ convex_hull FBX_LoadFirstConvexHull(fbx_context* Context, arena* Storage)
     return {};
 }
 
-mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
+mesh_2 FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
 {
     if(Context->MeshNodes.Count == 0)
         return {};
@@ -382,7 +382,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     u32 VertexCount = 0;    
     u32* IndexData = PushArray(IndexCount, u32, Clear, 0);
     
-    mesh Result = {};
+    mesh_2 Result = {};
     
     hash_table<vertex_p3_n3_uv_index> HashTable = CreateHashTable<vertex_p3_n3_uv_index>(FBX_HASH_SIZE*4);     
     
@@ -635,7 +635,7 @@ mesh FBX_LoadFirstMesh(fbx_context* Context, arena* Storage)
     {
         Result.IndexFormat = GRAPHICS_INDEX_FORMAT_32_BIT;
         Result.Indices = PushWriteArray(Storage, IndexData, IndexCount, u32, 0);
-    }
+    }        
     
     return Result;  
     

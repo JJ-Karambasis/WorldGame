@@ -1,4 +1,5 @@
 #include "world_game.h"
+#include "assets/assets.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
 #include "collision_detection.cpp"
@@ -38,25 +39,31 @@ EXPORT GAME_TICK(Tick)
     SET_DEVELOPER_CONTEXT(DevContext);
     
     Global_Platform = Platform;        
+    
+    platform_time Start = Global_Platform->Clock();
+    
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     SetGlobalErrorStream(Global_Platform->ErrorStream);
     
     world_entity_id ID = {};
     if(!Game->Initialized)
-    {                
-        Game->GameStorage = CreateArena(MEGABYTE(16));        
+    {       
+        b32 AssetResult = InitAssets(&Game->Assets2);
+        ASSERT(AssetResult);
+        
+        Game->GameStorage = CreateArena(MEGABYTE(16));                                
         
         Game->Assets->BoxWalkableMesh = LoadWalkableMesh(Game->Assets, "Box.fbx");
-        Game->Assets->QuadGraphicsMesh = LoadGraphicsMesh(Game->Assets, "Quad.fbx");
+        
         Game->Assets->QuadWalkableMesh = LoadWalkableMesh(Game->Assets, "Quad.fbx");        
         Game->Assets->BoxConvexHull = LoadConvexHull(Game->Assets, "assets/raw/fbx/BoxConvexHull.fbx");
-        Game->Assets->FloorMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/FloorMesh.fbx");
+        
         Game->Assets->FloorWalkableMesh = LoadWalkableMesh(Game->Assets, "assets/raw/fbx/FloorMesh.fbx");
         Game->Assets->FloorConvexHull = LoadConvexHull(Game->Assets, "assets/raw/fbx/FloorConvexHull.fbx");
         
-        Game->Assets->BoxMesh = LoadGraphicsMesh(Game->Assets, "Box.fbx");
-        Game->Assets->SphereMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/SphereMesh.fbx");
-        Game->Assets->PlayerMesh = LoadGraphicsMesh(Game->Assets, "assets/raw/fbx/PlayerMesh.fbx");
+        
+        
+        
         
         Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
         Game->Assets->TestAudio2 = LoadAudio(Game->Assets, "TestSound2.wav");
@@ -96,10 +103,13 @@ EXPORT GAME_TICK(Tick)
             World->WorldIndex = WorldIndex;
             World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
             
-            collision_volume Volume = CreateCapsuleCollisionVolume(V3(), PLAYER_RADIUS, PLAYER_HEIGHT);            
-            World->PlayerEntity = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, V3(0.0f, 0.0f, 0.0f), V3(PI*0.0f, 0.0f*PI, 0.0f*PI), &Game->Assets->Material_DiffuseC_SpecularC, &Game->Assets->PlayerMesh, Volume);
+            v3f P0 = V3() + Global_WorldZAxis*PLAYER_RADIUS;
+            capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);
+            World->PlayerEntity = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f*PI, 0.0f*PI), MESH_ASSET_ID_PLAYER, &Game->Assets->Material_DiffuseC_SpecularC);
+            AddCollisionVolume(Game, World->PlayerEntity, &PlayerCapsule);
+            
             game_camera* Camera = &World->Camera;
-                        
+            
             Camera->Target = World->PlayerEntity->Position;
             
             Camera->Coordinates = SphericalCoordinates(6, TO_RAD(-90.0f), TO_RAD(35.0f));
@@ -118,17 +128,14 @@ EXPORT GAME_TICK(Tick)
             World->JumpingQuads[1].OtherQuad = &World->JumpingQuads[0];
         }
         
-        collision_volume BoxConvexVolume = CreateConvexHullCollisionVolume(&Game->Assets->BoxConvexHull, V3(), IdentityQuaternion());
-        collision_volume FloorConvexVolume = CreateConvexHullCollisionVolume(&Game->Assets->FloorConvexHull, V3(), IdentityQuaternion());        
-        
-        CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(0.0f, 0.0f, PI*0.0f), &Game->Assets->Material_DiffuseT, &Game->Assets->FloorMesh, FloorConvexVolume);                                                                
-        CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(0.0f, 0.0f, PI*0.1f), &Game->Assets->Material_DiffuseT_SpecularT_Normal_2, &Game->Assets->BoxMesh, BoxConvexVolume);
-        CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(0.0f, 0.0f, PI*0.25f), &Game->Assets->Material_DiffuseT_SpecularT_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);
-        CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(0.0f, 0.0f, PI*0.33f), &Game->Assets->Material_DiffuseC_SpecularC_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);
-        CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(0.0f, 0.0f, PI*0.0f), &Game->Assets->Material_DiffuseT_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);
-        CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(0.0f, 0.0f, PI*0.2f), &Game->Assets->Material_DiffuseT_SpecularT, &Game->Assets->BoxMesh, BoxConvexVolume);
-        CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(0.0f, 0.0f, PI*0.6f), &Game->Assets->Material_DiffuseT_SpecularC, &Game->Assets->BoxMesh, BoxConvexVolume);
-        CreateStaticEntity(Game, 0, V3(1.5f, 2.5f, 0.0f),   V3(0.0f, 0.0f, PI*0.5f), &Game->Assets->Material_DiffuseC_Normal, &Game->Assets->BoxMesh, BoxConvexVolume);                
+        CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_FLOOR, &Game->Assets->Material_DiffuseT);                           
+        CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularT_Normal_2);
+        CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.25f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularT_Normal);
+        CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.33f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseC_SpecularC_Normal);
+        CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_Normal);
+        CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularT);
+        CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularC);
+        CreateStaticEntity(Game, 0, V3(1.5f, 2.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.5f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseC_Normal);                        
         
         Game->Initialized = true;
     }        
@@ -144,7 +151,9 @@ EXPORT GAME_TICK(Tick)
     if(IsPressed(Game->Input->Action))
         PlayAudio(Game, &Game->Assets->TestAudio2, 0.15f);
     
-    UpdateWorld(Game);            
+    b32 Simulate = true;
+    if(Simulate)
+        UpdateWorld(Game);            
     
 #if 0 
     block_puzzle* Puzzle = &Game->TestPuzzle;    
@@ -201,7 +210,10 @@ EXPORT GAME_TICK(Tick)
         world* World = GetCurrentWorld(Game);        
         view_settings ViewSettings = GetViewSettings(&World->Camera);        
         
-        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &ViewSettings, Game->Assets);        
+        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &ViewSettings, Game->Assets, &Game->Assets2);        
         PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Graphics->RenderDim);
     }    
+    
+    platform_time End = Global_Platform->Clock();
+    CONSOLE_LOG("Elapsed Game Time %f\n", Global_Platform->ElapsedTime(End, Start)*1000.0);
 }

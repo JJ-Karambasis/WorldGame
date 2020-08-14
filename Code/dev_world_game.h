@@ -27,6 +27,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #include "camera.h"
 #include "input.h"
 #include "assets.h"
+#include "assets/assets.h"
 #include "dev_frame_recording.h"
 
 struct dev_input
@@ -114,6 +115,12 @@ enum view_mode_type
     VIEW_MODE_TYPE_WIREFRAME_ON_LIT
 };
 
+struct mesh_convex_hull_gdi
+{
+    u32 Count;
+    graphics_mesh_id* Meshes;
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -153,6 +160,8 @@ struct dev_context
     dev_mesh TriangleArrowMesh;
         
     dynamic_array<debug_primitive> DebugPrimitives;
+    
+    mesh_convex_hull_gdi MeshConvexHulls[MESH_ASSET_COUNT];
     
     arena LogStorage;
     dynamic_array<string> Logs;
@@ -224,7 +233,7 @@ inline void DebugLog(dev_context* DevContext, char* Format, ...)
 inline u32 
 ConvexHullIndexCount(convex_hull* Hull)
 {
-    u32 Result = Hull->FaceCount*3*2;
+    u32 Result = Hull->Header.FaceCount*3*2;
     return Result;
 }
 

@@ -1,7 +1,7 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-#include "AKCommon/ak_common.h"
+#include <ak_common.h>
 #include "platform.h"
 
 #define MAX_JOINT_COUNT 256
@@ -11,7 +11,11 @@
 #define SHADOW_MAP_WIDTH (512*2)
 #define SHADOW_MAP_HEIGHT (512*2)
 
+#define INVALID_GRAPHICS_MESH_ID ((graphics_mesh_id)-1)
+#define INVALID_GRAPHICS_TEXTURE_ID ((graphics_texture_id)-1)
+
 typedef i64 graphics_texture_id;
+typedef i64 graphics_mesh_id;
 
 struct view_settings
 {
@@ -177,16 +181,16 @@ struct graphics;
 #define ALLOCATE_TEXTURE(name) graphics_texture_id name(graphics* Graphics, void* Data, v2i Dimensions, graphics_texture_format TextureFormat, graphics_sampler_info* SamplerInfo)
 typedef ALLOCATE_TEXTURE(allocate_texture);
 
-#define ALLOCATE_MESH(name) i64 name(graphics* Graphics, void* VertexData, ptr VertexDataSize, graphics_vertex_format VertexFormat, void* IndexData, ptr IndexDataSize, graphics_index_format IndexFormat)
+#define ALLOCATE_MESH(name) graphics_mesh_id name(graphics* Graphics, void* VertexData, ptr VertexDataSize, graphics_vertex_format VertexFormat, void* IndexData, ptr IndexDataSize, graphics_index_format IndexFormat)
 typedef ALLOCATE_MESH(allocate_mesh);
 
-#define ALLOCATE_DYNAMIC_MESH(name) i64 name(graphics* Graphics, graphics_vertex_format VertexFormat, graphics_index_format IndexFormat)
+#define ALLOCATE_DYNAMIC_MESH(name) graphics_mesh_id name(graphics* Graphics, graphics_vertex_format VertexFormat, graphics_index_format IndexFormat)
 typedef ALLOCATE_DYNAMIC_MESH(allocate_dynamic_mesh);
 
 #define ALLOCATE_RENDER_BUFFER(name) graphics_render_buffer* name(graphics* Graphics, v2i Resolution)
 typedef ALLOCATE_RENDER_BUFFER(allocate_render_buffer);
 
-#define STREAM_MESH_DATA(name) void name(graphics* Graphics, i64 MeshID, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
+#define STREAM_MESH_DATA(name) void name(graphics* Graphics, graphics_mesh_id MeshID, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
 typedef STREAM_MESH_DATA(stream_mesh_data);
 
 #define INIT_GRAPHICS(name) graphics* name(platform* Platform, void** PlatformData)

@@ -31,11 +31,12 @@ struct world_entity
     
     union
     {
-        rigid_transform Transform;
+        sqt Transform;
         struct
         {
-            v3f Position;
             quaternion Orientation;
+            v3f Position;
+            v3f Scale;            
         };
     };
     
@@ -44,16 +45,14 @@ struct world_entity
     v3f MoveDelta;    
     v3f CollidedNormal;
     
-    //TODO(JJ): Multiple collision volumes
-    collision_volume CollisionVolume;    
+    collision_volume* CollisionVolumes;
     
     world_entity_id ID;
     world_entity_id LinkID;        
-    
+        
     world_entity_state State;
     
-    mesh* Mesh;
-    walkable_mesh* WalkableMesh;        
+    mesh_asset_id MeshID;        
 };
 
 typedef pool<world_entity> world_entity_pool;

@@ -55,6 +55,8 @@ struct platform
     platform_clock* Clock;
     platform_elapsed_time* ElapsedTime;
     platform_toggle_audio* ToggleAudio;
+    
+    platform_file_handle* AssetFile;
 };
 
 global platform* Global_Platform;

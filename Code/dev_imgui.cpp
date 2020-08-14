@@ -71,7 +71,6 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             DevCamera->Orientation = CameraTransform.Orientation;
             DevCamera->FocalPoint = Camera->Target;
             DevCamera->Distance = Camera->Coordinates.Radius;
-
         }
     }    
     

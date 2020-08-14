@@ -616,49 +616,6 @@ i32 SignCCD(f32 Value)
         return 1;
 }
 
-b32 EqualScalarsCCD(f32 a, f32 b)
-{
-    f32 ab = Abs(a-b);
-    if(ab < FLT_EPSILON)
-        return true;
-    
-    f32 aAbs = Abs(a);
-    f32 bAbs = Abs(b);
-    if(bAbs > aAbs)
-    {
-        return ab < FLT_EPSILON*bAbs;
-    }
-    else
-    {
-        return ab < FLT_EPSILON*aAbs;
-    }
-}
-
-inline b32 
-EqualVec3CCD(v3f A, v3f B)
-{
-    b32 Result = EqualScalarsCCD(A.x, B.x) && EqualScalarsCCD(A.y, B.y) && EqualScalarsCCD(A.z, B.z);
-    return Result;
-}
-
-b32 EqualScalarsCCD64(f64 a, f64 b)
-{
-    f64 ab = Abs(a-b);
-    if(ab < DBL_EPSILON)
-        return true;
-    
-    f64 aAbs = Abs(a);
-    f64 bAbs = Abs(b);
-    if(bAbs > aAbs)
-    {
-        return ab < DBL_EPSILON*bAbs;
-    }
-    else
-    {
-        return ab < DBL_EPSILON*aAbs;
-    }
-}
-
 f32 PointSegmentDistance(v3f P, v3f A, v3f B)
 {
     v3f AB = B-A;
@@ -672,7 +629,7 @@ f32 PointSegmentDistance(v3f P, v3f A, v3f B)
     {
         Result = SquareMagnitude(A-P);
     }
-    else if(t > 1 || EqualScalarsCCD(t, 1))
+    else if(t > 1 || AreEqual32(t, 1))
     {
         Result = SquareMagnitude(B-P);
     }
@@ -706,10 +663,10 @@ f32 PointTriangleDistance(v3f P, v3f A, v3f B, v3f C)
     
     f64 Result;
     if((IsFuzzyZero(s) || (s > 0)) && 
-       (EqualScalarsCCD64(s, 1) || s < 1) &&
+       (AreEqual64(s, 1) || s < 1) &&
        (IsFuzzyZero(t) || (t > 0)) &&
-       (EqualScalarsCCD64(t, 1) || t < 1) &&
-       (EqualScalarsCCD64(t+s, 1) || (t+s < 1)))
+       (AreEqual64(t, 1) || t < 1) &&
+       (AreEqual64(t+s, 1) || (t+s < 1)))
     {
         Result = s*s*v;
         Result += t*t*w;
@@ -744,7 +701,7 @@ i32 PerformTriangleTest(gjk_simplex* Simplex, v3f* V)
     if(IsFuzzyZero(Distance))
         return 1;
     
-    if(EqualVec3CCD(A, B) || EqualVec3CCD(A, C))
+    if(AreEqualV3(A, B) || AreEqualV3(A, C))
         return -1;
     
     v3f AO = -A;

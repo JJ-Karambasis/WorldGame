@@ -90,7 +90,7 @@ void UpdatePlayer(game* Game, world_entity* PlayerEntity)
         
         if(DeltaLength > VERY_CLOSE_DISTANCE)
         {            
-            v3f TargetPosition = PlayerEntity->Position + PlayerEntity->MoveDelta;                
+            v3f TargetPosition = PlayerEntity->Position + PlayerEntity->MoveDelta;                           
             collision_result CollisionResult = DetectCollisions(World, PlayerEntity);
             
             if(!CollisionResult.HitEntity)

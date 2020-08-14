@@ -192,7 +192,7 @@ void PushMaterial(graphics* Graphics, graphics_material* Material)
     PushCommand(Graphics, PushCommandMaterial);
 }
 
-void PushDrawMesh(graphics* Graphics, i64 MeshID, m4 Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawMesh(graphics* Graphics, graphics_mesh_id MeshID, m4 Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_mesh* PushCommandDrawMesh = PushStruct(push_command_draw_mesh, NoClear, 0);
     PushCommandDrawMesh->Type = PUSH_COMMAND_DRAW_MESH;
@@ -204,17 +204,17 @@ void PushDrawMesh(graphics* Graphics, i64 MeshID, m4 Transform, u32 IndexCount, 
     PushCommand(Graphics, PushCommandDrawMesh);
 }
 
-void PushDrawMesh(graphics* Graphics, i64 MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawMesh(graphics* Graphics, graphics_mesh_id MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     PushDrawMesh(Graphics, MeshID, TransformM4(Transform), IndexCount, IndexOffset, VertexOffset);
 }
 
-void PushDrawMesh(graphics* Graphics, i64 MeshID, rigid_transform Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawMesh(graphics* Graphics, graphics_mesh_id MeshID, rigid_transform Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     PushDrawMesh(Graphics, MeshID, TransformM4(Transform), IndexCount, IndexOffset, VertexOffset);
 }
 
-void PushDrawSkeletonMesh(graphics* Graphics, i64 MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset, m4* Joints, u32 JointCount)
+void PushDrawSkeletonMesh(graphics* Graphics, graphics_mesh_id MeshID, sqt Transform, u32 IndexCount, u32 IndexOffset, u32 VertexOffset, m4* Joints, u32 JointCount)
 {
     push_command_draw_skeleton_mesh* PushCommandDrawSkeletonMesh = PushStruct(push_command_draw_skeleton_mesh, NoClear, 0);
     PushCommandDrawSkeletonMesh->Type = PUSH_COMMAND_DRAW_SKELETON_MESH;
@@ -228,7 +228,7 @@ void PushDrawSkeletonMesh(graphics* Graphics, i64 MeshID, sqt Transform, u32 Ind
 }
 
 
-void PushDrawUnlitMesh(graphics* Graphics, i64 MeshID, m4 Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawUnlitMesh(graphics* Graphics, graphics_mesh_id MeshID, m4 Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_unlit_mesh* PushCommandDrawUnlitMesh = PushStruct(push_command_draw_unlit_mesh, NoClear, 0);
     PushCommandDrawUnlitMesh->Type = PUSH_COMMAND_DRAW_UNLIT_MESH;
@@ -240,17 +240,17 @@ void PushDrawUnlitMesh(graphics* Graphics, i64 MeshID, m4 Transform, graphics_di
     PushCommand(Graphics, PushCommandDrawUnlitMesh);
 }
 
-void PushDrawUnlitMesh(graphics* Graphics, i64 MeshID, sqt Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawUnlitMesh(graphics* Graphics, graphics_mesh_id MeshID, sqt Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     PushDrawUnlitMesh(Graphics, MeshID, TransformM4(Transform), DiffuseSlot, IndexCount, IndexOffset, VertexOffset);
 }
 
-void PushDrawUnlitMesh(graphics* Graphics, i64 MeshID, rigid_transform Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawUnlitMesh(graphics* Graphics, graphics_mesh_id MeshID, rigid_transform Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     PushDrawUnlitMesh(Graphics, MeshID, TransformM4(Transform), DiffuseSlot, IndexCount, IndexOffset, VertexOffset);
 }
 
-void PushDrawUnlitSkeletonMesh(graphics* Graphics, i64 MeshID, sqt Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset, m4* Joints, u32 JointCount)
+void PushDrawUnlitSkeletonMesh(graphics* Graphics, graphics_mesh_id MeshID, sqt Transform, graphics_diffuse_material_slot DiffuseSlot, u32 IndexCount, u32 IndexOffset, u32 VertexOffset, m4* Joints, u32 JointCount)
 {
     push_command_draw_unlit_skeleton_mesh* PushCommandDrawUnlitSkeletonMesh = PushStruct(push_command_draw_unlit_skeleton_mesh, NoClear, 0);
     PushCommandDrawUnlitSkeletonMesh->Type = PUSH_COMMAND_DRAW_UNLIT_MESH;
@@ -263,7 +263,7 @@ void PushDrawUnlitSkeletonMesh(graphics* Graphics, i64 MeshID, sqt Transform, gr
     PushCommand(Graphics, PushCommandDrawUnlitSkeletonMesh);
 }
 
-void PushDrawLineMesh(graphics* Graphics, i64 MeshID, m4 Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawLineMesh(graphics* Graphics, graphics_mesh_id MeshID, m4 Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_line_mesh* PushCommandDrawLineMesh = PushStruct(push_command_draw_line_mesh, NoClear, 0);
     PushCommandDrawLineMesh->Type = PUSH_COMMAND_DRAW_LINE_MESH;
@@ -275,17 +275,17 @@ void PushDrawLineMesh(graphics* Graphics, i64 MeshID, m4 Transform, c3 Color, u3
     PushCommand(Graphics, PushCommandDrawLineMesh);
 }
 
-void PushDrawLineMesh(graphics* Graphics, i64 MeshID, sqt Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawLineMesh(graphics* Graphics, graphics_mesh_id MeshID, sqt Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     PushDrawLineMesh(Graphics, MeshID, TransformM4(Transform), Color, IndexCount, IndexOffset, VertexOffset);
 }
 
-void PushDrawLineMesh(graphics* Graphics, i64 MeshID, rigid_transform Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawLineMesh(graphics* Graphics, graphics_mesh_id MeshID, rigid_transform Transform, c3 Color, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     PushDrawLineMesh(Graphics, MeshID, TransformM4(Transform), Color, IndexCount, IndexOffset, VertexOffset);
 }
 
-void PushDrawImGuiUI(graphics* Graphics, i64 MeshID, i64 TextureID, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
+void PushDrawImGuiUI(graphics* Graphics, graphics_mesh_id MeshID, i64 TextureID, u32 IndexCount, u32 IndexOffset, u32 VertexOffset)
 {
     push_command_draw_imgui_ui* PushCommandDrawImGuiUI = PushStruct(push_command_draw_imgui_ui, NoClear, 0);
     PushCommandDrawImGuiUI->Type = PUSH_COMMAND_DRAW_IMGUI_UI;
@@ -318,6 +318,9 @@ void PushViewCommands(graphics* Graphics, v2i Resolution, v3f ViewPosition, m3 V
 {    
     m4 Perspective = PerspectiveM4(FieldOfView, SafeRatio(Resolution.width, Resolution.height), ZNear, ZFar);
     m4 View = InverseTransformM4(ViewPosition, ViewOrientation);
+    
+    m4 I = Perspective*Inverse(Perspective);
+    
     PushViewPosition(Graphics, ViewPosition);
     PushViewProjection(Graphics, View*Perspective);    
 }
@@ -339,7 +342,34 @@ void PushRenderBufferViewportScissorAndView(graphics* Graphics, graphics_render_
     PushViewCommands(Graphics, RenderBuffer->Resolution, View);
 }
 
-void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, view_settings* Camera, assets* Assets)
+graphics_mesh_id LoadGraphicsMesh(assets_2* Assets, graphics* Graphics, mesh_asset_id ID)
+{
+    mesh_info* MeshInfo = GetMeshInfo(Assets, ID);
+    mesh* Mesh = GetMesh(Assets, ID);
+    if(!Mesh)    
+        Mesh = LoadMesh(Assets, ID);                    
+    
+    graphics_vertex_format VertexFormat = MeshInfo->Header.IsSkeletalMesh ? GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS : GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV;
+    graphics_index_format IndexFormat = MeshInfo->Header.IsIndexFormat32 ? GRAPHICS_INDEX_FORMAT_32_BIT : GRAPHICS_INDEX_FORMAT_16_BIT;
+    
+    ptr VerticesSize = GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount;                
+    ptr IndicesSize = GetIndexStride(MeshInfo)*MeshInfo->Header.IndexCount;        
+    
+    graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, VerticesSize, VertexFormat, Mesh->Indices, IndicesSize, IndexFormat); 
+    Assets->GraphicsMeshes[ID] = Result;
+    return Result;
+}
+
+graphics_mesh_id GetOrLoadGraphicsMesh(assets_2* Assets, graphics* Graphics, mesh_asset_id ID)
+{    
+    graphics_mesh_id MeshHandle = GetGraphicsMeshID(Assets, ID);
+    if(MeshHandle == INVALID_GRAPHICS_MESH_ID)
+        MeshHandle = LoadGraphicsMesh(Assets, Graphics, ID);
+    return MeshHandle;
+}
+
+void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, view_settings* Camera, assets* Assets,
+                              assets_2* Assets2)
 {    
     graphics_light_buffer LightBuffer = {};
     LightBuffer.DirectionalLightCount = 0;        
@@ -368,10 +398,15 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
         
         PushViewProjection(Graphics, DirectionalLight->ViewProjection);
         PushShadowMap(Graphics);
-        PushClearDepth(Graphics, 1.0f);        
+        PushClearDepth(Graphics, 1.0f);
+        
         FOR_EACH(Entity, &World->EntityPool)
         {
-            PushDrawMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);            
+            if(Entity->MeshID != INVALID_MESH_ID)            
+            {   
+                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets2, Graphics, Entity->MeshID);
+                PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets2, Entity->MeshID), 0, 0);            
+            }
         }
     }
     
@@ -399,7 +434,11 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
             PushClearDepth(Graphics, 1.0f);
             FOR_EACH(Entity, &World->EntityPool)
             {
-                PushDrawMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);
+                if(Entity->MeshID != INVALID_MESH_ID)            
+                {   
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets2, Graphics, Entity->MeshID);
+                    PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets2, Entity->MeshID), 0, 0);
+                }
             }
         }
     }    
@@ -411,13 +450,15 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     
     PushLightBuffer(Graphics, &LightBuffer);            
     FOR_EACH(Entity, &World->EntityPool)        
-    {                
-        b32 Flip = false;
-        if(Entity->Mesh)            
+    {                        
+        if(Entity->MeshID != INVALID_MESH_ID)            
         {            
             graphics_material* Material = Entity->Material;
             PushMaterial(Graphics, Material);
-            PushDrawMesh(Graphics, Entity->Mesh->GDIHandle, Entity->Transform, Entity->Mesh->IndexCount, 0, 0);
+            
+            graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets2, Graphics, Entity->MeshID);
+            PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets2, Entity->MeshID), 0, 0);
         }
     }        
+        
 }

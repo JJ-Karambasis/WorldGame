@@ -1,4 +1,5 @@
 #include "win32_world_game.h"
+#include "assets/assets.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
 #include "collision_detection.cpp"
@@ -662,12 +663,14 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     
     *Global_PlatformArena = CreateArena(MEGABYTE(1));
     
-    string EXEFilePathName = Win32_GetExePathWithName();
-    Global_EXEFilePath = GetFilePath(EXEFilePathName);    
+    Global_EXEFilePath = GetProgramPath(Global_PlatformArena);
     string GameDLLPathName = Concat(Global_EXEFilePath, "World_Game.dll", Global_PlatformArena);
     string TempDLLPathName = Concat(Global_EXEFilePath, "World_Game_Temp.dll", Global_PlatformArena);    
     string OpenGLGraphicsDLLPathName = Concat(Global_EXEFilePath, "OpenGL.dll", Global_PlatformArena);
-    string OpenGLGraphicsTempDLLPathName = Concat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);    
+    string OpenGLGraphicsTempDLLPathName = Concat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
+    
+    Global_Platform->AssetFile = LoadAssetFile(Concat(Global_EXEFilePath, "WorldGame.assets"));
+    BOOL_CHECK_AND_HANDLE(Global_Platform->AssetFile, "Could not load the asset file.");
     
     u16 KeyboardUsage = 6;
     u16 MouseUsage = 2;
@@ -834,7 +837,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         Graphics->RenderDim = Win32_GetWindowDim(Window);
         
-        //TODO(JJ): Probably don't want this
+        //TODO(JJ): Probably don't want this 
         if(Game.dt > 1.0f/20.0f)
             Game.dt = 1.0f/20.0f;
         

@@ -19,45 +19,62 @@ sphere CreateSphere(v3f CenterP, f32 Radius)
     return Result;
 }
 
-collision_volume CreateSphereCollisionVolume(v3f CenterP, f32 Radius)
+void AttachToCollisionVolume(collision_volume* CollisionVolume, convex_hull* ConvexHull)
 {
-    collision_volume Result;
-    Result.Type = COLLISION_VOLUME_TYPE_SPHERE;
-    Result.Sphere = CreateSphere(CenterP, Radius);    
-    return Result;
+    CollisionVolume->Type = COLLISION_VOLUME_TYPE_CONVEX_HULL;
+    CollisionVolume->ConvexHull = ConvexHull;
 }
 
-collision_volume CreateCapsuleCollisionVolume(v3f BottomPosition, f32 Radius, f32 Height)
+void AttachToCollisionVolume(collision_volume* CollisionVolume, sphere* Sphere)
 {
-    collision_volume Result;
-    Result.Type = COLLISION_VOLUME_TYPE_CAPSULE;    
-    v3f P0 = BottomPosition + Global_WorldZAxis*Radius;
-    Result.Capsule = CreateCapsule(P0, P0 + Global_WorldZAxis*Height, Radius);    
-    return Result;
+    CollisionVolume->Type = COLLISION_VOLUME_TYPE_SPHERE;
+    CollisionVolume->Sphere = *Sphere;
 }
 
-collision_volume CreateConvexHullCollisionVolume(convex_hull* ConvexHull, v3f Position, quaternion Orientation)
+void AttachToCollisionVolume(collision_volume* CollisionVolume, capsule* Capsule)
 {
-    collision_volume Result;
-    Result.Type = COLLISION_VOLUME_TYPE_CONVEX_HULL;
-    Result.ConvexHull = ConvexHull;
-    Result.Transform = {Position, Orientation};
-    return Result;
+    CollisionVolume->Type = COLLISION_VOLUME_TYPE_CAPSULE;
+    CollisionVolume->Capsule = *Capsule;
 }
 
-capsule TransformCapsule(capsule* Capsule, rigid_transform Transform)
+
+void AttachCollisionVolume(world_entity* Entity, collision_volume* Volume)
+{    
+    if(!Entity->CollisionVolumes)
+        Entity->CollisionVolumes = Volume;   
+    else
+    {
+        Volume->Next = Entity->CollisionVolumes;
+        Entity->CollisionVolumes = Volume;
+    }    
+}
+
+template <typename type>
+void AddCollisionVolume(game* Game, world_entity* Entity, type* Collider)
+{
+    collision_volume* Volume = AllocateListEntry<collision_volume>(&Game->CollisionVolumeStorage, &Game->GameStorage);
+    AttachToCollisionVolume(Volume, Collider);
+    AttachCollisionVolume(Entity, Volume);
+}
+
+capsule TransformCapsule(capsule* Capsule, sqt Transform)
 {
     capsule Result;
-    Result.P0 = TransformV3(Capsule->P0, Transform);
-    Result.P1 = TransformV3(Capsule->P1, Transform);
-    Result.Radius = Capsule->Radius;
+    Result.P0 = NoScaleTransformV3(Capsule->P0, Transform);
+    Result.P1 = NoScaleTransformV3(Capsule->P1, Transform);
+    
+    u32 Component = LargestComponent(Transform.Scale);
+    Result.Radius = Capsule->Radius*Transform.Scale[Component];
     return Result;
 }
 
-sphere TransformSphere(sphere* Sphere, rigid_transform Transform)
+sphere TransformSphere(sphere* Sphere, sqt Transform)
 {
     sphere Result = {};
-    Result.Radius = Sphere->Radius;
+    
+    u32 Component = LargestComponent(Transform.Scale);    
+    Result.Radius = Sphere->Radius*Transform.Scale[Component];    
+    
     Result.CenterP = Sphere->CenterP + Transform.Translation;    
     return Result;
 }
@@ -284,14 +301,13 @@ b32 RayTriangleIntersection(v3f RayOrigin, v3f RayDirection, v3f P0, v3f P1, v3f
     return true;
 }
 
-ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection, mesh* Mesh, rigid_transform MeshTransform)
+ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, sqt MeshTransform)
 {
     ray_mesh_intersection_result Result = {};    
     
-    ptr VertexSize = GetVertexBufferSize(Mesh->VertexFormat, Mesh->VertexCount);
-    ptr VertexStride = GetVertexStride(Mesh->VertexFormat);
-    ptr IndexSize = GetIndexBufferSize(Mesh->IndexFormat, Mesh->IndexCount);
-    ptr IndexStride = GetIndexSize(Mesh->IndexFormat);
+    u32 VertexStride = GetVertexStride(MeshInfo);
+    u32 IndexStride = GetIndexStride(MeshInfo);        
+    u32 IndexSize = IndexStride*MeshInfo->Header.IndexCount;
     
     u32 i = 0;
     while(i*IndexStride < IndexSize)
@@ -303,84 +319,44 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
         v3f Vertex2 = V3(0,0,0);
         v3f Vertex3 = V3(0,0,0);
         
-        if(Mesh->IndexFormat == GRAPHICS_INDEX_FORMAT_16_BIT)
-        {
-            Index1 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
-            i++;
-            Index2 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
-            i++;
-            Index3 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
-            i++;
-        }
-        else if(Mesh->IndexFormat == GRAPHICS_INDEX_FORMAT_32_BIT)
+        if(MeshInfo->Header.IsIndexFormat32)
         {
             Index1 = *(u32*)((u8*)Mesh->Indices + i*IndexStride);
             i++;
             Index2 = *(u32*)((u8*)Mesh->Indices + i*IndexStride);
             i++;
             Index3 = *(u32*)((u8*)Mesh->Indices + i*IndexStride);
-            i++;
+            i++;            
         }
-        INVALID_ELSE;
+        else
+        {            
+            Index1 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
+            i++;
+            Index2 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
+            i++;
+            Index3 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
+            i++;
+        }        
         
-        switch(Mesh->VertexFormat)
+        if(MeshInfo->Header.IsSkeletalMesh)
         {
-            case GRAPHICS_VERTEX_FORMAT_P3:
-            {
-                vertex_p3 TVertex1 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-                vertex_p3 TVertex2 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-                vertex_p3 TVertex3 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index3*VertexStride));
-                
-                Vertex1 = TVertex1.P;
-                Vertex2 = TVertex2.P;
-                Vertex3 = TVertex3.P;
-            } break;
+            vertex_p3_n3_t4_uv_weights TVertex1 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index1*VertexStride));
+            vertex_p3_n3_t4_uv_weights TVertex2 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index2*VertexStride));
+            vertex_p3_n3_t4_uv_weights TVertex3 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index3*VertexStride));
             
-            case GRAPHICS_VERTEX_FORMAT_P3_N3:
-            {
-                vertex_p3_n3 TVertex1 = *(vertex_p3_n3*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-                vertex_p3_n3 TVertex2 = *(vertex_p3_n3*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-                vertex_p3_n3 TVertex3 = *(vertex_p3_n3*)((u8*)Mesh->Vertices + (Index3*VertexStride));
-                
-                Vertex1 = TVertex1.P;
-                Vertex2 = TVertex2.P;
-                Vertex3 = TVertex3.P;
-            } break;
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;            
+        }
+        else
+        {            
+            vertex_p3_n3_t4_uv TVertex1 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index1*VertexStride));
+            vertex_p3_n3_t4_uv TVertex2 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index2*VertexStride));
+            vertex_p3_n3_t4_uv TVertex3 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index3*VertexStride));
             
-            case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS:
-            {
-                vertex_p3_n3_weights TVertex1 = *(vertex_p3_n3_weights*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-                vertex_p3_n3_weights TVertex2 = *(vertex_p3_n3_weights*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-                vertex_p3_n3_weights TVertex3 = *(vertex_p3_n3_weights*)((u8*)Mesh->Vertices + (Index3*VertexStride));
-                
-                Vertex1 = TVertex1.P;
-                Vertex2 = TVertex2.P;
-                Vertex3 = TVertex3.P;
-            } break;
-            
-            case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV:
-            {
-                vertex_p3_n3_t4_uv TVertex1 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-                vertex_p3_n3_t4_uv TVertex2 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-                vertex_p3_n3_t4_uv TVertex3 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index3*VertexStride));
-                
-                Vertex1 = TVertex1.P;
-                Vertex2 = TVertex2.P;
-                Vertex3 = TVertex3.P;
-            } break;
-            
-            case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS:
-            {
-                vertex_p3_n3_t4_uv_weights TVertex1 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-                vertex_p3_n3_t4_uv_weights TVertex2 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-                vertex_p3_n3_t4_uv_weights TVertex3 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index3*VertexStride));
-                
-                Vertex1 = TVertex1.P;
-                Vertex2 = TVertex2.P;
-                Vertex3 = TVertex3.P;
-            } break;
-            
-            INVALID_DEFAULT_CASE;
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;
         }
         
         Vertex1 = TransformV3(Vertex1, MeshTransform);
@@ -415,11 +391,11 @@ GetBisectionMid(v3f DeltaA, v3f DeltaB, f32 tStart, f32 tEnd)
     return (tStart+tEnd)*0.5f;    
 }
 
-f32 HullHullTOI(convex_hull* HullA, rigid_transform TransformA, v3f DeltaA, 
-                convex_hull* HullB, rigid_transform TransformB, v3f DeltaB)
+f32 HullHullTOI(convex_hull* HullA, sqt TransformA, v3f DeltaA, 
+                convex_hull* HullB, sqt TransformB, v3f DeltaB)
 {    
-    moving_convex_hull_support A = {HullA, CreateSQT(TransformA), DeltaA};
-    moving_convex_hull_support B = {HullB, CreateSQT(TransformB), DeltaB};
+    moving_convex_hull_support A = {HullA, TransformA, DeltaA};
+    moving_convex_hull_support B = {HullB, TransformB, DeltaB};
     
     if(GJKIntersected(&A, &B))    
     {
@@ -431,16 +407,16 @@ f32 HullHullTOI(convex_hull* HullA, rigid_transform TransformA, v3f DeltaA,
             if(tMid == tStart)
                 return tStart;
             
-            moving_convex_hull_support StartA = {HullA, CreateSQT(TransformA.Translation+(DeltaA*tStart), TransformA.Orientation), DeltaA*tMid};
-            moving_convex_hull_support StartB = {HullB, CreateSQT(TransformB.Translation+(DeltaB*tStart), TransformB.Orientation), DeltaB*tMid};
+            moving_convex_hull_support StartA = {HullA, CreateSQT(TransformA.Translation+(DeltaA*tStart), TransformA.Scale, TransformA.Orientation), DeltaA*tMid};
+            moving_convex_hull_support StartB = {HullB, CreateSQT(TransformB.Translation+(DeltaB*tStart), TransformB.Scale, TransformB.Orientation), DeltaB*tMid};
             if(GJKIntersected(&StartA, &StartB))
             {
                 tEnd = tMid;
                 continue;
             }
             
-            moving_convex_hull_support EndA = {HullA, CreateSQT(TransformA.Translation+(DeltaA*tMid), TransformA.Orientation), DeltaA*tEnd};
-            moving_convex_hull_support EndB = {HullB, CreateSQT(TransformB.Translation+(DeltaB*tMid), TransformB.Orientation), DeltaB*tEnd};
+            moving_convex_hull_support EndA = {HullA, CreateSQT(TransformA.Translation+(DeltaA*tMid), TransformA.Scale, TransformA.Orientation), DeltaA*tEnd};
+            moving_convex_hull_support EndB = {HullB, CreateSQT(TransformB.Translation+(DeltaB*tMid), TransformB.Scale, TransformB.Orientation), DeltaB*tEnd};
             if(GJKIntersected(&EndA, &EndB))
             {
                 tStart = tMid;
@@ -454,10 +430,10 @@ f32 HullHullTOI(convex_hull* HullA, rigid_transform TransformA, v3f DeltaA,
     return INFINITY;
 }
 
-b32 PerformConvexHullEPA(penetration* Result, convex_hull* HullA, rigid_transform TransformA, convex_hull* HullB, rigid_transform TransformB)
+b32 PerformConvexHullEPA(penetration* Result, convex_hull* HullA, sqt TransformA, convex_hull* HullB, sqt TransformB)
 {
-    margin_convex_hull_support AEPA = {HullA, CreateSQT(TransformA), 0.005f};
-    margin_convex_hull_support BEPA = {HullB, CreateSQT(TransformB), 0.005f};
+    margin_convex_hull_support AEPA = {HullA, TransformA, 0.005f};
+    margin_convex_hull_support BEPA = {HullB, TransformB, 0.005f};
     epa_result EPAResult = EPA(&AEPA, &BEPA);        
     if(!EPAResult.IsValid)
         return false;    
@@ -467,10 +443,10 @@ b32 PerformConvexHullEPA(penetration* Result, convex_hull* HullA, rigid_transfor
     return true;
 }
 
-f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, rigid_transform Transform, v3f DeltaB)
+f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, sqt Transform, v3f DeltaB)
 {    
     moving_line_segment_support A = {Capsule->P0, Capsule->P1, DeltaA};
-    moving_convex_hull_support  B = {Hull, CreateSQT(Transform), DeltaB};
+    moving_convex_hull_support  B = {Hull, Transform, DeltaB};
     
     if(GJKQuadraticIntersected(&A, &B, Capsule->Radius))
     {
@@ -483,7 +459,7 @@ f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, rigid_transf
                 return tStart;
             
             moving_line_segment_support StartA = {Capsule->P0+DeltaA*tStart, Capsule->P1+DeltaA*tStart, DeltaA*tMid};
-            moving_convex_hull_support StartB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tStart), Transform.Orientation), DeltaB*tMid};
+            moving_convex_hull_support StartB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tStart), Transform.Scale, Transform.Orientation), DeltaB*tMid};
             if(GJKQuadraticIntersected(&StartA, &StartB, Capsule->Radius))
             {
                 tEnd = tMid;
@@ -491,7 +467,7 @@ f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, rigid_transf
             }
             
             moving_line_segment_support EndA = {Capsule->P0+DeltaA*tMid, Capsule->P1+DeltaA*tMid, DeltaA*tEnd};
-            moving_convex_hull_support EndB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tMid), Transform.Orientation), DeltaB*tEnd};
+            moving_convex_hull_support EndB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tMid), Transform.Scale, Transform.Orientation), DeltaB*tEnd};
             if(GJKQuadraticIntersected(&EndA, &EndB, Capsule->Radius))
             {
                 tStart = tMid;
@@ -505,10 +481,10 @@ f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, rigid_transf
     return INFINITY;    
 }
 
-f32 SphereHullTOI(sphere* Sphere, v3f DeltaA, convex_hull* Hull, rigid_transform Transform, v3f DeltaB)
+f32 SphereHullTOI(sphere* Sphere, v3f DeltaA, convex_hull* Hull, sqt Transform, v3f DeltaB)
 {    
     moving_point_support A = {Sphere->CenterP, DeltaA};
-    moving_convex_hull_support B = {Hull, CreateSQT(Transform), DeltaB};
+    moving_convex_hull_support B = {Hull, Transform, DeltaB};
     
     if(GJKQuadraticIntersected(&A, &B, Sphere->Radius))
     {
@@ -522,7 +498,7 @@ f32 SphereHullTOI(sphere* Sphere, v3f DeltaA, convex_hull* Hull, rigid_transform
                 return tStart;
             
             moving_point_support StartA = {Sphere->CenterP+DeltaA*tStart, DeltaA*tMid};
-            moving_convex_hull_support StartB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tStart), Transform.Orientation), DeltaB*tMid};
+            moving_convex_hull_support StartB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tStart), Transform.Scale, Transform.Orientation), DeltaB*tMid};
             if(GJKQuadraticIntersected(&StartA, &StartB, Sphere->Radius))
             {
                 tEnd = tMid;
@@ -530,7 +506,7 @@ f32 SphereHullTOI(sphere* Sphere, v3f DeltaA, convex_hull* Hull, rigid_transform
             }
             
             moving_point_support EndA = {Sphere->CenterP+DeltaA*tMid, DeltaA*tEnd};
-            moving_convex_hull_support EndB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tMid), Transform.Orientation), DeltaB*tEnd};
+            moving_convex_hull_support EndB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tMid), Transform.Scale, Transform.Orientation), DeltaB*tEnd};
             if(GJKQuadraticIntersected(&EndA, &EndB, Sphere->Radius))
             {
                 tStart = tMid;
@@ -604,7 +580,7 @@ f32 SphereCapsuleTOI(sphere* Sphere, v3f DeltaA, capsule* Capsule, v3f DeltaB)
     return Result;
 }
 
-b32 FindCollisions(collision_result* Result, world* World, world_entity* Entity)
+b32 FindCollisions(time_of_impact_result* Result, world* World, world_entity* Entity)
 {
     *Result = {};
     Result->t = INFINITY;
@@ -614,129 +590,141 @@ b32 FindCollisions(collision_result* Result, world* World, world_entity* Entity)
     { \
         Result->HitEntity = TestEntity; \
         Result->t = t; \
+        Result->VolumeA = VolumeA; \
+        Result->VolumeB = VolumeB; \
     }
     
-    switch(Entity->CollisionVolume.Type)
-    {
-        case COLLISION_VOLUME_TYPE_SPHERE:
+    for(collision_volume* VolumeA = Entity->CollisionVolumes; VolumeA; VolumeA = VolumeA->Next)
+    {        
+        switch(VolumeA->Type)
         {
-            sphere SphereA = TransformSphere(&Entity->CollisionVolume.Sphere, Entity->Transform);
-            FOR_EACH(TestEntity, &World->EntityPool)
+            case COLLISION_VOLUME_TYPE_SPHERE:
             {
-                if(TestEntity != Entity)
+                sphere SphereA = TransformSphere(&VolumeA->Sphere, Entity->Transform);
+                FOR_EACH(TestEntity, &World->EntityPool)
                 {
-                    switch(TestEntity->CollisionVolume.Type)
+                    if(TestEntity != Entity)
                     {
-                        case COLLISION_VOLUME_TYPE_SPHERE:
-                        {
-                            sphere SphereB = TransformSphere(&TestEntity->CollisionVolume.Sphere, TestEntity->Transform);
-                            
-                            f32 t = SphereSphereTOI(&SphereA, Entity->MoveDelta, &SphereB, V3());
-                            UPDATE_HIT();
-                        } break;
-                        
-                        case COLLISION_VOLUME_TYPE_CAPSULE:
-                        {
-                            capsule CapsuleB = TransformCapsule(&TestEntity->CollisionVolume.Capsule, TestEntity->Transform);
-                            
-                            f32 t = SphereCapsuleTOI(&SphereA, Entity->MoveDelta, &CapsuleB, V3());
-                            UPDATE_HIT();
-                        } break;
-                        
-                        case COLLISION_VOLUME_TYPE_CONVEX_HULL:
-                        {
-                            convex_hull* HullB = TestEntity->CollisionVolume.ConvexHull;
-                            rigid_transform TransformB = TestEntity->CollisionVolume.Transform*TestEntity->Transform;
-                            
-                            f32 t = SphereHullTOI(&SphereA, Entity->MoveDelta, HullB, TransformB, V3());
-                            UPDATE_HIT();                        
-                        } break;
+                        for(collision_volume* VolumeB = TestEntity->CollisionVolumes; VolumeB; VolumeB = VolumeB->Next)
+                        {                            
+                            switch(VolumeB->Type)
+                            {
+                                case COLLISION_VOLUME_TYPE_SPHERE:
+                                {
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestEntity->Transform);
+                                    
+                                    f32 t = SphereSphereTOI(&SphereA, Entity->MoveDelta, &SphereB, V3());
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CAPSULE:
+                                {
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestEntity->Transform);
+                                    
+                                    f32 t = SphereCapsuleTOI(&SphereA, Entity->MoveDelta, &CapsuleB, V3());
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                                {
+                                    convex_hull* HullB = VolumeB->ConvexHull;
+                                    sqt TransformB = HullB->Header.Transform*TestEntity->Transform;
+                                    
+                                    f32 t = SphereHullTOI(&SphereA, Entity->MoveDelta, HullB, TransformB, V3());
+                                    UPDATE_HIT();                        
+                                } break;
+                            }
+                        }
                     }
                 }
+                
+            } break;
+            
+            case COLLISION_VOLUME_TYPE_CAPSULE:
+            {
+                capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, Entity->Transform);
+                FOR_EACH(TestEntity, &World->EntityPool)
+                {
+                    if(TestEntity != Entity)
+                    {
+                        for(collision_volume* VolumeB = TestEntity->CollisionVolumes; VolumeB; VolumeB = VolumeB->Next)
+                        {
+                            switch(VolumeB->Type)
+                            {
+                                case COLLISION_VOLUME_TYPE_SPHERE:
+                                {
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestEntity->Transform);
+                                    
+                                    f32 t = SphereCapsuleTOI(&SphereB, V3(), &CapsuleA, Entity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CAPSULE:
+                                {
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestEntity->Transform);
+                                    
+                                    f32 t = CapsuleCapsuleTOI(&CapsuleA, Entity->MoveDelta, &CapsuleB, V3());
+                                    UPDATE_HIT();
+                                } break;                                                
+                                
+                                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                                {
+                                    convex_hull* HullB = VolumeB->ConvexHull;
+                                    sqt TransformB = HullB->Header.Transform*TestEntity->Transform;
+                                    
+                                    f32 t = CapsuleHullTOI(&CapsuleA, Entity->MoveDelta, HullB, TransformB, V3());
+                                    UPDATE_HIT();
+                                } break;
+                            }
+                        }
+                    }
+                }            
+                
+            } break;
+            
+            case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+            {
+                convex_hull* HullA = VolumeA->ConvexHull;
+                sqt TransformA = HullA->Header.Transform*Entity->Transform;
+                
+                FOR_EACH(TestEntity, &World->EntityPool)
+                {
+                    if(TestEntity != Entity)
+                    {                                        
+                        for(collision_volume* VolumeB = TestEntity->CollisionVolumes; VolumeB; VolumeB = VolumeB->Next)
+                        {
+                            switch(VolumeB->Type)
+                            {
+                                case COLLISION_VOLUME_TYPE_SPHERE:
+                                {
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestEntity->Transform);                                    
+                                    f32 t = SphereHullTOI(&SphereB, V3(), HullA, TransformA, Entity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CAPSULE:
+                                {
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestEntity->Transform);
+                                    
+                                    f32 t = CapsuleHullTOI(&CapsuleB, V3(), HullA, TransformA, Entity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                                {
+                                    convex_hull* HullB = VolumeB->ConvexHull;
+                                    sqt TransformB = HullB->Header.Transform*TestEntity->Transform;                            
+                                    
+                                    f32 t = HullHullTOI(HullA, TransformA, Entity->MoveDelta, HullB, TransformB, V3());
+                                    UPDATE_HIT();                                                        
+                                } break;
+                            }
+                        }
+                    }
+                }            
             }
-            
-        } break;
-        
-        case COLLISION_VOLUME_TYPE_CAPSULE:
-        {
-            capsule CapsuleA = TransformCapsule(&Entity->CollisionVolume.Capsule, Entity->Transform);
-            FOR_EACH(TestEntity, &World->EntityPool)
-            {
-                if(TestEntity != Entity)
-                {
-                    switch(TestEntity->CollisionVolume.Type)
-                    {
-                        case COLLISION_VOLUME_TYPE_SPHERE:
-                        {
-                            sphere SphereB = TransformSphere(&TestEntity->CollisionVolume.Sphere, TestEntity->Transform);
-                            
-                            f32 t = SphereCapsuleTOI(&SphereB, V3(), &CapsuleA, Entity->MoveDelta);
-                            UPDATE_HIT();
-                        } break;
-                        
-                        case COLLISION_VOLUME_TYPE_CAPSULE:
-                        {
-                            capsule CapsuleB = TransformCapsule(&TestEntity->CollisionVolume.Capsule, TestEntity->Transform);
-                            
-                            f32 t = CapsuleCapsuleTOI(&CapsuleA, Entity->MoveDelta, &CapsuleB, V3());
-                            UPDATE_HIT();
-                        } break;                                                
-                        
-                        case COLLISION_VOLUME_TYPE_CONVEX_HULL:
-                        {
-                            convex_hull* HullB = TestEntity->CollisionVolume.ConvexHull;
-                            rigid_transform TransformB = TestEntity->CollisionVolume.Transform*TestEntity->Transform;
-                            
-                            f32 t = CapsuleHullTOI(&CapsuleA, Entity->MoveDelta, HullB, TransformB, V3());
-                            UPDATE_HIT();
-                        } break;
-                    }
-                }
-            }            
-            
-        } break;
-        
-        case COLLISION_VOLUME_TYPE_CONVEX_HULL:
-        {
-            convex_hull* HullA = Entity->CollisionVolume.ConvexHull;
-            rigid_transform TransformA = Entity->CollisionVolume.Transform*Entity->Transform;
-            
-            FOR_EACH(TestEntity, &World->EntityPool)
-            {
-                if(TestEntity != Entity)
-                {                                        
-                    switch(TestEntity->CollisionVolume.Type)
-                    {
-                        case COLLISION_VOLUME_TYPE_SPHERE:
-                        {
-                            sphere SphereB = TransformSphere(&TestEntity->CollisionVolume.Sphere, TestEntity->Transform);
-                            
-                            f32 t = SphereHullTOI(&SphereB, V3(), HullA, TransformA, Entity->MoveDelta);
-                            UPDATE_HIT();
-                        } break;
-                        
-                        case COLLISION_VOLUME_TYPE_CAPSULE:
-                        {
-                            capsule CapsuleB = TransformCapsule(&TestEntity->CollisionVolume.Capsule, TestEntity->Transform);
-                            
-                            f32 t = CapsuleHullTOI(&CapsuleB, V3(), HullA, TransformA, Entity->MoveDelta);
-                            UPDATE_HIT();
-                        } break;
-                        
-                        case COLLISION_VOLUME_TYPE_CONVEX_HULL:
-                        {
-                            convex_hull* HullB = TestEntity->CollisionVolume.ConvexHull;
-                            rigid_transform TransformB = TestEntity->CollisionVolume.Transform*TestEntity->Transform;                            
-                            
-                            f32 t = HullHullTOI(HullA, TransformA, Entity->MoveDelta, HullB, TransformB, V3());
-                            UPDATE_HIT();                                                        
-                        } break;
-                    }
-                }
-            }            
-        }
-    }    
-    
+        }    
+    }
 #undef UPDATE_HIT
     
     return (Result->HitEntity != NULL);
@@ -767,22 +755,22 @@ penetration GetQuadraticPenetration(gjk_distance* Distance, f32 Radius)
     return Result;
 }
 
-penetration GetSphereHullPenetration(sphere* Sphere, convex_hull* Hull, rigid_transform HullTransform)
+penetration GetSphereHullPenetration(sphere* Sphere, convex_hull* Hull, sqt HullTransform)
 {
     
     point_support AGJK = {Sphere->CenterP};
-    convex_hull_support BGJK = {Hull, CreateSQT(HullTransform)};
+    convex_hull_support BGJK = {Hull, HullTransform};
     gjk_distance DistanceResult = GJKDistance(&AGJK, &BGJK);
     
     penetration Result = GetQuadraticPenetration(&DistanceResult, Sphere->Radius);
     return Result;
 }
 
-penetration GetCapsuleHullPenetration(capsule* Capsule, convex_hull* Hull, rigid_transform HullTransform)
+penetration GetCapsuleHullPenetration(capsule* Capsule, convex_hull* Hull, sqt HullTransform)
 {    
     
     line_segment_support AGJK = {Capsule->P0, Capsule->P1};
-    convex_hull_support  BGJK = {Hull, CreateSQT(HullTransform)};
+    convex_hull_support  BGJK = {Hull, HullTransform};
     gjk_distance DistanceResult = GJKDistance(&AGJK, &BGJK);
     
     penetration Result = GetQuadraticPenetration(&DistanceResult, Capsule->Radius);   
@@ -810,11 +798,11 @@ penetration GetSphereCapsulePenetration(sphere* Sphere, capsule* CapsuleB)
     return Result;
 }
 
-penetration GetHullHullPenetration(convex_hull* HullA, rigid_transform TransformA, 
-                                   convex_hull* HullB, rigid_transform TransformB)
+penetration GetHullHullPenetration(convex_hull* HullA, sqt TransformA, 
+                                   convex_hull* HullB, sqt TransformB)
 {    
-    convex_hull_support AGJK = {HullA, CreateSQT(TransformA)};
-    convex_hull_support BGJK = {HullB, CreateSQT(TransformB)};
+    convex_hull_support AGJK = {HullA, TransformA};
+    convex_hull_support BGJK = {HullB, TransformB};
     
     b32 Intersecting = GJKIntersected(&AGJK, &BGJK);
     gjk_distance DistanceResult = GJKDistance(&AGJK, &BGJK);                                                                                                               
@@ -837,23 +825,23 @@ penetration GetHullHullPenetration(convex_hull* HullA, rigid_transform Transform
     return Result;
 }
 
-penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHit)
+penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, collision_volume* VolumeA, collision_volume* VolumeB, f32 tHit)
 {
     ASSERT((tHit >= 0) && (tHit <= 1.0f));    
     
     penetration Result = {};    
-    switch(AEntity->CollisionVolume.Type)
+    switch(VolumeA->Type)
     {
         case COLLISION_VOLUME_TYPE_SPHERE:
         {
-            sphere SphereA = TransformSphere(&AEntity->CollisionVolume.Sphere, AEntity->Transform);
+            sphere SphereA = TransformSphere(&VolumeA->Sphere, AEntity->Transform);
             SphereA.CenterP += AEntity->MoveDelta*tHit;
             
-            switch(BEntity->CollisionVolume.Type)
+            switch(VolumeB->Type)
             {
                 case COLLISION_VOLUME_TYPE_SPHERE:
                 {
-                    sphere SphereB = TransformSphere(&BEntity->CollisionVolume.Sphere, BEntity->Transform);
+                    sphere SphereB = TransformSphere(&VolumeB->Sphere, BEntity->Transform);
                     SphereB.CenterP += BEntity->MoveDelta*tHit;
                     
                     Result = GetSphereSpherePenetration(&SphereA, &SphereB);
@@ -861,7 +849,7 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
                 {
-                    capsule CapsuleB = TransformCapsule(&BEntity->CollisionVolume.Capsule, BEntity->Transform);
+                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, BEntity->Transform);
                     CapsuleB.P0 += BEntity->MoveDelta*tHit;
                     CapsuleB.P1 += BEntity->MoveDelta*tHit;
                     
@@ -870,8 +858,8 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
-                    convex_hull* HullB = BEntity->CollisionVolume.ConvexHull;
-                    rigid_transform TransformB = BEntity->CollisionVolume.Transform*BEntity->Transform;                        
+                    convex_hull* HullB = VolumeB->ConvexHull;
+                    sqt TransformB = HullB->Header.Transform*BEntity->Transform;                        
                     TransformB.Translation += BEntity->MoveDelta*tHit;                                                            
                     
                     Result = GetSphereHullPenetration(&SphereA, HullB, TransformB);
@@ -882,15 +870,15 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
         
         case COLLISION_VOLUME_TYPE_CAPSULE:
         {
-            capsule CapsuleA = TransformCapsule(&AEntity->CollisionVolume.Capsule, AEntity->Transform);
+            capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, AEntity->Transform);
             CapsuleA.P0 += AEntity->MoveDelta*tHit;
             CapsuleA.P1 += AEntity->MoveDelta*tHit;            
             
-            switch(BEntity->CollisionVolume.Type)
+            switch(VolumeB->Type)
             {   
                 case COLLISION_VOLUME_TYPE_SPHERE:
                 {
-                    sphere SphereB = TransformSphere(&BEntity->CollisionVolume.Sphere, BEntity->Transform);
+                    sphere SphereB = TransformSphere(&VolumeB->Sphere, BEntity->Transform);
                     SphereB.CenterP += BEntity->MoveDelta*tHit;
                     
                     Result = GetSphereCapsulePenetration(&SphereB, &CapsuleA);
@@ -899,7 +887,7 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
                 {
-                    capsule CapsuleB = TransformCapsule(&BEntity->CollisionVolume.Capsule, BEntity->Transform);
+                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, BEntity->Transform);
                     CapsuleB.P0 += BEntity->MoveDelta*tHit;
                     CapsuleB.P1 += BEntity->MoveDelta*tHit;
                     
@@ -908,8 +896,8 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
-                    convex_hull* HullB = BEntity->CollisionVolume.ConvexHull;
-                    rigid_transform TransformB = BEntity->CollisionVolume.Transform*BEntity->Transform;                        
+                    convex_hull* HullB = VolumeB->ConvexHull;
+                    sqt TransformB = HullB->Header.Transform*BEntity->Transform;                        
                     TransformB.Translation += BEntity->MoveDelta*tHit;
                     
                     Result = GetCapsuleHullPenetration(&CapsuleA, HullB, TransformB);
@@ -920,15 +908,15 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
         
         case COLLISION_VOLUME_TYPE_CONVEX_HULL:
         {
-            convex_hull* HullA = AEntity->CollisionVolume.ConvexHull;
-            rigid_transform TransformA = AEntity->CollisionVolume.Transform*AEntity->Transform;
+            convex_hull* HullA = VolumeA->ConvexHull;
+            sqt TransformA = HullA->Header.Transform*AEntity->Transform;
             TransformA.Translation += AEntity->MoveDelta*tHit;
             
-            switch(BEntity->CollisionVolume.Type)
+            switch(VolumeB->Type)
             {
                 case COLLISION_VOLUME_TYPE_SPHERE:
                 {
-                    sphere SphereB = TransformSphere(&BEntity->CollisionVolume.Sphere, BEntity->Transform);
+                    sphere SphereB = TransformSphere(&VolumeB->Sphere, BEntity->Transform);
                     SphereB.CenterP += BEntity->MoveDelta*tHit;
                     
                     Result = GetSphereHullPenetration(&SphereB, HullA, TransformA);
@@ -937,7 +925,7 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
                 {
-                    capsule CapsuleB = TransformCapsule(&BEntity->CollisionVolume.Capsule, BEntity->Transform);
+                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, BEntity->Transform);
                     CapsuleB.P0 += BEntity->MoveDelta*tHit;
                     CapsuleB.P1 += BEntity->MoveDelta*tHit;
                     
@@ -947,8 +935,8 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
-                    convex_hull* HullB = BEntity->CollisionVolume.ConvexHull;
-                    rigid_transform TransformB = BEntity->CollisionVolume.Transform*BEntity->Transform;                        
+                    convex_hull* HullB = VolumeB->ConvexHull;
+                    sqt TransformB = HullB->Header.Transform*BEntity->Transform;                        
                     TransformB.Translation += BEntity->MoveDelta*tHit;
                     
                     Result = GetHullHullPenetration(HullA, TransformA, HullB, TransformB);
@@ -963,11 +951,24 @@ penetration GetPenetration(world_entity* AEntity, world_entity* BEntity, f32 tHi
 
 collision_result DetectCollisions(world* World, world_entity* Entity)
 {
+    platform_time Start = Global_Platform->Clock();
+    
     collision_result Result = {};
     Result.t = INFINITY;    
     
-    if(FindCollisions(&Result, World, Entity))
-        Result.Penetration = GetPenetration(Entity, Result.HitEntity, Result.t);    
+    time_of_impact_result TOIResult = {};
+    TOIResult.t = INFINITY;
+    
+    penetration Penetration = {};
+    if(FindCollisions(&TOIResult, World, Entity))
+    {
+        Result.Penetration = GetPenetration(Entity, TOIResult.HitEntity, TOIResult.VolumeA, TOIResult.VolumeB, TOIResult.t);    
+        Result.HitEntity = TOIResult.HitEntity;
+        Result.t = TOIResult.t;
+    }        
+    
+    platform_time End = Global_Platform->Clock();
+    CONSOLE_LOG("Elapsed Collision Time %f\n", Global_Platform->ElapsedTime(End, Start)*1000.0);
     
     return Result;
 }
