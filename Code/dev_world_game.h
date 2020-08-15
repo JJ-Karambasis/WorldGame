@@ -123,12 +123,12 @@ struct dev_context
     arena DevStorage;
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
-    b32 DrawOtherWorld;
-    b32 SelectObjects;              
+    b32 DrawOtherWorld;             
     b32 DrawFrames;
     b32 DrawColliders;
     view_mode_type ViewModeType;    
     b32 DrawGrid;
+    b32 EditMode;
     
     graphics_render_buffer* RenderBuffer;
     

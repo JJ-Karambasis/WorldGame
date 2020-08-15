@@ -2,7 +2,7 @@
 #define GRAPHICS_PUSH_COMMANDS_H
 
 //CONFIRM(JJ): Is this alright to be fixed sized?
-#define MAX_COMMAND_COUNT 4096
+#define MAX_COMMAND_COUNT 8192
 
 enum push_command_type
 {

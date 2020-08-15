@@ -153,7 +153,7 @@ void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTop
         }
         else
         {
-            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Red3());
+            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Green3());
         }
     }
 
@@ -165,7 +165,7 @@ void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTop
         }
         else
         {
-           DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Green3()); 
+           DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Red3()); 
         }
     }
 }
@@ -515,20 +515,17 @@ void DevelopmentRender(dev_context* DevContext)
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
-    if(DevContext->SelectObjects)
+    if(!IsDown(Input->Alt))
     {
-        if(!IsDown(Input->Alt))
+        if(IsPressed(Input->LMB))
         {
-            if(IsPressed(Input->LMB))
-            {
-                DevContext->SelectedObject = GetSelectedObject(DevContext);                
-            }
-            if(IsPressed(Input->MMB))
-            {
-                DevContext->SelectedObject = nullptr;
-            }
-        }    
-    }        
+            DevContext->SelectedObject = GetSelectedObject(DevContext);                
+        }
+        if(IsPressed(Input->MMB))
+        {
+            DevContext->SelectedObject = nullptr;
+        }
+    }          
     
     PushDepth(Graphics, false);    
     for(u32 PrimitiveIndex = 0; PrimitiveIndex < DevContext->DebugPrimitives.Size; PrimitiveIndex++)
@@ -615,7 +612,8 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         DevContext->DrawGrid = true;
-        DevContext->DrawColliders = true;        
+        DevContext->DrawColliders = true;      
+        DevContext->EditMode = true;  
         
         CreateDevLineCapsuleMesh(DevContext, 1.0f, 60);
         CreateDevLineBoxMesh(DevContext);

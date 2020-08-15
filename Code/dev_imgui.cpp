@@ -89,8 +89,8 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);        
     ImGui::Checkbox("Draw Frames", (bool*)&DevContext->DrawFrames);    
     ImGui::Checkbox("Draw colliders", (bool*)&DevContext->DrawColliders);    
-    ImGui::Checkbox("Inspect Objects", (bool*)&DevContext->SelectObjects);  
     ImGui::Checkbox("Draw Grid", (bool*)&DevContext->DrawGrid);  
+    ImGui::Checkbox("Edit Mode", (bool*)&DevContext->EditMode);  
     
     local b32 Open = true;
     if(CollapsingHeader("Game Information", ImGuiTreeNodeFlags_DefaultOpen))
