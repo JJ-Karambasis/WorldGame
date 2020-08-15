@@ -164,23 +164,22 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         game_information* GameInformation = &DevContext->GameInformation;
         if(DevContext->SelectedObject != nullptr)
         {
-            v3f ObjectPosition = DevContext->SelectedObject->Position;
             v3f ObjectVelocity = DevContext->SelectedObject->Velocity;
-            
-            ImGui::Text("Selected Object Position: (%.2f, %.2f, %.2f)", ObjectPosition.x, ObjectPosition.y, ObjectPosition.z);
-            ImGui::Text("Selected Object Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
-            ImGui::Text("Selected Object Type: (%d)", DevContext->SelectedObject->Type);
-            ImGui::Text("Selected Object ID: (%d)", DevContext->SelectedObject->ID.ID);
-            ImGui::Text("Selected Object WorldIndex: (%d)", DevContext->SelectedObject->ID.WorldIndex);
+
+            ImGui::InputFloat3("Position", &DevContext->SelectedObject->Position.x, 3);
+            ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
+            ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
+            ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);
+            ImGui::Text("WorldIndex: (%d)", DevContext->SelectedObject->ID.WorldIndex);
             if(!IsInvalidEntityID(DevContext->SelectedObject->LinkID))
             {
-                ImGui::Text("Selected Object Link ID: (%d)", DevContext->SelectedObject->LinkID.ID);
-                ImGui::Text("Selected Object Link WorldIndex: (%d)", DevContext->SelectedObject->LinkID.WorldIndex);
+                ImGui::Text("Link ID: (%d)", DevContext->SelectedObject->LinkID.ID);
+                ImGui::Text("Link WorldIndex: (%d)", DevContext->SelectedObject->LinkID.WorldIndex);
             }
             else
             {
-                ImGui::Text("Selected Object Link ID: (%s)", "No Linked Entity");
-                ImGui::Text("Selected Object Link WorldIndex: (%s)", "No Linked Entity");
+                ImGui::Text("Link ID: (%s)", "No Linked Entity");
+                ImGui::Text("Link WorldIndex: (%s)", "No Linked Entity");
             }
             ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);
             
