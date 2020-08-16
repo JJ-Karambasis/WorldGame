@@ -49,7 +49,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
 #endif
     
     SetNextWindowPos(ImVec2(0, 0));
-    SetNextWindowSize(GetImGuiSize(DevContext));    
+    SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/3.0f, (f32)Graphics->RenderDim.y));    
     
     local bool open = true;
     Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize);    

@@ -228,11 +228,6 @@ ConvexHullIndexCount(convex_hull* Hull)
     return Result;
 }
 
-inline ImVec2 GetImGuiSize(dev_context* DevContext)
-{
-    return ImVec2((f32)DevContext->Graphics->RenderDim.x/3.0f, (f32)DevContext->Graphics->RenderDim.y);
-}
-
 #else
 
 #define SET_DEVELOPER_CONTEXT(context)
