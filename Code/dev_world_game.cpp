@@ -363,7 +363,7 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     f32 z = 1.0f;
     v3f ray_nds = V3(x, y, z);
     v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
-    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+    m4 Perspective = PerspectiveM4(World->Camera.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), World->Camera.ZNear, World->Camera.ZFar);
     v4f ray_eye =  ray_clip * Inverse(Perspective);
     ray_eye = V4(ray_eye.xy, -1.0, 0.0);
     v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
