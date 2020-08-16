@@ -379,7 +379,7 @@ world_entity* GetSelectedObject(dev_context* DevContext)
             ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Entity->Mesh, Entity->Transform);
             if(IntersectionResult.FoundCollision)
             {
-                if(tBest > IntersectionResult.t)
+                if(tBest > IntersectionResult.t && IntersectionResult.t > World->Camera.ZNear)
                 {
                     tBest = IntersectionResult.t;
                     Result = Entity;
