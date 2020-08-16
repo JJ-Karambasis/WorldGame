@@ -194,7 +194,7 @@ void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTop
         }
         else
         {
-           DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Green3()); 
+            DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Green3()); 
         }
     }
 }
@@ -405,10 +405,10 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     {        
         if(Entity->MeshID != INVALID_MESH_ID)
         {   
-            mesh_info* MeshInfo = GetMeshInfo(&DevContext->Game->Assets2, Entity->MeshID);
-            mesh* Mesh = GetMesh(&DevContext->Game->Assets2, Entity->MeshID);
+            mesh_info* MeshInfo = GetMeshInfo(&DevContext->Game->Assets, Entity->MeshID);
+            mesh* Mesh = GetMesh(&DevContext->Game->Assets, Entity->MeshID);
             if(!Mesh)
-                Mesh = LoadMesh(&DevContext->Game->Assets2, Entity->MeshID);
+                Mesh = LoadMesh(&DevContext->Game->Assets, Entity->MeshID);
             
             ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Mesh, MeshInfo, Entity->Transform);
             if(IntersectionResult.FoundCollision)
@@ -426,7 +426,7 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     return Result;
 }
 
-void DrawWireframeWorld(graphics* Graphics, world* World, assets_2* Assets)
+void DrawWireframeWorld(graphics* Graphics, world* World, assets* Assets)
 {
     PushWireframe(Graphics, true);
     PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);        
@@ -450,13 +450,13 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
     PushRenderBufferViewportScissorAndView(DevContext->Graphics, RenderBuffer, &ViewSettings);
     PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);                
     
-    assets_2* Assets = &DevContext->Game->Assets2;
+    assets* Assets = &DevContext->Game->Assets;
     
     switch(DevContext->ViewModeType)
     {
         case VIEW_MODE_TYPE_LIT:
         {                        
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets, Assets);                                                         
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, Assets);                                                         
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
@@ -467,8 +467,8 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                 {
                     graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, DevContext->Graphics, Entity->MeshID);
                     
-                    graphics_material* Material = Entity->Material;                    
-                    PushDrawUnlitMesh(DevContext->Graphics, MeshHandle, Entity->Transform, Material->Diffuse, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);                                     
+                    graphics_diffuse_material_slot Diffuse = ConvertToGraphicsDiffuse(Assets, DevContext->Graphics, Entity->Material->Diffuse);
+                    PushDrawUnlitMesh(DevContext->Graphics, MeshHandle, Entity->Transform, Diffuse, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);                                     
                 }
             }
         } break;                
@@ -480,7 +480,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, DevContext->Game->Assets, Assets);            
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, Assets);            
             DrawWireframeWorld(DevContext->Graphics, World, Assets);                        
         } break;
         

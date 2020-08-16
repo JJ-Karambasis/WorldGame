@@ -184,7 +184,7 @@ void PushLightBuffer(graphics* Graphics, graphics_light_buffer* LightBuffer)
     PushCommand(Graphics, PushCommandLightBuffer);
 }
 
-void PushMaterial(graphics* Graphics, graphics_material* Material)
+void PushMaterial(graphics* Graphics, graphics_material Material)
 {
     push_command_material* PushCommandMaterial = PushStruct(push_command_material, NoClear, 0);
     PushCommandMaterial->Type = PUSH_COMMAND_MATERIAL;
@@ -342,7 +342,7 @@ void PushRenderBufferViewportScissorAndView(graphics* Graphics, graphics_render_
     PushViewCommands(Graphics, RenderBuffer->Resolution, View);
 }
 
-graphics_mesh_id LoadGraphicsMesh(assets_2* Assets, graphics* Graphics, mesh_asset_id ID)
+graphics_mesh_id LoadGraphicsMesh(assets* Assets, graphics* Graphics, mesh_asset_id ID)
 {
     mesh_info* MeshInfo = GetMeshInfo(Assets, ID);
     mesh* Mesh = GetMesh(Assets, ID);
@@ -360,7 +360,7 @@ graphics_mesh_id LoadGraphicsMesh(assets_2* Assets, graphics* Graphics, mesh_ass
     return Result;
 }
 
-graphics_mesh_id GetOrLoadGraphicsMesh(assets_2* Assets, graphics* Graphics, mesh_asset_id ID)
+graphics_mesh_id GetOrLoadGraphicsMesh(assets* Assets, graphics* Graphics, mesh_asset_id ID)
 {    
     graphics_mesh_id MeshHandle = GetGraphicsMeshID(Assets, ID);
     if(MeshHandle == INVALID_GRAPHICS_MESH_ID)
@@ -368,8 +368,114 @@ graphics_mesh_id GetOrLoadGraphicsMesh(assets_2* Assets, graphics* Graphics, mes
     return MeshHandle;
 }
 
-void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, view_settings* Camera, assets* Assets,
-                              assets_2* Assets2)
+graphics_texture_format GetTextureFormat(u32 ComponentCount, b32 IsSRGB)
+{
+    switch(ComponentCount)
+    {
+        case 1:
+        {
+            return GRAPHICS_TEXTURE_FORMAT_R8;
+        } break;
+        
+        case 3:
+        {
+            return IsSRGB ? GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB : GRAPHICS_TEXTURE_FORMAT_R8G8B8;
+        } break;
+        
+        case 4:
+        {
+            return IsSRGB ? GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8 : GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8;
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    
+    return (graphics_texture_format)-1;
+}
+
+graphics_texture_format GetTextureFormat(texture_info* Info)
+{
+    graphics_texture_format Result = GetTextureFormat(Info->Header.ComponentCount, Info->Header.IsSRGB);
+    return Result;    
+}
+
+graphics_texture_id LoadGraphicsTexture(assets* Assets, graphics* Graphics, texture_asset_id ID)
+{   
+    texture_info* TextureInfo = GetTextureInfo(Assets, ID);
+    texture* Texture = GetTexture(Assets, ID);
+    if(!Texture)
+        Texture = LoadTexture(Assets, ID);
+    
+    graphics_sampler_info SamplerInfo = {};
+    SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
+    SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
+    
+    graphics_texture_format Format = GetTextureFormat(TextureInfo);
+    
+    graphics_texture_id Result = Graphics->AllocateTexture(Graphics, Texture->Texels, TextureInfo->Header.Width, TextureInfo->Header.Height, Format, &SamplerInfo);
+    Assets->GraphicsTextures[ID] = Result;
+    return Result;
+}
+
+graphics_texture_id GetOrLoadGraphicsTexture(assets* Assets, graphics* Graphics, texture_asset_id ID)
+{
+    graphics_texture_id TextureHandle = GetGraphicsTextureID(Assets, ID);
+    if(TextureHandle == INVALID_GRAPHICS_TEXTURE_ID)
+        TextureHandle = LoadGraphicsTexture(Assets, Graphics, ID);
+    return TextureHandle;
+}
+
+graphics_diffuse_material_slot ConvertToGraphicsDiffuse(assets* Assets, graphics* Graphics, material_diffuse Diffuse)
+{
+    graphics_diffuse_material_slot DiffuseSlot;
+    
+    DiffuseSlot.IsTexture = Diffuse.IsTexture;
+    if(DiffuseSlot.IsTexture)            
+        DiffuseSlot.DiffuseID = GetOrLoadGraphicsTexture(Assets, Graphics, Diffuse.DiffuseID);    
+    else            
+        DiffuseSlot.Diffuse = Diffuse.Diffuse;     
+    
+    return DiffuseSlot;
+}
+
+graphics_normal_material_slot ConvertToGraphicsNormal(assets* Assets, graphics* Graphics, material_normal Normal)
+{
+    graphics_normal_material_slot NormalSlot;
+    NormalSlot.InUse = Normal.InUse;
+    if(!NormalSlot.InUse)
+        return NormalSlot;
+    
+    NormalSlot.NormalID = GetOrLoadGraphicsTexture(Assets, Graphics, Normal.NormalID);
+    return NormalSlot;
+}
+
+graphics_specular_material_slot ConvertToGraphicsSpecular(assets* Assets, graphics* Graphics, material_specular Specular)
+{
+    graphics_specular_material_slot SpecularSlot;
+    SpecularSlot.InUse = Specular.InUse;
+    if(!SpecularSlot.InUse)
+        return SpecularSlot;
+    
+    SpecularSlot.IsTexture = Specular.IsTexture;
+    if(SpecularSlot.IsTexture)
+        SpecularSlot.SpecularID = GetOrLoadGraphicsTexture(Assets, Graphics, Specular.SpecularID);    
+    else    
+        SpecularSlot.Specular = Specular.Specular;    
+    
+    SpecularSlot.Shininess = Specular.Shininess;
+    return SpecularSlot;
+}
+
+graphics_material ConvertToGraphicsMaterial(assets* Assets, graphics* Graphics, material* Material)
+{
+    graphics_material GraphicsMaterial;
+    GraphicsMaterial.Diffuse = ConvertToGraphicsDiffuse(Assets, Graphics, Material->Diffuse);
+    GraphicsMaterial.Normal = ConvertToGraphicsNormal(Assets, Graphics, Material->Normal);
+    GraphicsMaterial.Specular = ConvertToGraphicsSpecular(Assets, Graphics, Material->Specular);
+    return GraphicsMaterial;
+}
+
+void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, view_settings* Camera, assets* Assets)
 {    
     graphics_light_buffer LightBuffer = {};
     LightBuffer.DirectionalLightCount = 0;        
@@ -404,8 +510,8 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
         {
             if(Entity->MeshID != INVALID_MESH_ID)            
             {   
-                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets2, Graphics, Entity->MeshID);
-                PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets2, Entity->MeshID), 0, 0);            
+                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
+                PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);            
             }
         }
     }
@@ -436,8 +542,8 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
             {
                 if(Entity->MeshID != INVALID_MESH_ID)            
                 {   
-                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets2, Graphics, Entity->MeshID);
-                    PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets2, Entity->MeshID), 0, 0);
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
+                    PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
                 }
             }
         }
@@ -452,13 +558,12 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     FOR_EACH(Entity, &World->EntityPool)        
     {                        
         if(Entity->MeshID != INVALID_MESH_ID)            
-        {            
-            graphics_material* Material = Entity->Material;
+        {                        
+            graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, Entity->Material);            
             PushMaterial(Graphics, Material);
             
-            graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets2, Graphics, Entity->MeshID);
-            PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets2, Entity->MeshID), 0, 0);
+            graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
+            PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
         }
-    }        
-        
+    }    
 }

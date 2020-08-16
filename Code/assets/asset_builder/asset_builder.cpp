@@ -1,5 +1,6 @@
 #include "asset_builder.h"
 #include "asset_builder_fbx.cpp"
+#include "asset_builder_png.cpp"
 
 enum command_argument_type
 {    
@@ -55,7 +56,7 @@ struct command_line
         ConsoleLog("Option| Info                  | Example");
         ConsoleLog("-c    | Used to create assets | '-c Path\\To\\AssetsFile.fbx'");
         ConsoleLog("-d    | Used to delete assets | '-d AssetType NameOfAsset' or '-d AssetType Slot'");
-        NewLine();        
+        ConsoleNewLine();        
         ConsoleLog("AssetTypes:");
         ConsoleLog("\tMesh");
         ConsoleLog("\tTexture");
@@ -65,31 +66,33 @@ struct command_line
     }
 };
 
-void CreateAssets(asset_builder* AssetBuilder, dynamic_array<string>* CreateParameters)
+void CreateAssets(asset_builder* AssetBuilder, dynamic_array<string>& CreateParameters)
 {
     ConsoleLog("Creating assets");
-    NewLine();
-    for(u32 FileIndex = 0; FileIndex < CreateParameters->Size; FileIndex++)
+    ConsoleNewLine();
+    for(u32 FileIndex = 0; FileIndex < CreateParameters.Size; FileIndex++)
     {
-        string* File = CreateParameters->Get(FileIndex);
+        string File = CreateParameters[FileIndex];
         
         ConsoleLog("-------------------------");
-        ConsoleLog("Started Parsing File %s", File->Data);
+        ConsoleLog("Started Parsing File %s", File.Data);
         
-        string Ext = GetFileExtension(*File);
+        string Ext = GetFileExtension(File);
         if(StringEquals(Ext, "fbx"))            
-            ParseFBX(AssetBuilder, File->Data);        
+            ParseFBX(AssetBuilder, File);        
+        else if(StringEquals(Ext, "png"))
+            ParsePNG(AssetBuilder, File);
         else
             ConsoleError("Unknown file extension %s", Ext.Data);
         
-        ConsoleLog("Ended Parsing File %s", File->Data);                
+        ConsoleLog("Ended Parsing File %s", File.Data);                
         
-        if(FileIndex == (CreateParameters->Size - 1))
+        if(FileIndex == (CreateParameters.Size - 1))
             ConsoleLog("-------------------------");
     }   
-    NewLine();
+    ConsoleNewLine();
     ConsoleLog("Finished creating assets");
-    NewLine();
+    ConsoleNewLine();
 }
 
 void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>* DeleteParameters)
@@ -136,20 +139,38 @@ ptr CalculateTotalMeshInfoSize(list<mesh_info>* MeshInfos)
     return Result;
 }
 
+
+ptr CalculateTextureInfoSize(texture_info* TextureInfo)
+{
+    ptr Result = 0;
+    Result += sizeof(texture_info_header);
+    Result += sizeof(char)*TextureInfo->Header.NameLength;
+    return Result;
+}
+
+ptr CalculateTotalTextureInfoSize(list<texture_info>* TextureInfos)
+{
+    ptr Result = 0;
+    FOR_EACH(TextureInfo, TextureInfos)
+        Result += CalculateTextureInfoSize(TextureInfo);
+    return Result;
+}
+
 ptr CalculateOffsetToData(asset_builder* AssetBuilder)
 {
     ptr Result = 0;
     Result += sizeof(asset_header);
     Result += CalculateTotalMeshInfoSize(&AssetBuilder->MeshInfos);
+    Result += CalculateTotalTextureInfoSize(&AssetBuilder->TextureInfos);
     return Result;
 }
 
 void WriteConvexHull(FILE* AssetFile, convex_hull* ConvexHull)
 {
     fwrite(&ConvexHull->Header,  sizeof(ConvexHull->Header), 1, AssetFile);
-    fwrite(ConvexHull->Vertices, sizeof(half_vertex)*ConvexHull->Header.VertexCount, 1, AssetFile);
-    fwrite(ConvexHull->Edges,    sizeof(half_edge)*ConvexHull->Header.EdgeCount,   1,   AssetFile);
-    fwrite(ConvexHull->Faces,    sizeof(half_face)*ConvexHull->Header.FaceCount,  1,   AssetFile);    
+    fwrite(ConvexHull->Vertices, sizeof(half_vertex), ConvexHull->Header.VertexCount, AssetFile);
+    fwrite(ConvexHull->Edges,    sizeof(half_edge),   ConvexHull->Header.EdgeCount,   AssetFile);
+    fwrite(ConvexHull->Faces,    sizeof(half_face),   ConvexHull->Header.FaceCount,   AssetFile);    
 }
 
 void WriteMeshInfo(FILE* AssetFile, mesh_info* MeshInfo)
@@ -166,9 +187,22 @@ void WriteMeshInfos(FILE* AssetFile, list<mesh_info>* MeshInfos)
         WriteMeshInfo(AssetFile, MeshInfo);    
 }
 
+void WriteTextureInfo(FILE* AssetFile, texture_info* TextureInfo)
+{
+    fwrite(&TextureInfo->Header, sizeof(TextureInfo->Header), 1, AssetFile);
+    fwrite(TextureInfo->Name, sizeof(char), TextureInfo->Header.NameLength, AssetFile);
+}
+
+void WriteTextureInfos(FILE* AssetFile, list<texture_info>* TextureInfos)
+{
+    FOR_EACH(TextureInfo, TextureInfos)
+        WriteTextureInfo(AssetFile, TextureInfo);
+}
+
 void WriteInfos(FILE* AssetFile, asset_builder* AssetBuilder)
 {
     WriteMeshInfos(AssetFile, &AssetBuilder->MeshInfos);
+    WriteTextureInfos(AssetFile, &AssetBuilder->TextureInfos);
 }
 
 void WriteMesh(FILE* AssetFile, mesh* Mesh, mesh_info* MeshInfo)
@@ -193,9 +227,32 @@ void WriteMeshData(FILE* AssetFile, list<mesh>* Meshes, list<mesh_info>* MeshInf
     }    
 }
 
+void WriteTexture(FILE* AssetFile, texture* Texture, texture_info* TextureInfo)
+{
+    ptr TextureDataSize = GetTextureDataSize(TextureInfo);
+    fwrite(Texture->Texels, TextureDataSize, 1, AssetFile);
+}
+
+void WriteTextureData(FILE* AssetFile, list<texture>* Textures, list<texture_info>* TextureInfos)
+{
+    list_iterator<texture> TextureIterator = BeginIter(Textures);
+    list_iterator<texture_info> TextureInfoIterator = BeginIter(TextureInfos);
+    
+    texture* Texture = GetFirst(&TextureIterator);
+    texture_info* TextureInfo = GetFirst(&TextureInfoIterator);
+    
+    while(Texture && TextureInfo)
+    {
+        WriteTexture(AssetFile, Texture, TextureInfo);
+        Texture = GetNext(&TextureIterator);
+        TextureInfo = GetNext(&TextureInfoIterator);
+    }
+}
+
 void WriteData(FILE* AssetFile, asset_builder* AssetBuilder)
 {
     WriteMeshData(AssetFile, &AssetBuilder->Meshes, &AssetBuilder->MeshInfos);
+    WriteTextureData(AssetFile, &AssetBuilder->Textures, &AssetBuilder->TextureInfos);
 }
 
 void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHeaderPath)
@@ -207,6 +264,12 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     {        
         MeshInfo->Header.OffsetToData = OffsetToData;        
         OffsetToData += GetMeshDataSize(MeshInfo);
+    }
+    
+    FOR_EACH(TextureInfo, &AssetBuilder->TextureInfos)
+    {
+        TextureInfo->Header.OffsetToData = OffsetToData;
+        OffsetToData += GetTextureDataSize(TextureInfo);
     }
     
     string_stream HeaderBuilder = CreateStringStream(MEGABYTE(1));
@@ -221,24 +284,37 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     
     HeaderBuilder.NewLine();        
     
-    HeaderBuilder.WriteLine("#define INVALID_MESH_ID ((mesh_asset_id)-1)");
+    HeaderBuilder.WriteLine("#define INVALID_MESH_ID    ((mesh_asset_id)-1)");
+    HeaderBuilder.WriteLine("#define INVALID_TEXTURE_ID ((texture_asset_id)-1)");    
+    
     HeaderBuilder.NewLine();
     
     {
         HeaderBuilder.WriteLine("enum mesh_asset_id");
-        HeaderBuilder.WriteLine("{");
-        
+        HeaderBuilder.WriteLine("{");        
         FOR_EACH(MeshInfo, &AssetBuilder->MeshInfos)
         {
             HeaderBuilder.WriteLine("\tMESH_ASSET_ID_%s,", ToUpper(MeshInfo->Name));
-        }
-        
-        HeaderBuilder.WriteLine("\tMESH_ASSET_COUNT");
-        
+        }        
+        HeaderBuilder.WriteLine("\tMESH_ASSET_COUNT");        
         HeaderBuilder.WriteLine("};");
     }
     
     HeaderBuilder.NewLine();
+    
+    {
+        HeaderBuilder.WriteLine("enum texture_asset_id");
+        HeaderBuilder.WriteLine("{");
+        FOR_EACH(TextureInfo, &AssetBuilder->TextureInfos)
+        {
+            HeaderBuilder.WriteLine("\tTEXTURE_ASSET_ID_%s,", ToUpper(TextureInfo->Name));            
+        }
+        HeaderBuilder.WriteLine("\tTEXTURE_ASSET_COUNT");
+        HeaderBuilder.WriteLine("};");
+    }
+    
+    HeaderBuilder.NewLine();
+    
     HeaderBuilder.WriteLine("#endif");
     
     ConsoleLog("Started opening asset files %s and %s", AssetHeaderPath.Data, AssetPath.Data);
@@ -258,7 +334,7 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     }
     
     ConsoleLog("Finished opening asset files");
-    NewLine();
+    ConsoleNewLine();
     
     ConsoleLog("Writing asset header file at %s", AssetHeaderPath.Data);    
     
@@ -267,7 +343,7 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     
     fclose(AssetHeaderFile);
     ConsoleLog("Finished writing asset header file.");
-    NewLine();
+    ConsoleNewLine();
     
     
     ConsoleLog("Writing asset file %s version %d.%d", AssetPath.Data, ASSET_MAJOR_VERSION, ASSET_MINOR_VERSION);
@@ -286,7 +362,7 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     
     fclose(AssetFile);
     ConsoleLog("Finished writing asset file");
-    NewLine();
+    ConsoleNewLine();
     
     DeleteStringStream(&HeaderBuilder);
     
@@ -302,7 +378,7 @@ int main(i32 ArgCount, char** Args)
     if(ArgCount < 2)
     {
         ConsoleLog("No arguments were specified.");
-        NewLine();
+        ConsoleNewLine();
         CommandLine.DisplayHelp();
         return 0;
     }
@@ -318,7 +394,7 @@ int main(i32 ArgCount, char** Args)
            (CommandLine.Arguments[COMMAND_ARGUMENT_TYPE_DELETE].Size == 0))
         {
             ConsoleLog("You are not deleting or creating any assets");
-            NewLine();
+            ConsoleNewLine();
             CommandLine.DisplayHelp();
             return 0;
         }
@@ -330,7 +406,7 @@ int main(i32 ArgCount, char** Args)
         
         asset_builder AssetBuilder = {};
         AssetBuilder.AssetArena = CreateArena(MEGABYTE(128));        
-        CreateAssets(&AssetBuilder, &CommandLine.Arguments[COMMAND_ARGUMENT_TYPE_CREATE]);
+        CreateAssets(&AssetBuilder, CommandLine.Arguments[COMMAND_ARGUMENT_TYPE_CREATE]);
         
         if(FileExists(AssetPath))
         {

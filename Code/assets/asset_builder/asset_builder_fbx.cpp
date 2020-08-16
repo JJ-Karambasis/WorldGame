@@ -277,7 +277,7 @@ FBX_GetPivotDelta(v3f Pivot, m4 Transform)
     return Delta;
 }
 
-void ParseFBX(asset_builder* AssetBuilder, char* Path)
+void ParseFBX(asset_builder* AssetBuilder, string Path)
 {
     if(!Global_FBXManager)
     {
@@ -291,7 +291,7 @@ void ParseFBX(asset_builder* AssetBuilder, char* Path)
     FbxImporter* Importer = FbxImporter::Create(Global_FBXManager, "");
     
     ConsoleLog("Loading FBX File %s", Path);
-    if(Importer->Initialize(Path, -1, Global_FBXManager->GetIOSettings()))
+    if(Importer->Initialize(Path.Data, -1, Global_FBXManager->GetIOSettings()))
     {
         i32 MajorVersion, MinorVersion, RevisionVersion;
         Importer->GetFileVersion(MajorVersion, MinorVersion, RevisionVersion);        
@@ -313,7 +313,7 @@ void ParseFBX(asset_builder* AssetBuilder, char* Path)
                 FbxMesh* MeshFBX = Node->GetMesh();
                 const char* MeshName = Node->GetName();
                 
-                NewLine();
+                ConsoleNewLine();
                 ConsoleLog("Processing Mesh %s", MeshName);
                 
                 if(!MeshFBX->IsTriangleMesh()) { ConsoleError("Mesh is not a triangle mesh. Please triangulate the mesh either manually or via your modeling program's exporter. Skipping Mesh"); continue; }
@@ -708,7 +708,7 @@ void ParseFBX(asset_builder* AssetBuilder, char* Path)
         ConsoleError("Failed to initialize the FBX file. Message %s", Importer->GetStatus().GetErrorString());
     }
     
-    NewLine();
+    ConsoleNewLine();
     ConsoleLog("Finished loading fbx file");
     
     Importer->Destroy();

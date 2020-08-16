@@ -80,7 +80,35 @@ b32 LoadMeshInfos(arena* Arena, mesh_info* MeshInfos)
     return true;
 }
 
-b32 LoadAssetInfos(assets_2* Assets)
+b32 LoadTextureInfo(arena* Arena, texture_info* TextureInfo)
+{
+    //TODO(JJ): What constitutes a failure when loading mesh infos?    
+    platform_file_handle* File = GetAssetFile();
+    Global_Platform->ReadFile(File, &TextureInfo->Header, sizeof(texture_info_header), NO_OFFSET);
+    
+    TextureInfo->Name = PushArray(Arena, TextureInfo->Header.NameLength+1, char, Clear, 0);
+    Global_Platform->ReadFile(File, TextureInfo->Name, TextureInfo->Header.NameLength*sizeof(char), NO_OFFSET);
+    TextureInfo->Name[TextureInfo->Header.NameLength] = 0;
+    
+    return true;
+}
+
+b32 LoadTextureInfos(arena* Arena, texture_info* TextureInfos)
+{
+    for(u32 TextureIndex = 0; TextureIndex < TEXTURE_ASSET_COUNT; TextureIndex++)
+    {
+        texture_info* TextureInfo = TextureInfos + TextureIndex;
+        if(!LoadTextureInfo(Arena, TextureInfo))
+        {
+            //TODO(JJ): Output some diagnostics
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+b32 LoadAssetInfos(assets* Assets)
 {
     if(!LoadMeshInfos(&Assets->AssetArena, Assets->MeshInfos))
     {
@@ -88,14 +116,25 @@ b32 LoadAssetInfos(assets_2* Assets)
         return false;
     }
     
+    if(!LoadTextureInfos(&Assets->AssetArena, Assets->TextureInfos))
+    {
+        //TODO(JJ): Output some diagnostics
+        return false;
+    }
+    
     for(u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)    
-        Assets->GraphicsMeshes[MeshIndex] = INVALID_GRAPHICS_MESH_ID;    
+        Assets->GraphicsMeshes[MeshIndex] = INVALID_GRAPHICS_MESH_ID;            
+    
+    for(u32 TextureIndex = 0; TextureIndex < TEXTURE_ASSET_COUNT; TextureIndex++)
+        Assets->GraphicsTextures[TextureIndex] = INVALID_GRAPHICS_TEXTURE_ID;
     
     return true;
 }
 
-mesh* LoadMesh(assets_2* Assets, mesh_asset_id ID)
+mesh* LoadMesh(assets* Assets, mesh_asset_id ID)
 {
+    ASSERT(ID != INVALID_MESH_ID);
+    
     platform_file_handle* File = GetAssetFile();
     
     mesh_info* MeshInfo = Assets->MeshInfos + ID;            
@@ -109,5 +148,28 @@ mesh* LoadMesh(assets_2* Assets, mesh_asset_id ID)
     
     Global_Platform->ReadFile(File, Mesh->Vertices, MeshSize, MeshInfo->Header.OffsetToData);
     
+    Assets->Meshes[ID] = Mesh;
+    
     return Mesh;
+}
+
+texture* LoadTexture(assets* Assets, texture_asset_id ID)
+{
+    ASSERT(ID != INVALID_TEXTURE_ID);
+    
+    platform_file_handle* File = GetAssetFile();
+    
+    texture_info* TextureInfo = Assets->TextureInfos + ID;
+    
+    u32 TextureSize = GetTextureDataSize(TextureInfo);
+    u32 AllocationSize = sizeof(texture) + TextureSize;
+    
+    texture* Texture = (texture*)Global_Platform->AllocateMemory(AllocationSize);    
+    Texture->Texels = (void*)(Texture+1);
+    
+    Global_Platform->ReadFile(File, Texture->Texels, TextureSize, TextureInfo->Header.OffsetToData);
+    
+    Assets->Textures[ID] = Texture;
+    
+    return Texture;
 }

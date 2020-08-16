@@ -139,7 +139,7 @@ void FreeEntity(game* Game, world_entity_id ID)
 }
 
 world_entity*
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id MeshID, graphics_material* Material, void* UserData=NULL)
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id MeshID, material* Material, void* UserData=NULL)
 {
     world* World = GetWorld(Game, WorldIndex);
     
@@ -155,7 +155,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     
     if(MeshID != INVALID_MESH_ID)
     {
-        mesh_info* MeshInfo = GetMeshInfo(&Game->Assets2, MeshID);
+        mesh_info* MeshInfo = GetMeshInfo(&Game->Assets, MeshID);
         for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
         {
             convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;                        
@@ -169,7 +169,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
 }
 
 world_entity*
-CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id Mesh, graphics_material* Material, void* UserData=NULL)
+CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id Mesh, material* Material, void* UserData=NULL)
 {
     world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_STATIC, WorldIndex, Position, Scale, Euler, Mesh, Material, UserData);
     return Result;

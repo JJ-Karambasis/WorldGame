@@ -7,7 +7,6 @@
 #include "input.h"
 #include "graphics.h"
 #include "assets/assets.h"
-#include "assets.h"
 #include "collision_detection.h"
 #include "audio.h"
 #include "camera.h"
@@ -40,9 +39,8 @@ struct block_puzzle
 struct game
 {        
     b32 Initialized;
-    assets_2 Assets2;
-    
-    assets* Assets;
+    assets Assets;
+        
     audio_output* AudioOutput;
     input* Input;  
     graphics_render_buffer* RenderBuffer;    

@@ -658,9 +658,6 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     Global_Platform->TempArena = &DefaultArena;
     Global_Platform->ErrorStream = &ErrorStream;
     
-    assets Assets = {};
-    Assets.Storage = CreateArena(MEGABYTE(64));
-    
     *Global_PlatformArena = CreateArena(MEGABYTE(1));
     
     Global_EXEFilePath = GetProgramPath(Global_PlatformArena);
@@ -706,7 +703,6 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     input Input = {};
     game Game = {};    
     
-    Game.Assets = &Assets;
     Game.Input = &Input;
     Game.AudioOutput = &AudioOutput;
     
@@ -727,8 +723,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     graphics* Graphics = GraphicsCode.InitGraphics(Global_Platform, PlatformData);
     if(!Graphics)
         WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
-    
-    Assets.Graphics = Graphics;        
+        
     void* DevPointer = NULL;
     
 #if DEVELOPER_BUILD

@@ -9,10 +9,13 @@ struct asset_builder
     
     list<mesh_info> MeshInfos;
     list<mesh> Meshes;             
+    
+    list<texture_info> TextureInfos;
+    list<texture> Textures;
 };
 
 inline void 
-NewLine()
+ConsoleNewLine()
 {
     fprintf(stdout, "\n");
 }
@@ -23,7 +26,7 @@ ConsoleLog(char* Format, ...)
     va_list Args;
     va_start(Args, Format);
     vfprintf(stdout, Format, Args);
-    NewLine();        
+    ConsoleNewLine();        
     va_end(Args);    
 }
 
@@ -34,7 +37,7 @@ ConsoleError(char* Format, ...)
     va_start(Args, Format);
     fprintf(stdout, "Error: ");
     vfprintf(stdout, Format, Args);
-    NewLine();        
+    ConsoleNewLine();        
     va_end(Args);
 }
 

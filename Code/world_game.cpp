@@ -6,9 +6,6 @@
 #include "world.cpp"
 #include "player.cpp"
 #include "wav.cpp"
-#include "fbx.cpp"
-#include "png.cpp"
-#include "assets.cpp"
 #include "graphics.cpp"
 
 PUZZLE_COMPLETE_CALLBACK(DespawnWallCompleteCallback)
@@ -48,46 +45,10 @@ EXPORT GAME_TICK(Tick)
     world_entity_id ID = {};
     if(!Game->Initialized)
     {       
-        b32 AssetResult = InitAssets(&Game->Assets2);
+        b32 AssetResult = InitAssets(&Game->Assets);
         ASSERT(AssetResult);
         
-        Game->GameStorage = CreateArena(MEGABYTE(16));                                
-        
-        Game->Assets->BoxWalkableMesh = LoadWalkableMesh(Game->Assets, "Box.fbx");
-        
-        Game->Assets->QuadWalkableMesh = LoadWalkableMesh(Game->Assets, "Quad.fbx");        
-        Game->Assets->BoxConvexHull = LoadConvexHull(Game->Assets, "assets/raw/fbx/BoxConvexHull.fbx");
-        
-        Game->Assets->FloorWalkableMesh = LoadWalkableMesh(Game->Assets, "assets/raw/fbx/FloorMesh.fbx");
-        Game->Assets->FloorConvexHull = LoadConvexHull(Game->Assets, "assets/raw/fbx/FloorConvexHull.fbx");
-        
-        
-        
-        
-        
-        Game->Assets->TestAudio = LoadAudio(Game->Assets, "TestSound.wav");
-        Game->Assets->TestAudio2 = LoadAudio(Game->Assets, "TestSound2.wav");
-        
-        Game->Assets->TestMaterial0_Diffuse = LoadTexture(Game->Assets, "TestMaterial0_diffuse.png", true);   
-        Game->Assets->TestMaterial0_Normal = LoadTexture(Game->Assets, "TestMaterial0_normal.png", false);
-        Game->Assets->TestMaterial0_Specular = LoadTexture(Game->Assets, "TestMaterial0_specular.png", false);        
-        Game->Assets->TestMaterial1_Diffuse = LoadTexture(Game->Assets, "TestMaterial1_diffuse.png", true);
-        Game->Assets->TestMaterial1_Normal = LoadTexture(Game->Assets, "TestMaterial1_normal.png", false);
-        Game->Assets->TestMaterial1_Specular = LoadTexture(Game->Assets, "TestMaterial1_specular.png", false);                
-        
-        Game->Assets->Material_DiffuseC = CreateMaterial_DCon(Game->Assets, Blue3());
-        Game->Assets->Material_DiffuseT = CreateMaterial_DTex(Game->Assets, &Game->Assets->TestMaterial1_Diffuse);                        
-        Game->Assets->Material_DiffuseC_SpecularC = CreateMaterial_DCon_SCon(Game->Assets, Blue3(), 0.5f, 8);
-        Game->Assets->Material_DiffuseC_SpecularT = CreateMaterial_DCon_STex(Game->Assets, Red3(), &Game->Assets->TestMaterial0_Specular, 8);
-        Game->Assets->Material_DiffuseT_SpecularC = CreateMaterial_DTex_SCon(Game->Assets, &Game->Assets->TestMaterial1_Diffuse, 1.0f, 8);
-        Game->Assets->Material_DiffuseT_SpecularT = CreateMaterial_DTex_STex(Game->Assets, &Game->Assets->TestMaterial0_Diffuse, &Game->Assets->TestMaterial0_Specular, 16);
-        Game->Assets->Material_DiffuseT_Normal = CreateMaterial_DTex_NTex(Game->Assets, &Game->Assets->TestMaterial1_Diffuse, &Game->Assets->TestMaterial1_Normal);
-        Game->Assets->Material_DiffuseC_Normal = CreateMaterial_DCon_NTex(Game->Assets, Yellow3(), &Game->Assets->TestMaterial1_Normal);
-        Game->Assets->Material_DiffuseC_SpecularC_Normal = CreateMaterial_DCon_SCon_NTex(Game->Assets, Green3(), 1.0f, 32, &Game->Assets->TestMaterial1_Normal);
-        Game->Assets->Material_DiffuseT_SpecularT_Normal = CreateMaterial_DTex_STex_NTex(Game->Assets, &Game->Assets->TestMaterial0_Diffuse, &Game->Assets->TestMaterial0_Specular, 8, &Game->Assets->TestMaterial0_Normal);
-        Game->Assets->Material_DiffuseT_SpecularT_Normal_2 = CreateMaterial_DTex_STex_NTex(Game->Assets, &Game->Assets->TestMaterial1_Diffuse, &Game->Assets->TestMaterial1_Specular, 8, &Game->Assets->TestMaterial1_Normal);
-        
-        PlayAudio(Game, &Game->Assets->TestAudio, 1.0f);
+        Game->GameStorage = CreateArena(MEGABYTE(16));                                                                        
         
         Game->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim);
         
@@ -105,7 +66,7 @@ EXPORT GAME_TICK(Tick)
             
             v3f P0 = V3() + Global_WorldZAxis*PLAYER_RADIUS;
             capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);
-            World->PlayerEntity = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f*PI, 0.0f*PI), MESH_ASSET_ID_PLAYER, &Game->Assets->Material_DiffuseC_SpecularC);
+            World->PlayerEntity = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f*PI, 0.0f*PI), MESH_ASSET_ID_PLAYER, &Global_PlayerMaterial);
             AddCollisionVolume(Game, World->PlayerEntity, &PlayerCapsule);
             
             game_camera* Camera = &World->Camera;
@@ -128,14 +89,14 @@ EXPORT GAME_TICK(Tick)
             World->JumpingQuads[1].OtherQuad = &World->JumpingQuads[0];
         }
         
-        CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_FLOOR, &Game->Assets->Material_DiffuseT);                           
-        CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularT_Normal_2);
-        CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.25f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularT_Normal);
-        CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.33f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseC_SpecularC_Normal);
-        CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_Normal);
-        CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularT);
-        CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseT_SpecularC);
-        CreateStaticEntity(Game, 0, V3(1.5f, 2.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.5f), MESH_ASSET_ID_BOX, &Game->Assets->Material_DiffuseC_Normal);                        
+        CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_FLOOR, &Global_Material0);                           
+        CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), MESH_ASSET_ID_BOX, &Global_Material0);
+        CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.25f), MESH_ASSET_ID_BOX, &Global_Material0);
+        CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.33f), MESH_ASSET_ID_BOX, &Global_Material0);
+        CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_BOX, &Global_Material1);
+        CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f), MESH_ASSET_ID_BOX, &Global_Material1);
+        CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f), MESH_ASSET_ID_BOX, &Global_Material1);
+        CreateStaticEntity(Game, 0, V3(1.5f, 2.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.5f), MESH_ASSET_ID_BOX, &Global_Material1);                        
         
         Game->Initialized = true;
     }        
@@ -146,10 +107,7 @@ EXPORT GAME_TICK(Tick)
         u32 PrevIndex = Game->CurrentWorldIndex;
         Game->CurrentWorldIndex = !PrevIndex;
         OnWorldSwitch(Game, PrevIndex, Game->CurrentWorldIndex);          
-    }
-    
-    if(IsPressed(Game->Input->Action))
-        PlayAudio(Game, &Game->Assets->TestAudio2, 0.15f);
+    }    
     
     b32 Simulate = true;
     if(Simulate)
@@ -210,7 +168,7 @@ EXPORT GAME_TICK(Tick)
         world* World = GetCurrentWorld(Game);        
         view_settings ViewSettings = GetViewSettings(&World->Camera);        
         
-        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &ViewSettings, Game->Assets, &Game->Assets2);        
+        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &ViewSettings, &Game->Assets);        
         PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Graphics->RenderDim);
     }    
     

@@ -136,8 +136,8 @@ struct shadow_pass
 struct opengl_forward_pass
 {
     b32 Current;
-    graphics_material* PrevBoundMaterial;
-    graphics_material* BoundMaterial;        
+    graphics_material PrevBoundMaterial;
+    graphics_material BoundMaterial;        
 };
 
 struct opengl_render_buffer : public graphics_render_buffer

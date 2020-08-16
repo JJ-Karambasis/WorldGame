@@ -9,15 +9,15 @@ i64 AllocateImGuiFont(graphics* Graphics)
 {    
     ImGuiIO* IO = &GetIO();
     void* ImGuiFontData;
-    v2i ImGuiFontDimensions;
     
-    IO->Fonts->GetTexDataAsRGBA32((unsigned char**)&ImGuiFontData, &ImGuiFontDimensions.width, &ImGuiFontDimensions.height);
+    i32 Width, Height;        
+    IO->Fonts->GetTexDataAsRGBA32((unsigned char**)&ImGuiFontData, &Width, &Height);
     
     graphics_sampler_info SamplerInfo = {};
     SamplerInfo.MinFilter = GRAPHICS_FILTER_LINEAR;
     SamplerInfo.MagFilter = GRAPHICS_FILTER_LINEAR;
     
-    i64 FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, ImGuiFontDimensions, GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8, &SamplerInfo);        
+    i64 FontTexture = Graphics->AllocateTexture(Graphics, ImGuiFontData, (u32)Width, (u32)Height, GRAPHICS_TEXTURE_FORMAT_R8G8B8_ALPHA8, &SamplerInfo);        
     IO->Fonts->TexID = (ImTextureID)FontTexture;    
     return FontTexture;
 }
@@ -105,11 +105,8 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         v3f PlayerVelocity0 = PlayerEntity0->Velocity;
         v3f PlayerVelocity1 = PlayerEntity1->Velocity;
         
-        v3f CollisionNormal = PlayerEntity0->CollidedNormal;
-        
         Text("Player 0 Position: (%.2f, %.2f, %.6f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
-        Text("Player 0 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity0.x, PlayerVelocity0.y, PlayerVelocity0.z);
-        Text("Collided Normal: (%.2f, %.2f, %.2f)", CollisionNormal.x, CollisionNormal.y, CollisionNormal.z);
+        Text("Player 0 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity0.x, PlayerVelocity0.y, PlayerVelocity0.z);        
         
         Text("Player 1 Position: (%.2f, %.2f, %.2f)", PlayerPosition1.x, PlayerPosition1.y, PlayerPosition1.z);
         Text("Player 1 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity1.x, PlayerVelocity1.y, PlayerVelocity1.z);

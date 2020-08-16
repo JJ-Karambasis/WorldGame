@@ -16,7 +16,7 @@ struct asset_header
 
 struct asset_info_header
 {    
-    u64 OffsetToData;
+    u64 OffsetToData;    
 };
 
 struct mesh_info_header : public asset_info_header
@@ -35,6 +35,15 @@ struct convex_hull_header
     u32 VertexCount;
     u32 EdgeCount;
     u32 FaceCount;    
+};
+
+struct texture_info_header : public asset_info_header
+{
+    u32 Width;
+    u32 Height;
+    u32 ComponentCount;    
+    b32 IsSRGB;    
+    u32 NameLength;
 };
 
 #pragma pack(pop)
@@ -76,11 +85,18 @@ struct convex_hull
     convex_hull_header Header;    
     half_vertex* Vertices;
     half_edge* Edges;
-    half_face* Faces;    
-    
-#if DEVELOPER_BUILD
-    i64 GDIHandle;
-#endif
+    half_face* Faces;        
+};
+
+struct texture_info
+{
+    texture_info_header Header;
+    char* Name;
+};
+
+struct texture
+{
+    void* Texels;
 };
 
 inline u32 
@@ -107,6 +123,13 @@ GetMeshDataSize(mesh_info* MeshInfo)
     
     Result += GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount;
     Result += GetIndexStride(MeshInfo)*MeshInfo->Header.IndexCount;
+    return Result;
+}
+
+inline u32 
+GetTextureDataSize(texture_info* TextureInfo)
+{
+    u32 Result = TextureInfo->Header.Width*TextureInfo->Header.Height*TextureInfo->Header.ComponentCount;
     return Result;
 }
 

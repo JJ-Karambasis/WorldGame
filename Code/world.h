@@ -38,21 +38,17 @@ struct world_entity
             v3f Position;
             v3f Scale;            
         };
-    };
-    
-    graphics_material* Material;    
+    };        
     v3f Velocity;            
-    v3f MoveDelta;    
-    v3f CollidedNormal;
+    v3f MoveDelta;            
+    world_entity_state State;    
     
-    collision_volume* CollisionVolumes;
+    collision_volume* CollisionVolumes;    
+    mesh_asset_id MeshID;        
+    material* Material;    
     
     world_entity_id ID;
-    world_entity_id LinkID;        
-        
-    world_entity_state State;
-    
-    mesh_asset_id MeshID;        
+    world_entity_id LinkID;                
 };
 
 typedef pool<world_entity> world_entity_pool;

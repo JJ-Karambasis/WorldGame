@@ -17,6 +17,14 @@ glUniform1i(Shader->OmniShadowMapUniform, OMNI_SHADOW_MAP_TEXTURE_UNIT)
 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection); \
 SetUniform3f(Shader->ViewPositionUniform, ViewPosition)
 
+inline opengl_forward_pass InitForwardPass()
+{
+    opengl_forward_pass ForwardPass = {};    
+    ForwardPass.PrevBoundMaterial = InvalidGraphicsMaterial();
+    ForwardPass.BoundMaterial = InvalidGraphicsMaterial();
+    return ForwardPass;
+}
+
 inline void
 BindTextureToUnit(GLuint Texture, GLint Uniform, GLuint Unit)
 {
@@ -262,7 +270,7 @@ ALLOCATE_TEXTURE(AllocateTexture)
     GLint InternalFormat = GetInternalFormat(TextureFormat);    
     GLint Format = GetFormat(TextureFormat);
     
-    glTexImage2D(GL_TEXTURE_2D, 0, InternalFormat, Dimensions.width, Dimensions.height, 0, Format, GL_UNSIGNED_BYTE, Data);
+    glTexImage2D(GL_TEXTURE_2D, 0, InternalFormat, Width, Height, 0, Format, GL_UNSIGNED_BYTE, Data);
     
     glBindTexture(GL_TEXTURE_2D, 0);
     
@@ -850,7 +858,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     u32 SkinningIndex = 0;            
     
     shadow_pass ShadowPass = {};
-    opengl_forward_pass ForwardPass = {};    
+    opengl_forward_pass ForwardPass = InitForwardPass();        
     
     GLint ModelUniform = -1;
     
@@ -862,7 +870,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
         {   
             case PUSH_COMMAND_SHADOW_MAP:
             {                
-                ForwardPass = {};                                         
+                ForwardPass = InitForwardPass();                                         
                 ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
                 ShadowPass.Current = true;                
                 
@@ -874,7 +882,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_OMNI_SHADOW_MAP:
             {                
-                ForwardPass = {};      
+                ForwardPass = InitForwardPass();      
                 ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
                 ShadowPass.Current = true;                     
                                 
@@ -954,21 +962,21 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ASSERT(ForwardPass.Current != ShadowPass.Current);
                 if(ForwardPass.Current)
                 {                       
-                    if(ForwardPass.BoundMaterial && (ForwardPass.BoundMaterial != ForwardPass.PrevBoundMaterial))
+                    if(ShouldUpdateMaterial(ForwardPass.BoundMaterial, ForwardPass.PrevBoundMaterial))
                     {
                         ForwardPass.PrevBoundMaterial = ForwardPass.BoundMaterial;
                         
-                        graphics_material* BoundMaterial = ForwardPass.BoundMaterial;
-                        if(!BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        graphics_material BoundMaterial = ForwardPass.BoundMaterial;
+                        if(!BoundMaterial.Specular.InUse && !BoundMaterial.Normal.InUse)
                         {
-                            if(BoundMaterial->Diffuse.IsTexture)
+                            if(BoundMaterial.Diffuse.IsTexture)
                             {   
                                 lambertian_texture_shader* Shader = &OpenGL->LambertianTextureShader;
                                 SET_ILLUMINATION_PROGRAM();
                                 
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
                                 
-                                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
                                 BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);                                
                             }
                             else
@@ -977,23 +985,23 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 SET_ILLUMINATION_PROGRAM();
                                 
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);       
-                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);                                
+                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);                                
                             }
                         }
-                        else if(BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        else if(BoundMaterial.Specular.InUse && !BoundMaterial.Normal.InUse)
                         {                       
-                            if(BoundMaterial->Diffuse.IsTexture)
+                            if(BoundMaterial.Diffuse.IsTexture)
                             {   
-                                if(BoundMaterial->Specular.IsTexture)
+                                if(BoundMaterial.Specular.IsTexture)
                                 {
                                     phong_dtex_stex_shader* Shader = &OpenGL->PhongDTexSTexShader;
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
-                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);
                                     
                                     BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                     BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
@@ -1004,26 +1012,26 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
+                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
                                     BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);
                                 }
                             }
                             else
                             {
-                                if(BoundMaterial->Specular.IsTexture)
+                                if(BoundMaterial.Specular.IsTexture)
                                 {
                                     phong_dcon_stex_shader* Shader = &OpenGL->PhongDConSTexShader;
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
                                     
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);                                                                                                
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);                                                                                                
                                     
-                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);                                    
+                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);                                    
                                     BindTextureToUnit(Texture->Handle, Shader->SpecularTextureUniform, 0);                                    
                                 }
                                 else
@@ -1032,22 +1040,22 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();                                    
                                     SET_VIEW_UNIFORMS();
                                     
-                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                 }
                             }
                         }
-                        else if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        else if(!BoundMaterial.Specular.InUse && BoundMaterial.Normal.InUse)
                         {   
-                            if(BoundMaterial->Diffuse.IsTexture)
+                            if(BoundMaterial.Diffuse.IsTexture)
                             {
                                 lambertian_texture_normal_map_shader* Shader = &OpenGL->LambertianTextureNormalMapShader;
                                 SET_ILLUMINATION_PROGRAM();
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
                                 
-                                opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
-                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
+                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
                                 
                                 BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                 BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);
@@ -1057,27 +1065,27 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 lambertian_color_normal_map_shader* Shader = &OpenGL->LambertianColorNormalMapShader;
                                 SET_ILLUMINATION_PROGRAM();
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                
-                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
+                                SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
                                 
-                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
                                 BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);                                
                             }                                                        
                         }
                         else
                         {   
-                            if(BoundMaterial->Diffuse.IsTexture)
+                            if(BoundMaterial.Diffuse.IsTexture)
                             {
-                                if(BoundMaterial->Specular.IsTexture)
+                                if(BoundMaterial.Specular.IsTexture)
                                 {                   
                                     phong_dtex_stex_normal_map_shader* Shader = &OpenGL->PhongDTexSTexNormalMapShader;
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
-                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
                                     
                                     BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                     BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
@@ -1089,11 +1097,11 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Diffuse.DiffuseID);
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
                                     
                                     BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                     BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
@@ -1101,17 +1109,17 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                             }
                             else
                             {
-                                if(BoundMaterial->Specular.IsTexture)
+                                if(BoundMaterial.Specular.IsTexture)
                                 {
                                     phong_dcon_stex_normal_map_shader* Shader = &OpenGL->PhongDConSTexNormalMapShader;
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Specular.SpecularID);
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
                                     
                                     BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 0);
                                     BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
@@ -1122,11 +1130,11 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial->Diffuse.Diffuse);
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial->Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial->Specular.Shininess);
+                                    SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
+                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial->Normal.NormalID);
+                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
                                     BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);
                                 }
                             }                                                        
@@ -1169,19 +1177,19 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ASSERT(ForwardPass.Current != ShadowPass.Current);
                 if(ForwardPass.Current)
                 {                    
-                    if(ForwardPass.BoundMaterial && (ForwardPass.BoundMaterial != ForwardPass.PrevBoundMaterial))
+                    if(ShouldUpdateMaterial(ForwardPass.BoundMaterial, ForwardPass.PrevBoundMaterial))
                     {
                         ForwardPass.PrevBoundMaterial = ForwardPass.BoundMaterial;
                         
-                        graphics_material* BoundMaterial = ForwardPass.BoundMaterial;
-                        if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        graphics_material BoundMaterial = ForwardPass.BoundMaterial;
+                        if(!BoundMaterial.Specular.InUse && BoundMaterial.Normal.InUse)
                         {
                             NOT_IMPLEMENTED;
                         }
-                        else if(BoundMaterial->Specular.InUse && !BoundMaterial->Normal.InUse)
+                        else if(BoundMaterial.Specular.InUse && !BoundMaterial.Normal.InUse)
                         {                        
                         }
-                        else if(!BoundMaterial->Specular.InUse && BoundMaterial->Normal.InUse)
+                        else if(!BoundMaterial.Specular.InUse && BoundMaterial.Normal.InUse)
                         {
                             NOT_IMPLEMENTED;
                         }
@@ -1206,7 +1214,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_DRAW_UNLIT_MESH:
             {
-                ForwardPass = {};
+                ForwardPass = InitForwardPass();
                 ShadowPass = {};
                 
                 push_command_draw_unlit_mesh* DrawUnlitMesh = (push_command_draw_unlit_mesh*)Command;
@@ -1246,7 +1254,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_DRAW_LINE_MESH:            
             {
-                ForwardPass = {};
+                ForwardPass = InitForwardPass();
                 ShadowPass = {};
                 
                 push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;
@@ -1266,7 +1274,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_DRAW_IMGUI_UI:
             {                
-                ForwardPass = {};     
+                ForwardPass = InitForwardPass();     
                 ShadowPass = {};
                 
                 push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                

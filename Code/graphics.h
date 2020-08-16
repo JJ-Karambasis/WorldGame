@@ -178,7 +178,7 @@ struct graphics_render_buffer
 
 struct graphics;
 
-#define ALLOCATE_TEXTURE(name) graphics_texture_id name(graphics* Graphics, void* Data, v2i Dimensions, graphics_texture_format TextureFormat, graphics_sampler_info* SamplerInfo)
+#define ALLOCATE_TEXTURE(name) graphics_texture_id name(graphics* Graphics, void* Data, u32 Width, u32 Height, graphics_texture_format TextureFormat, graphics_sampler_info* SamplerInfo)
 typedef ALLOCATE_TEXTURE(allocate_texture);
 
 #define ALLOCATE_MESH(name) graphics_mesh_id name(graphics* Graphics, void* VertexData, ptr VertexDataSize, graphics_vertex_format VertexFormat, void* IndexData, ptr IndexDataSize, graphics_index_format IndexFormat)
@@ -326,33 +326,66 @@ CreateDiffuseMaterialSlot(graphics_texture_id DiffuseID)
     return Result;
 }
 
-inline graphics_specular_material_slot
-CreateSpecularMaterialSlot(f32 Specular, i32 Shininess)
+inline graphics_material InvalidGraphicsMaterial()
 {
-    graphics_specular_material_slot Result = {};
-    Result.InUse = true;    
-    Result.Specular = Specular;
-    Result.Shininess = Shininess;
+    graphics_material Material = {};
+    Material.Diffuse.IsTexture = -1;
+    return Material;
+}
+
+b32 IsInvalidGraphicsMaterial(graphics_material Material)
+{
+    b32 Result = Material.Diffuse.IsTexture == -1;
     return Result;
 }
 
-inline graphics_specular_material_slot 
-CreateSpecularMaterialSlot(graphics_texture_id SpecularID, i32 Shininess)
+inline b32 
+DiffuseSlotsEqual(graphics_diffuse_material_slot A, graphics_diffuse_material_slot B)
 {
-    graphics_specular_material_slot Result = {};
-    Result.InUse = true;
-    Result.IsTexture = true;
-    Result.SpecularID = SpecularID;    
-    Result.Shininess = Shininess;
+    if(A.IsTexture == -1 || B.IsTexture == -1) return false;    
+    if(A.IsTexture != B.IsTexture) return false;
+    
+    if(A.IsTexture) return A.DiffuseID == B.DiffuseID;            
+    else return A.Diffuse == B.Diffuse;    
+}
+
+inline b32
+NormalSlotsEqual(graphics_normal_material_slot A, graphics_normal_material_slot B)
+{
+    if(A.InUse != B.InUse) return false;    
+    if(A.InUse) return A.NormalID == B.NormalID;
+    else return true;    
+}
+
+inline b32
+SpecularSlotsEqual(graphics_specular_material_slot A, graphics_specular_material_slot B)
+{
+    if(A.InUse != B.InUse) return false;
+    
+    if(A.InUse)
+    {
+        if(A.IsTexture != B.IsTexture) return false;
+        if(A.Shininess != B.Shininess) return false;
+        
+        if(A.IsTexture) return A.SpecularID == B.SpecularID;
+        else return A.Specular == B.Specular;
+    }
+    else return true;
+}
+
+inline b32 
+AreSameMaterials(graphics_material A, graphics_material B)
+{
+    b32 Result = (DiffuseSlotsEqual(A.Diffuse, B.Diffuse) && 
+                  NormalSlotsEqual(A.Normal, B.Normal) && 
+                  SpecularSlotsEqual(A.Specular, B.Specular));
     return Result;
 }
 
-inline graphics_normal_material_slot 
-CreateNormalMaterialSlot(graphics_texture_id NormalID)
+inline b32
+ShouldUpdateMaterial(graphics_material Current, graphics_material Prev)
 {
-    graphics_normal_material_slot Result;
-    Result.InUse = true;
-    Result.NormalID = NormalID;
+    b32 Result = !IsInvalidGraphicsMaterial(Current) && !AreSameMaterials(Current, Prev);
     return Result;
 }
 

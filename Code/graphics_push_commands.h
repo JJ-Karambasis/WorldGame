@@ -115,7 +115,7 @@ struct push_command_light_buffer : public push_command
 
 struct push_command_material : public push_command
 {
-    graphics_material* Material;
+    graphics_material Material;
 };
 
 struct push_command_draw_mesh : public push_command

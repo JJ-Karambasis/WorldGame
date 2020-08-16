@@ -26,7 +26,6 @@ global struct dev_context* __Internal_Dev_Context__;
 #include "imgui/imgui.h"
 #include "camera.h"
 #include "input.h"
-#include "assets.h"
 #include "assets/assets.h"
 #include "dev_frame_recording.h"
 
