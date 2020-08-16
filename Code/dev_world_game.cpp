@@ -515,7 +515,7 @@ void DevelopmentRender(dev_context* DevContext)
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
-    if(!IsDown(Input->Alt))
+    if(!IsDown(Input->Alt) && !ImGui::IsMouseHoveringRect(ImVec2(0, 0), GetImGuiSize(DevContext), false))
     {
         if(IsPressed(Input->LMB))
         {

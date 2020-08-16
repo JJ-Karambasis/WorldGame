@@ -31,7 +31,7 @@ void DevelopmentImGuiInit(dev_context* DevContext)
     
     ImGuiIO* IO = &ImGui::GetIO();
     IO->BackendRendererName = "OpenGL";
-    IO->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;    
+    IO->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 }
 
 void DevelopmentImGuiUpdate(dev_context* DevContext)
@@ -49,7 +49,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
 #endif
     
     SetNextWindowPos(ImVec2(0, 0));
-    SetNextWindowSize(ImVec2((f32)Graphics->RenderDim.x/3.0f, (f32)Graphics->RenderDim.y));    
+    SetNextWindowSize(GetImGuiSize(DevContext));    
     
     local bool open = true;
     Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize);    
