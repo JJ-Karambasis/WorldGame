@@ -144,7 +144,10 @@ EXPORT GAME_TICK(Tick)
     if(IsPressed(Game->Input->Action))
         PlayAudio(Game, &Game->Assets->TestAudio2, 0.15f);
     
-    UpdateWorld(Game);            
+    if(!IN_EDIT_MODE())
+    {   
+        UpdateWorld(Game);    
+    }        
     
 #if 0 
     block_puzzle* Puzzle = &Game->TestPuzzle;    

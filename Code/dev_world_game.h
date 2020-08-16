@@ -22,6 +22,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEBUG_DRAW_EDGE(position0, position1, color) DebugDrawEdge(__Internal_Dev_Context__, position0, position1, color)
 #define DEBUG_DRAW_QUAD(center, normal, dimensions, color) DebugDrawQuad(__Internal_Dev_Context__, center, normal, dimensions, color)
 #define DEBUG_LOG(format, ...) DebugLog(__Internal_Dev_Context__, format, __VA_ARGS__)
+#define IN_EDIT_MODE() (((dev_context*)DevContext)->EditMode)
 
 #include "imgui/imgui.h"
 #include "camera.h"
@@ -124,11 +125,10 @@ struct dev_context
     b32 InDevelopmentMode;    
     b32 UseDevCamera;        
     b32 DrawOtherWorld;
-    b32 SelectObjects;              
-    b32 DrawFrames;
     b32 DrawColliders;
     view_mode_type ViewModeType;    
     b32 DrawGrid;
+    b32 EditMode;
     
     graphics_render_buffer* RenderBuffer;
     
@@ -239,6 +239,7 @@ ConvexHullIndexCount(convex_hull* Hull)
 #define DEBUG_DRAW_EDGE(position0, position1, color)
 #define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color)
 #define DEBUG_DRAW_QUAD(center, normal, dimensions, color)
+#define IN_EDIT_MODE() false
 
 #endif
 
