@@ -9,7 +9,7 @@ set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533
 set Common=%SharedCommon% %Warnings% -nologo -EHsc- %AKCommonPath%
 set Compiler=cl
 
-IF NOT EXIST ..\din mkdir ..\bin
+IF NOT EXIST ..\bin mkdir ..\bin
 IF NOT EXIST ..\data mkdir ..\data
 IF NOT EXIST ..\data\frame_recordings mkdir ..\data\frame_recordings
 
