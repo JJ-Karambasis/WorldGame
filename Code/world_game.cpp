@@ -109,9 +109,10 @@ EXPORT GAME_TICK(Tick)
         OnWorldSwitch(Game, PrevIndex, Game->CurrentWorldIndex);          
     }    
     
-    b32 Simulate = true;
-    if(Simulate)
-        UpdateWorld(Game);            
+    if(!IN_EDIT_MODE())
+    {   
+        UpdateWorld(Game);    
+    }            
     
 #if 0 
     block_puzzle* Puzzle = &Game->TestPuzzle;    

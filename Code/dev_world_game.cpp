@@ -182,7 +182,7 @@ void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTop
         }
         else
         {
-            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Red3());
+            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Green3());
         }
     }
     
@@ -193,8 +193,8 @@ void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTop
             DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Color);
         }
         else
-        {
-            DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Green3()); 
+        {            
+            DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Red3());             
         }
     }
 }
@@ -392,7 +392,7 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     f32 z = 1.0f;
     v3f ray_nds = V3(x, y, z);
     v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
-    m4 Perspective = PerspectiveM4(CAMERA_FIELD_OF_VIEW, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), CAMERA_ZNEAR, CAMERA_ZFAR);
+    m4 Perspective = PerspectiveM4(World->Camera.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), World->Camera.ZNear, World->Camera.ZFar);
     v4f ray_eye =  ray_clip * Inverse(Perspective);
     ray_eye = V4(ray_eye.xy, -1.0, 0.0);
     v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
@@ -588,20 +588,17 @@ void DevelopmentRender(dev_context* DevContext)
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
-    if(DevContext->SelectObjects)
+    if(!IsDown(Input->Alt) && !ImGui::GetIO().WantCaptureMouse)
     {
-        if(!IsDown(Input->Alt))
+        if(IsPressed(Input->LMB))
         {
-            if(IsPressed(Input->LMB))
-            {
-                DevContext->SelectedObject = GetSelectedObject(DevContext);                
-            }
-            if(IsPressed(Input->MMB))
-            {
-                DevContext->SelectedObject = nullptr;
-            }
-        }    
-    }        
+            DevContext->SelectedObject = GetSelectedObject(DevContext);                
+        }
+        if(IsPressed(Input->MMB))
+        {
+            DevContext->SelectedObject = nullptr;
+        }
+    }          
     
     PushDepth(Graphics, false);    
     for(u32 PrimitiveIndex = 0; PrimitiveIndex < DevContext->DebugPrimitives.Size; PrimitiveIndex++)
@@ -628,14 +625,11 @@ void DevelopmentRender(dev_context* DevContext)
         }
     }
     DevContext->DebugPrimitives.Size = 0;
-    
-    if(DevContext->DrawFrames)
-    {        
-        FOR_EACH(Entity, &World->EntityPool)
-        {
-            m3 Orientation = ToMatrix3(Entity->Transform.Orientation);
-            DrawFrame(DevContext, Entity->Transform.Translation, Orientation.XAxis, Orientation.YAxis, Orientation.ZAxis);
-        }        
+
+    if(DevContext->SelectedObject != nullptr)
+    {
+        m3 Orientation = ToMatrix3(DevContext->SelectedObject->Transform.Orientation);
+        DrawFrame(DevContext, DevContext->SelectedObject->Transform.Translation, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
     }
 
     PushDepth(Graphics, true);
@@ -688,7 +682,8 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         DevContext->DrawGrid = true;
-        DevContext->DrawColliders = true;        
+        DevContext->DrawColliders = true;      
+        DevContext->EditMode = true;  
         
         for(u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
             DevContext->MeshConvexHulls[MeshIndex].Count = (u32)-1;
