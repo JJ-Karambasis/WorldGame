@@ -144,7 +144,7 @@ EXPORT GAME_TICK(Tick)
     if(IsPressed(Game->Input->Action))
         PlayAudio(Game, &Game->Assets->TestAudio2, 0.15f);
     
-    if(NOT_IN_DEVELOPMENT_MODE() || !((dev_context*)DevContext)->EditMode)
+    if(!IN_EDIT_MODE())
     {   
         UpdateWorld(Game);    
     }        

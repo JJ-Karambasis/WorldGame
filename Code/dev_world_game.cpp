@@ -552,17 +552,8 @@ void DevelopmentRender(dev_context* DevContext)
         }
     }
     DevContext->DebugPrimitives.Size = 0;
-    
-    if(DevContext->DrawFrames)
-    {        
-        FOR_EACH(Entity, &World->EntityPool)
-        {
-            m3 Orientation = ToMatrix3(Entity->Transform.Orientation);
-            DrawFrame(DevContext, Entity->Transform.Translation, Orientation.XAxis, Orientation.YAxis, Orientation.ZAxis);
-        }        
-    }
 
-    if(!DevContext->DrawFrames && DevContext->SelectedObject != nullptr)
+    if(DevContext->SelectedObject != nullptr)
     {
         m3 Orientation = ToMatrix3(DevContext->SelectedObject->Transform.Orientation);
         DrawFrame(DevContext, DevContext->SelectedObject->Transform.Translation, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
