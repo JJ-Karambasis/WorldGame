@@ -565,7 +565,7 @@ void DevelopmentRender(dev_context* DevContext)
     if(!DevContext->DrawFrames && DevContext->SelectedObject != nullptr)
     {
         m3 Orientation = ToMatrix3(DevContext->SelectedObject->Transform.Orientation);
-        DrawFrame(DevContext, DevContext->SelectedObject->Transform.Translation, Orientation.XAxis, Orientation.YAxis, Orientation.ZAxis);
+        DrawFrame(DevContext, DevContext->SelectedObject->Transform.Translation, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
     }
 
     PushDepth(Graphics, true);
