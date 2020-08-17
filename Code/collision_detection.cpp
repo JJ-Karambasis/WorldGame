@@ -11,6 +11,15 @@ capsule CreateCapsule(v3f P0, v3f P1, f32 Radius)
     return Result;
 }
 
+capsule CreateCapsule(v3f Bottom, f32 Height, f32 Radius)
+{
+    capsule Result;
+    Result.P0     = Bottom + Global_WorldZAxis*Radius;
+    Result.P1     = Result.P0 + Global_WorldZAxis*Height;
+    Result.Radius = Radius;
+    return Result;
+}
+
 sphere CreateSphere(v3f CenterP, f32 Radius)
 {
     sphere Result;
@@ -37,7 +46,6 @@ void AttachToCollisionVolume(collision_volume* CollisionVolume, capsule* Capsule
     CollisionVolume->Capsule = *Capsule;
 }
 
-
 void AttachCollisionVolume(world_entity* Entity, collision_volume* Volume)
 {    
     if(!Entity->CollisionVolumes)
@@ -60,10 +68,12 @@ void AddCollisionVolume(game* Game, world_entity* Entity, type* Collider)
 capsule TransformCapsule(capsule* Capsule, sqt Transform)
 {
     capsule Result;
-    Result.P0 = NoScaleTransformV3(Capsule->P0, Transform);
-    Result.P1 = NoScaleTransformV3(Capsule->P1, Transform);
     
-    u32 Component = LargestComponent(Transform.Scale);
+    v3f ZScale = V3(1.0f, 1.0f, Transform.Scale.z);
+    Result.P0 = TransformV3(Capsule->P0, Transform.Translation, Transform.Orientation, ZScale);
+    Result.P1 = TransformV3(Capsule->P1, Transform.Translation, Transform.Orientation, ZScale);
+    
+    u32 Component = LargestComponent(Transform.Scale.xy);
     Result.Radius = Capsule->Radius*Transform.Scale[Component];
     return Result;
 }
@@ -73,9 +83,8 @@ sphere TransformSphere(sphere* Sphere, sqt Transform)
     sphere Result = {};
     
     u32 Component = LargestComponent(Transform.Scale);    
-    Result.Radius = Sphere->Radius*Transform.Scale[Component];    
-    
-    Result.CenterP = Sphere->CenterP + Transform.Translation;    
+    Result.Radius = Sphere->Radius*Transform.Scale[Component];        
+    Result.CenterP = TransformV3(Sphere->CenterP, Transform);
     return Result;
 }
 

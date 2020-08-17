@@ -41,8 +41,7 @@ EXPORT GAME_TICK(Tick)
     
     InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
     SetGlobalErrorStream(Global_Platform->ErrorStream);
-    
-    world_entity_id ID = {};
+            
     if(!Game->Initialized)
     {       
         b32 AssetResult = InitAssets(&Game->Assets);
@@ -96,11 +95,10 @@ EXPORT GAME_TICK(Tick)
         CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_BOX, &Global_Material1);
         CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f), MESH_ASSET_ID_BOX, &Global_Material1);
         CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f), MESH_ASSET_ID_BOX, &Global_Material1);
-        CreateStaticEntity(Game, 0, V3(1.5f, 2.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.5f), MESH_ASSET_ID_BOX, &Global_Material1);                        
+        CreateStaticEntity(Game, 0, V3(1.5f, 2.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.5f), MESH_ASSET_ID_BOX, &Global_Material1);                                
         
         Game->Initialized = true;
     }        
-    
     
     if(IsPressed(Game->Input->SwitchWorld)) 
     {

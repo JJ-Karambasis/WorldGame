@@ -549,9 +549,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                     
                     INVALID_DEFAULT_CASE;
                 }
-            }
-            
-            ASSERT(ConvexHullGDI ? ConvexHullIndex == ConvexHullGDI->Count : true);
+            }                        
         }                        
     }   
 #endif

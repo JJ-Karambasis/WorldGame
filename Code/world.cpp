@@ -130,16 +130,15 @@ void FreeEntity(game* Game, world_entity_id ID)
     while(Volume)
     {
         collision_volume* VolumeToFree = Volume;
-        Volume = Volume->Next;
-        *VolumeToFree = {};
+        Volume = Volume->Next;        
         FreeListEntry(&Game->CollisionVolumeStorage, VolumeToFree);
-    }                
-        
+    }                    
+    
     FreeFromPool(&World->EntityPool, ID.ID);
 }
 
 world_entity*
-CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id MeshID, material* Material, void* UserData=NULL)
+CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id MeshID, material* Material, b32 NoMeshColliders = false)
 {
     world* World = GetWorld(Game, WorldIndex);
     
@@ -153,7 +152,7 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
     Entity->Material = Material;
     Entity->MeshID = MeshID;
     
-    if(MeshID != INVALID_MESH_ID)
+    if((MeshID != INVALID_MESH_ID) && !NoMeshColliders)
     {
         mesh_info* MeshInfo = GetMeshInfo(&Game->Assets, MeshID);
         for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
@@ -169,9 +168,9 @@ CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v
 }
 
 world_entity*
-CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id Mesh, material* Material, void* UserData=NULL)
+CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id Mesh, material* Material, b32 NoMeshColliders = false)
 {
-    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_STATIC, WorldIndex, Position, Scale, Euler, Mesh, Material, UserData);
+    world_entity* Result = CreateEntity(Game, WORLD_ENTITY_TYPE_STATIC, WorldIndex, Position, Scale, Euler, Mesh, Material, NoMeshColliders);
     return Result;
 }
 

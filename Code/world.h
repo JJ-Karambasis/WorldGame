@@ -79,6 +79,4 @@ struct world
     jumping_quad JumpingQuads[2];        
 };
 
-
-
 #endif
