@@ -162,6 +162,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             v3f ObjectVelocity = DevContext->SelectedObject->Velocity;
 
             ImGui::InputFloat3("Position", &DevContext->SelectedObject->Position.x, 3);
+            SliderFloat("X Scale", &DevContext->SelectedObject->Scale.x, 0.1f, 100.0f);
+            SliderFloat("Y Scale", &DevContext->SelectedObject->Scale.y, 0.1f, 100.0f);
+            SliderFloat("Z Scale", &DevContext->SelectedObject->Scale.z, 0.1f, 100.0f);
             ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
             ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
             ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);
