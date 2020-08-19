@@ -319,17 +319,6 @@ ALLOCATE_MESH(AllocateMesh)
             
         } break; 
         
-        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV:
-        {            
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, N));
-            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, UV)); 
-            
-            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
-        } break;
-        
         case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS:
         {                        
             glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, P));
@@ -343,46 +332,27 @@ ALLOCATE_MESH(AllocateMesh)
             glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
         } break;
         
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV:
+        {
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, N));            
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, UV));
+            
+            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
+            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
+        } break;
+        
         case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS:
         {
             glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, N));
-            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, UV)); 
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, N));            
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, UV));
             glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointI));                        
             glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointW));
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
-        } break;        
-        
-        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV:
-        {
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, N));
-            glVertexAttribPointer(TANGENT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, T));
-            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv, UV));
-            
-            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(TANGENT_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
-        } break;
-        
-        case GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS:
-        {
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, N));
-            glVertexAttribPointer(TANGENT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, T));
-            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, UV));
-            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, JointI));                        
-            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_t4_uv_weights, JointW));
-            
-            glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
-            glEnableVertexAttribArray(TANGENT_ATTRIBUTE_INDEX);
+            glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
             glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(JOINT_INDEX_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
@@ -885,7 +855,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ForwardPass = InitForwardPass();      
                 ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
                 ShadowPass.Current = true;                     
-                                
+                
                 push_command_omni_shadow_map* OmniShadowMap = (push_command_omni_shadow_map*)Command;                
                 if(!BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &ShadowPass.OmniShadowMapCounter))
                     INVALID_CODE;
@@ -973,6 +943,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                             {   
                                 lambertian_texture_shader* Shader = &OpenGL->LambertianTextureShader;
                                 SET_ILLUMINATION_PROGRAM();
+                                SET_VIEW_UNIFORMS();
                                 
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
                                 
@@ -983,6 +954,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                             {
                                 lambertian_color_shader* Shader = &OpenGL->LambertianColorShader;
                                 SET_ILLUMINATION_PROGRAM();
+                                SET_VIEW_UNIFORMS();
                                 
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);       
                                 SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);                                
@@ -1052,7 +1024,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                             {
                                 lambertian_texture_normal_map_shader* Shader = &OpenGL->LambertianTextureNormalMapShader;
                                 SET_ILLUMINATION_PROGRAM();
-                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
+                                SET_VIEW_UNIFORMS();
                                 
                                 opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
                                 opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
@@ -1064,7 +1036,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                             {
                                 lambertian_color_normal_map_shader* Shader = &OpenGL->LambertianColorNormalMapShader;
                                 SET_ILLUMINATION_PROGRAM();
-                                SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);                                
+                                SET_VIEW_UNIFORMS();                                
                                 SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
                                 
                                 opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);

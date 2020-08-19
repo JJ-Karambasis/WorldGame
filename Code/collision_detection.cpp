@@ -349,9 +349,9 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
         
         if(MeshInfo->Header.IsSkeletalMesh)
         {
-            vertex_p3_n3_t4_uv_weights TVertex1 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-            vertex_p3_n3_t4_uv_weights TVertex2 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-            vertex_p3_n3_t4_uv_weights TVertex3 = *(vertex_p3_n3_t4_uv_weights*)((u8*)Mesh->Vertices + (Index3*VertexStride));
+            vertex_p3_n3_uv_weights TVertex1 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index1*VertexStride));
+            vertex_p3_n3_uv_weights TVertex2 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index2*VertexStride));
+            vertex_p3_n3_uv_weights TVertex3 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index3*VertexStride));
             
             Vertex1 = TVertex1.P;
             Vertex2 = TVertex2.P;
@@ -359,9 +359,9 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
         }
         else
         {            
-            vertex_p3_n3_t4_uv TVertex1 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-            vertex_p3_n3_t4_uv TVertex2 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-            vertex_p3_n3_t4_uv TVertex3 = *(vertex_p3_n3_t4_uv*)((u8*)Mesh->Vertices + (Index3*VertexStride));
+            vertex_p3_n3_uv TVertex1 = *(vertex_p3_n3_uv*)((u8*)Mesh->Vertices + (Index1*VertexStride));
+            vertex_p3_n3_uv TVertex2 = *(vertex_p3_n3_uv*)((u8*)Mesh->Vertices + (Index2*VertexStride));
+            vertex_p3_n3_uv TVertex3 = *(vertex_p3_n3_uv*)((u8*)Mesh->Vertices + (Index3*VertexStride));
             
             Vertex1 = TVertex1.P;
             Vertex2 = TVertex2.P;

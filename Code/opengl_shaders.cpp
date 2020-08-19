@@ -1,10 +1,9 @@
 #define POSITION_ATTRIBUTE_INDEX 0
 #define NORMAL_ATTRIBUTE_INDEX 1
 #define UV_ATTRIBUTE_INDEX 2
-#define TANGENT_ATTRIBUTE_INDEX 3
-#define COLOR_ATTRIBUTE_INDEX 4
-#define JOINT_INDEX_ATTRIBUTE_INDEX 5
-#define JOINT_WEIGHT_ATTRIBUTE_INDEX 6
+#define COLOR_ATTRIBUTE_INDEX 3
+#define JOINT_INDEX_ATTRIBUTE_INDEX 4
+#define JOINT_WEIGHT_ATTRIBUTE_INDEX 5
 
 #define SKINNING_BUFFER_INDEX 0
 #define LIGHT_BUFFER_INDEX 1
@@ -15,10 +14,9 @@ layout (location = 0) in v2f Position2D;
 layout (location = 0) in v3f Position;
 layout (location = 1) in v3f Normal;
 layout (location = 2) in v2f UV;
-layout (location = 3) in v4f Tangent;
-layout (location = 4) in c4  Color;
-layout (location = 5) in u32 JointI;
-layout (location = 6) in v4f JointW;
+layout (location = 3) in c4  Color;
+layout (location = 4) in u32 JointI;
+layout (location = 5) in v4f JointW;
 )";
 
 global const char* Shader_Header = R"(
@@ -299,6 +297,7 @@ lambertian_color_shader CreateLambertianColorShader()
         
         MVP_UNIFORMS();        
         SHADOW_MAP_UNIFORMS();
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");                
         
         SET_LIGHT_UNIFORM_BLOCKS();        
@@ -325,6 +324,7 @@ lambertian_texture_shader CreateLambertianTextureShader()
         
         MVP_UNIFORMS();        
         SHADOW_MAP_UNIFORMS();
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");                
         
         SET_LIGHT_UNIFORM_BLOCKS();        
@@ -350,6 +350,7 @@ lambertian_color_normal_map_shader CreateLambertianColorNormalMapShader()
         
         MVP_UNIFORMS();
         SHADOW_MAP_UNIFORMS();
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
         
@@ -376,6 +377,7 @@ lambertian_texture_normal_map_shader CreateLambertianTextureNormalMapShader()
         
         MVP_UNIFORMS();
         SHADOW_MAP_UNIFORMS();
+        Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
         

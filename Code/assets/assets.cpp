@@ -32,8 +32,8 @@ b32 PopulateAssetMap(assets* Assets)
 b32 InitAssets(assets* Assets)
 {
     Assets->AssetArena = CreateArena(MEGABYTE(1));    
-    Assets->MeshNameMap = CreateHashMap<char*, mesh_asset_id>(MESH_ASSET_COUNT*10, &Assets->AssetArena);    
-    Assets->TextureNameMap = CreateHashMap<char*, texture_asset_id>(TEXTURE_ASSET_COUNT*10, &Assets->AssetArena);
+    Assets->MeshNameMap = CreateHashMap<char*, mesh_asset_id>(MESH_ASSET_COUNT*10, StringEquals, &Assets->AssetArena);    
+    Assets->TextureNameMap = CreateHashMap<char*, texture_asset_id>(TEXTURE_ASSET_COUNT*10, StringEquals, &Assets->AssetArena);
     
     if(!LoadAssetInfos(Assets))
     {

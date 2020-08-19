@@ -44,11 +44,6 @@ layout (std140) uniform LightViewProjectionBuffer
 out v2f PixelUV;
 #endif
 
-#ifdef HAS_NORMAL_MAPPING
-out v3f PixelWorldTangent;
-out v3f PixelWorldBitangent;
-#endif
-
 void main()
 {
 #ifdef HAS_SKINNING
@@ -96,12 +91,6 @@ void main()
 
 #ifdef HAS_TEXTURES
     PixelUV = UV;
-#endif
-
-#ifdef HAS_NORMAL_MAPPING
-    PixelWorldTangent = normalize(m3(Model)*Tangent.xyz);    
-    PixelWorldTangent = normalize(PixelWorldTangent - dot(PixelWorldTangent, PixelWorldNormal)*PixelWorldNormal);
-    PixelWorldBitangent = cross(PixelWorldNormal, PixelWorldTangent)*Tangent.w;
 #endif
 
 #ifdef OMNI_SHADOW_MAP

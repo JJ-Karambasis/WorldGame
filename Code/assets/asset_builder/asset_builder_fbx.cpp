@@ -84,6 +84,88 @@ inline b32 IsValidConvexHull(FbxNode* Node)
     return true;
 }
 
+b32 AreConvexHullsIdentical(convex_hull* NewConvexHull, convex_hull* OldConvexHull)
+{
+    if(NewConvexHull->Header.Transform   != OldConvexHull->Header.Transform)   return false;
+    if(NewConvexHull->Header.VertexCount != OldConvexHull->Header.VertexCount) return false;
+    if(NewConvexHull->Header.EdgeCount   != OldConvexHull->Header.EdgeCount)   return false;
+    if(NewConvexHull->Header.FaceCount   != OldConvexHull->Header.FaceCount)   return false;
+    
+    for(u32 VertexIndex = 0; VertexIndex < NewConvexHull->Header.VertexCount; VertexIndex++)
+    {
+        half_vertex* NewVertex = NewConvexHull->Vertices + VertexIndex;
+        half_vertex* OldVertex = OldConvexHull->Vertices + VertexIndex;        
+        if(*NewVertex != *OldVertex) return false;
+    }
+    
+    for(u32 EdgeIndex = 0; EdgeIndex < NewConvexHull->Header.EdgeCount; EdgeIndex++)
+    {
+        half_edge* NewEdge = NewConvexHull->Edges + EdgeIndex;
+        half_edge* OldEdge = OldConvexHull->Edges + EdgeIndex;
+        if(*NewEdge != *OldEdge) return false;
+    }
+    
+    for(u32 FaceIndex = 0; FaceIndex < NewConvexHull->Header.FaceCount; FaceIndex++)
+    {
+        half_face* NewFace = NewConvexHull->Faces + FaceIndex;
+        half_face* OldFace = OldConvexHull->Faces + FaceIndex;
+        if(*NewFace != *OldFace) return false;
+    }
+    
+    return true;
+}
+
+b32 AreMeshesIdentical(mesh* NewMesh, mesh_info* NewMeshInfo, mesh* OldMesh, mesh_info* OldMeshInfo)
+{
+    if(NewMeshInfo->Header.IsSkeletalMesh  != OldMeshInfo->Header.IsSkeletalMesh)  return false;
+    if(NewMeshInfo->Header.IsIndexFormat32 != OldMeshInfo->Header.IsIndexFormat32) return false;
+    if(NewMeshInfo->Header.VertexCount     != OldMeshInfo->Header.VertexCount)     return false;
+    if(NewMeshInfo->Header.IndexCount      != OldMeshInfo->Header.IndexCount)      return false;
+    if(NewMeshInfo->Header.ConvexHullCount != OldMeshInfo->Header.ConvexHullCount) return false;
+    
+    for(u32 ConvexHullIndex = 0; ConvexHullIndex < NewMeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
+    {
+        convex_hull* NewConvexHull = NewMeshInfo->ConvexHulls + ConvexHullIndex;
+        convex_hull* OldConvexHull = OldMeshInfo->ConvexHulls + ConvexHullIndex;        
+        if(!AreConvexHullsIdentical(NewConvexHull, OldConvexHull)) return false;
+    }
+    
+    for(u32 VertexIndex = 0; VertexIndex < NewMeshInfo->Header.VertexCount; VertexIndex++)
+    {
+        if(NewMeshInfo->Header.IsSkeletalMesh)
+        {
+            vertex_p3_n3_uv_weights* NewVertex = (vertex_p3_n3_uv_weights*)NewMesh->Vertices + VertexIndex;
+            vertex_p3_n3_uv_weights* OldVertex = (vertex_p3_n3_uv_weights*)OldMesh->Vertices + VertexIndex;            
+            if(*NewVertex != *OldVertex) return false;                
+        }
+        else
+        {
+            vertex_p3_n3_uv* NewVertex = (vertex_p3_n3_uv*)NewMesh->Vertices + VertexIndex;
+            vertex_p3_n3_uv* OldVertex = (vertex_p3_n3_uv*)OldMesh->Vertices + VertexIndex;
+            if(*NewVertex != *OldVertex) 
+                return false;
+        }
+    }
+    
+    for(u32 Index = 0; Index < NewMeshInfo->Header.IndexCount; Index++)
+    {
+        if(NewMeshInfo->Header.IsIndexFormat32)
+        {
+            u32* NewIndex = (u32*)NewMesh->Indices + Index;
+            u32* OldIndex = (u32*)OldMesh->Indices + Index;            
+            if(*NewIndex != *OldIndex) return false;
+        }
+        else
+        {
+            u16* NewIndex = (u16*)NewMesh->Indices + Index;
+            u16* OldIndex = (u16*)OldMesh->Indices + Index;
+            if(*NewIndex != *OldIndex) return false;
+        }
+    }
+    
+    return true;
+}
+
 fbx_mesh_context FBX_GetMeshContext(FbxNode* Node)
 {   
     fbx_mesh_context MeshContext = {};
@@ -290,7 +372,7 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
     
     FbxImporter* Importer = FbxImporter::Create(Global_FBXManager, "");
     
-    ConsoleLog("Loading FBX File %s", Path);
+    ConsoleLog("Loading FBX File %s", Path.Data);
     if(Importer->Initialize(Path.Data, -1, Global_FBXManager->GetIOSettings()))
     {
         i32 MajorVersion, MinorVersion, RevisionVersion;
@@ -349,7 +431,7 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                 u32 VertexCount = 0;
                 
                 u32* IndexData = PushArray(IndexCount, u32, Clear, 0);
-                hash_map<vertex_p3_n3_uv, u32> VertexMap = CreateHashMap<vertex_p3_n3_uv, u32>(IndexCount*4);                
+                hash_map<vertex_p3_n3_uv, u32> VertexMap = CreateHashMap<vertex_p3_n3_uv, u32>(IndexCount*4, [](vertex_p3_n3_uv A, vertex_p3_n3_uv B){ return A == B; });                
                 
                 void* VertexData;
                 if(JointContext.JointsData)
@@ -403,84 +485,16 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                     }
                 }
                 
-                v3f* Tangents   = PushArray(VertexCount, v3f, Clear, 0);
-                v3f* Bitangents = PushArray(VertexCount, v3f, Clear, 0);
-                
-                for(u32 TriangleIndex = 0; TriangleIndex < TriangleCount; TriangleIndex++)
-                {
-                    u32 Index0 = IndexData[(TriangleIndex*3)+0];
-                    u32 Index1 = IndexData[(TriangleIndex*3)+1];
-                    u32 Index2 = IndexData[(TriangleIndex*3)+2];
-                    
-                    v3f P[3];
-                    v2f UV[3];
-                    
-                    if(JointContext.JointsData)
-                    {
-                        vertex_p3_n3_uv_weights Vertex0 = ((vertex_p3_n3_uv_weights*)VertexData)[Index0];
-                        vertex_p3_n3_uv_weights Vertex1 = ((vertex_p3_n3_uv_weights*)VertexData)[Index1];
-                        vertex_p3_n3_uv_weights Vertex2 = ((vertex_p3_n3_uv_weights*)VertexData)[Index2];                                                                        
-                        
-                        P[0] = Vertex0.P;
-                        P[1] = Vertex1.P;
-                        P[2] = Vertex2.P;
-                        
-                        UV[0] = Vertex0.UV;
-                        UV[1] = Vertex1.UV;
-                        UV[2] = Vertex2.UV;
-                    }
-                    else
-                    {
-                        vertex_p3_n3_uv Vertex0 = ((vertex_p3_n3_uv*)VertexData)[Index0];
-                        vertex_p3_n3_uv Vertex1 = ((vertex_p3_n3_uv*)VertexData)[Index1];
-                        vertex_p3_n3_uv Vertex2 = ((vertex_p3_n3_uv*)VertexData)[Index2];                        
-                        
-                        P[0] = Vertex0.P;
-                        P[1] = Vertex1.P;
-                        P[2] = Vertex2.P;
-                        
-                        UV[0] = Vertex0.UV;
-                        UV[1] = Vertex1.UV;
-                        UV[2] = Vertex2.UV;
-                    }
-                    
-                    v3f Edge0 = P[1]-P[0];
-                    v3f Edge1 = P[2]-P[0];
-                    
-                    float S0 = UV[1].x - UV[0].x;
-                    float S1 = UV[2].x - UV[0].x;
-                    float T0 = UV[1].y - UV[0].y;
-                    float T1 = UV[2].y - UV[0].y;
-                    
-                    float R = 1.0f/(S0*T1 - S1*T0);
-                    
-                    v3f TanDir = V3((T1*Edge0.x - T0*Edge1.x)*R,
-                                    (T1*Edge0.y - T0*Edge1.y)*R,
-                                    (T1*Edge0.z - T0*Edge1.z)*R);
-                    
-                    v3f BiDir = V3((S0*Edge1.x - S1*Edge0.x)*R,
-                                   (S0*Edge1.y - S1*Edge0.y)*R,
-                                   (S0*Edge1.z - S1*Edge0.z)*R);
-                    
-                    Tangents[Index0] += TanDir;
-                    Tangents[Index1] += TanDir;
-                    Tangents[Index2] += TanDir;                   
-                    
-                    Bitangents[Index0] += BiDir;
-                    Bitangents[Index1] += BiDir;
-                    Bitangents[Index2] += BiDir;                                                    
-                }
-                
                 b32 IsSkeletalMesh = false;
                 
                 ptr VerticesSize;
                 if(JointContext.JointsData)
                 {
                     IsSkeletalMesh = true;
-                    VerticesSize = VertexCount*sizeof(vertex_p3_n3_t4_uv_weights);
+                    VerticesSize = VertexCount*sizeof(vertex_p3_n3_uv_weights);
                 }
                 else
-                    VerticesSize = VertexCount*sizeof(vertex_p3_n3_t4_uv);
+                    VerticesSize = VertexCount*sizeof(vertex_p3_n3_uv);
                 
                 b32 IsIndexFormat32 = false;
                 ptr IndicesSize;
@@ -514,32 +528,32 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                 CopyMemory(MeshInfo->Name, MeshName, sizeof(char)*MeshInfo->Header.NameLength);
                 MeshInfo->Name[MeshInfo->Header.NameLength] = 0;
                 
+                v3f MeshPivot = FBX_GetPivot(Node);
+                m4  MeshTransform = FBX_GetLocalToParentTransform(Node);                                
+                v3f MeshDelta = FBX_GetPivotDelta(MeshPivot, MeshTransform);
+                
+                m3 MeshModelR = M3(MeshTransform);
+                m3 NormalMeshModelR = Transpose(InverseTransformM3(MeshModelR));
+                
                 for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
-                {
-                    v3f T = Normalize(Tangents[VertexIndex]);
-                    v3f B = Bitangents[VertexIndex];
-                    
+                {                                                            
                     if(IsSkeletalMesh)
                     {
-                        vertex_p3_n3_t4_uv_weights* DstVertex = (vertex_p3_n3_t4_uv_weights*)Mesh->Vertices + VertexIndex;
+                        vertex_p3_n3_uv_weights* DstVertex = (vertex_p3_n3_uv_weights*)Mesh->Vertices + VertexIndex;
                         vertex_p3_n3_uv_weights* SrcVertex = (vertex_p3_n3_uv_weights*)VertexData + VertexIndex;                                                                        
                         
-                        DstVertex->P = SrcVertex->P;
-                        DstVertex->N = Normalize(SrcVertex->N);
-                        DstVertex->UV = SrcVertex->UV;
-                        DstVertex->T = OrthogonalTangent(B, T, DstVertex->N);
-                        CopyMemory(DstVertex->JointI, SrcVertex->JointI, sizeof(DstVertex->JointI));
-                        CopyMemory(DstVertex->JointW, SrcVertex->JointW, sizeof(DstVertex->JointW));                        
+                        *DstVertex = *SrcVertex;                        
+                        DstVertex->P = SrcVertex->P*MeshModelR - MeshPivot;                        
+                        DstVertex->N = Normalize(DstVertex->N*NormalMeshModelR);                        
                     }
                     else
                     {
-                        vertex_p3_n3_t4_uv* DstVertex = (vertex_p3_n3_t4_uv*)Mesh->Vertices + VertexIndex;
+                        vertex_p3_n3_uv* DstVertex = (vertex_p3_n3_uv*)Mesh->Vertices + VertexIndex;
                         vertex_p3_n3_uv* SrcVertex = (vertex_p3_n3_uv*)VertexData + VertexIndex;
                         
-                        DstVertex->P = SrcVertex->P;
-                        DstVertex->N = Normalize(SrcVertex->N);
-                        DstVertex->UV = SrcVertex->UV;
-                        DstVertex->T = OrthogonalTangent(B, T, DstVertex->N);                        
+                        *DstVertex = *SrcVertex;
+                        DstVertex->P = SrcVertex->P*MeshModelR - MeshPivot;                        
+                        DstVertex->N = Normalize(DstVertex->N*NormalMeshModelR);                                       
                     }
                 }
                 
@@ -552,31 +566,6 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                 {
                     u16* Indices = (u16*)Mesh->Indices;
                     for(u32 Index = 0; Index < IndexCount; Index++) Indices[Index] =  SafeU16(IndexData[Index]);
-                }
-                
-                v3f MeshPivot = FBX_GetPivot(Node);
-                m4  MeshTransform = FBX_GetLocalToParentTransform(Node);                                
-                v3f MeshDelta = FBX_GetPivotDelta(MeshPivot, MeshTransform);
-                
-                m3 MeshModelR = M3(MeshTransform);
-                m3 NormalMeshModelR = Transpose(InverseTransformM3(MeshModelR));
-                
-                for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
-                {
-                    if(IsSkeletalMesh)
-                    {
-                        vertex_p3_n3_t4_uv_weights* Vertex = (vertex_p3_n3_t4_uv_weights*)Mesh->Vertices + VertexIndex;
-                        Vertex->P = Vertex->P*MeshModelR - MeshPivot;
-                        Vertex->N = Normalize(Vertex->N*NormalMeshModelR);
-                        Vertex->T.xyz = Normalize(Vertex->T.xyz*MeshModelR);
-                    }
-                    else
-                    {
-                        vertex_p3_n3_t4_uv* Vertex = (vertex_p3_n3_t4_uv*)Mesh->Vertices + VertexIndex;
-                        Vertex->P = Vertex->P*MeshModelR - MeshPivot;
-                        Vertex->N = Normalize(Vertex->N*NormalMeshModelR);
-                        Vertex->T.xyz = Normalize(Vertex->T.xyz*MeshModelR);                                                
-                    }
                 }
                 
                 MeshInfo->ConvexHulls = PushArray(&AssetBuilder->AssetArena, MeshInfo->Header.ConvexHullCount, convex_hull, Clear, 0);                
@@ -623,7 +612,7 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                         ConvexHull->Edges[EdgeIndex].NextEdge = -1;
                     }
                     
-                    hash_map<int_pair, i32> EdgeMap = CreateHashMap<int_pair, i32>((ConvexHull->Header.EdgeCount+ConvexHull->Header.VertexCount)*3);
+                    hash_map<int_pair, i32> EdgeMap = CreateHashMap<int_pair, i32>((ConvexHull->Header.EdgeCount+ConvexHull->Header.VertexCount)*3, IntPairCompare);
                     u32 EdgeIndex = 0;
                     
                     for(u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
@@ -696,8 +685,33 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                 
                 DeleteDynamicArray(&MeshContext.ConvexHullNodes);
                 
-                AddToList(&AssetBuilder->MeshInfos, MeshInfoLink);
-                AddToList(&AssetBuilder->Meshes, MeshLink);
+                mesh_pair Pair;
+                if(AssetBuilder->MeshTable.Find(MeshInfo->Name, &Pair))
+                {
+                    if(!AreMeshesIdentical(Mesh, MeshInfo, Pair.Mesh, Pair.MeshInfo))
+                    {
+                        b32 OverrideMesh = ConsoleTrueFalse("Duplicate meshes found with the same name are not identical. Override the mesh");
+                        if(OverrideMesh)
+                        {
+                            list_entry<mesh_info>* OldMeshInfo = (list_entry<mesh_info>*)Pair.MeshInfo;
+                            list_entry<mesh>* OldMesh = (list_entry<mesh>*)Pair.Mesh;
+                            
+                            RemoveFromList(&AssetBuilder->MeshInfos, OldMeshInfo);
+                            RemoveFromList(&AssetBuilder->Meshes, OldMesh);
+                                                        
+                            AddToList(&AssetBuilder->MeshInfos, MeshInfoLink);
+                            AddToList(&AssetBuilder->Meshes, MeshLink);
+                        }
+                    }
+                }
+                else
+                {
+                    Pair = {MeshInfo, Mesh};
+                    AssetBuilder->MeshTable.Insert(MeshInfo->Name, Pair);
+                                        
+                    AddToList(&AssetBuilder->MeshInfos, MeshInfoLink);
+                    AddToList(&AssetBuilder->Meshes, MeshLink);                    
+                }
                 
                 ConsoleLog("Successful processed mesh!");
             }

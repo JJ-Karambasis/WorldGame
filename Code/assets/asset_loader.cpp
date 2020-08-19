@@ -1,10 +1,3 @@
-inline b32 
-ValidateVersion(asset_header Header)
-{
-    b32 Result = (Header.MajorVersion == ASSET_MAJOR_VERSION) && (Header.MinorVersion == ASSET_MINOR_VERSION);
-    return Result;
-}
-
 platform_file_handle* LoadAssetFile(string AssetPath)
 {
     platform_file_handle* FileHandle = Global_Platform->OpenFile(AssetPath.Data, PLATFORM_FILE_ATTRIBUTES_READ);
@@ -17,9 +10,10 @@ platform_file_handle* LoadAssetFile(string AssetPath)
     asset_header Header = {};
     Global_Platform->ReadFile(FileHandle, &Header, sizeof(Header), NO_OFFSET);
     
-    BOOL_CHECK_AND_HANDLE(StringEquals(Header.Signature, ASSET_SIGNATURE), "Asset file header signature does not match. Cannot load asset file!");
+    BOOL_CHECK_AND_HANDLE(ValidateSignature(Header), "Asset file header signature does not match. Cannot load asset file!");
     BOOL_CHECK_AND_HANDLE(ValidateVersion(Header), "Asset file is not the right version. Found %d.%d when engine supports %d.%d", Header.MajorVersion, Header.MinorVersion, ASSET_MAJOR_VERSION, ASSET_MINOR_VERSION); 
     BOOL_CHECK_AND_HANDLE(Header.MeshCount == MESH_ASSET_COUNT, "Mesh count does not match the asset header's mesh count. Found %d, when engine expected %d", Header.MeshCount, MESH_ASSET_COUNT);
+    BOOL_CHECK_AND_HANDLE(Header.TextureCount == TEXTURE_ASSET_COUNT, "Texture count does not match the asset header's texture count. Found %d, when engine expected %d", Header.TextureCount, TEXTURE_ASSET_COUNT);
     
     return FileHandle;
     

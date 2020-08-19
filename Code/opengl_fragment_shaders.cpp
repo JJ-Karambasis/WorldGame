@@ -110,9 +110,7 @@ layout (std140) uniform LightBuffer
 };
 
 
-#if LAMBERTIAN_MODEL == 0
 uniform v3f ViewPosition;
-#endif
 
 uniform sampler2DArray ShadowMap;
 uniform sampler2DArray OmniShadowMap;
@@ -270,12 +268,45 @@ f32 SampleOmniShadowMap(i32 ShadowMapIndex, v3f PixelWorldPosition, v3f LightWor
     return Result;
 }
 
+//NOTE(EVERYONE): Got this from here http://www.thetenthplanet.de/archives/1180
+//I wanted to try and not have tangent and bitangent vectors stored in the mesh.
+//While not as efficient on the pixel shader, it definitely produces nicer results 
+//and is more memory efficient 
+m3 CotangentBasis(v3f N, v3f p, v2f uv)
+{
+    // get edge vectors of the pixel triangle 
+    v3f dp1 = dFdx( p ); 
+    v3f dp2 = dFdy( p ); 
+    v2f duv1 = dFdx( uv ); 
+    v2f duv2 = dFdy( uv );   
+
+    // solve the linear system 
+    v3f dp2perp = cross( dp2, N ); 
+    v3f dp1perp = cross( N, dp1 ); 
+    v3f T = dp2perp * duv1.x + dp1perp * duv2.x; 
+    v3f B = dp2perp * duv1.y + dp1perp * duv2.y;   
+
+    // construct a scale-invariant frame 
+    f32 invmax = inversesqrt( max( dot(T,T), dot(B,B) ) ); 
+    return m3( T * invmax, B * invmax, N );
+    
+}
+
+v3f NormalMapInfluence(sampler2D NormalMap, v3f Normal, v3f View, v2f UV)
+{
+    v3f N = texture(NormalMap, UV).xyz;
+    N = N*2.0f - 1.0f;
+    m3 TBN = CotangentBasis(Normal, -View, UV);
+    N = normalize(TBN*N);
+    return N;
+}
+
 void main()
 {    
+    v3f V = normalize(ViewPosition-PixelWorldPosition);
+
 #ifdef HAS_NORMAL_MAPPING
-    v3f N = normalize(texture(NormalMap, PixelUV).xyz);
-    N = N*2.0f - 1.0f;
-    N = normalize(m3(PixelWorldTangent, PixelWorldBitangent, PixelWorldNormal)*N);
+    v3f N = NormalMapInfluence(NormalMap, PixelWorldNormal, V, PixelUV);
 #else
     v3f N = normalize(PixelWorldNormal);
 #endif    
@@ -294,10 +325,6 @@ void main()
 
 #ifdef SPECULAR_TEXTURE
     f32 Specular = texture(SpecularTexture, PixelUV).r;
-#endif
-
-#if LAMBERTIAN_MODEL == 0
-    v3f V = normalize(ViewPosition-PixelWorldPosition);
 #endif
 
     c3 FinalColor = c3(0, 0, 0);
@@ -345,7 +372,7 @@ void main()
 
     c3 Ambient = 0.03*SurfaceColor.xyz;
     FinalColor += Ambient;
-    FragColor = c4(FinalColor, 1.0f);
+    FragColor = c4(FinalColor, 1.0f);    
 }
 
 )";

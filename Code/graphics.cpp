@@ -349,7 +349,7 @@ graphics_mesh_id LoadGraphicsMesh(assets* Assets, graphics* Graphics, mesh_asset
     if(!Mesh)    
         Mesh = LoadMesh(Assets, ID);                    
     
-    graphics_vertex_format VertexFormat = MeshInfo->Header.IsSkeletalMesh ? GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV_WEIGHTS : GRAPHICS_VERTEX_FORMAT_P3_N3_T4_UV;
+    graphics_vertex_format VertexFormat = MeshInfo->Header.IsSkeletalMesh ? GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS : GRAPHICS_VERTEX_FORMAT_P3_N3_UV;
     graphics_index_format IndexFormat = MeshInfo->Header.IsIndexFormat32 ? GRAPHICS_INDEX_FORMAT_32_BIT : GRAPHICS_INDEX_FORMAT_16_BIT;
     
     ptr VerticesSize = GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount;                

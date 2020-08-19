@@ -29,6 +29,7 @@ struct lambertian_color_shader : public base_shader
 {
     GLint ModelUniform;
     GLint ViewProjectionUniform;     
+    GLint ViewPositionUniform;
     GLint DiffuseColorUniform;    
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;            
@@ -38,6 +39,7 @@ struct lambertian_texture_shader : public base_shader
 { 
     GLint ModelUniform;
     GLint ViewProjectionUniform;               
+    GLint ViewPositionUniform;
     GLint DiffuseTextureUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;            
@@ -47,6 +49,7 @@ struct lambertian_color_normal_map_shader : public base_shader
 {
     GLint ModelUniform;
     GLint ViewProjectionUniform;
+    GLint ViewPositionUniform;
     GLint DiffuseColorUniform;
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
@@ -57,6 +60,7 @@ struct lambertian_texture_normal_map_shader  : public base_shader
 {
     GLint ModelUniform;
     GLint ViewProjectionUniform;
+    GLint ViewPositionUniform;
     GLint DiffuseTextureUniform;
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
