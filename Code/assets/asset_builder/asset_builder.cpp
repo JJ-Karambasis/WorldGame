@@ -110,8 +110,71 @@ void CreateAssets(asset_builder* AssetBuilder, dynamic_array<string>& CreatePara
     ConsoleNewLine();
 }
 
-void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>* DeleteParameters)
+void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeleteParameters)
 {
+    if(DeleteParameters.Size > 0)
+    {
+        ConsoleLog("Deleting assets");
+        ConsoleNewLine();
+        
+        if((DeleteParameters.Size % 2) != 0)
+        {
+            ConsoleError("Deleting assets come in type/name pairs. Found an invalid amount of deletion parameters. Skipping asset deletion");
+            return;
+        }
+        
+        for(u32 FileIndex = 0; FileIndex < DeleteParameters.Size; FileIndex += 2)
+        {        
+            string Type = ToLower(DeleteParameters[FileIndex]);
+            string Name = DeleteParameters[FileIndex+1];
+            
+            if(StringEquals(Type, "mesh"))
+            {
+                ConsoleLog("Deleting mesh %s", Name.Data);
+                
+                mesh_pair Pair;
+                if(AssetBuilder->MeshTable.Find(Name.Data, &Pair))
+                {                
+                    list_entry<mesh_info>* OldMeshInfo = (list_entry<mesh_info>*)Pair.MeshInfo;
+                    list_entry<mesh>* OldMesh = (list_entry<mesh>*)Pair.Mesh;
+                    
+                    RemoveFromList(&AssetBuilder->MeshInfos, OldMeshInfo);
+                    RemoveFromList(&AssetBuilder->Meshes, OldMesh);                                
+                }
+                else
+                {
+                    ConsoleError("Could not find mesh to delete");
+                }            
+            }
+            else if(StringEquals(Type, "texture"))
+            {
+                ConsoleLog("Deleting texture %s", Name.Data);
+                
+                texture_pair Pair;
+                if(AssetBuilder->TextureTable.Find(Name.Data, &Pair))
+                {
+                    list_entry<texture_info>* OldTextureInfo = (list_entry<texture_info>*)Pair.TextureInfo;
+                    list_entry<texture>* OldTexture = (list_entry<texture>*)Pair.Texture;
+                    
+                    RemoveFromList(&AssetBuilder->TextureInfos, OldTextureInfo);
+                    RemoveFromList(&AssetBuilder->Textures, OldTexture);
+                }
+                else
+                {
+                    ConsoleError("Could not find texture to delete");
+                }
+            }
+            else
+            {
+                ConsoleError("Invalid asset type %s. Skipping deletion of asset %s", DeleteParameters[FileIndex].Data, Name.Data);
+            }        
+            
+            ConsoleNewLine();
+        }
+        
+        ConsoleLog("Finished deleting assets");
+        ConsoleNewLine();    
+    }
 }
 
 void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, FILE* File)
@@ -127,7 +190,7 @@ void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, FILE* File)
     {
         convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;
         fread(&ConvexHull->Header, sizeof(ConvexHull->Header), 1, File);
-                
+        
         u32 ConvexHullDataSize = 0;
         ConvexHullDataSize += (ConvexHull->Header.VertexCount*sizeof(half_vertex));                
         ConvexHullDataSize += (ConvexHull->Header.EdgeCount*sizeof(half_edge));
@@ -253,7 +316,7 @@ void ReadAssets(asset_builder* AssetBuilder, string AssetPath)
         texture_pair Pair = {&TextureInfos[TextureIndex].Entry, &Textures[TextureIndex].Entry};
         AssetBuilder->TextureTable.Insert(Pair.TextureInfo->Name, Pair);
     }
-            
+    
     ConsoleLog("Current asset file read successfully");    
 }
 
@@ -578,6 +641,7 @@ int main(i32 ArgCount, char** Args)
         if(FileExists(AssetPath))
             ReadAssets(&AssetBuilder, AssetPath);
         
+        DeleteAssets(&AssetBuilder, CommandLine.Arguments[COMMAND_ARGUMENT_TYPE_DELETE]);
         CreateAssets(&AssetBuilder, CommandLine.Arguments[COMMAND_ARGUMENT_TYPE_CREATE]);
         
         if(FileExists(AssetPath))
