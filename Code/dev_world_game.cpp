@@ -694,6 +694,13 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         CreateDevTriangleCylinderMesh(DevContext, 60);
         CreateDevTriangleConeMesh(DevContext, 60);
         CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);
+
+        DevContext->EntityRotations = (v3f*)malloc(Game->Worlds[0].EntityPool.Capacity * sizeof(v3f));
+
+        FOR_EACH(Entity, &Game->Worlds[0].EntityPool)
+        {
+            DevContext->EntityRotations[GetPoolIndex(Entity->ID.ID)] = QuaternionEuler(Entity->Orientation);
+        }
         
         DevelopmentImGuiInit(DevContext);
         

@@ -34,6 +34,36 @@ void DevelopmentImGuiInit(dev_context* DevContext)
     IO->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 }
 
+//Rotates the current SelectedObject, by difference between OldRotation and NewRotation, then updates the OldRotation
+void DevelopmentUpdateSelectedObjectRotation(dev_context* DevContext, v3f* OldRotation, v3f NewRotation)
+{
+    f32 RollDiff = 0;
+    f32 PitchDiff = 0;
+    f32 YawDiff = 0;
+    if(NewRotation.roll != OldRotation->roll)
+    {
+        RollDiff = (OldRotation->roll - NewRotation.roll) * -1;
+        quaternion xRotation = RotQuat(V3(1,0,0), RollDiff);
+        DevContext->SelectedObject->Orientation *= xRotation;
+        DevContext->SelectedObject->Orientation = Normalize(DevContext->SelectedObject->Orientation);
+    }
+    if(NewRotation.pitch != OldRotation->pitch)
+    {
+        PitchDiff = (OldRotation->pitch - NewRotation.pitch) * -1;
+        quaternion yRotation = RotQuat(V3(0,1,0), PitchDiff);
+        DevContext->SelectedObject->Orientation *= yRotation;
+        DevContext->SelectedObject->Orientation = Normalize(DevContext->SelectedObject->Orientation);
+    }
+    if(NewRotation.yaw != OldRotation->yaw)
+    {
+        YawDiff = (OldRotation->yaw - NewRotation.yaw) * -1;
+        quaternion zRotation = RotQuat(V3(0,0,1), YawDiff);
+        DevContext->SelectedObject->Orientation *= zRotation;
+        DevContext->SelectedObject->Orientation = Normalize(DevContext->SelectedObject->Orientation);
+    }
+    *OldRotation = NewRotation;
+}
+
 void DevelopmentImGuiUpdate(dev_context* DevContext)
 {
     graphics* Graphics = DevContext->Graphics;
@@ -162,9 +192,21 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             v3f ObjectVelocity = DevContext->SelectedObject->Velocity;
 
             ImGui::InputFloat3("Position", &DevContext->SelectedObject->Position.x, 3);
+
             DragFloat("X Scale", &DevContext->SelectedObject->Scale.x, 0.1f, 0.0f, 100.0f);
             DragFloat("Y Scale", &DevContext->SelectedObject->Scale.y, 0.1f, 0.0f, 100.0f);
             DragFloat("Z Scale", &DevContext->SelectedObject->Scale.z, 0.1f, 0.0f, 100.0f);
+
+            v3f* Rotation = &DevContext->EntityRotations[GetPoolIndex(DevContext->SelectedObject->ID.ID)];
+            f32 ObjectRoll = TO_DEGREE(Rotation->roll);
+            f32 ObjectPitch = TO_DEGREE(Rotation->pitch);
+            f32 ObjectYaw = TO_DEGREE(Rotation->yaw);
+            DragFloat("Roll", &ObjectRoll, 0.1f, -180.0f, 180.0f, "%.3f");
+            DragFloat("Pitch", &ObjectPitch, 0.1f, -180.0f, 180.0f, "%.3f");
+            DragFloat("Yaw", &ObjectYaw, 0.1f, -180.0f, 180.0f, "%.3f");
+
+            DevelopmentUpdateSelectedObjectRotation(DevContext, Rotation, V3(TO_RAD(ObjectRoll), TO_RAD(ObjectPitch), TO_RAD(ObjectYaw)));
+
             ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
             ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
             ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);
