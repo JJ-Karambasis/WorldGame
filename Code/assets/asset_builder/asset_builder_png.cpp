@@ -68,7 +68,7 @@ void ParsePNG(asset_builder* AssetBuilder, string Path)
                     RemoveFromList(&AssetBuilder->Textures, OldTexture);
                     
                     AddToList(&AssetBuilder->TextureInfos, TextureInfoLink);
-                    AddToList(&AssetBuilder->Textures, TextureLink);
+                    AddToList(&AssetBuilder->Textures, TextureLink);                    
                 }
             }
         }
@@ -76,7 +76,7 @@ void ParsePNG(asset_builder* AssetBuilder, string Path)
         {            
             Pair = {TextureInfo, Texture};
             AssetBuilder->TextureTable.Insert(TextureInfo->Name, Pair);
-                        
+            
             AddToList(&AssetBuilder->TextureInfos, TextureInfoLink);
             AddToList(&AssetBuilder->Textures, TextureLink);        
         }

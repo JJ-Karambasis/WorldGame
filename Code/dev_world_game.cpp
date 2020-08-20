@@ -355,7 +355,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
         Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
         v3f Eulers = (Camera->AngularVelocity*Game->dt);            
         
-        quaternion Orientation = Normalize(RotQuat(Camera->Orientation.XAxis, Eulers.pitch)*RotQuat(Camera->Orientation.YAxis, Eulers.yaw));
+        quaternion Orientation = Normalize(RotQuat(Camera->Orientation.XAxis, Eulers.roll)*RotQuat(Camera->Orientation.YAxis, Eulers.pitch));
         Camera->Orientation *= ToMatrix3(Orientation);
         
         Camera->Velocity.xy *= (1.0f /  (1.0f+Game->dt*CAMERA_LINEAR_DAMPING));            
@@ -538,7 +538,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                         ASSERT(Entity->MeshID != INVALID_MESH_ID && ConvexHullGDI);
                         ASSERT(ConvexHullGDI->Count != 0);
                         
-                        sqt Transform = Volume->ConvexHull->Header.Transform*Entity->Transform;                                                
+                        sqt Transform = ToParentCoordinates(Volume->ConvexHull->Header.Transform, Entity->Transform);
                         m4 Model = TransformM4(Transform);
                         
                         PushDrawLineMesh(DevContext->Graphics, ConvexHullGDI->Meshes[ConvexHullIndex], Model, Blue3(), 
