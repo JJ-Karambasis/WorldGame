@@ -24,31 +24,17 @@ struct world_entity_id
 inline world_entity_id MakeEntityID(u64 ID, u32 WorldIndex) { world_entity_id Result = {ID, WorldIndex}; return Result; }
 inline world_entity_id InvalidEntityID() { return MakeEntityID(0, (u32)-1); }
 inline b32 IsInvalidEntityID(world_entity_id ID) { return (ID.ID == 0) || ((ID.WorldIndex != 0) && (ID.WorldIndex != 1)); }
+inline b32 AreEqualIDs(world_entity_id A, world_entity_id B) { return (A.ID == B.ID) && (A.WorldIndex == B.WorldIndex); }
 
 struct world_entity
 {
-    world_entity_type Type;            
-    
-    union
-    {
-        sqt Transform;
-        struct
-        {
-            quaternion Orientation;
-            v3f Position;
-            v3f Scale;            
-        };
-    };        
-    v3f Velocity;            
-    v3f MoveDelta;            
-    world_entity_state State;    
-    
-    collision_volume* CollisionVolumes;    
-    mesh_asset_id MeshID;        
-    material* Material;    
-    
+    world_entity_type Type;   
+    world_entity_state State;        
     world_entity_id ID;
     world_entity_id LinkID;                
+    
+    mesh_asset_id MeshID;        
+    material Material;        
 };
 
 typedef pool<world_entity> world_entity_pool;
@@ -66,17 +52,6 @@ struct pushing_state
 {
     world_entity_id EntityID;    
     v2f Direction;
-};
-
-#include "player.h"
-
-struct world
-{   
-    u32 WorldIndex;
-    world_entity_pool EntityPool;
-    game_camera Camera;    
-    world_entity* PlayerEntity;        
-    jumping_quad JumpingQuads[2];        
 };
 
 #endif

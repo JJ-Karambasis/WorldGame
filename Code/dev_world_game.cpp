@@ -302,23 +302,24 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
 
 
 inline view_settings
-GetViewSettings(dev_context* DevContext, world* World)
+GetViewSettings(dev_context* DevContext, u32 WorldIndex)
 {    
+    game* Game = DevContext->Game;
     if(DevContext->UseDevCamera)
     {   
-        camera* Camera = DevContext->Cameras + World->WorldIndex;
+        camera* Camera = DevContext->Cameras + WorldIndex;
         
         view_settings Result = {};    
         Result.Position = Camera->Position;
         Result.Orientation = Camera->Orientation;
-        Result.FieldOfView = World->Camera.FieldOfView;
-        Result.ZNear = World->Camera.ZNear;
-        Result.ZFar = World->Camera.ZFar;
+        Result.FieldOfView = Game->Cameras[WorldIndex].FieldOfView;
+        Result.ZNear = Game->Cameras[WorldIndex].ZNear;
+        Result.ZFar = Game->Cameras[WorldIndex].ZFar;
         return Result;
     }
     else
     {
-        view_settings Result = GetViewSettings(&World->Camera);        
+        view_settings Result = GetViewSettings(&Game->Cameras[WorldIndex]);        
         return Result;        
     }        
 }
@@ -328,8 +329,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     dev_input* Input = &DevContext->Input;
     game* Game = DevContext->Game;
     graphics* Graphics = DevContext->Graphics;
-    
-    world* World = GetCurrentWorld(Game);    
+        
     if(DevContext->UseDevCamera)
     {
         camera* Camera = DevContext->Cameras + Game->CurrentWorldIndex;
@@ -380,9 +380,8 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
     dev_input* Input = &DevContext->Input;
-    world* World = GetCurrentWorld(Game);        
-    
-    view_settings ViewSettings = GetViewSettings(DevContext, World);
+        
+    view_settings ViewSettings = GetViewSettings(DevContext, Game->CurrentWorldIndex);    
     
     //For not just getting the player entity. need to change to cast the ray and get the intersected object
     i32 Height = Graphics->RenderDim.height;
@@ -392,7 +391,7 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     f32 z = 1.0f;
     v3f ray_nds = V3(x, y, z);
     v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
-    m4 Perspective = PerspectiveM4(World->Camera.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), World->Camera.ZNear, World->Camera.ZFar);
+    m4 Perspective = PerspectiveM4(ViewSettings.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), ViewSettings.ZNear, ViewSettings.ZFar);
     v4f ray_eye =  ray_clip * Inverse(Perspective);
     ray_eye = V4(ray_eye.xy, -1.0, 0.0);
     v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
@@ -401,19 +400,20 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     f32 tBest = INFINITY;
     world_entity* Result = NULL;
     
-    FOR_EACH(Entity, &World->EntityPool)
+    FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
     {        
         if(Entity->MeshID != INVALID_MESH_ID)
         {   
-            mesh_info* MeshInfo = GetMeshInfo(&DevContext->Game->Assets, Entity->MeshID);
-            mesh* Mesh = GetMesh(&DevContext->Game->Assets, Entity->MeshID);
+            mesh_info* MeshInfo = GetMeshInfo(DevContext->Game->Assets, Entity->MeshID);
+            mesh* Mesh = GetMesh(DevContext->Game->Assets, Entity->MeshID);
             if(!Mesh)
-                Mesh = LoadMesh(&DevContext->Game->Assets, Entity->MeshID);
+                Mesh = LoadMesh(DevContext->Game->Assets, Entity->MeshID);
             
-            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Mesh, MeshInfo, Entity->Transform);
+            sqt Transform = *GetEntityTransform(Game, Entity->ID);
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Mesh, MeshInfo, Transform);
             if(IntersectionResult.FoundCollision)
             {
-                if(tBest > IntersectionResult.t && IntersectionResult.t > World->Camera.ZNear)
+                if(tBest > IntersectionResult.t && IntersectionResult.t > ViewSettings.ZNear)
                 {
                     tBest = IntersectionResult.t;
                     Result = Entity;
@@ -426,16 +426,18 @@ world_entity* GetSelectedObject(dev_context* DevContext)
     return Result;
 }
 
-void DrawWireframeWorld(graphics* Graphics, world* World, assets* Assets)
+void DrawWireframeWorld(game* Game, graphics* Graphics, u32 WorldIndex, assets* Assets)
 {
     PushWireframe(Graphics, true);
     PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);        
-    FOR_EACH(Entity, &World->EntityPool)
+    FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
     {
         if(Entity->MeshID != INVALID_MESH_ID)
         {
             graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
-            PushDrawUnlitMesh(Graphics, MeshHandle, Entity->Transform, CreateDiffuseMaterialSlot(Cyan3()), 
+            
+            sqt Transform = *GetEntityTransform(Game, Entity->ID);
+            PushDrawUnlitMesh(Graphics, MeshHandle, Transform, CreateDiffuseMaterialSlot(Cyan3()), 
                               GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
         }
     }
@@ -443,45 +445,47 @@ void DrawWireframeWorld(graphics* Graphics, world* World, assets* Assets)
     PushWireframe(Graphics, false);
 }
 
-void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, world* World)
+void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex)
 {           
-    view_settings ViewSettings = GetViewSettings(DevContext, World);    
+    view_settings ViewSettings = GetViewSettings(DevContext, WorldIndex);    
     
     PushRenderBufferViewportScissorAndView(DevContext->Graphics, RenderBuffer, &ViewSettings);
     PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);                
     
-    assets* Assets = &DevContext->Game->Assets;
+    game* Game = DevContext->Game;
+    assets* Assets = Game->Assets;
     
     switch(DevContext->ViewModeType)
     {
         case VIEW_MODE_TYPE_LIT:
         {                        
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, Assets);                                                         
+            PushWorldShadingCommands(Game, DevContext->Graphics, WorldIndex, RenderBuffer, &ViewSettings, Assets);                                                         
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
         {                                    
-            FOR_EACH(Entity, &World->EntityPool)
+            FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
             {
                 if(Entity->MeshID != INVALID_MESH_ID)                    
                 {
-                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, DevContext->Graphics, Entity->MeshID);
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, DevContext->Graphics, Entity->MeshID);                    
+                    graphics_diffuse_material_slot Diffuse = ConvertToGraphicsDiffuse(Assets, DevContext->Graphics, Entity->Material.Diffuse);
                     
-                    graphics_diffuse_material_slot Diffuse = ConvertToGraphicsDiffuse(Assets, DevContext->Graphics, Entity->Material->Diffuse);
-                    PushDrawUnlitMesh(DevContext->Graphics, MeshHandle, Entity->Transform, Diffuse, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);                                     
+                    sqt Transform = *GetEntityTransform(Game, Entity->ID);
+                    PushDrawUnlitMesh(DevContext->Graphics, MeshHandle, Transform, Diffuse, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);                                     
                 }
             }
         } break;                
         
         case VIEW_MODE_TYPE_WIREFRAME:
         {                                    
-            DrawWireframeWorld(DevContext->Graphics, World, Assets);            
+            DrawWireframeWorld(Game, DevContext->Graphics, WorldIndex, Assets);            
         } break;
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, World, &ViewSettings, Assets);            
-            DrawWireframeWorld(DevContext->Graphics, World, Assets);                        
+            PushWorldShadingCommands(Game, DevContext->Graphics, WorldIndex, RenderBuffer, &ViewSettings, Assets);            
+            DrawWireframeWorld(Game, DevContext->Graphics, WorldIndex, Assets);                        
         } break;
         
         INVALID_DEFAULT_CASE;        
@@ -492,7 +496,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
 #if 1 
     if(DevContext->DrawColliders)
     {
-        FOR_EACH(Entity, &World->EntityPool)
+        FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
         {   
             mesh_convex_hull_gdi* ConvexHullGDI = NULL; 
             if(Entity->MeshID != INVALID_MESH_ID)
@@ -516,20 +520,24 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                 }                                
             }
             
+            sqt EntityTransform = *GetEntityTransform(Game, Entity->ID);
+            
             u32 ConvexHullIndex = 0;
-            for(collision_volume* Volume = Entity->CollisionVolumes; Volume; Volume = Volume->Next)
+            
+            sim_state* SimState = GetSimState(Game, Entity->ID);
+            FOR_EACH(Volume, SimState->CollisionVolumes)
             {                
                 switch(Volume->Type)
                 {
                     case COLLISION_VOLUME_TYPE_SPHERE:
                     {
-                        sphere Sphere = TransformSphere(&Volume->Sphere, Entity->Transform);                    
+                        sphere Sphere = TransformSphere(&Volume->Sphere, EntityTransform);                    
                         DrawLineEllipsoid(DevContext, Sphere.CenterP, V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), Blue3());
                     } break;
                     
                     case COLLISION_VOLUME_TYPE_CAPSULE:
                     {
-                        capsule Capsule = TransformCapsule(&Volume->Capsule, Entity->Transform);
+                        capsule Capsule = TransformCapsule(&Volume->Capsule, EntityTransform);
                         DrawLineCapsule(DevContext, Capsule.P0, Capsule.P1, Capsule.Radius, Blue3());                                                
                     } break;
                     
@@ -538,7 +546,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, wo
                         ASSERT(Entity->MeshID != INVALID_MESH_ID && ConvexHullGDI);
                         ASSERT(ConvexHullGDI->Count != 0);
                         
-                        sqt Transform = ToParentCoordinates(Volume->ConvexHull->Header.Transform, Entity->Transform);
+                        sqt Transform = ToParentCoordinates(Volume->ConvexHull->Header.Transform, EntityTransform);
                         m4 Model = TransformM4(Transform);
                         
                         PushDrawLineMesh(DevContext->Graphics, ConvexHullGDI->Meshes[ConvexHullIndex], Model, Blue3(), 
@@ -575,14 +583,15 @@ void DevelopmentRender(dev_context* DevContext)
     DevelopmentImGuiUpdate(DevContext);    
     DevelopmentUpdateCamera(DevContext);
     
-    world* World = GetCurrentWorld(Game);    
+    UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);    
     
-    view_settings ViewSettings = GetViewSettings(DevContext, World);    
+    view_settings ViewSettings = GetViewSettings(DevContext, Game->CurrentWorldIndex);    
     
-    DrawWorld(DevContext, Game->RenderBuffer, World);    
+    DrawWorld(DevContext, Game->RenderBuffer, Game->CurrentWorldIndex);    
     if(DevContext->DrawOtherWorld)
     {
-        DrawWorld(DevContext, DevContext->RenderBuffer, GetNotCurrentWorld(Game));                      
+        UpdateRenderBuffer(&DevContext->RenderBuffer, Graphics, Graphics->RenderDim/5);                           
+        DrawWorld(DevContext, DevContext->RenderBuffer, !Game->CurrentWorldIndex);
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
@@ -623,18 +632,18 @@ void DevelopmentRender(dev_context* DevContext)
         }
     }
     DevContext->DebugPrimitives.Size = 0;
-
+    
     if(DevContext->SelectedObject != nullptr)
-    {
-        m3 Orientation = ToMatrix3(DevContext->SelectedObject->Transform.Orientation);
-        DrawFrame(DevContext, DevContext->SelectedObject->Transform.Translation, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
+    {        
+        v3f Position = GetEntityPosition(Game, DevContext->SelectedObject->ID);
+        DrawFrame(DevContext, Position, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
     }
-
+    
     PushDepth(Graphics, true);
-
+    
     if(DevContext->DrawGrid)
     {
-        m4 Perspective = PerspectiveM4(World->Camera.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), World->Camera.ZNear, World->Camera.ZFar);
+        m4 Perspective = PerspectiveM4(ViewSettings.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), ViewSettings.ZNear, ViewSettings.ZFar);
         v3f FrustumCorners[8];
         GetFrustumCorners(FrustumCorners, Perspective);
         TransformPoints(FrustumCorners, 8, TransformM4(ViewSettings.Position, ViewSettings.Orientation));
@@ -716,4 +725,4 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
         Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
 }
 
-#include "dev_frame_recording.cpp"
+//#include "dev_frame_recording.cpp"

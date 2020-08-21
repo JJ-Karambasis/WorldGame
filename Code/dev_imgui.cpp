@@ -60,10 +60,10 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     {
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {           
- 
-            game_camera* Camera = &(Game->Worlds[WorldIndex].Camera);
+            
+            game_camera* Camera = &Game->Cameras[WorldIndex];
             camera* DevCamera = &DevContext->Cameras[WorldIndex];
-
+            
             rigid_transform_matrix CameraTransform = GetCameraTransform(Camera);  
             
             DevCamera->Position = CameraTransform.Translation;
@@ -82,7 +82,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     SameLine();
     Combo("", (int*)&DevContext->ViewModeType, ViewModeTypes, ARRAYCOUNT(ViewModeTypes));
    
-    DevelopmentFrameRecording(DevContext);    
+    //DevelopmentFrameRecording(DevContext);    
     
     ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    
@@ -95,29 +95,14 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     {
         game_information* GameInformation = &DevContext->GameInformation;
         
-        world_entity* PlayerEntity0 = Game->Worlds[0].PlayerEntity;
-        world_entity* PlayerEntity1 = Game->Worlds[1].PlayerEntity;
-        
-        v3f PlayerPosition0 = PlayerEntity0->Position;
-        v3f PlayerPosition1 = PlayerEntity1->Position;
-        
-        v3f PlayerVelocity0 = PlayerEntity0->Velocity;
-        v3f PlayerVelocity1 = PlayerEntity1->Velocity;
-        
-        Text("Player 0 Position: (%.2f, %.2f, %.6f)", PlayerPosition0.x, PlayerPosition0.y, PlayerPosition0.z);
-        Text("Player 0 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity0.x, PlayerVelocity0.y, PlayerVelocity0.z);        
-        
-        Text("Player 1 Position: (%.2f, %.2f, %.2f)", PlayerPosition1.x, PlayerPosition1.y, PlayerPosition1.z);
-        Text("Player 1 Velocity: (%.2f, %.2f, %.2f)", PlayerVelocity1.x, PlayerVelocity1.y, PlayerVelocity1.z);
-        
         Text("Movement Time Max Iterations: %I64u", GameInformation->MaxTimeIterations);
         Text("GJK Max Iterations: %I64u", GameInformation->MaxGJKIterations);
         
         if(!DevContext->UseDevCamera)
         {            
-            for(u32 WorldIndex = 0; WorldIndex < ARRAYCOUNT(Game->Worlds); WorldIndex++)
+            for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
             {                                
-                game_camera* Camera = &Game->Worlds[WorldIndex].Camera;
+                game_camera* Camera = &Game->Cameras[WorldIndex];
                 
                 NewLine();
                 
@@ -153,18 +138,22 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             }
         }
     }
-
+    
     if(ImGui::CollapsingHeader("SelectedObject"))
     {
         game_information* GameInformation = &DevContext->GameInformation;
         if(DevContext->SelectedObject != nullptr)
         {
-            v3f ObjectVelocity = DevContext->SelectedObject->Velocity;
-
-            ImGui::InputFloat3("Position", &DevContext->SelectedObject->Position.x, 3);
-            DragFloat("X Scale", &DevContext->SelectedObject->Scale.x, 0.1f, 0.0f, 100.0f);
-            DragFloat("Y Scale", &DevContext->SelectedObject->Scale.y, 0.1f, 0.0f, 100.0f);
-            DragFloat("Z Scale", &DevContext->SelectedObject->Scale.z, 0.1f, 0.0f, 100.0f);
+            sim_state* SimState = GetSimState(Game, DevContext->SelectedObject->ID);
+            
+            v3f ObjectVelocity = SimState->Velocity;
+            
+            sqt* Transform = GetEntityTransform(Game, DevContext->SelectedObject->ID);
+            
+            ImGui::InputFloat3("Position", &Transform->Translation[0], 3);
+            DragFloat("X Scale", &Transform->Scale.x, 0.1f, 0.0f, 100.0f);
+            DragFloat("Y Scale", &Transform->Scale.y, 0.1f, 0.0f, 100.0f);
+            DragFloat("Z Scale", &Transform->Scale.z, 0.1f, 0.0f, 100.0f);
             ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
             ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
             ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);
@@ -179,8 +168,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 ImGui::Text("Link ID: (%s)", "No Linked Entity");
                 ImGui::Text("Link WorldIndex: (%s)", "No Linked Entity");
             }
-            ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);
-            
+            ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);            
         }
         else
         {

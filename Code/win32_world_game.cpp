@@ -2,9 +2,8 @@
 #include "assets/assets.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
-#include "collision_detection.cpp"
 #include "world.cpp"
-#include "player.cpp"
+#include "collision_detection.cpp"
 
 #include "graphics.cpp"
 
@@ -14,11 +13,11 @@ b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* Keyboard);
 void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
-#define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse(&DevContext, RawMouse)
-#define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard(&DevContext, RawKeyboard)
-#define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(&DevContext, Game, Graphics)
-#define DEVELOPMENT_RECORD_FRAME(Game) DevelopmentRecordFrame(&DevContext, Game)
-#define DEVELOPMENT_PLAY_FRAME(Game) DevelopmentPlayFrame(&DevContext, Game)
+#define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse(DevContext, RawMouse)
+#define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard(DevContext, RawKeyboard)
+#define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(DevContext, Game, Graphics)
+#define DEVELOPMENT_RECORD_FRAME(Game) DevelopmentRecordFrame(DevContext, Game)
+#define DEVELOPMENT_PLAY_FRAME(Game) DevelopmentPlayFrame(DevContext, Game)
 #else
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) false
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) 
@@ -31,31 +30,10 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 global string Global_EXEFilePath;
 global arena __Global_PlatformArena__;
 global arena* Global_PlatformArena = &__Global_PlatformArena__;
-global LARGE_INTEGER Global_Frequency;
 global win32_game_code Global_GameCode;
 
 //TODO(JJ): This lock can probably be moved out into some developer code macros since it is only used for hot reloading (for the audio thread)
 global lock Global_Lock;
-
-PLATFORM_CLOCK(Win32_Clock)
-{
-    LARGE_INTEGER Result;
-    QueryPerformanceCounter(&Result);
-    return Result.QuadPart;
-}
-
-inline f64
-Win32_ToSeconds(u64 Time)
-{
-    f64 Result = ((f64)Time/(f64)Global_Frequency.QuadPart);
-    return Result;
-}
-
-PLATFORM_ELAPSED_TIME(Win32_Elapsed)
-{
-    f64 Result = Win32_ToSeconds(End-Start);
-    return Result;
-}
 
 internal LRESULT CALLBACK 
 Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
@@ -130,7 +108,10 @@ FILETIME Win32_GetFileCreationTime(string FilePath)
 win32_game_code Win32_DefaultGameCode()
 {
     win32_game_code Result = {};    
+    Result.Initialize = Game_InitializeStub;
+    Result.FixedTick = Game_FixedTickStub;
     Result.Tick = Game_TickStub;    
+    Result.Render = Game_RenderStub;
     Result.OutputSoundSamples = Game_OutputSoundSamplesStub;
     return Result;
 }
@@ -144,9 +125,12 @@ Win32_LoadGameCode(string DLLPath, string TempDLLPath)
         return Win32_DefaultGameCode();    
     
     Result.GameLibrary.Library = LoadLibrary(TempDLLPath.Data);
+    Result.Initialize = (game_initialize*)GetProcAddress(Result.GameLibrary.Library, "Initialize");
+    Result.FixedTick = (game_fixed_tick*)GetProcAddress(Result.GameLibrary.Library, "FixedTick");
+    Result.Render = (game_render*)GetProcAddress(Result.GameLibrary.Library, "Render");
     Result.Tick = (game_tick*)GetProcAddress(Result.GameLibrary.Library, "Tick");
     Result.OutputSoundSamples = (game_output_sound_samples*)GetProcAddress(Result.GameLibrary.Library, "OutputSoundSamples");
-    if(!Result.GameLibrary.Library || !Result.Tick || !Result.OutputSoundSamples)
+    if(!Result.GameLibrary.Library || !Result.Initialize || !Result.FixedTick || !Result.Tick || !Result.Render || !Result.OutputSoundSamples)
         return Win32_DefaultGameCode();
     
     Result.GameLibrary.LastWriteTime = Win32_GetFileCreationTime(DLLPath);
@@ -218,18 +202,6 @@ Win32_UnloadGraphicsCode(win32_graphics_code* GraphicsCode, string TempDLLPath)
     }
 }
 
-ALLOCATE_MEMORY(Win32_AllocateMemory)
-{
-    void* Result = VirtualAlloc(0, Capacity, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-    return Result;
-}
-
-FREE_MEMORY(Win32_FreeMemory)
-{
-    if(Memory)    
-        VirtualFree(Memory, 0, MEM_RELEASE);    
-}
-
 #if DEVELOPER_BUILD
 PLATFORM_LOG(Win32_Log)
 {   
@@ -247,165 +219,6 @@ inline PLATFORM_LOG(Win32_Log)
 {
 }
 #endif
-
-PLATFORM_READ_ENTIRE_FILE(Win32_ReadEntireFile)
-{
-    buffer Result = {};
-    HANDLE FileHandle = CreateFile(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING,
-                                   FILE_ATTRIBUTE_NORMAL, NULL);
-    if(FileHandle == INVALID_HANDLE_VALUE) 
-    {
-        WRITE_ERROR("Failed to open the file for reading");
-        return Result;
-    }
-    
-    DWORD HighWord = 0;
-    u32 FileSize = GetFileSize(FileHandle, &HighWord);
-    if(HighWord != 0) 
-    { 
-        CloseHandle(FileHandle); 
-        WRITE_ERROR("File size is too large for reading."); 
-        return Result;
-    }
-    
-    void* Data = Global_Platform->AllocateMemory(FileSize);
-    DWORD BytesRead;
-    if(!ReadFile(FileHandle, Data, FileSize, &BytesRead, NULL) || (BytesRead != FileSize)) 
-    { 
-        CloseHandle(FileHandle); 
-        WRITE_ERROR("Was unable to read the entire file.");
-        return Result; 
-    }
-    
-    CloseHandle(FileHandle);    
-    
-    Result.Data = (u8*)Data;
-    Result.Size = FileSize;    
-    return Result;
-}
-
-HANDLE Win32_OpenFile(char* Path)
-{
-    HANDLE Result = CreateFile(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                               FILE_ATTRIBUTE_NORMAL, NULL);
-    return Result;
-}
-
-PLATFORM_WRITE_ENTIRE_FILE(Win32_WriteEntireFile)
-{
-    HANDLE FileHandle = Win32_OpenFile(Path);        
-    if(FileHandle == INVALID_HANDLE_VALUE) 
-    {        
-        WRITE_ERROR("Failed to open the file for writing.");        
-        return;
-    }
-    
-    DWORD BytesWritten;
-    if(!WriteFile(FileHandle, Data, Length, &BytesWritten, NULL) ||
-       (BytesWritten != Length))        
-        WRITE_ERROR("Was unable to write the entire file.");           
-    
-    CloseHandle(FileHandle);    
-}
-
-PLATFORM_FREE_FILE_MEMORY(Win32_FreeFileMemory)
-{
-    if(!IsInvalidBuffer(*Buffer))
-    {
-        Global_Platform->FreeMemory(Buffer->Data);        
-        Buffer->Size = 0;
-        Buffer->Data = NULL;        
-    }
-}
-
-PLATFORM_OPEN_FILE(Win32_OpenFile)
-{
-    DWORD DesiredAttributes = 0;
-    DWORD CreationDisposition = 0;
-    if(Attributes == PLATFORM_FILE_ATTRIBUTES_READ)
-    {
-        DesiredAttributes = GENERIC_READ;
-        CreationDisposition = OPEN_EXISTING;
-    }
-    else if(Attributes == PLATFORM_FILE_ATTRIBUTES_WRITE)
-    {
-        DesiredAttributes = GENERIC_WRITE;
-        CreationDisposition = CREATE_ALWAYS;
-    }
-    else
-    {
-        WRITE_ERROR("Invalid platform file attribute (ID: %d).", (u32)Attributes);        
-        return NULL;
-    }    
-    
-    HANDLE Handle = CreateFile(Path, DesiredAttributes, 0, NULL, CreationDisposition, FILE_ATTRIBUTE_NORMAL, NULL);
-    if(Handle == INVALID_HANDLE_VALUE)
-    {
-        WRITE_ERROR("Failed to open the file.");
-        return NULL;
-    }
-    
-    platform_file_handle* Result = (platform_file_handle*)Win32_AllocateMemory(sizeof(platform_file_handle));
-    Result->Handle = Handle;
-    Result->Attributes = Attributes;
-    return Result;
-}    
-
-PLATFORM_READ_FILE(Win32_ReadFile)
-{
-    if(File->Attributes != PLATFORM_FILE_ATTRIBUTES_READ)
-    {
-        WRITE_ERROR("Failed to read file because the file attributes are mapped to write.");
-        return false;
-    }
-    
-    OVERLAPPED* OffsetPointer = NULL;
-    OVERLAPPED Offsets = {};
-    if(Offset != NO_OFFSET)
-    {
-        Offsets.Offset = (DWORD)(Offset & 0xFFFFFFFF);
-        Offsets.OffsetHigh = (DWORD)((Offset >> 32) & 0xFFFFFFFF);
-        OffsetPointer = &Offsets;
-    }
-    
-    DWORD BytesRead;
-    if(ReadFile(File->Handle, Data, ReadSize, &BytesRead, OffsetPointer) && (BytesRead == ReadSize))
-        return true;
-    
-    WRITE_ERROR("Failed to read file. Bytes read %d - Bytes requested %d", BytesRead, ReadSize);
-    return false;
-}
-
-PLATFORM_WRITE_FILE(Win32_WriteFile)
-{
-    if(File->Attributes != PLATFORM_FILE_ATTRIBUTES_WRITE)
-    {
-        WRITE_ERROR("Failed to write file because the file attributes are mapped to read.");
-        return false;
-    }
-    
-    OVERLAPPED* OffsetPointer = NULL;
-    OVERLAPPED Offsets = {};
-    if(Offset != NO_OFFSET)
-    {
-        Offsets.Offset = (DWORD)(Offset & 0xFFFFFFFF);
-        Offsets.OffsetHigh = (DWORD)((Offset >> 32) & 0xFFFFFFFF);
-        OffsetPointer = &Offsets;
-    }
-    
-    DWORD BytesWritten;
-    if(WriteFile(File->Handle, Data, WriteSize, &BytesWritten, OffsetPointer) && (BytesWritten == WriteSize))
-        return true;
-    
-    WRITE_ERROR("Failed to write file. Bytes written %d - Bytes requested %d", BytesWritten, WriteSize);
-    return false;
-}
-
-PLATFORM_CLOSE_FILE(Win32_CloseFile)
-{
-    CloseHandle(File->Handle);
-    Win32_FreeMemory(File);    
-}
 
 win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
 {    
@@ -425,7 +238,7 @@ win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
     WaveFormat.nSamplesPerSec = AUDIO_OUTPUT_SAMPLES_PER_SECOND;
     WaveFormat.wBitsPerSample = sizeof(i16)*8;
     WaveFormat.nBlockAlign = (WaveFormat.nChannels*WaveFormat.wBitsPerSample) / 8;
-    WaveFormat.nAvgBytesPerSec = WaveFormat.nSamplesPerSec*WaveFormat.nBlockAlign;
+    WaveFormat.nAvgBytesPerSec = WaveFormat.nSamplesPerSec*WaveFormat.nBlockAlign;    
     
     DSBUFFERDESC BufferDescription = {};
     BufferDescription.dwSize = sizeof(BufferDescription);
@@ -447,7 +260,7 @@ win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
     win32_audio_output Result = {};        
     Result.SoundBuffer = SoundBuffer;    
     Result.Samples.Count = BufferLength*AUDIO_OUTPUT_SAMPLES_PER_SECOND;
-    Result.Samples.Data = (i16*)Win32_AllocateMemory(BufferDescription.dwBufferBytes);
+    Result.Samples.Data = (i16*)AllocateMemory(BufferDescription.dwBufferBytes);
     Result.Mute = true;
     
     return Result;
@@ -472,18 +285,7 @@ PLATFORM_TOGGLE_AUDIO(Win32_ToggleAudio)
 platform* Win32_GetPlatformStruct()
 {
     local platform Result;
-    Result.Log             = Win32_Log;
-    Result.AllocateMemory  = Win32_AllocateMemory;
-    Result.FreeMemory      = Win32_FreeMemory;   
-    Result.ReadEntireFile  = Win32_ReadEntireFile;
-    Result.WriteEntireFile = Win32_WriteEntireFile;    
-    Result.FreeFileMemory  = Win32_FreeFileMemory;
-    Result.OpenFile        = Win32_OpenFile;
-    Result.ReadFile        = Win32_ReadFile;
-    Result.WriteFile       = Win32_WriteFile;
-    Result.CloseFile       = Win32_CloseFile;
-    Result.Clock           = Win32_Clock;
-    Result.ElapsedTime     = Win32_Elapsed;
+    Result.Log             = Win32_Log;                                            
     Result.ToggleAudio     = Win32_ToggleAudio;
     return &Result;
 }
@@ -520,7 +322,7 @@ Win32_AudioThread(void* Paramter)
     Win32_ClearSoundBuffer(AudioOutput);
     SoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
     
-    u64 FlipWallClock = Global_Platform->Clock();    
+    u64 FlipWallClock = WallClock();    
     b32 SoundIsValid = false;
     
     u16 BytesPerSample = sizeof(u16)*AUDIO_OUTPUT_CHANNEL_COUNT;
@@ -530,131 +332,127 @@ Win32_AudioThread(void* Paramter)
     i32 SafetyBytes = (i32)(((f32)AUDIO_OUTPUT_CHANNEL_COUNT*(f32)BytesPerSample / TARGET_AUDIO_HZ)/3.0f);
     
     for(;;)
-    {        
-        if(Game->Initialized)
-        {
-            temp_arena TemporaryArena = BeginTemporaryMemory(&AudioThreadArena);
+    {                
+        temp_arena TemporaryArena = BeginTemporaryMemory(&AudioThreadArena);
+        
+        u64 AudioWallClock = WallClock();
+        f32 FromBeginToAudioSeconds = (f32)GetElapsedTime(AudioWallClock, FlipWallClock);
+        
+        DWORD PlayCursor;
+        DWORD WriteCursor;
+        if(SoundBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
+        {            
+            if(!SoundIsValid)
+            {
+                AudioOutput->RunningSampleIndex = WriteCursor / BytesPerSample;
+                SoundIsValid = true;
+            }
             
-            u64 AudioWallClock = Global_Platform->Clock();
-            f32 FromBeginToAudioSeconds = (f32)Global_Platform->ElapsedTime(AudioWallClock, FlipWallClock);
+            DWORD ByteToLock = ((AudioOutput->RunningSampleIndex*BytesPerSample) % SoundBufferSize);
             
-            DWORD PlayCursor;
-            DWORD WriteCursor;
-            if(SoundBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
-            {            
-                if(!SoundIsValid)
-                {
-                    AudioOutput->RunningSampleIndex = WriteCursor / BytesPerSample;
-                    SoundIsValid = true;
-                }
-                
-                DWORD ByteToLock = ((AudioOutput->RunningSampleIndex*BytesPerSample) % SoundBufferSize);
-                
-                DWORD ExpectedSoundBytesPerFrame =
-                    (int)((f32)(AUDIO_OUTPUT_SAMPLES_PER_SECOND*BytesPerSample) / TARGET_AUDIO_HZ);
-                f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
-                DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(f32)ExpectedSoundBytesPerFrame);
-                
-                DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
-                
-                DWORD SafeWriteCursor = WriteCursor;
-                if(SafeWriteCursor < PlayCursor)
-                {
-                    SafeWriteCursor += SoundBufferSize;
-                }
-                ASSERT(SafeWriteCursor >= PlayCursor);
-                SafeWriteCursor += SafetyBytes;
-                
-                b32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
-                
-                DWORD TargetCursor = 0;
-                if(AudioCardIsLowLatency)
-                {
-                    TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
-                }
-                else
-                {
-                    TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame + SafetyBytes);
-                }
-                TargetCursor = (TargetCursor % SoundBufferSize);
-                
-                DWORD BytesToWrite = 0;
-                if(ByteToLock > TargetCursor)
-                {
-                    BytesToWrite = (SoundBufferSize - ByteToLock);
-                    BytesToWrite += TargetCursor;
-                }
-                else
-                {
-                    BytesToWrite = TargetCursor - ByteToLock;
-                }
-                
-                DWORD SamplesToWrite = BytesToWrite / BytesPerSample;
-                if(!IsLocked(&Global_Lock))
-                {   
-                    ASSERT(SamplesToWrite < AudioOutput->Samples.Count);
-                    samples Samples = {SamplesToWrite, AudioOutput->Samples.Data};
-                    
-                    Global_GameCode.OutputSoundSamples(Game, Global_Platform, &Samples, &AudioThreadArena);
-                    
-                    VOID* Region1;
-                    VOID* Region2;
-                    DWORD Region1Size;            
-                    DWORD Region2Size;
-                    if(SUCCEEDED(SoundBuffer->Lock(ByteToLock, BytesToWrite, &Region1, &Region1Size, &Region2, &Region2Size, 0)))
-                    {   
-                        i16* SrcSamples = AudioOutput->Samples.Data;                    
-                        DWORD Region1SampleCount = Region1Size/BytesPerSample;
-                        
-                        i16* DstSample  = (i16*)Region1;                 
-                        for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
-                        {                            
-                            *DstSample++ = *SrcSamples++;
-                            *DstSample++ = *SrcSamples++;                                                    
-                            AudioOutput->RunningSampleIndex++;                        
-                        }
-                        
-                        DWORD Region2SampleCount = Region2Size/BytesPerSample;
-                        DstSample  = (i16*)Region2;                 
-                        for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
-                        {                            
-                            *DstSample++ = *SrcSamples++;
-                            *DstSample++ = *SrcSamples++;                                                    
-                            AudioOutput->RunningSampleIndex++;                        
-                        }
-                        
-                        SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);                
-                    }                       
-                }
+            DWORD ExpectedSoundBytesPerFrame =
+                (int)((f32)(AUDIO_OUTPUT_SAMPLES_PER_SECOND*BytesPerSample) / TARGET_AUDIO_HZ);
+            f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
+            DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(f32)ExpectedSoundBytesPerFrame);
+            
+            DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
+            
+            DWORD SafeWriteCursor = WriteCursor;
+            if(SafeWriteCursor < PlayCursor)
+            {
+                SafeWriteCursor += SoundBufferSize;
+            }
+            ASSERT(SafeWriteCursor >= PlayCursor);
+            SafeWriteCursor += SafetyBytes;
+            
+            b32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
+            
+            DWORD TargetCursor = 0;
+            if(AudioCardIsLowLatency)
+            {
+                TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
             }
             else
             {
-                SoundIsValid = false;
-            }                  
+                TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame + SafetyBytes);
+            }
+            TargetCursor = (TargetCursor % SoundBufferSize);
             
+            DWORD BytesToWrite = 0;
+            if(ByteToLock > TargetCursor)
+            {
+                BytesToWrite = (SoundBufferSize - ByteToLock);
+                BytesToWrite += TargetCursor;
+            }
+            else
+            {
+                BytesToWrite = TargetCursor - ByteToLock;
+            }
             
-            f32 Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);
-            while(Delta < TargetSecondsPerFrame)        
-                Delta = (f32)Global_Platform->ElapsedTime(Global_Platform->Clock(), FlipWallClock);        
-            
-            FlipWallClock = Global_Platform->Clock();        
-            
-            EndTemporaryMemory(&TemporaryArena);
-            CHECK_ARENA(&AudioThreadArena);
+            DWORD SamplesToWrite = BytesToWrite / BytesPerSample;
+            if(!IsLocked(&Global_Lock))
+            {   
+                ASSERT(SamplesToWrite < AudioOutput->Samples.Count);
+                samples Samples = {SamplesToWrite, AudioOutput->Samples.Data};
+                
+                Global_GameCode.OutputSoundSamples(Game, Global_Platform, &Samples, &AudioThreadArena);
+                
+                VOID* Region1;
+                VOID* Region2;
+                DWORD Region1Size;            
+                DWORD Region2Size;
+                if(SUCCEEDED(SoundBuffer->Lock(ByteToLock, BytesToWrite, &Region1, &Region1Size, &Region2, &Region2Size, 0)))
+                {   
+                    i16* SrcSamples = AudioOutput->Samples.Data;                    
+                    DWORD Region1SampleCount = Region1Size/BytesPerSample;
+                    
+                    i16* DstSample  = (i16*)Region1;                 
+                    for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
+                    {                            
+                        *DstSample++ = *SrcSamples++;
+                        *DstSample++ = *SrcSamples++;                                                    
+                        AudioOutput->RunningSampleIndex++;                        
+                    }
+                    
+                    DWORD Region2SampleCount = Region2Size/BytesPerSample;
+                    DstSample  = (i16*)Region2;                 
+                    for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
+                    {                            
+                        *DstSample++ = *SrcSamples++;
+                        *DstSample++ = *SrcSamples++;                                                    
+                        AudioOutput->RunningSampleIndex++;                        
+                    }
+                    
+                    SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);                
+                }                       
+            }
         }
+        else
+        {
+            SoundIsValid = false;
+        }                  
+        
+        
+        f32 Delta = (f32)GetElapsedTime(WallClock(), FlipWallClock);
+        while(Delta < TargetSecondsPerFrame)        
+            Delta = (f32)GetElapsedTime(WallClock(), FlipWallClock);        
+        
+        FlipWallClock = WallClock();        
+        
+        EndTemporaryMemory(&TemporaryArena);
+        CHECK_ARENA(&AudioThreadArena);        
     }    
 }
 
 int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
-{ 
-    QueryPerformanceFrequency(&Global_Frequency);    
+{     
     Global_Platform = Win32_GetPlatformStruct();
     
     error_stream ErrorStream = CreateErrorStream();
     SetGlobalErrorStream(&ErrorStream);
     
     arena DefaultArena = CreateArena(MEGABYTE(256));    
-    InitMemory(&DefaultArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);    
+    InitMemory(&DefaultArena, AllocateMemory, FreeMemory);    
     Global_Platform->TempArena = &DefaultArena;
     Global_Platform->ErrorStream = &ErrorStream;
     
@@ -667,7 +465,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     string OpenGLGraphicsTempDLLPathName = Concat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
     
     Global_Platform->AssetFile = LoadAssetFile(Concat(Global_EXEFilePath, "WorldGame.assets"));
-    BOOL_CHECK_AND_HANDLE(Global_Platform->AssetFile, "Could not load the asset file.");
+    BOOL_CHECK_AND_HANDLE(Global_Platform->AssetFile.IsValid(), "Could not load the asset file.");
     
     u16 KeyboardUsage = 6;
     u16 MouseUsage = 2;
@@ -701,11 +499,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");        
     
     input Input = {};
-    game Game = {};    
-    
-    Game.Input = &Input;
-    Game.AudioOutput = &AudioOutput;
-    
+        
     Global_GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);
     if(!Global_GameCode.GameLibrary.Library)    
         WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
@@ -723,24 +517,22 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     graphics* Graphics = GraphicsCode.InitGraphics(Global_Platform, PlatformData);
     if(!Graphics)
         WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
-        
+            
     void* DevPointer = NULL;
     
 #if DEVELOPER_BUILD
-    dev_context DevContext = {};
-    DevContext.InDevelopmentMode = true;
-    DevContext.PlatformData = PlatformData;
-    DevContext.Graphics = Graphics;
-    DevContext.Game = &Game;
-    
-    DevPointer = &DevContext;
+    dev_context _DevContext_ = {};
+    dev_context* DevContext = &_DevContext_;
+    DevContext->InDevelopmentMode = true;
+    DevContext->PlatformData = PlatformData;        
+    DevPointer = DevContext;
 #endif
     
-    CloseHandle(CreateThread(NULL, 0, Win32_AudioThread, &Game, 0, NULL));    
+    game* Game = Global_GameCode.Initialize(&Input, &AudioOutput, Global_Platform, DevPointer);                                            
     
+    CloseHandle(CreateThread(NULL, 0, Win32_AudioThread, Game, 0, NULL));    
     
-    Game.dt = 1.0f/60.0f; 
-    u64 StartTime = Win32_Clock();
+    u64 StartTime = WallClock();
     for(;;)
     {   
         //DEVELOPER_GRAPHICS(Graphics);
@@ -833,24 +625,34 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         Graphics->RenderDim = Win32_GetWindowDim(Window);
         
         //TODO(JJ): Probably don't want this 
-        if(Game.dt > 1.0f/20.0f)
-            Game.dt = 1.0f/20.0f;
+        if(Game->dt > 1.0f/20.0f)
+            Game->dt = 1.0f/20.0f;
         
-        DEVELOPMENT_RECORD_FRAME(&Game);
-        DEVELOPMENT_PLAY_FRAME(&Game);
+        Game->dtFixed = Game->dt;
         
-        Global_GameCode.Tick(&Game, Graphics, Global_Platform, DevPointer);                                
+        //DEVELOPMENT_RECORD_FRAME(Game);
+        //DEVELOPMENT_PLAY_FRAME(Game);
         
-        DEVELOPMENT_TICK(&Game, Graphics);                
+        if(!IN_EDIT_MODE())
+            Global_GameCode.FixedTick(Game);
+        
+        Global_GameCode.Tick(Game);                                
+        
+        if(NOT_IN_DEVELOPMENT_MODE())
+        {
+            Global_GameCode.Render(Game, Graphics);
+        }
+        
+        DEVELOPMENT_TICK(Game, Graphics);                
         
         GraphicsCode.ExecuteRenderCommands(Graphics, Global_Platform, DevPointer);
         
         for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
         
-        Game.dt = (f32)Win32_Elapsed(Win32_Clock(), StartTime);
+        Game->dt = (f32)GetElapsedTime(WallClock(), StartTime);
         //CONSOLE_LOG("dt: %f\n", Input.dt*1000.0f);
-        StartTime = Win32_Clock();
+        StartTime = WallClock();
         
         EndTemporaryMemory(&FrameArena);        
         CHECK_ARENA(GetDefaultArena());
@@ -858,7 +660,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     
     handle_error:
     string ErrorMessage = GetGlobalErrorStream()->GetString();
-    Global_Platform->WriteEntireFile("Errors.log", ErrorMessage.Data, SafeU32(ErrorMessage.Length));
+    WriteEntireFile("Errors.log", ErrorMessage.Data, SafeU32(ErrorMessage.Length));
     MessageBox(NULL, "Error has occurred, please see Errors.log file.", NULL, MB_OK);     
     return -1;
 } 
@@ -1045,7 +847,7 @@ string Platform_FindNewFrameRecordingPath()
         if(!FindNextFile(FileHandle, &FindData))
             break;
     }        
-        
+    
     Result = FormatString("%s\\frame_recordings\\FrameRecording_%d.arc_recording", Global_DataPath, Global_FrameRecordingIndex);    
     return Result;
 }
@@ -1140,7 +942,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
     dev_input* Input = &DevContext->Input;
     
     Input->MouseDelta = V2i(RawMouse->lLastX, RawMouse->lLastY);
-
+    
     switch(RawMouse->usButtonFlags)
     {
         case RI_MOUSE_LEFT_BUTTON_DOWN:

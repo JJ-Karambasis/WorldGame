@@ -15,7 +15,7 @@ IF NOT EXIST ..\data\frame_recordings mkdir ..\data\frame_recordings
 set COMPILE_PLATFORM=1
 set COMPILE_GRAPHICS=1
 set COMPILE_GAME=1
-set COMPILE_ASSET_BUILDER=1
+set COMPILE_ASSET_BUILDER=0
 
 pushd ..\Bin
 del *.pdb > NUL 2> NUL

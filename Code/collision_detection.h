@@ -43,10 +43,10 @@ struct penetration
     f32 Distance;
 };
 
-struct collision_result
+struct continuous_collision_result
 {
     f32 t;
-    struct world_entity* HitEntity;    
+    world_entity_id HitEntityID;    
     penetration Penetration;    
 };
 
@@ -63,12 +63,67 @@ struct collision_volume
     collision_volume* Next;
 };
 
-struct time_of_impact_result
+typedef pool<collision_volume> collision_volume_pool;
+
+struct collision_event
+{
+    world_entity_id HitEntityID;
+    penetration     Penetration;
+};
+
+struct toi_result
 {
     f32 t;
-    world_entity* HitEntity;
+    world_entity_id HitEntityID;
     collision_volume* VolumeA;
     collision_volume* VolumeB;
 };
+
+inline collision_event CreateCollisionEvent(world_entity_id HitEntityID, penetration Penetration)
+{
+    collision_event Result;
+    Result.HitEntityID = HitEntityID;
+    Result.Penetration = Penetration;
+    return Result;
+}
+
+struct sim_state
+{
+    v3f Velocity;    
+    v3f MoveDelta;    
+    v2f MoveDirection;    
+    collision_volume* CollisionVolumes;
+};
+
+template <typename type> void AddCollisionVolume(collision_volume_pool* Pool, sim_state* Entity, type* Collider);
+
+struct collision_volume_iter
+{
+    collision_volume* First;
+    collision_volume* Current;
+};
+
+collision_volume_iter BeginIter(collision_volume* First)
+{
+    collision_volume_iter Result = {};
+    Result.First = First;
+    return Result;
+}
+
+collision_volume* GetFirst(collision_volume_iter* Iter)
+{
+    ASSERT(!Iter->Current);
+    Iter->Current = Iter->First;
+    return Iter->Current;
+}
+
+collision_volume* GetNext(collision_volume_iter* Iter)
+{
+    collision_volume* Result = Iter->Current->Next;
+    Iter->Current = Result;
+    return Result;
+}
+
+sim_state* GetSimState(game* Game, world_entity_id ID);
 
 #endif

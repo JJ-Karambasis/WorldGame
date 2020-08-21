@@ -51,18 +51,17 @@ struct material
 };
 
 struct assets
-{
-    arena AssetArena;
+{        
     hash_map<char*, mesh_asset_id> MeshNameMap;        
     hash_map<char*, texture_asset_id> TextureNameMap;
     
-    mesh_info MeshInfos[MESH_ASSET_COUNT];
-    mesh* Meshes[MESH_ASSET_COUNT];    
-    graphics_mesh_id GraphicsMeshes[MESH_ASSET_COUNT];    
+    mesh_info* MeshInfos;
+    mesh** Meshes;
+    graphics_mesh_id* GraphicsMeshes;
     
-    texture_info TextureInfos[TEXTURE_ASSET_COUNT];
-    texture* Textures[TEXTURE_ASSET_COUNT];
-    graphics_texture_id GraphicsTextures[TEXTURE_ASSET_COUNT];            
+    texture_info* TextureInfos;
+    texture** Textures;
+    graphics_texture_id* GraphicsTextures;
 };
 
 inline material_diffuse

@@ -29,25 +29,33 @@ b32 PopulateAssetMap(assets* Assets)
     return true;
 }
 
-b32 InitAssets(assets* Assets)
-{
-    Assets->AssetArena = CreateArena(MEGABYTE(1));    
-    Assets->MeshNameMap = CreateHashMap<char*, mesh_asset_id>(MESH_ASSET_COUNT*10, StringEquals, &Assets->AssetArena);    
-    Assets->TextureNameMap = CreateHashMap<char*, texture_asset_id>(TEXTURE_ASSET_COUNT*10, StringEquals, &Assets->AssetArena);
+assets* InitAssets(arena* Storage)
+{    
+    assets* Assets = PushStruct(Storage, assets, Clear, 0);
+    Assets->MeshNameMap = CreateHashMap<char*, mesh_asset_id>(MESH_ASSET_COUNT*10, StringEquals, Storage);    
+    Assets->TextureNameMap = CreateHashMap<char*, texture_asset_id>(TEXTURE_ASSET_COUNT*10, StringEquals, Storage);        
     
-    if(!LoadAssetInfos(Assets))
+    Assets->MeshInfos = PushArray(Storage, MESH_ASSET_COUNT, mesh_info, Clear, 0);
+    Assets->Meshes = PushArray(Storage, MESH_ASSET_COUNT, mesh*, Clear, 0);
+    Assets->GraphicsMeshes = PushArray(Storage, MESH_ASSET_COUNT, graphics_mesh_id, Clear, 0);
+    
+    Assets->TextureInfos = PushArray(Storage, TEXTURE_ASSET_COUNT, texture_info, Clear, 0);
+    Assets->Textures = PushArray(Storage, TEXTURE_ASSET_COUNT, texture*, Clear, 0);
+    Assets->GraphicsTextures = PushArray(Storage, TEXTURE_ASSET_COUNT, graphics_texture_id, Clear, 0);
+    
+    if(!LoadAssetInfos(Assets, Storage))
     {
         //TODO(JJ): Output some diagnostics
-        return false;
+        return NULL;
     }
     
     if(!PopulateAssetMap(Assets))
     {
         //TODO(JJ): Output some diagnostics
-        return false;
+        return NULL;
     }
     
-    return true;
+    return Assets;
 }
 
 inline mesh_info* 

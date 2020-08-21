@@ -475,7 +475,7 @@ graphics_material ConvertToGraphicsMaterial(assets* Assets, graphics* Graphics, 
     return GraphicsMaterial;
 }
 
-void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, world* World, view_settings* Camera, assets* Assets)
+void PushWorldShadingCommands(game* Game, graphics* Graphics, u32 WorldIndex, graphics_render_buffer* RenderBuffer, view_settings* Camera, assets* Assets)
 {    
     graphics_light_buffer LightBuffer = {};
     LightBuffer.DirectionalLightCount = 0;        
@@ -506,12 +506,14 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
         PushShadowMap(Graphics);
         PushClearDepth(Graphics, 1.0f);
         
-        FOR_EACH(Entity, &World->EntityPool)
+        FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
         {
             if(Entity->MeshID != INVALID_MESH_ID)            
             {   
                 graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
-                PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);            
+                
+                sqt Transform = *GetEntityTransform(Game, Entity->ID);
+                PushDrawMesh(Graphics, MeshHandle, Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);            
             }
         }
     }
@@ -538,12 +540,14 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
             PushViewProjection(Graphics, LightViewProjections[FaceIndex]);
             PushOmniShadowMap(Graphics, PointLight->Radius);
             PushClearDepth(Graphics, 1.0f);
-            FOR_EACH(Entity, &World->EntityPool)
+            FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
             {
                 if(Entity->MeshID != INVALID_MESH_ID)            
                 {   
                     graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
-                    PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
+                    
+                    sqt Transform = *GetEntityTransform(Game, Entity->ID);
+                    PushDrawMesh(Graphics, MeshHandle, Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
                 }
             }
         }
@@ -555,15 +559,31 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
     PushLightBuffer(Graphics, &LightBuffer);            
-    FOR_EACH(Entity, &World->EntityPool)        
+    FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])        
     {                        
         if(Entity->MeshID != INVALID_MESH_ID)            
         {                        
-            graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, Entity->Material);            
+            graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &Entity->Material);            
             PushMaterial(Graphics, Material);
             
             graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
-            PushDrawMesh(Graphics, MeshHandle, Entity->Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
+            sqt Transform = *GetEntityTransform(Game, Entity->ID);
+            PushDrawMesh(Graphics, MeshHandle, Transform, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
         }
     }    
+}
+
+void UpdateRenderBuffer(graphics_render_buffer** RenderBuffer, graphics* Graphics, v2i RenderDim)
+{
+    if(!(*RenderBuffer))
+    {        
+        *RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, RenderDim);
+        return;
+    }
+    
+    if((*RenderBuffer)->Resolution != RenderDim)
+    {
+        Graphics->FreeRenderBuffer(Graphics, *RenderBuffer);
+        *RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim);
+    }
 }

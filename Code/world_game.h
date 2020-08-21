@@ -3,15 +3,28 @@
 
 #include <ak_common.h>
 
+#define PLAYER_RADIUS 0.35f
+#define PLAYER_HEIGHT 1.3f
+
+struct game;
+
 #include "platform.h"
 #include "input.h"
 #include "graphics.h"
 #include "assets/assets.h"
-#include "collision_detection.h"
 #include "audio.h"
 #include "camera.h"
 #include "animation.h"
+
+struct jumping_quad
+{
+    v3f CenterP;
+    v2f Dimensions;    
+    jumping_quad* OtherQuad;
+};
+
 #include "world.h"
+#include "collision_detection.h"
 
 struct goal_rect
 {
@@ -20,7 +33,7 @@ struct goal_rect
     b32 GoalIsMet;
 };
 
-#define PUZZLE_COMPLETE_CALLBACK(name) void name(struct game* Game, void* UserData)
+#define PUZZLE_COMPLETE_CALLBACK(name) void name(game* Game, void* UserData)
 typedef PUZZLE_COMPLETE_CALLBACK(puzzle_complete_callback);
 
 struct block_puzzle
@@ -37,32 +50,65 @@ struct block_puzzle
 };
 
 struct game
-{        
-    b32 Initialized;
-    assets Assets;
-        
-    audio_output* AudioOutput;
-    input* Input;  
-    graphics_render_buffer* RenderBuffer;    
-    
-    arena GameStorage;
+{            
+    arena _Internal_GameStorage_;                        
+    arena* GameStorage;    
+    u32 CurrentWorldIndex;
+    collision_volume_pool CollisionVolumeStorage[2];
+    world_entity_pool EntityStorage[2];    
+    sqt* PrevTransforms[2];
+    sqt* CurrentTransforms[2];
+    sim_state* SimStates[2];
+    game_camera Cameras[2];            
     
     f32 dt;
-    u32 CurrentWorldIndex;
+    f32 dtFixed;    
     
-    free_list<collision_volume> CollisionVolumeStorage;
-    
-    world Worlds[2];                
-    block_puzzle TestPuzzle;
+    assets* Assets;
+    audio_output* AudioOutput;
+    input* Input;              
+    graphics_render_buffer* RenderBuffer;    
 };
 
-#define GAME_TICK(name) void name(game* Game, graphics* Graphics, platform* Platform, void* DevContext)
+struct graphics_object
+{
+    m4 WorldTransform;    
+    mesh_asset_id MeshID;    
+    material* Material;
+    
+    u32 JointCount;
+    m4* JointTransforms;        
+};
+
+#define GAME_INITIALIZE(name) game* name(input* Input, audio_output* AudioOutput, platform* Platform, void* DevContext)
+typedef GAME_INITIALIZE(game_initialize);
+
+#define GAME_FIXED_TICK(name) void name(game* Game)
+typedef GAME_FIXED_TICK(game_fixed_tick);
+
+#define GAME_TICK(name) void name(game* Game)
 typedef GAME_TICK(game_tick);
+
+#define GAME_RENDER(name) void name(game* Game, graphics* Graphics)
+typedef GAME_RENDER(game_render);
 
 #define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, platform* Platform, samples* OutputSamples, arena* TempArena)
 typedef GAME_OUTPUT_SOUND_SAMPLES(game_output_sound_samples);
 
+GAME_INITIALIZE(Game_InitializeStub)
+{
+    return NULL;
+}
+
+GAME_FIXED_TICK(Game_FixedTickStub)
+{    
+}
+
 GAME_TICK(Game_TickStub)
+{
+}
+
+GAME_RENDER(Game_RenderStub)
 {
 }
 

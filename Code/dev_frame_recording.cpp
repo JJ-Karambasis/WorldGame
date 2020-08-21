@@ -53,14 +53,14 @@ void DevelopmentFrameRecording(dev_context* DevContext)
                     void* Data = PushSize(DataSize, NoClear, 0);                    
                     *(u32*)Data = FrameRecording->RecordedFrames.Size;
                     CopyMemory((u32*)Data+1, FrameRecording->RecordedFrames.Data, sizeof(frame)*FrameRecording->RecordedFrames.Size);                    
-                    Global_Platform->WriteEntireFile(FrameRecording->RecordingPath.String.Data, Data, (u32)DataSize);
+                    WriteEntireFile(FrameRecording->RecordingPath.String, Data, (u32)DataSize);
                     
                     FrameRecording->RecordedFrames.Size = 0;
                     
                     if(!IsInvalidBuffer(FrameRecording->RecordingBuffer))
-                        Global_Platform->FreeFileMemory(&FrameRecording->RecordingBuffer);            
+                        FreeFileMemory(&FrameRecording->RecordingBuffer);            
                     
-                    FrameRecording->RecordingBuffer = Global_Platform->ReadEntireFile(FrameRecording->RecordingPath.String.Data);
+                    FrameRecording->RecordingBuffer = ReadEntireFile(FrameRecording->RecordingPath.String);
                 }
             }            
             
@@ -80,9 +80,9 @@ void DevelopmentFrameRecording(dev_context* DevContext)
                 if(!IsInvalidString(RecordingPath))
                 {
                     if(!IsInvalidBuffer(FrameRecording->RecordingBuffer))
-                        Global_Platform->FreeFileMemory(&FrameRecording->RecordingBuffer);            
+                        FreeFileMemory(&FrameRecording->RecordingBuffer);            
                     
-                    FrameRecording->RecordingBuffer = Global_Platform->ReadEntireFile(RecordingPath.Data);
+                    FrameRecording->RecordingBuffer = ReadEntireFile(RecordingPath);
                     CopyToStorage(&FrameRecording->RecordingPath, RecordingPath);
                 }
             }

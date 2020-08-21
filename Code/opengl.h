@@ -61,6 +61,8 @@ global PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
 global PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
 global PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
 global PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer;
+global PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers;
+global PFNGLDELETERENDERBUFFERSPROC glDeleteRenderbuffers;
 
 #include "opengl_shaders.h"
 

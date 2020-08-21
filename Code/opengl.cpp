@@ -438,6 +438,16 @@ ALLOCATE_RENDER_BUFFER(AllocateRenderBuffer)
     return Result;
 }
 
+FREE_RENDER_BUFFER(FreeRenderBuffer)
+{
+    opengl_context* OpenGL = (opengl_context*)Graphics;
+    opengl_render_buffer* OpenGLRenderBuffer = (opengl_render_buffer*)RenderBuffer;
+    
+    glDeleteRenderbuffers(1, &OpenGLRenderBuffer->DepthStencilAttachment);
+    glDeleteTextures(1, &OpenGLRenderBuffer->ColorAttachment);
+    glDeleteFramebuffers(1, &OpenGLRenderBuffer->Framebuffer);
+}
+
 STREAM_MESH_DATA(StreamMeshData)
 {
     ASSERT(IsAllocatedID(MeshID));
@@ -622,6 +632,7 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     Graphics->AllocateMesh = AllocateMesh;
     Graphics->AllocateDynamicMesh = AllocateDynamicMesh;
     Graphics->AllocateRenderBuffer = AllocateRenderBuffer;
+    Graphics->FreeRenderBuffer = FreeRenderBuffer;
     Graphics->StreamMeshData = StreamMeshData;        
     
     LOAD_FUNCTION(PFNGLCREATESHADERPROC, glCreateShader);
@@ -673,6 +684,8 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLRENDERBUFFERSTORAGEPROC, glRenderbufferStorage);
     LOAD_FUNCTION(PFNGLFRAMEBUFFERRENDERBUFFERPROC, glFramebufferRenderbuffer);
     LOAD_FUNCTION(PFNGLBLITFRAMEBUFFERPROC, glBlitFramebuffer);
+    LOAD_FUNCTION(PFNGLDELETEFRAMEBUFFERSPROC, glDeleteFramebuffers);        
+    LOAD_FUNCTION(PFNGLDELETERENDERBUFFERSPROC, glDeleteRenderbuffers);
     
 #if DEVELOPER_BUILD
     
@@ -698,7 +711,7 @@ extern "C"
 EXPORT INIT_GRAPHICS(InitGraphics)
 {
     Global_Platform = Platform;
-    InitMemory(Platform->TempArena, Platform->AllocateMemory, Platform->FreeMemory);
+    InitMemory(Global_Platform->TempArena, AllocateMemory, FreeMemory);
     
     arena GraphicsStorage = CreateArena(KILOBYTE(128));    
     opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
@@ -780,10 +793,10 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     SET_DEVELOPER_CONTEXT(DevContext);
     
     Global_Platform = Platform;        
-    InitMemory(Global_Platform->TempArena, Global_Platform->AllocateMemory, Global_Platform->FreeMemory);       
+    InitMemory(Global_Platform->TempArena, AllocateMemory, FreeMemory);       
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    platform_time Start = Global_Platform->Clock();
+    platform_time Start = WallClock();
     
     if(!OpenGL->SkinningBuffers.Ptr)
     {
@@ -1396,8 +1409,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     
     CommandList->Count = 0;        
     
-    platform_time End = Global_Platform->Clock();
-    CONSOLE_LOG("Elapsed Rendering Time %f\n", Global_Platform->ElapsedTime(End, Start)*1000.0);
+    platform_time End = WallClock();
+    CONSOLE_LOG("Elapsed Rendering Time %f\n", GetElapsedTime(End, Start)*1000.0);
     
     Platform_SwapBuffers(Graphics->PlatformData[0]);    
 }

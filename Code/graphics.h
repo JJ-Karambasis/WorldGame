@@ -188,6 +188,9 @@ typedef ALLOCATE_DYNAMIC_MESH(allocate_dynamic_mesh);
 #define ALLOCATE_RENDER_BUFFER(name) graphics_render_buffer* name(graphics* Graphics, v2i Resolution)
 typedef ALLOCATE_RENDER_BUFFER(allocate_render_buffer);
 
+#define FREE_RENDER_BUFFER(name) void name(graphics* Graphics, graphics_render_buffer* RenderBuffer)
+typedef FREE_RENDER_BUFFER(free_render_buffer);
+
 #define STREAM_MESH_DATA(name) void name(graphics* Graphics, graphics_mesh_id MeshID, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
 typedef STREAM_MESH_DATA(stream_mesh_data);
 
@@ -207,12 +210,13 @@ struct graphics
 {       
     v2i RenderDim;
     push_command_list CommandList;    
-    void** PlatformData;                                
+    void** PlatformData;                                        
     
     allocate_texture* AllocateTexture;
     allocate_mesh* AllocateMesh;
     allocate_dynamic_mesh* AllocateDynamicMesh;
     allocate_render_buffer* AllocateRenderBuffer;
+    free_render_buffer* FreeRenderBuffer;
     stream_mesh_data* StreamMeshData;        
 };
 

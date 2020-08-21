@@ -36,7 +36,11 @@ struct win32_hot_loaded_library
 struct win32_game_code
 {
     win32_hot_loaded_library GameLibrary;    
-    game_tick* Tick;        
+    
+    game_initialize* Initialize;
+    game_fixed_tick* FixedTick;
+    game_tick* Tick;            
+    game_render* Render;
     game_output_sound_samples* OutputSoundSamples;    
 };
 
@@ -47,12 +51,6 @@ struct win32_graphics_code
     bind_graphics_functions* BindGraphicsFunctions;    
     init_graphics* InitGraphics;
     invalidate_shaders* InvalidateShaders;    
-};
-
-struct platform_file_handle
-{
-    HANDLE Handle;
-    platform_file_attributes Attributes;
 };
 
 struct win32_audio_output : public audio_output
