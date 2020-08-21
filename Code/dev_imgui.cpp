@@ -34,6 +34,35 @@ void DevelopmentImGuiInit(dev_context* DevContext)
     IO->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 }
 
+//Rotates the current SelectedObject, by difference between OldRotation and NewRotation, then updates the OldRotation
+void DevelopmentUpdateSelectedObjectRotation(sqt* Transform, v3f* OldRotation, v3f NewRotation)
+{
+    f32 RollDiff = 0;
+    f32 PitchDiff = 0;
+    f32 YawDiff = 0;
+    if(NewRotation.roll != OldRotation->roll)
+    {
+        RollDiff = (OldRotation->roll - NewRotation.roll) * -1;
+        quaternion xRotation = RotQuat(Global_WorldXAxis, RollDiff);
+        Transform->Orientation *= xRotation;        
+    }
+    if(NewRotation.pitch != OldRotation->pitch)
+    {
+        PitchDiff = (OldRotation->pitch - NewRotation.pitch) * -1;
+        quaternion yRotation = RotQuat(Global_WorldYAxis, PitchDiff);
+        Transform->Orientation *= yRotation;        
+    }
+    if(NewRotation.yaw != OldRotation->yaw)
+    {
+        YawDiff = (OldRotation->yaw - NewRotation.yaw) * -1;
+        quaternion zRotation = RotQuat(Global_WorldZAxis, YawDiff);
+        Transform->Orientation *= zRotation;        
+    }
+    *OldRotation = NewRotation;
+    
+    Transform->Orientation = Normalize(Transform->Orientation);
+}
+
 void DevelopmentImGuiUpdate(dev_context* DevContext)
 {
     graphics* Graphics = DevContext->Graphics;
@@ -61,7 +90,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {           
             
-            game_camera* Camera = &Game->Cameras[WorldIndex];
+            game_camera* Camera = &Game->CurrentCameras[WorldIndex];
             camera* DevCamera = &DevContext->Cameras[WorldIndex];
             
             rigid_transform_matrix CameraTransform = GetCameraTransform(Camera);  
@@ -102,7 +131,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         {            
             for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
             {                                
-                game_camera* Camera = &Game->Cameras[WorldIndex];
+                game_camera* Camera = &Game->CurrentCameras[WorldIndex];
                 
                 NewLine();
                 
@@ -134,7 +163,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 
                 PushID(WorldIndex*6 + 5);
                 DragFloat("Far Plane", &Camera->ZFar, 0.01f, Camera->ZNear, 10000.0f, "%.3f");                                                  
-                PopID();                
+                PopID();                                                
             }
         }
     }
@@ -143,17 +172,30 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     {
         game_information* GameInformation = &DevContext->GameInformation;
         if(DevContext->SelectedObject != nullptr)
-        {
-            sim_state* SimState = GetSimState(Game, DevContext->SelectedObject->ID);
+        {               
+            world_entity_id EntityID = DevContext->SelectedObject->ID;
+            
+            sim_state* SimState = GetSimState(Game, EntityID);
             
             v3f ObjectVelocity = SimState->Velocity;
             
-            sqt* Transform = GetEntityTransform(Game, DevContext->SelectedObject->ID);
+            sqt* Transform = GetEntityTransform(Game, EntityID);
             
             ImGui::InputFloat3("Position", &Transform->Translation[0], 3);
             DragFloat("X Scale", &Transform->Scale.x, 0.1f, 0.0f, 100.0f);
             DragFloat("Y Scale", &Transform->Scale.y, 0.1f, 0.0f, 100.0f);
             DragFloat("Z Scale", &Transform->Scale.z, 0.1f, 0.0f, 100.0f);
+            
+            v3f* Rotation = &DevContext->EntityRotations[EntityID.WorldIndex][GetPoolIndex(EntityID.ID)];
+            f32 ObjectRoll = TO_DEGREE(Rotation->roll);
+            f32 ObjectPitch = TO_DEGREE(Rotation->pitch);
+            f32 ObjectYaw = TO_DEGREE(Rotation->yaw);
+            DragFloat("Roll", &ObjectRoll, 0.1f, -180.0f, 180.0f, "%.3f");
+            DragFloat("Pitch", &ObjectPitch, 0.1f, -180.0f, 180.0f, "%.3f");
+            DragFloat("Yaw", &ObjectYaw, 0.1f, -180.0f, 180.0f, "%.3f");
+            
+            DevelopmentUpdateSelectedObjectRotation(Transform, Rotation, V3(TO_RAD(ObjectRoll), TO_RAD(ObjectPitch), TO_RAD(ObjectYaw)));
+                        
             ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
             ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
             ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);

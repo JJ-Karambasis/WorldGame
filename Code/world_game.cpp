@@ -46,21 +46,33 @@ void LoadTestLevel(game* Game)
         capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);        
         AddCollisionVolume(&Game->CollisionVolumeStorage[WorldIndex], GetSimState(Game, ID), &PlayerCapsule);
         
-        game_camera* Camera = Game->Cameras + WorldIndex;        
+        game_camera* Camera = Game->CurrentCameras + WorldIndex;        
         Camera->Target = GetEntityPosition(Game, ID);        
         Camera->Coordinates = SphericalCoordinates(6, TO_RAD(-90.0f), TO_RAD(35.0f));        
         Camera->FieldOfView = TO_RAD(65.0f);                        
         Camera->ZNear = CAMERA_ZNEAR;
         Camera->ZFar = CAMERA_ZFAR;        
-    }
         
-    CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_FLOOR, Global_Material0);                           
+        Game->PrevCameras[WorldIndex] = *Camera;
+    }
+    
+    CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_FLOOR, Global_Material0);                               
     CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f),  MESH_ASSET_ID_BOX,   Global_Material0);
     CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.25f), MESH_ASSET_ID_BOX,   Global_Material0);
     CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.33f), MESH_ASSET_ID_BOX,   Global_Material0);
     CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material1);
     CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f),  MESH_ASSET_ID_BOX,   Global_Material1);
-    CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);            
+    CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);                
+    
+    
+    Game->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
+    Game->JumpingQuads[0].Dimensions = V2(1.0f, 2.0f);
+    
+    Game->JumpingQuads[1].CenterP = V3(-4.0f, 0.0f, 0.0f);
+    Game->JumpingQuads[1].Dimensions = V2(1.0f, 2.0f);
+    
+    Game->JumpingQuads[0].OtherQuad = &Game->JumpingQuads[1];
+    Game->JumpingQuads[1].OtherQuad = &Game->JumpingQuads[0];
 }
 
 extern "C"
@@ -111,9 +123,10 @@ void PlayerCollisionEvent(game* Game, world_entity* Player, collision_event* Col
 
 extern "C"
 EXPORT GAME_FIXED_TICK(FixedTick)
-{
-    
+{    
     f32 dt = Game->dtFixed;
+    
+    platform_time Start = WallClock();
     
     FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
     {
@@ -226,10 +239,12 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                 }                   
                 
                 if(!IsInvalidEntityID(CollisionEvent.HitEntityID))
-                    PlayerCollisionEvent(Game, Entity, &CollisionEvent);                
+                    PlayerCollisionEvent(Game, Entity, &CollisionEvent);  
+                
+                Game->CurrentCameras[Entity->ID.WorldIndex].Target = EntityTransform->Translation;
             } break;
         }
-    }
+    }    
 }
 
 extern "C"
@@ -250,11 +265,10 @@ EXPORT GAME_TICK(Tick)
                 SimState->MoveDirection = {};
                 
                 if(Entity->State != WORLD_ENTITY_STATE_JUMPING)
-                {
-#if 0 
-                    for(u32 JumpingQuadIndex = 0; JumpingQuadIndex < ARRAYCOUNT(World->JumpingQuads); JumpingQuadIndex++)
+                {                    
+                    for(u32 JumpingQuadIndex = 0; JumpingQuadIndex < ARRAYCOUNT(Game->JumpingQuads); JumpingQuadIndex++)
                     {
-                        jumping_quad* JumpingQuad = World->JumpingQuads + JumpingQuadIndex;
+                        jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
                         v2f HalfDim = JumpingQuad->Dimensions*0.5f;
                         
                         v2f Min = JumpingQuad->CenterP.xy - HalfDim;
@@ -275,8 +289,8 @@ EXPORT GAME_TICK(Tick)
                                     
                                     f32 InitialVelocity = Sqrt(Displacement*GRAVITY);
                                     
-                                    Entity->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
-                                    Entity->Velocity.z = InitialVelocity*SQRT2_2;
+                                    SimState->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
+                                    SimState->Velocity.z = InitialVelocity*SQRT2_2;
                                     
                                     Entity->State = WORLD_ENTITY_STATE_JUMPING;        
                                     
@@ -288,8 +302,7 @@ EXPORT GAME_TICK(Tick)
                         }       
                         
                         DEBUG_DRAW_QUAD(JumpingQuad->CenterP, Global_WorldZAxis, JumpingQuad->Dimensions, QuadColor);    
-                    }
-#endif
+                    }                    
                     
                     SimState->MoveDirection = {};
                     if(IsDown(Input->MoveForward))
@@ -308,8 +321,7 @@ EXPORT GAME_TICK(Tick)
                         SimState->MoveDirection = Normalize(SimState->MoveDirection);                    
                 }   
                 
-                game_camera* Camera = Game->Cameras + Game->CurrentWorldIndex;    
-                Camera->Target = Position;        
+                
             } break;
         }
     }
@@ -320,153 +332,7 @@ extern "C"
 EXPORT GAME_RENDER(Render)
 {
     UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);        
-    view_settings ViewSettings = GetViewSettings(&Game->Cameras[Game->CurrentWorldIndex]);        
-    PushWorldShadingCommands(Graphics, Game->RenderBuffer, &ViewSettings, Game->Assets, GraphicsObjects);
+    view_settings ViewSettings = GetViewSettings(&GraphicsState->Camera);
+    PushWorldShadingCommands(Graphics, Game->RenderBuffer, &ViewSettings, Game->Assets, GraphicsState->GraphicsObjects);
     PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Game->RenderBuffer->Resolution);
 }
-
-#if 0 
-extern "C"
-EXPORT GAME_TICK(Tick)
-{   
-    SET_DEVELOPER_CONTEXT(DevContext);
-    
-    Global_Platform = Platform;        
-    
-    platform_time Start = Global_Platform->Clock();
-    
-    InitMemory(Global_Platform->TempArena, AllocateMemory, FreeMemory);       
-    SetGlobalErrorStream(Global_Platform->ErrorStream);
-    
-    if(!Game->Initialized)
-    {       
-        b32 AssetResult = InitAssets(&Game->Assets);
-        ASSERT(AssetResult);
-        
-        Game->GameStorage = CreateArena(MEGABYTE(16));                                                                        
-        
-        Game->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim);
-        
-#if 0 
-        Game->Assets->TestSkeletonMesh = LoadGraphicsMesh(Game->Assets, "TestSkeleton.fbx");
-        Game->Assets->TestSkeleton = LoadSkeleton(Game->Assets, "TestSkeleton.fbx");
-        Game->Assets->TestAnimation = LoadAnimation(Game->Assets, "TestAnimation.fbx");
-#endif
-        
-        for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-        {
-            world* World = GetWorld(Game, WorldIndex);
-            World->WorldIndex = WorldIndex;
-            World->EntityPool = CreatePool<world_entity>(&Game->GameStorage, 512);            
-            
-            v3f P0 = V3() + Global_WorldZAxis*PLAYER_RADIUS;
-            capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);
-            World->PlayerEntity = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f*PI, 0.0f*PI), MESH_ASSET_ID_PLAYER, &Global_PlayerMaterial);
-            AddCollisionVolume(Game, World->PlayerEntity, &PlayerCapsule);
-            
-            game_camera* Camera = &World->Camera;
-            
-            Camera->Target = World->PlayerEntity->Position;
-            
-            Camera->Coordinates = SphericalCoordinates(6, TO_RAD(-90.0f), TO_RAD(35.0f));
-            
-            Camera->FieldOfView = TO_RAD(65.0f);                        
-            Camera->ZNear = CAMERA_ZNEAR;
-            Camera->ZFar = CAMERA_ZFAR;
-            
-            World->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
-            World->JumpingQuads[0].Dimensions = V2(1.0f, 2.0f);
-            
-            World->JumpingQuads[1].CenterP = V3(-4.0f, 0.0f, 0.0f);
-            World->JumpingQuads[1].Dimensions = V2(1.0f, 2.0f);
-            
-            World->JumpingQuads[0].OtherQuad = &World->JumpingQuads[1];
-            World->JumpingQuads[1].OtherQuad = &World->JumpingQuads[0];
-        }
-        
-        CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_FLOOR, &Global_Material0);                           
-        CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f), MESH_ASSET_ID_BOX, &Global_Material0);
-        CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.25f), MESH_ASSET_ID_BOX, &Global_Material0);
-        CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.33f), MESH_ASSET_ID_BOX, &Global_Material0);
-        CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f), MESH_ASSET_ID_BOX, &Global_Material1);
-        CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f), MESH_ASSET_ID_BOX, &Global_Material1);
-        CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f), MESH_ASSET_ID_BOX, &Global_Material1);        
-        
-        Game->Initialized = true;
-    }        
-    
-    if(IsPressed(Game->Input->SwitchWorld)) 
-    {
-        u32 PrevIndex = Game->CurrentWorldIndex;
-        Game->CurrentWorldIndex = !PrevIndex;
-        OnWorldSwitch(Game, PrevIndex, Game->CurrentWorldIndex);          
-    }    
-    
-    if(!IN_EDIT_MODE())
-    {   
-        UpdateWorld(Game);    
-    }            
-    
-#if 0 
-    block_puzzle* Puzzle = &Game->TestPuzzle;    
-    if(!Puzzle->IsComplete)
-    {        
-        Puzzle->IsComplete = true;
-        for(u32 GoalIndex = 0; GoalIndex < Puzzle->GoalRectCount; GoalIndex++)
-        {
-            goal_rect* GoalRect = Puzzle->GoalRects + GoalIndex;        
-            
-            b32 GoalIsMet = false;
-            for(u32 BlockEntityIndex = 0; BlockEntityIndex < Puzzle->BlockEntityCount; BlockEntityIndex++)
-            {
-                world_entity_id EntityID = Puzzle->BlockEntities[BlockEntityIndex];
-                if(EntityID.WorldIndex == GoalRect->WorldIndex)
-                {
-                    world_entity* Entity = GetEntity(Game, EntityID);
-                    
-                    ASSERT(Entity->Collider.Type == COLLIDER_TYPE_ALIGNED_BOX);
-                    
-                    aligned_box AlignedBox = GetWorldSpaceAlignedBox(Entity);
-                    rect3D Rect = CreateRect3DCenterDim(AlignedBox.CenterP, AlignedBox.Dim);
-                    
-                    if(IsRectFullyContainedInRect3D(Rect.Min, Rect.Max, GoalRect->Rect.Min, GoalRect->Rect.Max))
-                    {
-                        GoalIsMet = true;                    
-                        break;
-                    }
-                }
-            }
-            
-            GoalRect->GoalIsMet = GoalIsMet;        
-            
-            if(!GoalRect->GoalIsMet)
-                Puzzle->IsComplete = false;
-        }   
-        
-        if(Puzzle->IsComplete)
-        {
-            Puzzle->CompleteCallback(Game, Puzzle->CompleteData);        
-        }
-    }
-#endif
-    
-    
-    FOR_EACH(PlayingAudio, &Game->AudioOutput->PlayingAudioPool)
-    {
-        if(PlayingAudio->IsFinishedPlaying)        
-            FreeFromPool(&Game->AudioOutput->PlayingAudioPool, PlayingAudio);        
-    }
-    
-    if(NOT_IN_DEVELOPMENT_MODE())
-    {   
-        world* World = GetCurrentWorld(Game);        
-        view_settings ViewSettings = GetViewSettings(&World->Camera);        
-        
-        PushWorldShadingCommands(Graphics, Game->RenderBuffer, World, &ViewSettings, &Game->Assets);        
-        PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Graphics->RenderDim);
-    }    
-    
-    platform_time End = Global_Platform->Clock();
-    CONSOLE_LOG("Elapsed Game Time %f\n", Global_Platform->ElapsedTime(End, Start)*1000.0);
-}
-#endif

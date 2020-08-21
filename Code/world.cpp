@@ -1,12 +1,3 @@
-inline pushing_state
-InitPushingState()
-{
-    pushing_state Result;
-    Result.EntityID = InvalidEntityID();
-    Result.Direction = {};
-    return Result;
-}
-
 inline world_entity* 
 GetEntity(game* Game, world_entity_id EntityID)
 {    

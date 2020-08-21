@@ -54,13 +54,17 @@ struct game
     arena _Internal_GameStorage_;                        
     arena* GameStorage;    
     u32 CurrentWorldIndex;
+    
+    //This stuff is probably going to be our level data
     collision_volume_pool CollisionVolumeStorage[2];
     world_entity_pool EntityStorage[2];    
-    sqt* PrevTransforms[2];
+    sqt* PrevTransforms[2];    
     sqt* CurrentTransforms[2];
-    sim_state* SimStates[2];
-    game_camera Cameras[2];            
-    
+    game_camera PrevCameras[2];
+    game_camera CurrentCameras[2];
+    sim_state* SimStates[2];            
+    jumping_quad JumpingQuads[2];
+    //////////////////////////////////////////////////
     f32 dt;
     f32 dtFixed;    
     
@@ -84,6 +88,12 @@ struct graphics_object_list
 {
     graphics_object* Objects;
     u32 Count;
+};
+
+struct graphics_state
+{
+    graphics_object_list GraphicsObjects;
+    game_camera Camera;
 };
 
 struct graphics_object_list_iter
@@ -129,7 +139,7 @@ typedef GAME_FIXED_TICK(game_fixed_tick);
 #define GAME_TICK(name) void name(game* Game)
 typedef GAME_TICK(game_tick);
 
-#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, graphics_object_list GraphicsObjects)
+#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, graphics_state* GraphicsState)
 typedef GAME_RENDER(game_render);
 
 #define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, platform* Platform, samples* OutputSamples, arena* TempArena)

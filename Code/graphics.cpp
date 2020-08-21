@@ -582,7 +582,7 @@ void UpdateRenderBuffer(graphics_render_buffer** RenderBuffer, graphics* Graphic
     }
 }
 
-graphics_object ToGraphicsObject(game* Game, world_entity* Entity, f32 t)
+graphics_object InterpolateEntity(game* Game, world_entity* Entity, f32 t)
 {
     graphics_object Result;    
     sqt OldState = *GetEntityTransformOld(Game, Entity->ID);
@@ -597,16 +597,45 @@ graphics_object ToGraphicsObject(game* Game, world_entity* Entity, f32 t)
     return Result;
 }
 
-graphics_object_list GetGraphicsObjectList(game* Game, u32 WorldIndex, f32 t)
-{
-    graphics_object_list Result = {};
+game_camera InterpolateCamera(game* Game, u32 WorldIndex, f32 t)
+{    
+    game_camera* OldCamera = Game->PrevCameras    + WorldIndex;
+    game_camera* NewCamera = Game->CurrentCameras + WorldIndex;
     
-    Result.Objects = PushArray(Game->EntityStorage[WorldIndex].Capacity, graphics_object, Clear, 0);
+    game_camera Result;
+    
+    Result.Target = Lerp(OldCamera->Target, t, NewCamera->Target);
+    
+    //TODO(JJ): When we do some more game camera logic, we will need to interpolate the spherical coordinates as well
+    //ASSERT(NewCamera->Coordinates == OldCamera->Coordinates);
+    Result.Coordinates = NewCamera->Coordinates;    
+    
+    //NOTE(EVERYONE): These values are constant, they do not need to be interpolated    
+    //ASSERT(OldCamera->FieldOfView == NewCamera->FieldOfView);
+    //ASSERT(OldCamera->ZNear == NewCamera->ZNear);
+    //ASSERT(OldCamera->ZFar == NewCamera->ZFar);
+    
+    Result.FieldOfView = NewCamera->FieldOfView;
+    Result.ZNear = NewCamera->ZNear;
+    Result.ZFar = NewCamera->ZFar;
+    
+    return Result;
+}
+
+graphics_state GetGraphicsState(game* Game, u32 WorldIndex, f32 t)
+{
+    graphics_state Result = {};
+    graphics_object_list* GraphicsObjects = &Result.GraphicsObjects;
+    
+    GraphicsObjects->Objects = PushArray(Game->EntityStorage[WorldIndex].Capacity, graphics_object, Clear, 0);
     FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
     {
         if(Entity->MeshID != INVALID_GRAPHICS_MESH_ID)
-            Result.Objects[Result.Count++] = ToGraphicsObject(Game, Entity, t);
+        {
+            GraphicsObjects->Objects[GraphicsObjects->Count++] = InterpolateEntity(Game, Entity, t);            
+        }
     }
     
+    Result.Camera = InterpolateCamera(Game, WorldIndex, t);    
     return Result;    
 }

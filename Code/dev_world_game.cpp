@@ -302,7 +302,7 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
 
 
 inline view_settings
-GetViewSettings(dev_context* DevContext, u32 WorldIndex)
+GetViewSettings(dev_context* DevContext, graphics_state* GraphicsState, u32 WorldIndex)
 {    
     game* Game = DevContext->Game;
     if(DevContext->UseDevCamera)
@@ -312,14 +312,14 @@ GetViewSettings(dev_context* DevContext, u32 WorldIndex)
         view_settings Result = {};    
         Result.Position = Camera->Position;
         Result.Orientation = Camera->Orientation;
-        Result.FieldOfView = Game->Cameras[WorldIndex].FieldOfView;
-        Result.ZNear = Game->Cameras[WorldIndex].ZNear;
-        Result.ZFar = Game->Cameras[WorldIndex].ZFar;
+        Result.FieldOfView = Game->CurrentCameras[WorldIndex].FieldOfView;
+        Result.ZNear = Game->CurrentCameras[WorldIndex].ZNear;
+        Result.ZFar = Game->CurrentCameras[WorldIndex].ZFar;
         return Result;
     }
     else
     {
-        view_settings Result = GetViewSettings(&Game->Cameras[WorldIndex]);        
+        view_settings Result = GetViewSettings(&GraphicsState->Camera);        
         return Result;        
     }        
 }
@@ -375,13 +375,13 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     }    
 }
 
-world_entity* GetSelectedObject(dev_context* DevContext)
+world_entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState)
 {
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
     dev_input* Input = &DevContext->Input;
         
-    view_settings ViewSettings = GetViewSettings(DevContext, Game->CurrentWorldIndex);    
+    view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);    
     
     //For not just getting the player entity. need to change to cast the ray and get the intersected object
     i32 Height = Graphics->RenderDim.height;
@@ -445,9 +445,9 @@ void DrawWireframeWorld(game* Game, graphics* Graphics, u32 WorldIndex, assets* 
     PushWireframe(Graphics, false);
 }
 
-void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex, graphics_object_list GraphicsObjects)
+void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex, graphics_state* GraphicsState)
 {           
-    view_settings ViewSettings = GetViewSettings(DevContext, WorldIndex);    
+    view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, WorldIndex);    
     
     PushRenderBufferViewportScissorAndView(DevContext->Graphics, RenderBuffer, &ViewSettings);
     PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);                
@@ -459,7 +459,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
     {
         case VIEW_MODE_TYPE_LIT:
         {                        
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, &ViewSettings, Assets, GraphicsObjects);                                                         
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, &ViewSettings, Assets, GraphicsState->GraphicsObjects);                                                         
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
@@ -484,7 +484,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, &ViewSettings, Assets, GraphicsObjects);            
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, &ViewSettings, Assets, GraphicsState->GraphicsObjects);            
             DrawWireframeWorld(Game, DevContext->Graphics, WorldIndex, Assets);                        
         } break;
         
@@ -571,7 +571,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
 #endif
 }
 
-void DevelopmentRender(dev_context* DevContext, graphics_object_list GraphicsObjects)
+void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f32 tRenderInterpolate)
 {   
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
@@ -585,14 +585,14 @@ void DevelopmentRender(dev_context* DevContext, graphics_object_list GraphicsObj
     
     UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);    
     
-    view_settings ViewSettings = GetViewSettings(DevContext, Game->CurrentWorldIndex);    
+    view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);    
     
-    DrawWorld(DevContext, Game->RenderBuffer, Game->CurrentWorldIndex, GraphicsObjects);    
+    DrawWorld(DevContext, Game->RenderBuffer, Game->CurrentWorldIndex, GraphicsState);    
     if(DevContext->DrawOtherWorld)
     {
-        graphics_object_list OtherGraphicsObjects = GetGraphicsObjectList(Game, !Game->CurrentWorldIndex, 1.0f);        
+        graphics_state OtherGraphicsState = GetGraphicsState(Game, !Game->CurrentWorldIndex, tRenderInterpolate);        
         UpdateRenderBuffer(&DevContext->RenderBuffer, Graphics, Graphics->RenderDim/5);                           
-        DrawWorld(DevContext, DevContext->RenderBuffer, !Game->CurrentWorldIndex, OtherGraphicsObjects);
+        DrawWorld(DevContext, DevContext->RenderBuffer, !Game->CurrentWorldIndex, &OtherGraphicsState);
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
@@ -600,7 +600,7 @@ void DevelopmentRender(dev_context* DevContext, graphics_object_list GraphicsObj
     {
         if(IsPressed(Input->LMB))
         {
-            DevContext->SelectedObject = GetSelectedObject(DevContext);                
+            DevContext->SelectedObject = GetSelectedObject(DevContext, GraphicsState);                
         }
         if(IsPressed(Input->MMB))
         {
@@ -676,7 +676,7 @@ void DevelopmentRender(dev_context* DevContext, graphics_object_list GraphicsObj
     }
 }
 
-void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, graphics_object_list GraphicsObjects)
+void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, graphics_state* GraphicsState, f32 tRenderInterpolate)
 {
     DevContext->Game = Game;
     DevContext->Graphics = Graphics;
@@ -689,9 +689,9 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);        
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
-        DevContext->DrawGrid = true;
-        DevContext->DrawColliders = true;      
-        DevContext->EditMode = true;  
+        //DevContext->DrawGrid = true;
+        //DevContext->DrawColliders = true;      
+        //DevContext->EditMode = true;  
         
         for(u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
             DevContext->MeshConvexHulls[MeshIndex].Count = (u32)-1;
@@ -705,8 +705,19 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         CreateDevTriangleConeMesh(DevContext, 60);
         CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);
         
-        DevelopmentImGuiInit(DevContext);
+        DevContext->EntityRotations[0] = PushArray(&DevContext->DevStorage, Game->EntityStorage[0].Capacity, v3f, Clear, 0);
+        DevContext->EntityRotations[1] = PushArray(&DevContext->DevStorage, Game->EntityStorage[1].Capacity, v3f, Clear, 0);
         
+        for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+            {
+                sqt* Transform = GetEntityTransform(Game, Entity->ID);
+                DevContext->EntityRotations[WorldIndex][GetPoolIndex(Entity->ID.ID)] = QuaternionEuler(Transform->Orientation);
+            }
+        }
+        
+        DevelopmentImGuiInit(DevContext);        
         DevContext->Initialized = true;                        
     }
     
@@ -715,7 +726,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
     if(IsInDevelopmentMode(DevContext))
     {        
         Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, Game->dt, DevContext);        
-        DevelopmentRender(DevContext, GraphicsObjects);        
+        DevelopmentRender(DevContext, GraphicsState, tRenderInterpolate);        
     }
     
     if(IsPressed(Input->ToggleDevState)) DevContext->InDevelopmentMode = !DevContext->InDevelopmentMode;

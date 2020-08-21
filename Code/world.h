@@ -42,16 +42,4 @@ typedef pool<world_entity> world_entity_pool;
 #define MOVE_ACCELERATION 20.0f
 #define MOVE_DAMPING 5.0f
 
-enum player_state
-{
-    PLAYER_STATE_DEFAULT,
-    PLAYER_STATE_PUSHING
-};
-
-struct pushing_state
-{
-    world_entity_id EntityID;    
-    v2f Direction;
-};
-
 #endif

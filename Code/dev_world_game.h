@@ -170,6 +170,8 @@ struct dev_context
     struct world_entity* SelectedObject;
     v3f InspectRay;
     char DebugMessage[100];
+    
+    v3f* EntityRotations[2];
 };
 
 void Platform_InitImGui(void* PlatformData);

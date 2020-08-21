@@ -7,6 +7,8 @@
 
 struct game_camera
 {
+    //TODO(JJ): We will probably need to convert the game camera orientation to a quaternion instead of spherical coordinates
+    //to interpolate unless we can interpolate the spherical coordinates themselves for camera updating
     spherical_coordinates Coordinates;
     v3f Target;    
     
