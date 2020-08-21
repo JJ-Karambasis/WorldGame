@@ -445,7 +445,7 @@ void DrawWireframeWorld(game* Game, graphics* Graphics, u32 WorldIndex, assets* 
     PushWireframe(Graphics, false);
 }
 
-void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex)
+void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex, graphics_object_list GraphicsObjects)
 {           
     view_settings ViewSettings = GetViewSettings(DevContext, WorldIndex);    
     
@@ -459,7 +459,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
     {
         case VIEW_MODE_TYPE_LIT:
         {                        
-            PushWorldShadingCommands(Game, DevContext->Graphics, WorldIndex, RenderBuffer, &ViewSettings, Assets);                                                         
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, &ViewSettings, Assets, GraphicsObjects);                                                         
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:        
@@ -484,7 +484,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
         
         case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            PushWorldShadingCommands(Game, DevContext->Graphics, WorldIndex, RenderBuffer, &ViewSettings, Assets);            
+            PushWorldShadingCommands(DevContext->Graphics, RenderBuffer, &ViewSettings, Assets, GraphicsObjects);            
             DrawWireframeWorld(Game, DevContext->Graphics, WorldIndex, Assets);                        
         } break;
         
@@ -571,7 +571,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
 #endif
 }
 
-void DevelopmentRender(dev_context* DevContext)
+void DevelopmentRender(dev_context* DevContext, graphics_object_list GraphicsObjects)
 {   
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
@@ -587,11 +587,12 @@ void DevelopmentRender(dev_context* DevContext)
     
     view_settings ViewSettings = GetViewSettings(DevContext, Game->CurrentWorldIndex);    
     
-    DrawWorld(DevContext, Game->RenderBuffer, Game->CurrentWorldIndex);    
+    DrawWorld(DevContext, Game->RenderBuffer, Game->CurrentWorldIndex, GraphicsObjects);    
     if(DevContext->DrawOtherWorld)
     {
+        graphics_object_list OtherGraphicsObjects = GetGraphicsObjectList(Game, !Game->CurrentWorldIndex, 1.0f);        
         UpdateRenderBuffer(&DevContext->RenderBuffer, Graphics, Graphics->RenderDim/5);                           
-        DrawWorld(DevContext, DevContext->RenderBuffer, !Game->CurrentWorldIndex);
+        DrawWorld(DevContext, DevContext->RenderBuffer, !Game->CurrentWorldIndex, OtherGraphicsObjects);
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
@@ -675,7 +676,7 @@ void DevelopmentRender(dev_context* DevContext)
     }
 }
 
-void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
+void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, graphics_object_list GraphicsObjects)
 {
     DevContext->Game = Game;
     DevContext->Graphics = Graphics;
@@ -714,7 +715,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics)
     if(IsInDevelopmentMode(DevContext))
     {        
         Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, Game->dt, DevContext);        
-        DevelopmentRender(DevContext);        
+        DevelopmentRender(DevContext, GraphicsObjects);        
     }
     
     if(IsPressed(Input->ToggleDevState)) DevContext->InDevelopmentMode = !DevContext->InDevelopmentMode;

@@ -74,11 +74,51 @@ struct graphics_object
 {
     m4 WorldTransform;    
     mesh_asset_id MeshID;    
-    material* Material;
+    material Material;
     
     u32 JointCount;
     m4* JointTransforms;        
 };
+
+struct graphics_object_list
+{
+    graphics_object* Objects;
+    u32 Count;
+};
+
+struct graphics_object_list_iter
+{
+    graphics_object_list* List;
+    u32 CurrentIndex;
+};
+
+inline graphics_object_list_iter 
+BeginIter(graphics_object_list* List)
+{
+    graphics_object_list_iter Iter = {};
+    Iter.List = List;
+    return Iter;
+}
+
+inline graphics_object* 
+GetFirst(graphics_object_list_iter* Iter)
+{    
+    if(Iter->List->Count == 0)
+        return NULL;    
+    
+    graphics_object* Result = Iter->List->Objects + Iter->CurrentIndex++;        
+    return Result;
+}
+
+inline graphics_object*
+GetNext(graphics_object_list_iter* Iter)
+{    
+    if(Iter->CurrentIndex >= Iter->List->Count)
+        return NULL;
+    
+    graphics_object* Result = Iter->List->Objects + Iter->CurrentIndex++;
+    return Result;
+}
 
 #define GAME_INITIALIZE(name) game* name(input* Input, audio_output* AudioOutput, platform* Platform, void* DevContext)
 typedef GAME_INITIALIZE(game_initialize);
@@ -89,7 +129,7 @@ typedef GAME_FIXED_TICK(game_fixed_tick);
 #define GAME_TICK(name) void name(game* Game)
 typedef GAME_TICK(game_tick);
 
-#define GAME_RENDER(name) void name(game* Game, graphics* Graphics)
+#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, graphics_object_list GraphicsObjects)
 typedef GAME_RENDER(game_render);
 
 #define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, platform* Platform, samples* OutputSamples, arena* TempArena)

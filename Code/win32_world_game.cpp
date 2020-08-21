@@ -15,7 +15,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse(DevContext, RawMouse)
 #define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard(DevContext, RawKeyboard)
-#define DEVELOPMENT_TICK(Game, Graphics) DevelopmentTick(DevContext, Game, Graphics)
+#define DEVELOPMENT_TICK(Game, Graphics, GraphicsObjects) DevelopmentTick(DevContext, Game, Graphics, GraphicsObjects)
 #define DEVELOPMENT_RECORD_FRAME(Game) DevelopmentRecordFrame(DevContext, Game)
 #define DEVELOPMENT_PLAY_FRAME(Game) DevelopmentPlayFrame(DevContext, Game)
 #else
@@ -633,17 +633,22 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         //DEVELOPMENT_RECORD_FRAME(Game);
         //DEVELOPMENT_PLAY_FRAME(Game);
         
+        CopyMemory(Game->PrevTransforms[0], Game->CurrentTransforms[0], sizeof(sqt)*Game->EntityStorage[0].Capacity);
+        CopyMemory(Game->PrevTransforms[1], Game->CurrentTransforms[1], sizeof(sqt)*Game->EntityStorage[1].Capacity);
+        
         if(!IN_EDIT_MODE())
             Global_GameCode.FixedTick(Game);
         
         Global_GameCode.Tick(Game);                                
         
+        graphics_object_list GraphicsObjects = GetGraphicsObjectList(Game, Game->CurrentWorldIndex, 1.0f);
+        
         if(NOT_IN_DEVELOPMENT_MODE())
         {
-            Global_GameCode.Render(Game, Graphics);
+            Global_GameCode.Render(Game, Graphics, GraphicsObjects);
         }
         
-        DEVELOPMENT_TICK(Game, Graphics);                
+        DEVELOPMENT_TICK(Game, Graphics, GraphicsObjects);                                
         
         GraphicsCode.ExecuteRenderCommands(Graphics, Global_Platform, DevPointer);
         

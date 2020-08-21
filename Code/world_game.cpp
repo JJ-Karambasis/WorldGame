@@ -319,10 +319,9 @@ EXPORT GAME_TICK(Tick)
 extern "C"
 EXPORT GAME_RENDER(Render)
 {
-    UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);    
-    
+    UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);        
     view_settings ViewSettings = GetViewSettings(&Game->Cameras[Game->CurrentWorldIndex]);        
-    PushWorldShadingCommands(Game, Graphics, Game->CurrentWorldIndex, Game->RenderBuffer, &ViewSettings, Game->Assets);
+    PushWorldShadingCommands(Graphics, Game->RenderBuffer, &ViewSettings, Game->Assets, GraphicsObjects);
     PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Game->RenderBuffer->Resolution);
 }
 

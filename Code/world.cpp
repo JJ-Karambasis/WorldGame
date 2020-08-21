@@ -28,6 +28,13 @@ void FreeEntity(game* Game, world_entity_id ID)
     FreeFromPool(&Game->EntityStorage[ID.WorldIndex], ID.ID);
 }
 
+inline sqt* GetEntityTransformOld(game* Game, world_entity_id ID)
+{
+    u32 PoolIndex = GetPoolIndex(ID.ID);
+    sqt* Result = &Game->PrevTransforms[ID.WorldIndex][PoolIndex];
+    return Result;
+}
+
 inline sqt* GetEntityTransform(game* Game, world_entity_id ID)
 {
     u32 PoolIndex = GetPoolIndex(ID.ID);
