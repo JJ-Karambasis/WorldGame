@@ -11,16 +11,16 @@ enum command_argument_type
 
 struct file_raii
 {
-    FILE* File;
+    platform_file_handle File;    
     
-    inline file_raii(char* Path, char* Attributes)
+    inline file_raii(char* Path, platform_file_attributes Attributes)
     {
-        File = fopen(Path, Attributes);
+        File = FileOpen(Path, Attributes);        
     }
     
     inline ~file_raii()
     {
-        fclose(File);
+        FileClose(&File);        
     }
 };
 
@@ -81,26 +81,43 @@ struct command_line
     }
 };
 
+void ParseFile(asset_builder* AssetBuilder, string File, string Ext)
+{
+    ConsoleLog("-------------------------");
+    ConsoleLog("Started Parsing File %s", File.Data);
+    
+    if(StringEquals(Ext, "fbx"))            
+        ParseFBX(AssetBuilder, File);        
+    else if(StringEquals(Ext, "png"))
+        ParsePNG(AssetBuilder, File);
+    else
+        ConsoleError("Unknown file extension %s", Ext.Data);
+    
+    ConsoleLog("Ended Parsing File %s", File.Data);                
+}
+
 void CreateAssets(asset_builder* AssetBuilder, dynamic_array<string>& CreateParameters)
 {
     ConsoleLog("Creating assets");
     ConsoleNewLine();
     for(u32 FileIndex = 0; FileIndex < CreateParameters.Size; FileIndex++)
     {
-        string File = CreateParameters[FileIndex];
+        string FileOrDirectory = CreateParameters[FileIndex];
         
-        ConsoleLog("-------------------------");
-        ConsoleLog("Started Parsing File %s", File.Data);
-        
-        string Ext = GetFileExtension(File);
-        if(StringEquals(Ext, "fbx"))            
-            ParseFBX(AssetBuilder, File);        
-        else if(StringEquals(Ext, "png"))
-            ParsePNG(AssetBuilder, File);
+        string Ext = GetFileExtension(FileOrDirectory);
+        if(IsInvalidString(Ext))
+        {   
+            directory_result Results = GetAllFilesInDirectory(FileOrDirectory);
+            FOR_EACH(File, &Results)
+            {
+                Ext = GetFileExtension(*File);
+                ParseFile(AssetBuilder, *File, Ext);
+            }            
+        }
         else
-            ConsoleError("Unknown file extension %s", Ext.Data);
-        
-        ConsoleLog("Ended Parsing File %s", File.Data);                
+        {
+            ParseFile(AssetBuilder, FileOrDirectory, Ext);
+        }
         
         if(FileIndex == (CreateParameters.Size - 1))
             ConsoleLog("-------------------------");
@@ -177,19 +194,19 @@ void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeletePara
     }
 }
 
-void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, FILE* File)
+void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, platform_file_handle* File)
 {
-    fread(&MeshInfo->Header, sizeof(mesh_info_header), 1, File);
+    FileRead(File, &MeshInfo->Header, sizeof(mesh_info_header));    
     MeshInfo->Name = PushArray(&AssetBuilder->AssetArena, MeshInfo->Header.NameLength+1, char, Clear, 0);
     MeshInfo->ConvexHulls = PushArray(&AssetBuilder->AssetArena, MeshInfo->Header.ConvexHullCount, convex_hull, Clear, 0);
     
-    fread(MeshInfo->Name, sizeof(char), MeshInfo->Header.NameLength, File);
+    FileRead(File, MeshInfo->Name, sizeof(char)*MeshInfo->Header.NameLength);    
     MeshInfo->Name[MeshInfo->Header.NameLength] = 0;
     
     for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
     {
         convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;
-        fread(&ConvexHull->Header, sizeof(ConvexHull->Header), 1, File);
+        FileRead(File, &ConvexHull->Header, sizeof(ConvexHull->Header));
         
         u32 ConvexHullDataSize = 0;
         ConvexHullDataSize += (ConvexHull->Header.VertexCount*sizeof(half_vertex));                
@@ -197,7 +214,7 @@ void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, FILE* File)
         ConvexHullDataSize += (ConvexHull->Header.FaceCount*sizeof(half_face));
         
         void* ConvexHullData = PushSize(&AssetBuilder->AssetArena, ConvexHullDataSize, Clear, 0);
-        fread(ConvexHullData, ConvexHullDataSize, 1, File);
+        FileRead(File, ConvexHullData, ConvexHullDataSize);
         
         ConvexHull->Vertices = (half_vertex*)ConvexHullData;
         ConvexHull->Edges = (half_edge*)(ConvexHull->Vertices + ConvexHull->Header.VertexCount);
@@ -205,7 +222,7 @@ void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, FILE* File)
     }    
 }
 
-void ReadMeshInfos(asset_builder* AssetBuilder, list_entry<mesh_info>* MeshInfos, u32 MeshCount, FILE* File)
+void ReadMeshInfos(asset_builder* AssetBuilder, list_entry<mesh_info>* MeshInfos, u32 MeshCount, platform_file_handle* File)
 {
     for(u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
     {
@@ -214,15 +231,15 @@ void ReadMeshInfos(asset_builder* AssetBuilder, list_entry<mesh_info>* MeshInfos
     }
 }
 
-void ReadTextureInfo(asset_builder* AssetBuilder, texture_info* TextureInfo, FILE* File)
+void ReadTextureInfo(asset_builder* AssetBuilder, texture_info* TextureInfo, platform_file_handle* File)
 {
-    fread(&TextureInfo->Header, sizeof(texture_info_header), 1, File);
+    FileRead(File, &TextureInfo->Header, sizeof(texture_info_header));    
     TextureInfo->Name = PushArray(&AssetBuilder->AssetArena, TextureInfo->Header.NameLength+1, char, Clear, 0);
-    fread(TextureInfo->Name, sizeof(char), TextureInfo->Header.NameLength, File);
+    FileRead(File, TextureInfo->Name, sizeof(char)*TextureInfo->Header.NameLength);    
     TextureInfo->Name[TextureInfo->Header.NameLength] = 0;            
 }
 
-void ReadTextureInfos(asset_builder* AssetBuilder, list_entry<texture_info>* TextureInfos, u32 TextureCount, FILE* File)
+void ReadTextureInfos(asset_builder* AssetBuilder, list_entry<texture_info>* TextureInfos, u32 TextureCount, platform_file_handle* File)
 {
     for(u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
     {
@@ -231,16 +248,16 @@ void ReadTextureInfos(asset_builder* AssetBuilder, list_entry<texture_info>* Tex
     }
 }
 
-void ReadMesh(asset_builder* AssetBuilder, mesh* Mesh, mesh_info* MeshInfo, FILE* File)
+void ReadMesh(asset_builder* AssetBuilder, mesh* Mesh, mesh_info* MeshInfo, platform_file_handle* File)
 {
     u32 MeshSize = GetMeshDataSize(MeshInfo);
     void* Data = PushSize(&AssetBuilder->AssetArena, MeshSize, Clear, 0);
     Mesh->Vertices = Data;
-    Mesh->Indices = ((u8*)Mesh->Vertices + GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount);    
-    fread(Data, MeshSize, 1, File);    
+    Mesh->Indices = ((u8*)Mesh->Vertices + GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount);   
+    FileRead(File, Data, MeshSize);    
 }
 
-void ReadMeshes(asset_builder* AssetBuilder, list_entry<mesh>* Meshes, list_entry<mesh_info>* MeshInfos, u32 MeshCount, FILE* File)
+void ReadMeshes(asset_builder* AssetBuilder, list_entry<mesh>* Meshes, list_entry<mesh_info>* MeshInfos, u32 MeshCount, platform_file_handle* File)
 {
     for(u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
     {
@@ -249,15 +266,15 @@ void ReadMeshes(asset_builder* AssetBuilder, list_entry<mesh>* Meshes, list_entr
     }
 }
 
-void ReadTexture(asset_builder* AssetBuilder, texture* Texture, texture_info* TextureInfo, FILE* File)
+void ReadTexture(asset_builder* AssetBuilder, texture* Texture, texture_info* TextureInfo, platform_file_handle* File)
 {
     u32 TextureSize = GetTextureDataSize(TextureInfo);
     void* Data = PushSize(&AssetBuilder->AssetArena, TextureSize, Clear, 0);
     Texture->Texels = Data;    
-    fread(Data, TextureSize, 1, File);    
+    FileRead(File, Data, TextureSize);    
 }
 
-void ReadTextures(asset_builder* AssetBuilder, list_entry<texture>* Textures, list_entry<texture_info>* TextureInfos, u32 TextureCount, FILE* File)
+void ReadTextures(asset_builder* AssetBuilder, list_entry<texture>* Textures, list_entry<texture_info>* TextureInfos, u32 TextureCount, platform_file_handle* File)
 {
     for(u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
     {
@@ -270,15 +287,15 @@ void ReadAssets(asset_builder* AssetBuilder, string AssetPath)
 {
     ConsoleLog("Reading current asset file");
     
-    file_raii FileRAII(AssetPath.Data, "rb");    
-    if(!FileRAII.File)
+    file_raii FileRAII(AssetPath.Data, PLATFORM_FILE_ATTRIBUTES_READ);    
+    if(!FileRAII.File.IsValid())
     {
         ConsoleError("Could not open asset file for reading. Application will create a new one instead.");
         return;
     }
     
     asset_header Header = {};
-    fread(&Header, sizeof(Header), 1, FileRAII.File);
+    FileRead(&FileRAII.File, &Header, sizeof(Header));
     
     if(!ValidateSignature(Header))
     {
@@ -299,11 +316,11 @@ void ReadAssets(asset_builder* AssetBuilder, string AssetPath)
     list_entry<mesh>* Meshes = PushArray(&AssetBuilder->AssetArena, Header.MeshCount, list_entry<mesh>, Clear, 0);
     list_entry<texture>* Textures = PushArray(&AssetBuilder->AssetArena, Header.TextureCount, list_entry<texture>, Clear, 0);
     
-    ReadMeshInfos(AssetBuilder, MeshInfos, Header.MeshCount, FileRAII.File);
-    ReadTextureInfos(AssetBuilder, TextureInfos, Header.TextureCount, FileRAII.File);
+    ReadMeshInfos(AssetBuilder, MeshInfos, Header.MeshCount, &FileRAII.File);
+    ReadTextureInfos(AssetBuilder, TextureInfos, Header.TextureCount, &FileRAII.File);
     
-    ReadMeshes(AssetBuilder, Meshes, MeshInfos, Header.MeshCount, FileRAII.File);
-    ReadTextures(AssetBuilder, Textures, TextureInfos, Header.TextureCount, FileRAII.File);
+    ReadMeshes(AssetBuilder, Meshes, MeshInfos, Header.MeshCount, &FileRAII.File);
+    ReadTextures(AssetBuilder, Textures, TextureInfos, Header.TextureCount, &FileRAII.File);
     
     for(u32 MeshIndex = 0; MeshIndex < Header.MeshCount; MeshIndex++)
     {
@@ -382,62 +399,62 @@ ptr CalculateOffsetToData(asset_builder* AssetBuilder)
     return Result;
 }
 
-void WriteConvexHull(FILE* AssetFile, convex_hull* ConvexHull)
+void WriteConvexHull(platform_file_handle* AssetFile, convex_hull* ConvexHull)
 {
-    fwrite(&ConvexHull->Header,  sizeof(ConvexHull->Header), 1, AssetFile);
-    fwrite(ConvexHull->Vertices, sizeof(half_vertex), ConvexHull->Header.VertexCount, AssetFile);
-    fwrite(ConvexHull->Edges,    sizeof(half_edge),   ConvexHull->Header.EdgeCount,   AssetFile);
-    fwrite(ConvexHull->Faces,    sizeof(half_face),   ConvexHull->Header.FaceCount,   AssetFile);    
+    FileWrite(AssetFile, &ConvexHull->Header, sizeof(ConvexHull->Header));
+    FileWrite(AssetFile, ConvexHull->Vertices, sizeof(half_vertex)*ConvexHull->Header.VertexCount);
+    FileWrite(AssetFile, ConvexHull->Edges, sizeof(half_edge)*ConvexHull->Header.EdgeCount);
+    FileWrite(AssetFile, ConvexHull->Faces, sizeof(half_face)*ConvexHull->Header.FaceCount);    
 }
 
-void WriteMeshInfo(FILE* AssetFile, mesh_info* MeshInfo)
+void WriteMeshInfo(platform_file_handle* AssetFile, mesh_info* MeshInfo)
 {
-    fwrite(&MeshInfo->Header, sizeof(MeshInfo->Header), 1, AssetFile);
-    fwrite(MeshInfo->Name, sizeof(char), MeshInfo->Header.NameLength, AssetFile);
+    FileWrite(AssetFile, &MeshInfo->Header, sizeof(MeshInfo->Header));
+    FileWrite(AssetFile, MeshInfo->Name, sizeof(char)*MeshInfo->Header.NameLength);    
     for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
         WriteConvexHull(AssetFile, MeshInfo->ConvexHulls + ConvexHullIndex);    
 }
 
-void WriteMeshInfos(FILE* AssetFile, list<mesh_info>* MeshInfos)
+void WriteMeshInfos(platform_file_handle* AssetFile, list<mesh_info>* MeshInfos)
 {
     FOR_EACH(MeshInfo, MeshInfos)
         WriteMeshInfo(AssetFile, MeshInfo);    
 }
 
-void WriteTextureInfo(FILE* AssetFile, texture_info* TextureInfo)
+void WriteTextureInfo(platform_file_handle* AssetFile, texture_info* TextureInfo)
 {
-    fwrite(&TextureInfo->Header, sizeof(TextureInfo->Header), 1, AssetFile);
-    fwrite(TextureInfo->Name, sizeof(char), TextureInfo->Header.NameLength, AssetFile);
+    FileWrite(AssetFile, &TextureInfo->Header, sizeof(TextureInfo->Header));
+    FileWrite(AssetFile, TextureInfo->Name, sizeof(char)*TextureInfo->Header.NameLength);    
 }
 
-void WriteTextureInfos(FILE* AssetFile, list<texture_info>* TextureInfos)
+void WriteTextureInfos(platform_file_handle* AssetFile, list<texture_info>* TextureInfos)
 {
     FOR_EACH(TextureInfo, TextureInfos)
         WriteTextureInfo(AssetFile, TextureInfo);
 }
 
-b32 ValidateOffset(FILE* File, u64 Offset)
+b32 ValidateOffset(platform_file_handle* File, u64 Offset)
 {
-    u64 OffsetToTest = ftell(File);
+    u64 OffsetToTest = FileGetPointer(File);
     return OffsetToTest == Offset;
 }
 
-void WriteInfos(FILE* AssetFile, asset_builder* AssetBuilder)
+void WriteInfos(platform_file_handle* AssetFile, asset_builder* AssetBuilder)
 {
     WriteMeshInfos(AssetFile, &AssetBuilder->MeshInfos);
     WriteTextureInfos(AssetFile, &AssetBuilder->TextureInfos);
 }
 
-void WriteMesh(FILE* AssetFile, mesh* Mesh, mesh_info* MeshInfo)
+void WriteMesh(platform_file_handle* AssetFile, mesh* Mesh, mesh_info* MeshInfo)
 {
-    ptr MeshDataSize = GetMeshDataSize(MeshInfo);
+    u32 MeshDataSize = GetMeshDataSize(MeshInfo);
     
     ASSERT(ValidateOffset(AssetFile, MeshInfo->Header.OffsetToData));
     
-    fwrite(Mesh->Vertices, MeshDataSize, 1, AssetFile);
+    FileWrite(AssetFile, Mesh->Vertices, MeshDataSize);    
 }
 
-void WriteMeshData(FILE* AssetFile, list<mesh>* Meshes, list<mesh_info>* MeshInfos)
+void WriteMeshData(platform_file_handle* AssetFile, list<mesh>* Meshes, list<mesh_info>* MeshInfos)
 {
     list_iterator<mesh> MeshIterator = BeginIter(Meshes);
     list_iterator<mesh_info> MeshInfoIterator = BeginIter(MeshInfos);
@@ -453,16 +470,14 @@ void WriteMeshData(FILE* AssetFile, list<mesh>* Meshes, list<mesh_info>* MeshInf
     }    
 }
 
-void WriteTexture(FILE* AssetFile, texture* Texture, texture_info* TextureInfo)
+void WriteTexture(platform_file_handle* AssetFile, texture* Texture, texture_info* TextureInfo)
 {
-    ptr TextureDataSize = GetTextureDataSize(TextureInfo);
-    
-    ASSERT(ValidateOffset(AssetFile, TextureInfo->Header.OffsetToData));
-    
-    fwrite(Texture->Texels, TextureDataSize, 1, AssetFile);
+    u32 TextureDataSize = GetTextureDataSize(TextureInfo);    
+    ASSERT(ValidateOffset(AssetFile, TextureInfo->Header.OffsetToData));    
+    FileWrite(AssetFile, Texture->Texels, TextureDataSize);    
 }
 
-void WriteTextureData(FILE* AssetFile, list<texture>* Textures, list<texture_info>* TextureInfos)
+void WriteTextureData(platform_file_handle* AssetFile, list<texture>* Textures, list<texture_info>* TextureInfos)
 {
     list_iterator<texture> TextureIterator = BeginIter(Textures);
     list_iterator<texture_info> TextureInfoIterator = BeginIter(TextureInfos);
@@ -478,7 +493,7 @@ void WriteTextureData(FILE* AssetFile, list<texture>* Textures, list<texture_inf
     }
 }
 
-void WriteData(FILE* AssetFile, asset_builder* AssetBuilder)
+void WriteData(platform_file_handle* AssetFile, asset_builder* AssetBuilder)
 {
     WriteMeshData(AssetFile, &AssetBuilder->Meshes, &AssetBuilder->MeshInfos);
     WriteTextureData(AssetFile, &AssetBuilder->Textures, &AssetBuilder->TextureInfos);
@@ -488,7 +503,7 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
 {
     temp_arena TempArena = BeginTemporaryMemory();
     
-    ptr OffsetToData = CalculateOffsetToData(AssetBuilder);        
+    u64 OffsetToData = CalculateOffsetToData(AssetBuilder);        
     FOR_EACH(MeshInfo, &AssetBuilder->MeshInfos)
     {        
         MeshInfo->Header.OffsetToData = OffsetToData;        
@@ -548,15 +563,15 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     
     ConsoleLog("Started opening asset files %s and %s", AssetHeaderPath.Data, AssetPath.Data);
         
-    file_raii AssetFileRAII(AssetPath.Data, "wb");
-    file_raii AssetHeaderFileRAII(AssetHeaderPath.Data, "w");
-    if(!AssetHeaderFileRAII.File)
+    file_raii AssetFileRAII(AssetPath.Data, PLATFORM_FILE_ATTRIBUTES_WRITE);
+    file_raii AssetHeaderFileRAII(AssetHeaderPath.Data, PLATFORM_FILE_ATTRIBUTES_WRITE);
+    if(!AssetHeaderFileRAII.File.IsValid())
     {
         ConsoleError("Could not open the asset header file %s for writing.", AssetHeaderPath.Data);
         return;
     }
     
-    if(!AssetFileRAII.File)
+    if(!AssetFileRAII.File.IsValid())
     {
         ConsoleError("Could not open the asset file %s for writing.", AssetPath.Data);
         return;
@@ -568,8 +583,8 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     ConsoleLog("Writing asset header file at %s", AssetHeaderPath.Data);    
     
     string AssetHeaderFileString = HeaderBuilder.GetString();
-    fwrite(AssetHeaderFileString.Data, AssetHeaderFileString.Length, 1, AssetHeaderFileRAII.File);
-        
+    FileWrite(&AssetHeaderFileRAII.File, AssetHeaderFileString.Data, (u32)AssetHeaderFileString.Length);
+    
     ConsoleLog("Finished writing asset header file.");
     ConsoleNewLine();
     
@@ -585,9 +600,9 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     Header.MeshCount = AssetBuilder->MeshInfos.Count;
     Header.TextureCount = AssetBuilder->TextureInfos.Count;
     
-    fwrite(&Header, sizeof(Header), 1, AssetFileRAII.File);    
-    WriteInfos(AssetFileRAII.File, AssetBuilder);
-    WriteData(AssetFileRAII.File, AssetBuilder);
+    FileWrite(&AssetFileRAII.File, &Header, sizeof(Header));    
+    WriteInfos(&AssetFileRAII.File, AssetBuilder);
+    WriteData(&AssetFileRAII.File, AssetBuilder);
         
     ConsoleLog("Finished writing asset file");
     ConsoleNewLine();
