@@ -132,7 +132,9 @@ EXPORT GAME_FIXED_TICK(FixedTick)
             {               
                 sim_state* SimState = GetSimState(Game, Entity->ID);                
                 SimState->Velocity += SimState->Acceleration*dt;
-                SimState->Velocity.xy *= GetLinearDamp(dt, Global_PlayerDamping);                                                    
+                
+                if(!IsEntityState(Entity, ENTITY_STATE_JUMPING))
+                    SimState->Velocity.xy *= GetLinearDamp(dt, Global_PlayerDamping);                                                    
             } break;
         }
     }
