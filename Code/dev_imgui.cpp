@@ -180,7 +180,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         game_information* GameInformation = &DevContext->GameInformation;
         if(DevContext->SelectedObject != nullptr)
         {               
-            world_entity_id EntityID = DevContext->SelectedObject->ID;
+            entity_id EntityID = DevContext->SelectedObject->ID;
             
             sim_state* SimState = GetSimState(Game, EntityID);
             

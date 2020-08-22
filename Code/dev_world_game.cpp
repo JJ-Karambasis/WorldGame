@@ -375,7 +375,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     }    
 }
 
-world_entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState)
+entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState)
 {
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
@@ -398,7 +398,7 @@ world_entity* GetSelectedObject(dev_context* DevContext, graphics_state* Graphic
     ray_wor = Normalize(ray_wor);
     
     f32 tBest = INFINITY;
-    world_entity* Result = NULL;
+    entity* Result = NULL;
     
     FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
     {        

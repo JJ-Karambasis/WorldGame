@@ -582,7 +582,7 @@ void UpdateRenderBuffer(graphics_render_buffer** RenderBuffer, graphics* Graphic
     }
 }
 
-graphics_object InterpolateEntity(game* Game, world_entity* Entity, f32 t)
+graphics_object InterpolateEntity(game* Game, entity* Entity, f32 t)
 {
     graphics_object Result;    
     sqt OldState = *GetEntityTransformOld(Game, Entity->ID);

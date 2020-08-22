@@ -2,7 +2,7 @@
 #include "assets/assets.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
-#include "world.cpp"
+#include "entity.cpp"
 #include "collision_detection.cpp"
 
 #include "graphics.cpp"

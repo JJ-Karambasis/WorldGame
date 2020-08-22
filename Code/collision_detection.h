@@ -46,7 +46,7 @@ struct penetration
 struct continuous_collision_result
 {
     f32 t;
-    world_entity_id HitEntityID;    
+    entity_id HitEntityID;    
     penetration Penetration;    
 };
 
@@ -67,19 +67,19 @@ typedef pool<collision_volume> collision_volume_pool;
 
 struct collision_event
 {
-    world_entity_id HitEntityID;
+    entity_id HitEntityID;
     penetration     Penetration;
 };
 
 struct toi_result
 {
     f32 t;
-    world_entity_id HitEntityID;
+    entity_id HitEntityID;
     collision_volume* VolumeA;
     collision_volume* VolumeB;
 };
 
-inline collision_event CreateCollisionEvent(world_entity_id HitEntityID, penetration Penetration)
+inline collision_event CreateCollisionEvent(entity_id HitEntityID, penetration Penetration)
 {
     collision_event Result;
     Result.HitEntityID = HitEntityID;
@@ -91,7 +91,7 @@ struct sim_state
 {
     v3f Velocity;    
     v3f MoveDelta;    
-    v2f MoveDirection;    
+    v3f Acceleration;    
     collision_volume* CollisionVolumes;
 };
 
@@ -123,7 +123,5 @@ collision_volume* GetNext(collision_volume_iter* Iter)
     Iter->Current = Result;
     return Result;
 }
-
-sim_state* GetSimState(game* Game, world_entity_id ID);
 
 #endif

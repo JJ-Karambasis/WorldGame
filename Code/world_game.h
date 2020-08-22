@@ -23,7 +23,8 @@ struct jumping_quad
     jumping_quad* OtherQuad;
 };
 
-#include "world.h"
+//#include "world.h"
+#include "entity.h"
 #include "collision_detection.h"
 
 struct goal_rect
@@ -41,7 +42,7 @@ struct block_puzzle
     u32 GoalRectCount;
     u32 BlockEntityCount;
     goal_rect* GoalRects;    
-    world_entity_id* BlockEntities;                
+    entity_id* BlockEntities;                
     
     b32 IsComplete;
     
@@ -57,7 +58,7 @@ struct game
     
     //This stuff is probably going to be our level data
     collision_volume_pool CollisionVolumeStorage[2];
-    world_entity_pool EntityStorage[2];    
+    entity_storage EntityStorage[2];    
     sqt* PrevTransforms[2];    
     sqt* CurrentTransforms[2];
     game_camera PrevCameras[2];

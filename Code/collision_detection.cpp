@@ -36,13 +36,6 @@ inline toi_result InvalidTOIResult()
     return Result;
 }
 
-sim_state* GetSimState(game* Game, world_entity_id ID)
-{
-    u32 PoolIndex = Game->EntityStorage[ID.WorldIndex].GetIndex(ID.ID);
-    sim_state* Result = &Game->SimStates[ID.WorldIndex][PoolIndex];
-    return Result;
-}
-
 void AttachToCollisionVolume(collision_volume* CollisionVolume, convex_hull* ConvexHull)
 {
     CollisionVolume->Type = COLLISION_VOLUME_TYPE_CONVEX_HULL;
@@ -604,7 +597,7 @@ f32 SphereCapsuleTOI(sphere* Sphere, v3f DeltaA, capsule* Capsule, v3f DeltaB)
     return Result;
 }
 
-toi_result FindStaticTOI(game* Game, world_entity_id EntityID)
+toi_result FindStaticTOI(game* Game, entity_id EntityID)
 {
     toi_result Result = InvalidTOIResult();    
     
@@ -631,7 +624,7 @@ toi_result FindStaticTOI(game* Game, world_entity_id EntityID)
                 sphere SphereA = TransformSphere(&VolumeA->Sphere, *EntityTransform);
                 FOR_EACH(TestEntity, &Game->EntityStorage[WorldIndex])
                 {
-                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, WORLD_ENTITY_TYPE_STATIC))
+                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, ENTITY_TYPE_STATIC))
                     {
                         sim_state* SimStateB = GetSimState(Game, TestEntity->ID);                        
                         sqt* TestEntityTransform = GetEntityTransform(Game, TestEntity->ID);
@@ -674,7 +667,7 @@ toi_result FindStaticTOI(game* Game, world_entity_id EntityID)
                 capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, *EntityTransform);
                 FOR_EACH(TestEntity, &Game->EntityStorage[WorldIndex])
                 {
-                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, WORLD_ENTITY_TYPE_STATIC))
+                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, ENTITY_TYPE_STATIC))
                     {
                         sim_state* SimStateB = GetSimState(Game, TestEntity->ID);                        
                         sqt* TestEntityTransform = GetEntityTransform(Game, TestEntity->ID);
@@ -718,7 +711,7 @@ toi_result FindStaticTOI(game* Game, world_entity_id EntityID)
                 
                 FOR_EACH(TestEntity, &Game->EntityStorage[WorldIndex])
                 {
-                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, WORLD_ENTITY_TYPE_STATIC))
+                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, ENTITY_TYPE_STATIC))
                     {      
                         sim_state* SimStateB = GetSimState(Game, TestEntity->ID);                        
                         sqt* TestEntityTransform = GetEntityTransform(Game, TestEntity->ID);
@@ -857,7 +850,7 @@ penetration GetHullHullPenetration(convex_hull* HullA, sqt TransformA,
     return Result;
 }
 
-penetration GetPenetration(game* Game, world_entity_id AEntityID, world_entity_id BEntityID, collision_volume* VolumeA, collision_volume* VolumeB, f32 tHit)
+penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID, collision_volume* VolumeA, collision_volume* VolumeB, f32 tHit)
 {
     ASSERT((tHit >= 0) && (tHit <= 1.0f));    
     
@@ -988,7 +981,7 @@ penetration GetPenetration(game* Game, world_entity_id AEntityID, world_entity_i
     return Result;
 }
 
-continuous_collision_result DetectStaticContinuousCollisions(game* Game, world_entity_id EntityID)
+continuous_collision_result DetectStaticContinuousCollisions(game* Game, entity_id EntityID)
 {    
     continuous_collision_result Result = {};
     Result.t = INFINITY;    

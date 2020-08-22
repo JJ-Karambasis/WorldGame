@@ -2,14 +2,14 @@
 #include "assets/assets.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
-#include "world.cpp"
+#include "entity.cpp"
 #include "collision_detection.cpp"
 //#include "player.cpp"
 #include "graphics.cpp"
 
 PUZZLE_COMPLETE_CALLBACK(DespawnWallCompleteCallback)
 {
-    world_entity_id* IDs = (world_entity_id*)UserData;
+    entity_id* IDs = (entity_id*)UserData;
     
     FreeEntity(Game, IDs[0]);
     FreeEntity(Game, IDs[1]);
@@ -34,20 +34,18 @@ void LoadTestLevel(game* Game)
     //TODO(JJ): Load entity data at runtime    
     for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {           
-        Game->EntityStorage[WorldIndex] = CreatePool<world_entity>(Game->GameStorage, 512);        
+        Game->EntityStorage[WorldIndex] = CreatePool<entity>(Game->GameStorage, 512);        
         Game->CollisionVolumeStorage[WorldIndex] = CreatePool<collision_volume>(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity*4);        
         Game->PrevTransforms[WorldIndex] = PushArray(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity, sqt, Clear, 0);        
         Game->CurrentTransforms[WorldIndex] = PushArray(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity, sqt, Clear, 0);
         Game->SimStates[WorldIndex] = PushArray(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity, sim_state, Clear, 0);
         
-        world_entity_id ID = CreateEntity(Game, WORLD_ENTITY_TYPE_PLAYER, WorldIndex, V3(0.0f, 0.0f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(PI*0.0f, 0.0f*PI, 0.0f*PI), MESH_ASSET_ID_PLAYER, Global_PlayerMaterial);
-        
         v3f P0 = V3() + Global_WorldZAxis*PLAYER_RADIUS;
         capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);        
-        AddCollisionVolume(&Game->CollisionVolumeStorage[WorldIndex], GetSimState(Game, ID), &PlayerCapsule);
+        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, V3(), V3(), Global_PlayerMaterial, &PlayerCapsule);
         
         game_camera* Camera = Game->CurrentCameras + WorldIndex;        
-        Camera->Target = GetEntityPosition(Game, ID);        
+        Camera->Target = GetEntityPosition(Game, PlayerID);        
         Camera->Coordinates = SphericalCoordinates(6, TO_RAD(-90.0f), TO_RAD(35.0f));        
         Camera->FieldOfView = TO_RAD(65.0f);                        
         Camera->ZNear = CAMERA_ZNEAR;
@@ -106,19 +104,17 @@ EXPORT GAME_INITIALIZE(Initialize)
     return Game;
 }
 
-#define GRAVITY 20.0f
-
-inline f32 GetLinearDamp(f32 dt)
+inline f32 GetLinearDamp(f32 dt, f32 Damping)
 {
     //CONFIRM(JJ): Should the damping constant be configurable per entity?
-    f32 Result = 1.0f / (1.0f + dt*MOVE_DAMPING);
+    f32 Result = 1.0f / (1.0f + dt * Damping);
     return Result;
 }
 
-void PlayerCollisionEvent(game* Game, world_entity* Player, collision_event* CollisionEvent)
+void PlayerCollisionEvent(game* Game, entity* Player, collision_event* CollisionEvent)
 {
-    if(Player->State == WORLD_ENTITY_STATE_JUMPING)
-        Player->State = WORLD_ENTITY_STATE_NOTHING;
+    if(IsEntityState(Player, ENTITY_STATE_JUMPING))
+        SetEntityState(Player, ENTITY_STATE_NONE);    
 }
 
 extern "C"
@@ -132,31 +128,22 @@ EXPORT GAME_FIXED_TICK(FixedTick)
     {
         switch(Entity->Type)
         {
-            case WORLD_ENTITY_TYPE_PLAYER:
+            case ENTITY_TYPE_PLAYER:
             {               
-                sim_state* SimState = GetSimState(Game, Entity->ID);
-                if(Entity->State == WORLD_ENTITY_STATE_JUMPING)  
-                {
-                    SimState->Velocity.z -= (GRAVITY*dt);                
-                }
-                else
-                {
-                    v2f MoveAcceleration = SimState->MoveDirection*MOVE_ACCELERATION;
-                    SimState->Velocity.xy += MoveAcceleration*dt;
-                    SimState->Velocity.xy *= GetLinearDamp(dt);
-                    
-                    SimState->Velocity.z -= (GRAVITY*dt);                                        
-                }
-                
+                sim_state* SimState = GetSimState(Game, Entity->ID);                
+                SimState->Velocity += SimState->Acceleration*dt;
+                SimState->Velocity.xy *= GetLinearDamp(dt, Global_PlayerDamping);                                                    
             } break;
         }
     }
+    
+#define VERY_CLOSE_DISTANCE 1e-4f
     
     FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
     {
         switch(Entity->Type)
         {
-            case WORLD_ENTITY_TYPE_PLAYER:
+            case ENTITY_TYPE_PLAYER:
             {
                 collision_event CollisionEvent = {};
                 
@@ -257,15 +244,15 @@ EXPORT GAME_TICK(Tick)
     {
         switch(Entity->Type)
         {
-            case WORLD_ENTITY_TYPE_PLAYER:
+            case ENTITY_TYPE_PLAYER:
             {
                 sim_state* SimState = GetSimState(Game, Entity->ID);                
                 v3f Position = GetEntityPosition(Game, Entity->ID);                
                 
-                SimState->MoveDirection = {};
+                SimState->Acceleration = {};
                 
-                if(Entity->State != WORLD_ENTITY_STATE_JUMPING)
-                {                    
+                if(!IsEntityState(Entity, ENTITY_STATE_JUMPING))                
+                {
                     for(u32 JumpingQuadIndex = 0; JumpingQuadIndex < ARRAYCOUNT(Game->JumpingQuads); JumpingQuadIndex++)
                     {
                         jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
@@ -287,12 +274,12 @@ EXPORT GAME_TICK(Tick)
                                     f32 Displacement = Magnitude(XDirection);
                                     XDirection /= Displacement;                    
                                     
-                                    f32 InitialVelocity = Sqrt(Displacement*GRAVITY);
+                                    f32 InitialVelocity = Sqrt(Displacement*Global_Gravity);
                                     
                                     SimState->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
                                     SimState->Velocity.z = InitialVelocity*SQRT2_2;
                                     
-                                    Entity->State = WORLD_ENTITY_STATE_JUMPING;        
+                                    SetEntityState(Entity, ENTITY_STATE_JUMPING);
                                     
                                     break;                    
                                     
@@ -304,24 +291,23 @@ EXPORT GAME_TICK(Tick)
                         DEBUG_DRAW_QUAD(JumpingQuad->CenterP, Global_WorldZAxis, JumpingQuad->Dimensions, QuadColor);    
                     }                    
                     
-                    SimState->MoveDirection = {};
                     if(IsDown(Input->MoveForward))
-                        SimState->MoveDirection.y = 1.0f;
+                        SimState->Acceleration.y = 1.0f;
                     
                     if(IsDown(Input->MoveBackward))
-                        SimState->MoveDirection.y = -1.0f;
+                        SimState->Acceleration.y = -1.0f;
                     
                     if(IsDown(Input->MoveRight))
-                        SimState->MoveDirection.x = 1.0f;
+                        SimState->Acceleration.x = 1.0f;
                     
                     if(IsDown(Input->MoveLeft))
-                        SimState->MoveDirection.x = -1.0f;
+                        SimState->Acceleration.x = -1.0f;
                     
-                    if(SimState->MoveDirection != 0)
-                        SimState->MoveDirection = Normalize(SimState->MoveDirection);                    
-                }   
+                    if(SimState->Acceleration.xy != 0)
+                        SimState->Acceleration.xy = Normalize(SimState->Acceleration.xy) * Global_PlayerAcceleration;                    
+                }                                   
                 
-                
+                SimState->Acceleration.z -= Global_Gravity;
             } break;
         }
     }
