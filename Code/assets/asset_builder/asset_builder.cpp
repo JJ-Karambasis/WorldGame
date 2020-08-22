@@ -45,10 +45,10 @@ struct command_line
             if(IsNextArgument(Parameter))
                 break;
             
-            if(!IsInitialized(&Arguments[Type]))
+            if(!Arguments[Type].IsInitialized())
                 Arguments[Type] = CreateDynamicArray<string>();
             
-            Append(&Arguments[Type], LiteralString(Parameter));
+            Arguments[Type].Add(LiteralString(Parameter));
         }
     }
     
@@ -155,8 +155,8 @@ void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeletePara
                     list_entry<mesh_info>* OldMeshInfo = (list_entry<mesh_info>*)Pair.MeshInfo;
                     list_entry<mesh>* OldMesh = (list_entry<mesh>*)Pair.Mesh;
                     
-                    RemoveFromList(&AssetBuilder->MeshInfos, OldMeshInfo);
-                    RemoveFromList(&AssetBuilder->Meshes, OldMesh);                                
+                    AssetBuilder->MeshInfos.Remove(OldMeshInfo);
+                    AssetBuilder->Meshes.Remove(OldMesh);                    
                 }
                 else
                 {
@@ -173,8 +173,8 @@ void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeletePara
                     list_entry<texture_info>* OldTextureInfo = (list_entry<texture_info>*)Pair.TextureInfo;
                     list_entry<texture>* OldTexture = (list_entry<texture>*)Pair.Texture;
                     
-                    RemoveFromList(&AssetBuilder->TextureInfos, OldTextureInfo);
-                    RemoveFromList(&AssetBuilder->Textures, OldTexture);
+                    AssetBuilder->TextureInfos.Remove(OldTextureInfo);
+                    AssetBuilder->Textures.Remove(OldTexture);                    
                 }
                 else
                 {
@@ -227,7 +227,7 @@ void ReadMeshInfos(asset_builder* AssetBuilder, list_entry<mesh_info>* MeshInfos
     for(u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
     {
         ReadMeshInfo(AssetBuilder, &MeshInfos[MeshIndex].Entry, File);        
-        AddToList(&AssetBuilder->MeshInfos, &MeshInfos[MeshIndex]);        
+        AssetBuilder->MeshInfos.Add(&MeshInfos[MeshIndex]);        
     }
 }
 
@@ -244,7 +244,7 @@ void ReadTextureInfos(asset_builder* AssetBuilder, list_entry<texture_info>* Tex
     for(u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
     {
         ReadTextureInfo(AssetBuilder, &TextureInfos[TextureIndex].Entry, File);
-        AddToList(&AssetBuilder->TextureInfos, &TextureInfos[TextureIndex]);
+        AssetBuilder->TextureInfos.Add(&TextureInfos[TextureIndex]);        
     }
 }
 
@@ -262,7 +262,7 @@ void ReadMeshes(asset_builder* AssetBuilder, list_entry<mesh>* Meshes, list_entr
     for(u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
     {
         ReadMesh(AssetBuilder, &Meshes[MeshIndex].Entry, &MeshInfos[MeshIndex].Entry, File);
-        AddToList(&AssetBuilder->Meshes, &Meshes[MeshIndex]);
+        AssetBuilder->Meshes.Add(&Meshes[MeshIndex]);        
     }
 }
 
@@ -279,7 +279,7 @@ void ReadTextures(asset_builder* AssetBuilder, list_entry<texture>* Textures, li
     for(u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
     {
         ReadTexture(AssetBuilder, &Textures[TextureIndex].Entry, &TextureInfos[TextureIndex].Entry, File);
-        AddToList(&AssetBuilder->Textures, &Textures[TextureIndex]);
+        AssetBuilder->Textures.Add(&Textures[TextureIndex]);        
     }
 }
 
@@ -615,7 +615,7 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
 int main(i32 ArgCount, char** Args)
 { 
     arena TemporaryArena = CreateArena(MEGABYTE(32));
-    InitMemory(&TemporaryArena, AllocateMemory, FreeMemory);
+    SetDefaultArena(&TemporaryArena);
     
     command_line CommandLine = {};
     if(ArgCount < 2)

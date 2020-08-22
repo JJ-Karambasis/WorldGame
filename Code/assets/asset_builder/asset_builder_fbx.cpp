@@ -185,7 +185,7 @@ fbx_mesh_context FBX_GetMeshContext(FbxNode* Node)
                 return MeshContext;
             }
             
-            Append(&MeshContext.ConvexHullNodes, ChildNode);
+            MeshContext.ConvexHullNodes.Add(ChildNode);
         }
         
         if(FBX_HasAttribute(ChildNode, FbxNodeAttribute::eSkeleton))
@@ -696,11 +696,11 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                             list_entry<mesh_info>* OldMeshInfo = (list_entry<mesh_info>*)Pair.MeshInfo;
                             list_entry<mesh>* OldMesh = (list_entry<mesh>*)Pair.Mesh;
                             
-                            RemoveFromList(&AssetBuilder->MeshInfos, OldMeshInfo);
-                            RemoveFromList(&AssetBuilder->Meshes, OldMesh);
-                                                        
-                            AddToList(&AssetBuilder->MeshInfos, MeshInfoLink);
-                            AddToList(&AssetBuilder->Meshes, MeshLink);
+                            AssetBuilder->MeshInfos.Remove(OldMeshInfo);
+                            AssetBuilder->Meshes.Remove(OldMesh);
+                            
+                            AssetBuilder->MeshInfos.Add(MeshInfoLink);
+                            AssetBuilder->Meshes.Add(MeshLink);                            
                         }
                     }
                 }
@@ -708,9 +708,9 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                 {
                     Pair = {MeshInfo, Mesh};
                     AssetBuilder->MeshTable.Insert(MeshInfo->Name, Pair);
-                                        
-                    AddToList(&AssetBuilder->MeshInfos, MeshInfoLink);
-                    AddToList(&AssetBuilder->Meshes, MeshLink);                    
+                    
+                    AssetBuilder->MeshInfos.Add(MeshInfoLink);
+                    AssetBuilder->Meshes.Add(MeshLink);                    
                 }
                 
                 ConsoleLog("Successful processed mesh!");

@@ -64,11 +64,11 @@ void ParsePNG(asset_builder* AssetBuilder, string Path)
                     list_entry<texture_info>* OldTextureInfo = (list_entry<texture_info>*)Pair.TextureInfo;
                     list_entry<texture>* OldTexture = (list_entry<texture>*)Pair.Texture;
                     
-                    RemoveFromList(&AssetBuilder->TextureInfos, OldTextureInfo);
-                    RemoveFromList(&AssetBuilder->Textures, OldTexture);
+                    AssetBuilder->TextureInfos.Remove(OldTextureInfo);
+                    AssetBuilder->Textures.Remove(OldTexture);
                     
-                    AddToList(&AssetBuilder->TextureInfos, TextureInfoLink);
-                    AddToList(&AssetBuilder->Textures, TextureLink);                    
+                    AssetBuilder->TextureInfos.Add(TextureInfoLink);
+                    AssetBuilder->Textures.Add(TextureLink);                    
                 }
             }
         }
@@ -77,8 +77,8 @@ void ParsePNG(asset_builder* AssetBuilder, string Path)
             Pair = {TextureInfo, Texture};
             AssetBuilder->TextureTable.Insert(TextureInfo->Name, Pair);
             
-            AddToList(&AssetBuilder->TextureInfos, TextureInfoLink);
-            AddToList(&AssetBuilder->Textures, TextureLink);        
+            AssetBuilder->TextureInfos.Add(TextureInfoLink);
+            AssetBuilder->Textures.Add(TextureLink);            
         }
     
     }

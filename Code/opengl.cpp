@@ -255,8 +255,8 @@ ALLOCATE_TEXTURE(AllocateTexture)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    graphics_texture_id ResultID = AllocateFromPool(&OpenGL->TexturePool);
-    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, ResultID);
+    graphics_texture_id ResultID = OpenGL->TexturePool.Allocate();
+    opengl_texture* Texture = OpenGL->TexturePool.Get(ResultID);
     
     GLenum MinFilter = GetFilterType(SamplerInfo->MinFilter);
     GLenum MagFilter = GetFilterType(SamplerInfo->MagFilter);
@@ -282,8 +282,8 @@ ALLOCATE_MESH(AllocateMesh)
     //TODO(JJ): We should allocate this data structure from a pool of opengl graphics meshes later
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    i64 ResultID = AllocateFromPool(&OpenGL->MeshPool);
-    opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, ResultID);
+    i64 ResultID = OpenGL->MeshPool.Allocate();
+    opengl_mesh* Mesh = OpenGL->MeshPool.Get(ResultID);
     
     Mesh->IsDynamic = false;
     Mesh->IndexType = GetIndexType(IndexFormat);
@@ -370,8 +370,8 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    i64 ResultID = AllocateFromPool(&OpenGL->MeshPool);
-    opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, ResultID);
+    i64 ResultID = OpenGL->MeshPool.Allocate();
+    opengl_mesh* Mesh = OpenGL->MeshPool.Get(ResultID);
     
     Mesh->IsDynamic = true;
     Mesh->IndexType = GetIndexType(IndexFormat);
@@ -449,11 +449,9 @@ FREE_RENDER_BUFFER(FreeRenderBuffer)
 }
 
 STREAM_MESH_DATA(StreamMeshData)
-{
-    ASSERT(IsAllocatedID(MeshID));
-    opengl_context* OpenGL = (opengl_context*)Graphics;
-    
-    opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, MeshID);
+{    
+    opengl_context* OpenGL = (opengl_context*)Graphics;        
+    opengl_mesh* Mesh = OpenGL->MeshPool.Get(MeshID);
     
     glBindVertexArray(Mesh->VAO);
     
@@ -711,7 +709,7 @@ extern "C"
 EXPORT INIT_GRAPHICS(InitGraphics)
 {
     Global_Platform = Platform;
-    InitMemory(Global_Platform->TempArena, AllocateMemory, FreeMemory);
+    SetDefaultArena(Global_Platform->TempArena);    
     
     arena GraphicsStorage = CreateArena(KILOBYTE(128));    
     opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
@@ -793,7 +791,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     SET_DEVELOPER_CONTEXT(DevContext);
     
     Global_Platform = Platform;        
-    InitMemory(Global_Platform->TempArena, AllocateMemory, FreeMemory);       
+    SetDefaultArena(Global_Platform->TempArena);
     opengl_context* OpenGL = (opengl_context*)Graphics;        
     
     if(!OpenGL->SkinningBuffers.Ptr)
@@ -835,6 +833,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     GLuint BoundProgram = (GLuint)-1;
     GLuint BoundVAO = (GLuint)-1;
     GLuint WorldTransformUniform = (GLuint)-1;
+    
+    opengl_texture_pool* TexturePool = &OpenGL->TexturePool;
+    opengl_mesh_pool* MeshPool = &OpenGL->MeshPool;
     
     u32 SkinningIndex = 0;            
     
@@ -958,7 +959,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
                                 
-                                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
+                                opengl_texture* Texture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                 BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);                                
                             }
                             else
@@ -983,8 +984,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     
                                     glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
-                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);
+                                    opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
                                     
                                     BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                     BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
@@ -998,7 +999,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
                                     glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
+                                    opengl_texture* Texture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                     BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);
                                 }
                             }
@@ -1014,7 +1015,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     
                                     glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);                                                                                                
                                     
-                                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);                                    
+                                    opengl_texture* Texture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
                                     BindTextureToUnit(Texture->Handle, Shader->SpecularTextureUniform, 0);                                    
                                 }
                                 else
@@ -1037,8 +1038,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 SET_ILLUMINATION_PROGRAM();
                                 SET_VIEW_UNIFORMS();
                                 
-                                opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
-                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
+                                opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
+                                opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                 
                                 BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                 BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);
@@ -1050,7 +1051,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 SET_VIEW_UNIFORMS();                                
                                 SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
                                 
-                                opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
+                                opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                 BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);                                
                             }                                                        
                         }
@@ -1066,9 +1067,9 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     
                                     glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
-                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
+                                    opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
+                                    opengl_texture* SpecularTexture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                     
                                     BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                     BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 1);
@@ -1083,8 +1084,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
                                     glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* DiffuseTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Diffuse.DiffuseID);
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
+                                    opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
+                                    opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                     
                                     BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                     BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
@@ -1101,8 +1102,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
                                     glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* SpecularTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Specular.SpecularID);
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
+                                    opengl_texture* SpecularTexture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
+                                    opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                     
                                     BindTextureToUnit(SpecularTexture->Handle, Shader->SpecularTextureUniform, 0);
                                     BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);                                    
@@ -1117,7 +1118,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
                                     glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
-                                    opengl_texture* NormalMapTexture = GetByID(&OpenGL->TexturePool, BoundMaterial.Normal.NormalID);
+                                    opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                     BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);
                                 }
                             }                                                        
@@ -1147,7 +1148,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 }
                 
                 push_command_draw_mesh* DrawMesh = (push_command_draw_mesh*)Command;                
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawMesh->MeshID);
+                opengl_mesh* Mesh = MeshPool->Get(DrawMesh->MeshID);
                 
                 SetUniformM4(ModelUniform, DrawMesh->WorldTransform);
                 BindVAO(&BoundVAO, Mesh->VAO);
@@ -1201,7 +1202,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ShadowPass = {};
                 
                 push_command_draw_unlit_mesh* DrawUnlitMesh = (push_command_draw_unlit_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawUnlitMesh->MeshID);
+                opengl_mesh* Mesh = MeshPool->Get(DrawUnlitMesh->MeshID);
                 if(DrawUnlitMesh->DiffuseSlot.IsTexture)
                 {
                     if(BindProgram(&BoundProgram, OpenGL->TextureShader.Program))
@@ -1210,7 +1211,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                         SetUniformM4(OpenGL->TextureShader.ViewProjectionUniform, ViewProjection);
                     }
                     
-                    opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawUnlitMesh->DiffuseSlot.DiffuseID);
+                    opengl_texture* Texture = TexturePool->Get(DrawUnlitMesh->DiffuseSlot.DiffuseID);
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, Texture->Handle);
                 }
@@ -1241,7 +1242,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ShadowPass = {};
                 
                 push_command_draw_line_mesh* DrawLineMesh = (push_command_draw_line_mesh*)Command;
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawLineMesh->MeshID);
+                opengl_mesh* Mesh = MeshPool->Get(DrawLineMesh->MeshID);
                 
                 if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
                 {
@@ -1261,8 +1262,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ShadowPass = {};
                 
                 push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                
-                opengl_texture* Texture = GetByID(&OpenGL->TexturePool, DrawImGuiUI->TextureID);
-                opengl_mesh* Mesh = GetByID(&OpenGL->MeshPool, DrawImGuiUI->MeshID);
+                opengl_texture* Texture = TexturePool->Get(DrawImGuiUI->TextureID);
+                opengl_mesh* Mesh = MeshPool->Get(DrawImGuiUI->MeshID);
                 ASSERT(Mesh->IsDynamic);
                 
                 if(BindProgram(&BoundProgram, OpenGL->ImGuiShader.Program))                    

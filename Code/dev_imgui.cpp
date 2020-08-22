@@ -40,26 +40,33 @@ void DevelopmentUpdateSelectedObjectRotation(sqt* Transform, v3f* OldRotation, v
     f32 RollDiff = 0;
     f32 PitchDiff = 0;
     f32 YawDiff = 0;
+    
+    v3f XAxis = Global_WorldXAxis;
+    v3f YAxis = Global_WorldYAxis;
+    v3f ZAxis = Global_WorldZAxis;
+    
+    quaternion xRotation = IdentityQuaternion();
+    quaternion yRotation = IdentityQuaternion();
+    quaternion zRotation = IdentityQuaternion();
     if(NewRotation.roll != OldRotation->roll)
     {
         RollDiff = (OldRotation->roll - NewRotation.roll) * -1;
-        quaternion xRotation = RotQuat(Global_WorldXAxis, RollDiff);
-        Transform->Orientation *= xRotation;        
+        xRotation = RotQuat(XAxis, RollDiff);        
     }
     if(NewRotation.pitch != OldRotation->pitch)
     {
         PitchDiff = (OldRotation->pitch - NewRotation.pitch) * -1;
-        quaternion yRotation = RotQuat(Global_WorldYAxis, PitchDiff);
-        Transform->Orientation *= yRotation;        
+        yRotation = RotQuat(YAxis, PitchDiff);        
     }
     if(NewRotation.yaw != OldRotation->yaw)
     {
         YawDiff = (OldRotation->yaw - NewRotation.yaw) * -1;
-        quaternion zRotation = RotQuat(Global_WorldZAxis, YawDiff);
-        Transform->Orientation *= zRotation;        
+        zRotation = RotQuat(ZAxis, YawDiff);        
     }
     *OldRotation = NewRotation;
     
+    quaternion Orientation = zRotation*yRotation*xRotation;    
+    Transform->Orientation *= Orientation;     
     Transform->Orientation = Normalize(Transform->Orientation);
 }
 
@@ -186,7 +193,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             DragFloat("Y Scale", &Transform->Scale.y, 0.1f, 0.0f, 100.0f);
             DragFloat("Z Scale", &Transform->Scale.z, 0.1f, 0.0f, 100.0f);
             
-            v3f* Rotation = &DevContext->EntityRotations[EntityID.WorldIndex][GetPoolIndex(EntityID.ID)];
+            u32 PoolIndex = Game->EntityStorage[EntityID.WorldIndex].GetIndex(EntityID.ID);
+            
+            v3f* Rotation = &DevContext->EntityRotations[EntityID.WorldIndex][PoolIndex];
             f32 ObjectRoll = TO_DEGREE(Rotation->roll);
             f32 ObjectPitch = TO_DEGREE(Rotation->pitch);
             f32 ObjectYaw = TO_DEGREE(Rotation->yaw);

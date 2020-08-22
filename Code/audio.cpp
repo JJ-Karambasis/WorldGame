@@ -27,10 +27,10 @@ inline i16* GetSamples(audio* Audio, u64 SampleIndex)
 
 void PlayAudio(audio_output* AudioOutput, audio* Audio, f32 Volume)
 {
-    if(IsInitialized(&AudioOutput->PlayingAudioPool) && !AudioOutput->Mute)
-    {
-        pool<playing_audio>* AudioPool = &AudioOutput->PlayingAudioPool;        
-        playing_audio* PlayingAudio = GetByID(AudioPool, AllocateFromPool(AudioPool));        
+    pool<playing_audio>* AudioPool = &AudioOutput->PlayingAudioPool;        
+    if(AudioPool->IsInitialized() && !AudioOutput->Mute)
+    {        
+        playing_audio* PlayingAudio = AudioPool->Get(AudioPool->Allocate());
         PlayingAudio->Audio = Audio;
         PlayingAudio->Volume = Volume;
     }

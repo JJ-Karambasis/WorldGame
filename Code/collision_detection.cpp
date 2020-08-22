@@ -38,7 +38,7 @@ inline toi_result InvalidTOIResult()
 
 sim_state* GetSimState(game* Game, world_entity_id ID)
 {
-    u32 PoolIndex = GetPoolIndex(ID.ID);
+    u32 PoolIndex = Game->EntityStorage[ID.WorldIndex].GetIndex(ID.ID);
     sim_state* Result = &Game->SimStates[ID.WorldIndex][PoolIndex];
     return Result;
 }
@@ -75,7 +75,7 @@ void AttachCollisionVolume(sim_state* State, collision_volume* Volume)
 template <typename type>
 void AddCollisionVolume(collision_volume_pool* Storage, sim_state* State, type* Collider)
 {
-    collision_volume* Volume = GetByID(Storage, AllocateFromPool(Storage));    
+    collision_volume* Volume = Storage->Get(Storage->Allocate());
     AttachToCollisionVolume(Volume, Collider);
     AttachCollisionVolume(State, Volume);
 }

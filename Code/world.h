@@ -6,7 +6,8 @@
 enum world_entity_type
 {
     WORLD_ENTITY_TYPE_STATIC,
-    WORLD_ENTITY_TYPE_PLAYER        
+    WORLD_ENTITY_TYPE_PLAYER,
+    WORLD_ENTITY_TYPE_PUSHABLE
 };
 
 enum world_entity_state
@@ -19,6 +20,12 @@ struct world_entity_id
 {
     u64 ID;
     u32 WorldIndex;
+};
+
+struct dual_world_entity_id
+{
+    world_entity_id EntityA;
+    world_entity_id EntityB;
 };
 
 inline world_entity_id MakeEntityID(u64 ID, u32 WorldIndex) { world_entity_id Result = {ID, WorldIndex}; return Result; }

@@ -1,7 +1,7 @@
 inline world_entity* 
 GetEntity(game* Game, world_entity_id EntityID)
 {    
-    world_entity* Result = TryAndGetByID(&Game->EntityStorage[EntityID.WorldIndex], EntityID.ID);
+    world_entity* Result = Game->EntityStorage[EntityID.WorldIndex].Get(EntityID.ID);
     return Result;
 }
 
@@ -13,22 +13,22 @@ void FreeEntity(game* Game, world_entity_id ID)
     {
         collision_volume* VolumeToFree = Volume;
         Volume = Volume->Next;        
-        FreeFromPool(&Game->CollisionVolumeStorage[ID.WorldIndex], VolumeToFree);        
+        Game->CollisionVolumeStorage[ID.WorldIndex].Free(VolumeToFree);        
     }                    
     
-    FreeFromPool(&Game->EntityStorage[ID.WorldIndex], ID.ID);
+    Game->EntityStorage[ID.WorldIndex].Free(ID.ID);    
 }
 
 inline sqt* GetEntityTransformOld(game* Game, world_entity_id ID)
 {
-    u32 PoolIndex = GetPoolIndex(ID.ID);
+    u32 PoolIndex = Game->EntityStorage[ID.WorldIndex].GetIndex(ID.ID);
     sqt* Result = &Game->PrevTransforms[ID.WorldIndex][PoolIndex];
     return Result;
 }
 
 inline sqt* GetEntityTransform(game* Game, world_entity_id ID)
 {
-    u32 PoolIndex = GetPoolIndex(ID.ID);
+    u32 PoolIndex = Game->EntityStorage[ID.WorldIndex].GetIndex(ID.ID);
     sqt* Result = &Game->CurrentTransforms[ID.WorldIndex][PoolIndex];
     return Result;
 }
@@ -43,11 +43,11 @@ world_entity_id
 CreateEntity(game* Game, world_entity_type Type, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, mesh_asset_id MeshID, material Material, b32 NoMeshColliders = false)
 {   
     world_entity_pool* EntityStorage = Game->EntityStorage + WorldIndex;
-    i64 EntityID = AllocateFromPool(EntityStorage);    
+    i64 EntityID = EntityStorage->Allocate();
     world_entity_id Result = MakeEntityID(EntityID, WorldIndex);
     
-    u32 PoolIndex = GetPoolIndex(EntityID);
-    world_entity* Entity = GetByID(EntityStorage, EntityID);
+    u32 PoolIndex = EntityStorage->GetIndex(EntityID);
+    world_entity* Entity = EntityStorage->Get(EntityID);
         
     Entity->Type = Type;    
     Entity->State = WORLD_ENTITY_STATE_NOTHING;

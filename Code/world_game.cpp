@@ -80,8 +80,8 @@ EXPORT GAME_INITIALIZE(Initialize)
 {
     SET_DEVELOPER_CONTEXT(DevContext);
     Global_Platform = Platform;
-    
-    InitMemory(Global_Platform->TempArena, AllocateMemory, FreeMemory);
+        
+    SetDefaultArena(Global_Platform->TempArena);
     SetGlobalErrorStream(Global_Platform->ErrorStream);
     
     arena GameStorage = CreateArena(MEGABYTE(32));            

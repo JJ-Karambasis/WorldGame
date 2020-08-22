@@ -157,7 +157,7 @@ struct dev_context
     dev_mesh TriangleCylinderMesh;
     dev_mesh TriangleConeMesh;
     dev_mesh TriangleArrowMesh;
-        
+    
     dynamic_array<debug_primitive> DebugPrimitives;
     
     mesh_convex_hull_gdi MeshConvexHulls[MESH_ASSET_COUNT];
@@ -188,7 +188,7 @@ inline b32 IsInDevelopmentMode(dev_context* Context)
 
 inline void CheckPrimitivesAreAllocated(dev_context* DevContext)
 {
-    if(!IsInitialized(&DevContext->DebugPrimitives))
+    if(!DevContext->DebugPrimitives.IsInitialized())
         DevContext->DebugPrimitives = CreateDynamicArray<debug_primitive>(2048);
 }
 
@@ -198,7 +198,7 @@ inline void DebugDrawPoint(dev_context* DevContext, v3f P, c3 Color)
     
     debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_POINT};
     Primitive.Point = {P, Color};    
-    Append(&DevContext->DebugPrimitives, Primitive);
+    DevContext->DebugPrimitives.Add(Primitive);
 }
 
 inline void DebugDrawEdge(dev_context* DevContext, v3f P0, v3f P1, c3 Color)
@@ -207,7 +207,7 @@ inline void DebugDrawEdge(dev_context* DevContext, v3f P0, v3f P1, c3 Color)
     
     debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_EDGE};
     Primitive.Edge = {P0, P1, Color};
-    Append(&DevContext->DebugPrimitives, Primitive);
+    DevContext->DebugPrimitives.Add(Primitive);    
 }
 
 inline void DebugDrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c3 Color)
@@ -216,17 +216,17 @@ inline void DebugDrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f 
     
     debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_QUAD};
     Primitive.Quad = {CenterP, Normal, Dim, Color};
-    Append(&DevContext->DebugPrimitives, Primitive);
+    DevContext->DebugPrimitives.Add(Primitive);    
 }
 
 inline void DebugLog(dev_context* DevContext, char* Format, ...)
 {
-    if(!IsInitialized(&DevContext->Logs))
+    if(!DevContext->Logs.IsInitialized())
         DevContext->Logs = CreateDynamicArray<string>(16);    
            
     va_list Args;
     va_start(Args, Format);
-    Append(&DevContext->Logs, FormatString(Format, Args, &DevContext->LogStorage));    
+    DevContext->Logs.Add(FormatString(Format, Args, &DevContext->LogStorage));    
     va_end(Args);
     CONSOLE_LOG(DevContext->Logs[DevContext->Logs.Size-1].Data);
 }

@@ -63,7 +63,7 @@ struct game
     game_camera PrevCameras[2];
     game_camera CurrentCameras[2];
     sim_state* SimStates[2];            
-    jumping_quad JumpingQuads[2];
+    jumping_quad JumpingQuads[2];                
     //////////////////////////////////////////////////
     f32 dt;
     f32 dtFixed;    

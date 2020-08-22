@@ -713,7 +713,8 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
             FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
             {
                 sqt* Transform = GetEntityTransform(Game, Entity->ID);
-                DevContext->EntityRotations[WorldIndex][GetPoolIndex(Entity->ID.ID)] = QuaternionEuler(Transform->Orientation);
+                u32 PoolIndex = Game->EntityStorage[Entity->ID.WorldIndex].GetIndex(Entity->ID.ID);
+                DevContext->EntityRotations[WorldIndex][PoolIndex] = QuaternionEuler(Transform->Orientation);
             }
         }
         
