@@ -37,37 +37,8 @@ void DevelopmentImGuiInit(dev_context* DevContext)
 //Rotates the current SelectedObject, by difference between OldRotation and NewRotation, then updates the OldRotation
 void DevelopmentUpdateSelectedObjectRotation(sqt* Transform, v3f* OldRotation, v3f NewRotation)
 {
-    f32 RollDiff = 0;
-    f32 PitchDiff = 0;
-    f32 YawDiff = 0;
-    
-    v3f XAxis = Global_WorldXAxis;
-    v3f YAxis = Global_WorldYAxis;
-    v3f ZAxis = Global_WorldZAxis;
-    
-    quaternion xRotation = IdentityQuaternion();
-    quaternion yRotation = IdentityQuaternion();
-    quaternion zRotation = IdentityQuaternion();
-    if(NewRotation.roll != OldRotation->roll)
-    {
-        RollDiff = (OldRotation->roll - NewRotation.roll) * -1;
-        xRotation = RotQuat(XAxis, RollDiff);        
-    }
-    if(NewRotation.pitch != OldRotation->pitch)
-    {
-        PitchDiff = (OldRotation->pitch - NewRotation.pitch) * -1;
-        yRotation = RotQuat(YAxis, PitchDiff);        
-    }
-    if(NewRotation.yaw != OldRotation->yaw)
-    {
-        YawDiff = (OldRotation->yaw - NewRotation.yaw) * -1;
-        zRotation = RotQuat(ZAxis, YawDiff);        
-    }
     *OldRotation = NewRotation;
-    
-    quaternion Orientation = zRotation*yRotation*xRotation;    
-    Transform->Orientation *= Orientation;     
-    Transform->Orientation = Normalize(Transform->Orientation);
+    Transform->Orientation = Normalize(EulerQuaternion(NewRotation.roll, NewRotation.pitch, NewRotation.yaw));
 }
 
 void DevelopmentImGuiUpdate(dev_context* DevContext)
@@ -188,23 +159,48 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             
             sqt* Transform = GetEntityTransform(Game, EntityID);
             
-            ImGui::InputFloat3("Position", &Transform->Translation[0], 3);
-            DragFloat("X Scale", &Transform->Scale.x, 0.1f, 0.0f, 100.0f);
-            DragFloat("Y Scale", &Transform->Scale.y, 0.1f, 0.0f, 100.0f);
-            DragFloat("Z Scale", &Transform->Scale.z, 0.1f, 0.0f, 100.0f);
+            if(DevContext->EditMode)
+            {
+                DragFloat("X Translation", &Transform->Translation.x, 0.1f, -1000.0f, 1000.0f);
+                DragFloat("Y Translation", &Transform->Translation.y, 0.1f, -1000.0f, 1000.0f);
+                DragFloat("Z Translation", &Transform->Translation.z, 0.1f, -1000.0f, 1000.0f);
+
+                DragFloat("X Scale", &Transform->Scale.x, 0.1f, 0.0f, 100.0f);
+                DragFloat("Y Scale", &Transform->Scale.y, 0.1f, 0.0f, 100.0f);
+                DragFloat("Z Scale", &Transform->Scale.z, 0.1f, 0.0f, 100.0f);
+                
+                v3f* Rotation = &DevContext->EntityRotations[EntityID.WorldIndex][Game->EntityStorage[EntityID.WorldIndex].GetIndex(EntityID.ID)];
+                f32 ObjectRoll = TO_DEGREE(Rotation->roll);
+                f32 ObjectPitch = TO_DEGREE(Rotation->pitch);
+                f32 ObjectYaw = TO_DEGREE(Rotation->yaw);
+                DragFloat("Roll", &ObjectRoll, 0.1f, -180.0f, 180.0f, "%.3f");
+                DragFloat("Pitch", &ObjectPitch, 0.1f, -180.0f, 180.0f, "%.3f");
+                DragFloat("Yaw", &ObjectYaw, 0.1f, -180.0f, 180.0f, "%.3f");
             
-            u32 PoolIndex = Game->EntityStorage[EntityID.WorldIndex].GetIndex(EntityID.ID);
             
-            v3f* Rotation = &DevContext->EntityRotations[EntityID.WorldIndex][PoolIndex];
-            f32 ObjectRoll = TO_DEGREE(Rotation->roll);
-            f32 ObjectPitch = TO_DEGREE(Rotation->pitch);
-            f32 ObjectYaw = TO_DEGREE(Rotation->yaw);
-            DragFloat("Roll", &ObjectRoll, 0.1f, -180.0f, 180.0f, "%.3f");
-            DragFloat("Pitch", &ObjectPitch, 0.1f, -180.0f, 180.0f, "%.3f");
-            DragFloat("Yaw", &ObjectYaw, 0.1f, -180.0f, 180.0f, "%.3f");
-            
-            DevelopmentUpdateSelectedObjectRotation(Transform, Rotation, V3(TO_RAD(ObjectRoll), TO_RAD(ObjectPitch), TO_RAD(ObjectYaw)));
-                        
+                DevelopmentUpdateSelectedObjectRotation(Transform, Rotation, V3(TO_RAD(ObjectRoll), TO_RAD(ObjectPitch), TO_RAD(ObjectYaw)));
+            }
+            else
+            {
+                v3f Translation = Transform->Translation;
+                DragFloat("X Translation", &Translation.x, 0.0f, Translation.x, Translation.x);
+                DragFloat("Y Translation", &Translation.y, 0.0f, Translation.y, Translation.y);
+                DragFloat("Z Translation", &Translation.z, 0.0f, Translation.z, Translation.z);
+
+                v3f Scale = Transform->Scale;
+                DragFloat("X Scale", &Scale.x, 0.0f, Scale.x, Scale.x);
+                DragFloat("Y Scale", &Scale.y, 0.0f, Scale.y, Scale.y);
+                DragFloat("Z Scale", &Scale.z, 0.0f, Scale.z, Scale.z);
+                
+                v3f* Rotation = &DevContext->EntityRotations[EntityID.WorldIndex][Game->EntityStorage[EntityID.WorldIndex].GetIndex(EntityID.ID)];
+                f32 ObjectRoll = TO_DEGREE(Rotation->roll);
+                f32 ObjectPitch = TO_DEGREE(Rotation->pitch);
+                f32 ObjectYaw = TO_DEGREE(Rotation->yaw);
+                DragFloat("Roll", &ObjectRoll, 0.0f, ObjectRoll, ObjectRoll, "%.3f");
+                DragFloat("Pitch", &ObjectPitch, 0.0f, ObjectPitch, ObjectPitch, "%.3f");
+                DragFloat("Yaw", &ObjectYaw, 0.0f, ObjectYaw, ObjectYaw, "%.3f");
+            }
+                       
             ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
             ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
             ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);
