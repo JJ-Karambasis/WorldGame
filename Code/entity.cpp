@@ -58,7 +58,7 @@ CreateEntity(game* Game, entity_type Type, u32 WorldIndex, v3f Position, v3f Sca
     Entity->Type = Type;
     Entity->State = ENTITY_STATE_NONE;
     Entity->ID = Result;
-    Entity->LinkID = InvalidEntityID();
+    Entity->LinkID = InvalidEntityID();    
     Entity->MeshID = MeshID; 
     Entity->Material = Material;
     
@@ -95,6 +95,25 @@ CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, material
 {
     entity_id Result = CreateEntity(Game, ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f), Euler, MESH_ASSET_ID_PLAYER, Material, true);
     AddCollisionVolume(&Game->CollisionVolumeStorage[WorldIndex], GetSimState(Game, Result), Capsule);
+    return Result;
+}
+
+entity_id
+CreateSphereRigidBody(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Mass, material Material)
+{
+    ASSERT(Mass != 0);
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f)*Radius, V3(), MESH_ASSET_ID_SPHERE, Material, true);
+    
+    sim_state* SimState = GetSimState(Game, Result);
+    
+    sphere Sphere = CreateSphere(V3(0.0f, 0.0f, 0.0f), 1.0f);    
+    AddCollisionVolume(&Game->CollisionVolumeStorage[Result.WorldIndex], SimState, &Sphere);        
+    
+    f32 SphereRadius = Sphere.Radius*GetEntityTransform(Game, Result)->Scale.LargestComponent();
+    
+    SimState->InvMass = 1.0f/Mass;
+    SimState->InvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);    
+    
     return Result;
 }
 

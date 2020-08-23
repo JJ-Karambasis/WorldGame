@@ -586,8 +586,17 @@ graphics_object InterpolateEntity(game* Game, entity* Entity, f32 t)
 {
     graphics_object Result;    
     sqt OldState = *GetEntityTransformOld(Game, Entity->ID);
-    sqt NewState = *GetEntityTransform(Game, Entity->ID);    
-    sqt InterpState = Lerp(OldState, t, NewState);
+    sqt NewState = *GetEntityTransform(Game, Entity->ID);        
+    
+    //CONFIRM(JJ): Should we be doing runtime changes on an entities scale? Definitely not on rigid bodies,
+    //but do other entities might want this? Keep this assertion just in case. Not sure if we even need to 
+    //interpolate them either
+    ASSERT(OldState.Scale == NewState.Scale);
+    
+    sqt InterpState;
+    InterpState.Translation = Lerp(OldState.Translation, t, NewState.Translation);    
+    InterpState.Orientation = Lerp(OldState.Orientation, t, NewState.Orientation);
+    InterpState.Scale = NewState.Scale;
     
     Result.WorldTransform = TransformM4(InterpState);
     Result.MeshID = Entity->MeshID;

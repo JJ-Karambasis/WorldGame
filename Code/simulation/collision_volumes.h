@@ -1,5 +1,5 @@
-#ifndef COLLISION_DETECTION_H
-#define COLLISION_DETECTION_H
+#ifndef COLLISION_VOLUMES_H
+#define COLLISION_VOLUMES_H
 
 enum collision_volume_type
 {
@@ -29,27 +29,6 @@ struct capsule
     f32 Radius;
 };
 
-struct ray_mesh_intersection_result
-{
-    b32 FoundCollision;
-    f32 t;
-    f32 u;
-    f32 v;
-};
-
-struct penetration
-{    
-    v3f Normal;
-    f32 Distance;
-};
-
-struct continuous_collision_result
-{
-    f32 t;
-    entity_id HitEntityID;    
-    penetration Penetration;    
-};
-
 struct collision_volume
 {
     collision_volume_type Type;    
@@ -63,39 +42,27 @@ struct collision_volume
     collision_volume* Next;
 };
 
-typedef pool<collision_volume> collision_volume_pool;
-
-struct collision_event
+inline sphere 
+CreateSphere(v3f CenterP, f32 Radius) 
 {
-    entity_id HitEntityID;
-    penetration     Penetration;
-};
-
-struct toi_result
-{
-    f32 t;
-    entity_id HitEntityID;
-    collision_volume* VolumeA;
-    collision_volume* VolumeB;
-};
-
-inline collision_event CreateCollisionEvent(entity_id HitEntityID, penetration Penetration)
-{
-    collision_event Result;
-    Result.HitEntityID = HitEntityID;
-    Result.Penetration = Penetration;
-    return Result;
+    sphere Sphere = {CenterP, Radius};
+    return Sphere;
 }
 
-struct sim_state
-{
-    v3f Velocity;    
-    v3f MoveDelta;    
-    v3f Acceleration;    
-    collision_volume* CollisionVolumes;
-};
 
-template <typename type> void AddCollisionVolume(collision_volume_pool* Pool, sim_state* Entity, type* Collider);
+inline capsule 
+CreateCapsule(v3f P0, v3f P1, f32 Radius)
+{
+    capsule Capsule = {P0, P1, Radius};
+    return Capsule;
+}
+
+inline capsule 
+CreateCapsule(v3f Bottom, f32 Height, f32 Radius)
+{
+    v3f P0 = Bottom + Global_WorldZAxis*Radius;
+    return CreateCapsule(P0, P0+Global_WorldZAxis*Height, Radius);
+}
 
 struct collision_volume_iter
 {
@@ -123,5 +90,11 @@ collision_volume* GetNext(collision_volume_iter* Iter)
     Iter->Current = Result;
     return Result;
 }
+
+typedef pool<collision_volume> collision_volume_storage;
+
+template <typename type> void AddCollisionVolume(collision_volume_storage* Pool, sim_state* Entity, type* Collider);
+template <typename type> void AddCollisionVolume(game* Game, entity_id EntityID, type* Collider);
+m3 GetSphereInvInertiaTensor(f32 Radius, f32 Mass);
 
 #endif

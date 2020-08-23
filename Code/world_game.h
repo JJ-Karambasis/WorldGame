@@ -25,7 +25,8 @@ struct jumping_quad
 
 //#include "world.h"
 #include "entity.h"
-#include "collision_detection.h"
+
+#include "simulation/simulation.h"
 
 struct goal_rect
 {
@@ -57,7 +58,7 @@ struct game
     u32 CurrentWorldIndex;
     
     //This stuff is probably going to be our level data
-    collision_volume_pool CollisionVolumeStorage[2];
+    collision_volume_storage CollisionVolumeStorage[2];
     entity_storage EntityStorage[2];    
     sqt* PrevTransforms[2];    
     sqt* CurrentTransforms[2];
@@ -66,6 +67,10 @@ struct game
     sim_state* SimStates[2];            
     jumping_quad JumpingQuads[2];                
     //////////////////////////////////////////////////
+    
+    contact_storage ContactStorage;
+    manifold_storage ManifoldStorage;
+    
     f32 dt;
     f32 dtFixed;    
     

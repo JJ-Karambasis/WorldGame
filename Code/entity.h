@@ -4,7 +4,8 @@
 enum entity_type
 {
     ENTITY_TYPE_STATIC,
-    ENTITY_TYPE_PLAYER    
+    ENTITY_TYPE_PLAYER,
+    ENTITY_TYPE_RIGID_BODY
 };
 
 enum entity_state
@@ -35,9 +36,9 @@ struct entity
     entity_type Type;
     entity_state State;
     entity_id ID;
-    entity_id LinkID;    
+    entity_id LinkID;        
     mesh_asset_id MeshID;
-    material Material;
+    material Material;    
 };
 
 typedef pool<entity> entity_storage;

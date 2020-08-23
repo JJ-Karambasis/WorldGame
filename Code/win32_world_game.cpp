@@ -3,7 +3,7 @@
 #include "audio.cpp"
 #include "animation.cpp"
 #include "entity.cpp"
-#include "collision_detection.cpp"
+#include "simulation/simulation.cpp"
 
 #include "graphics.cpp"
 
