@@ -153,9 +153,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         {               
             entity_id EntityID = DevContext->SelectedObject->ID;
             
-            sim_state* SimState = GetSimState(Game, EntityID);
+            sim_entity* SimEntity = GetSimEntity(Game, EntityID);
             
-            v3f ObjectVelocity = SimState->Velocity;
+            v3f ObjectVelocity = SimEntity->Velocity;
             
             sqt* Transform = GetEntityTransform(Game, EntityID);
             

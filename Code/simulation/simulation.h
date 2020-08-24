@@ -1,7 +1,9 @@
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
-struct sim_state;
+struct sim_entity;
+struct simulation;
+
 
 #include "support.h"
 #include "collision_volumes.h"
@@ -10,39 +12,41 @@ struct sim_state;
 #include "rays.h"
 #include "contacts.h"
 
-
-
-struct sim_state
+struct sim_entity
 {
-    v3f Velocity;            
-    v3f Acceleration;
+    sqt         Transform;           
+    v3f         Velocity;        
+    v3f         Acceleration;        
+    v3f         MoveDelta;
+    rigid_body* RigidBody;    
+    collision_volume* CollisionVolumes;    
     
-    v3f AngularVelocity;
-    v3f AngularAcceleration;
+    void* UserData;
     
-    v3f MoveDelta;
-    
+    template <typename type> void AddCollisionVolume(simulation* Simulation, type* Collider);
+};
+
+struct rigid_body
+{
+    sim_entity* SimEntity;      
+    v3f AngularVelocity;    
+    v3f AngularAcceleration;        
+    f32 Restitution;
     f32 InvMass;
-    m3  InvInertiaTensor;            
-    collision_volume* CollisionVolumes;
+    m3  LocalInvInertiaTensor;
+    m3  WorldInvInertiaTensor;    
 };
 
-struct collision_event
+struct sim_entity_volume_pair
 {
-    entity_id HitEntityID;
-    penetration Penetration;
-};
-
-struct entity_collision_volume
-{
-    entity_id EntityID;
-    collision_volume* Volume;
+    sim_entity*       SimEntity;
+    collision_volume* Volume;    
 };
 
 struct collision_pair
 {    
-    entity_collision_volume A;
-    entity_collision_volume B;    
+    sim_entity_volume_pair A;
+    sim_entity_volume_pair B;    
 };
 
 struct collision_pair_list
@@ -58,11 +62,26 @@ struct collision_pair_check
     b32 Collided;
 };
 
-inline collision_event 
-CreateCollisionEvent(entity_id HitEntityID, penetration Penetration)
+typedef pool<rigid_body> rigid_body_storage;
+typedef pool<sim_entity> sim_entity_storage;
+
+struct simulation
 {
-    collision_event Result = {HitEntityID, Penetration};
-    return Result;
-}
+    collision_volume_storage CollisionVolumeStorage;
+    contact_storage          ContactStorage;
+    manifold_storage         ManifoldStorage;
+    rigid_body_storage       RigidBodyStorage;
+    sim_entity_storage       SimEntityStorage;          
+        
+    sim_entity* GetSimEntity(u64 ID);        
+    void        FreeSimEntity(u64 ID);
+    
+    u64         AllocateSimEntity();        
+    manifold*   GetManifold(rigid_body* A, rigid_body* B);
+    
+    continuous_collision DetectStaticContinuousCollisions(sim_entity* Entity);        
+    void GenerateContinuousContacts(collision_pair_list* RigidBodyPairs);
+    void SolveConstraints(u32 MaxIterations);
+};
 
 #endif

@@ -36,7 +36,8 @@ struct entity
     entity_type Type;
     entity_state State;
     entity_id ID;
-    entity_id LinkID;        
+    entity_id LinkID;         
+    u64 SimEntityID;            
     mesh_asset_id MeshID;
     material Material;    
 };

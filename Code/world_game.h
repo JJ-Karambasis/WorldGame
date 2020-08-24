@@ -57,19 +57,16 @@ struct game
     arena* GameStorage;    
     u32 CurrentWorldIndex;
     
-    //This stuff is probably going to be our level data
-    collision_volume_storage CollisionVolumeStorage[2];
+    //This stuff is probably going to be our level data    
     entity_storage EntityStorage[2];    
     sqt* PrevTransforms[2];    
     sqt* CurrentTransforms[2];
     game_camera PrevCameras[2];
-    game_camera CurrentCameras[2];
-    sim_state* SimStates[2];            
+    game_camera CurrentCameras[2];    
     jumping_quad JumpingQuads[2];                
     //////////////////////////////////////////////////
     
-    contact_storage ContactStorage;
-    manifold_storage ManifoldStorage;
+    simulation Simulations[2];
     
     f32 dt;
     f32 dtFixed;    
@@ -134,6 +131,20 @@ GetNext(graphics_object_list_iter* Iter)
     
     graphics_object* Result = Iter->List->Objects + Iter->CurrentIndex++;
     return Result;
+}
+
+inline simulation*
+GetSimulation(game* Game, u32 WorldIndex)
+{
+    simulation* Simulation = Game->Simulations + WorldIndex;
+    return Simulation;
+}
+
+inline simulation*
+GetSimulation(game* Game, entity_id ID)
+{
+    simulation* Simulation = GetSimulation(Game, ID.WorldIndex);
+    return Simulation;
 }
 
 #define GAME_INITIALIZE(name) game* name(input* Input, audio_output* AudioOutput, platform* Platform, void* DevContext)

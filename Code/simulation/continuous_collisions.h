@@ -4,7 +4,7 @@
 struct toi_result
 {
     f32 t;
-    entity_id HitEntityID;
+    sim_entity* HitEntity;
     collision_volume* VolumeA;
     collision_volume* VolumeB;    
 };
@@ -12,7 +12,7 @@ struct toi_result
 struct continuous_collision
 {
     f32 t;
-    entity_id HitEntityID;
+    sim_entity* HitEntity;
     penetration Penetration;
 };
 
@@ -21,7 +21,7 @@ InvalidTOIResult()
 {
     toi_result Result;
     Result.t = INFINITY;
-    Result.HitEntityID = InvalidEntityID();
+    Result.HitEntity = NULL;
     return Result;
 }
 

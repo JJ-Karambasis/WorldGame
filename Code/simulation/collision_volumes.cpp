@@ -16,32 +16,6 @@ void AttachToCollisionVolume(collision_volume* CollisionVolume, capsule* Capsule
     CollisionVolume->Capsule = *Capsule;
 }
 
-void AttachCollisionVolume(sim_state* State, collision_volume* Volume)
-{    
-    if(!State->CollisionVolumes)
-        State->CollisionVolumes = Volume;   
-    else
-    {
-        Volume->Next = State->CollisionVolumes;
-        State->CollisionVolumes = Volume;
-    }    
-}
-
-template <typename type>
-void AddCollisionVolume(collision_volume_storage* Storage, sim_state* State, type* Collider)
-{
-    collision_volume* Volume = Storage->Get(Storage->Allocate());
-    AttachToCollisionVolume(Volume, Collider);
-    AttachCollisionVolume(State, Volume);
-}
-
-template <typename type>
-void AddCollisionVolume(game* Game, entity_id EntityID, type* Collider)
-{
-    AddCollisionVolume(&Game->CollisionVolumeStorage[EntityID.WorldIndex], 
-                       GetSimState(Game, EntityID), Collider);    
-}
-
 capsule TransformCapsule(capsule* Capsule, sqt Transform)
 {
     capsule Result;
@@ -63,6 +37,19 @@ sphere TransformSphere(sphere* Sphere, sqt Transform)
     Result.Radius = Sphere->Radius*Transform.Scale[Component];        
     Result.CenterP = TransformV3(Sphere->CenterP, Transform);
     return Result;
+}
+
+inline void 
+TranslateCapsule(capsule* Capsule, v3f Delta)
+{
+    Capsule->P0 += Delta;
+    Capsule->P1 += Delta;
+}
+
+inline void
+TranslateSphere(sphere* Sphere, v3f Delta)
+{
+    Sphere->CenterP += Delta;
 }
 
 m3 GetSphereInvInertiaTensor(f32 Radius, f32 Mass)

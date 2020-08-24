@@ -556,8 +556,8 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     if(!RegisterClassEx(&WindowClass))    
         WRITE_AND_HANDLE_ERROR("Failed to register window class.");                    
     
-    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
-    //HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1920, 1080));
+    //HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
+    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1920, 1080));
     if(!Window)    
         WRITE_AND_HANDLE_ERROR("Failed to create game window."); 
     

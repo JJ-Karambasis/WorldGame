@@ -1,25 +1,42 @@
 #ifndef CONTACTS_H
 #define CONTACTS_H
 
+struct rigid_body;
+
 struct contact
-{
+{    
     v3f Position;
     v3f Normal;
     f32 Penetration;    
 };
 
-struct manifold
+struct contact_list
 {
-    m3 InvInertiaTensorWorldA;
-    m3 InvInertiaTensorWorldB;    
-    
-    entity_id BodyA;
-    entity_id BodyB;
-    
-    list<contact> Contacts;
+    contact* Ptr;
+    u32 Count;
 };
 
-typedef pool<list_entry<contact>> contact_storage;
+struct contact_constraint
+{
+    v3f WorldPosition;
+    v3f Normal;
+    f32 Penetration;
+    
+    v3f LocalPositionA;        
+    f32 NormalImpulse;
+    f32 NormalMass;
+};
+
+struct manifold
+{   
+    rigid_body* BodyA;
+    rigid_body* BodyB;    
+    list<contact_constraint> Contacts;
+    
+    void AddContactConstraints(simulation* Game, contact_list* Contacts);
+};
+
+typedef pool<list_entry<contact_constraint>> contact_storage;
 typedef pool<manifold> manifold_storage;
 
 #endif

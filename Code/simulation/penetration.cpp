@@ -106,40 +106,34 @@ penetration GetHullHullPenetration(convex_hull* HullA, sqt TransformA,
     return Result;
 }
 
-penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID, collision_volume* VolumeA, collision_volume* VolumeB, f32 tHit)
+penetration GetPenetration(sim_entity* SimEntityA, sim_entity* SimEntityB, collision_volume* VolumeA, collision_volume* VolumeB, f32 tHit)
 {
     ASSERT((tHit >= 0) && (tHit <= 1.0f));    
-    
-    sqt AEntityTransform = *GetEntityTransform(Game, AEntityID);            
-    sqt BEntityTransform = *GetEntityTransform(Game, BEntityID);
-    
-    sim_state* SimStateA = GetSimState(Game, AEntityID);
-    sim_state* SimStateB = GetSimState(Game, BEntityID);
     
     penetration Result = {};    
     switch(VolumeA->Type)
     {
         case COLLISION_VOLUME_TYPE_SPHERE:
         {            
-            sphere SphereA = TransformSphere(&VolumeA->Sphere, AEntityTransform);
-            SphereA.CenterP += SimStateA->MoveDelta*tHit;
+            sphere SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
+            SphereA.CenterP += SimEntityA->MoveDelta*tHit;
             
             
             switch(VolumeB->Type)
             {
                 case COLLISION_VOLUME_TYPE_SPHERE:
                 {                    
-                    sphere SphereB = TransformSphere(&VolumeB->Sphere, BEntityTransform);
-                    SphereB.CenterP += SimStateB->MoveDelta*tHit;
+                    sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
+                    SphereB.CenterP += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetSphereSpherePenetration(&SphereA, &SphereB);
                 } break;
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
                 {
-                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, BEntityTransform);
-                    CapsuleB.P0 += SimStateB->MoveDelta*tHit;
-                    CapsuleB.P1 += SimStateB->MoveDelta*tHit;
+                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+                    CapsuleB.P0 += SimEntityB->MoveDelta*tHit;
+                    CapsuleB.P1 += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetSphereCapsulePenetration(&SphereA, &CapsuleB);
                 } break;
@@ -147,8 +141,8 @@ penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID,
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
                     convex_hull* HullB = VolumeB->ConvexHull;
-                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, BEntityTransform);                        
-                    TransformB.Translation += SimStateB->MoveDelta*tHit;                                                            
+                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, SimEntityB->Transform);                        
+                    TransformB.Translation += SimEntityB->MoveDelta*tHit;                                                            
                     
                     Result = GetSphereHullPenetration(&SphereA, HullB, TransformB);
                 } break;
@@ -158,16 +152,16 @@ penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID,
         
         case COLLISION_VOLUME_TYPE_CAPSULE:
         {
-            capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, AEntityTransform);
-            CapsuleA.P0 += SimStateA->MoveDelta*tHit;
-            CapsuleA.P1 += SimStateA->MoveDelta*tHit;            
+            capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
+            CapsuleA.P0 += SimEntityA->MoveDelta*tHit;
+            CapsuleA.P1 += SimEntityA->MoveDelta*tHit;            
             
             switch(VolumeB->Type)
             {   
                 case COLLISION_VOLUME_TYPE_SPHERE:
                 {
-                    sphere SphereB = TransformSphere(&VolumeB->Sphere, BEntityTransform);
-                    SphereB.CenterP += SimStateB->MoveDelta*tHit;
+                    sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
+                    SphereB.CenterP += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetSphereCapsulePenetration(&SphereB, &CapsuleA);
                     Result.Normal = -Result.Normal;
@@ -175,9 +169,9 @@ penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID,
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
                 {
-                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, BEntityTransform);
-                    CapsuleB.P0 += SimStateB->MoveDelta*tHit;
-                    CapsuleB.P1 += SimStateB->MoveDelta*tHit;
+                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+                    CapsuleB.P0 += SimEntityB->MoveDelta*tHit;
+                    CapsuleB.P1 += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetCapsuleCapsulePenetration(&CapsuleA, &CapsuleB);
                 } break;
@@ -185,8 +179,8 @@ penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID,
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
                     convex_hull* HullB = VolumeB->ConvexHull;
-                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, BEntityTransform);                        
-                    TransformB.Translation += SimStateB->MoveDelta*tHit;
+                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, SimEntityB->Transform);                        
+                    TransformB.Translation += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetCapsuleHullPenetration(&CapsuleA, HullB, TransformB);
                 }
@@ -197,15 +191,15 @@ penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID,
         case COLLISION_VOLUME_TYPE_CONVEX_HULL:
         {
             convex_hull* HullA = VolumeA->ConvexHull;
-            sqt TransformA = ToParentCoordinates(HullA->Header.Transform, AEntityTransform);
-            TransformA.Translation += SimStateA->MoveDelta*tHit;
+            sqt TransformA = ToParentCoordinates(HullA->Header.Transform, SimEntityA->Transform);
+            TransformA.Translation += SimEntityA->MoveDelta*tHit;
             
             switch(VolumeB->Type)
             {
                 case COLLISION_VOLUME_TYPE_SPHERE:
                 {
-                    sphere SphereB = TransformSphere(&VolumeB->Sphere, BEntityTransform);
-                    SphereB.CenterP += SimStateB->MoveDelta*tHit;
+                    sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
+                    SphereB.CenterP += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetSphereHullPenetration(&SphereB, HullA, TransformA);
                     Result.Normal = -Result.Normal;
@@ -213,9 +207,9 @@ penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID,
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
                 {
-                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, BEntityTransform);
-                    CapsuleB.P0 += SimStateB->MoveDelta*tHit;
-                    CapsuleB.P1 += SimStateB->MoveDelta*tHit;
+                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+                    CapsuleB.P0 += SimEntityB->MoveDelta*tHit;
+                    CapsuleB.P1 += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetCapsuleHullPenetration(&CapsuleB, HullA, TransformA);
                     Result.Normal = -Result.Normal;
@@ -224,8 +218,8 @@ penetration GetPenetration(game* Game, entity_id AEntityID, entity_id BEntityID,
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
                     convex_hull* HullB = VolumeB->ConvexHull;
-                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, BEntityTransform);                        
-                    TransformB.Translation += SimStateB->MoveDelta*tHit;
+                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, SimEntityB->Transform);                        
+                    TransformB.Translation += SimEntityB->MoveDelta*tHit;
                     
                     Result = GetHullHullPenetration(HullA, TransformA, HullB, TransformB);
                 }

@@ -93,8 +93,6 @@ collision_volume* GetNext(collision_volume_iter* Iter)
 
 typedef pool<collision_volume> collision_volume_storage;
 
-template <typename type> void AddCollisionVolume(collision_volume_storage* Pool, sim_state* Entity, type* Collider);
-template <typename type> void AddCollisionVolume(game* Game, entity_id EntityID, type* Collider);
 m3 GetSphereInvInertiaTensor(f32 Radius, f32 Mass);
 
 #endif

@@ -524,8 +524,8 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
             
             u32 ConvexHullIndex = 0;
             
-            sim_state* SimState = GetSimState(Game, Entity->ID);
-            FOR_EACH(Volume, SimState->CollisionVolumes)
+            sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+            FOR_EACH(Volume, SimEntity->CollisionVolumes)
             {                
                 switch(Volume->Type)
                 {

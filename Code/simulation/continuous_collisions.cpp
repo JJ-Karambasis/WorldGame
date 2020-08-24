@@ -186,62 +186,54 @@ f32 SphereCapsuleTOI(sphere* Sphere, v3f DeltaA, capsule* Capsule, v3f DeltaB)
     return Result;
 }
 
-toi_result FindStaticTOI(game* Game, entity_id EntityID)
+toi_result FindStaticTOI(simulation* Simulation, sim_entity* SimEntity)
 {
     toi_result Result = InvalidTOIResult();    
-    
-    u32 WorldIndex = EntityID.WorldIndex;
     
 #define UPDATE_HIT() \
     if((t != INFINITY) && (t < Result.t)) \
     { \
-        Result.HitEntityID = TestEntity->ID; \
+        Result.HitEntity = TestSimEntity; \
         Result.t = t; \
         Result.VolumeA = VolumeA; \
         Result.VolumeB = VolumeB; \
     }
     
-    sim_state* SimStateA = GetSimState(Game, EntityID);    
-    sqt* EntityTransform = GetEntityTransform(Game, EntityID);
-    
-    FOR_EACH(VolumeA, SimStateA->CollisionVolumes)        
+    FOR_EACH(VolumeA, SimEntity->CollisionVolumes)        
     {        
         switch(VolumeA->Type)
         {
             case COLLISION_VOLUME_TYPE_SPHERE:
             {                
-                sphere SphereA = TransformSphere(&VolumeA->Sphere, *EntityTransform);
-                FOR_EACH(TestEntity, &Game->EntityStorage[WorldIndex])
+                sphere SphereA = TransformSphere(&VolumeA->Sphere, SimEntity->Transform);
+                FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
                 {
-                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, ENTITY_TYPE_STATIC))
-                    {
-                        sim_state* SimStateB = GetSimState(Game, TestEntity->ID);                        
-                        sqt* TestEntityTransform = GetEntityTransform(Game, TestEntity->ID);
-                        
-                        FOR_EACH(VolumeB, SimStateB->CollisionVolumes)                            
+                    if((TestSimEntity != SimEntity) && IsEntityType((entity*)TestSimEntity->UserData, ENTITY_TYPE_STATIC))
+                    {                        
+                        FOR_EACH(VolumeB, TestSimEntity->CollisionVolumes)                            
                         {                            
                             switch(VolumeB->Type)
                             {
                                 case COLLISION_VOLUME_TYPE_SPHERE:
                                 {                                    
-                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, *TestEntityTransform);                                    
-                                    f32 t = SphereSphereTOI(&SphereA, SimStateA->MoveDelta, &SphereB, V3());
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestSimEntity->Transform);                                    
+                                    f32 t = SphereSphereTOI(&SphereA, SimEntity->MoveDelta, &SphereB, V3());
                                     UPDATE_HIT();
                                 } break;
                                 
                                 case COLLISION_VOLUME_TYPE_CAPSULE:
                                 {
-                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, *TestEntityTransform);                                    
-                                    f32 t = SphereCapsuleTOI(&SphereA, SimStateA->MoveDelta, &CapsuleB, V3());
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestSimEntity->Transform);                                    
+                                    f32 t = SphereCapsuleTOI(&SphereA, SimEntity->MoveDelta, &CapsuleB, V3());
                                     UPDATE_HIT();
                                 } break;
                                 
                                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                                 {
                                     convex_hull* HullB = VolumeB->ConvexHull;
-                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, *TestEntityTransform);
+                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, TestSimEntity->Transform);
                                     
-                                    f32 t = SphereHullTOI(&SphereA, SimStateA->MoveDelta, HullB, TransformB, V3());
+                                    f32 t = SphereHullTOI(&SphereA, SimEntity->MoveDelta, HullB, TransformB, V3());
                                     UPDATE_HIT();                        
                                 } break;
                             }
@@ -253,37 +245,34 @@ toi_result FindStaticTOI(game* Game, entity_id EntityID)
             
             case COLLISION_VOLUME_TYPE_CAPSULE:
             {                
-                capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, *EntityTransform);
-                FOR_EACH(TestEntity, &Game->EntityStorage[WorldIndex])
+                capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntity->Transform);
+                FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
                 {
-                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, ENTITY_TYPE_STATIC))
-                    {
-                        sim_state* SimStateB = GetSimState(Game, TestEntity->ID);                        
-                        sqt* TestEntityTransform = GetEntityTransform(Game, TestEntity->ID);
-                        
-                        FOR_EACH(VolumeB, SimStateB->CollisionVolumes)
+                    if((TestSimEntity != SimEntity) && IsEntityType((entity*)TestSimEntity->UserData, ENTITY_TYPE_STATIC))
+                    {                        
+                        FOR_EACH(VolumeB, TestSimEntity->CollisionVolumes)
                         {
                             switch(VolumeB->Type)
                             {
                                 case COLLISION_VOLUME_TYPE_SPHERE:
                                 {
-                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, *TestEntityTransform);                                    
-                                    f32 t = SphereCapsuleTOI(&SphereB, V3(), &CapsuleA, SimStateA->MoveDelta);
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestSimEntity->Transform);                                    
+                                    f32 t = SphereCapsuleTOI(&SphereB, V3(), &CapsuleA, SimEntity->MoveDelta);
                                     UPDATE_HIT();
                                 } break;
                                 
                                 case COLLISION_VOLUME_TYPE_CAPSULE:
                                 {
-                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, *TestEntityTransform);                                    
-                                    f32 t = CapsuleCapsuleTOI(&CapsuleA, SimStateA->MoveDelta, &CapsuleB, V3());
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestSimEntity->Transform);                                    
+                                    f32 t = CapsuleCapsuleTOI(&CapsuleA, SimEntity->MoveDelta, &CapsuleB, V3());
                                     UPDATE_HIT();
                                 } break;                                                
                                 
                                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                                 {
                                     convex_hull* HullB = VolumeB->ConvexHull;
-                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, *TestEntityTransform);                                    
-                                    f32 t = CapsuleHullTOI(&CapsuleA, SimStateA->MoveDelta, HullB, TransformB, V3());
+                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, TestSimEntity->Transform);                                    
+                                    f32 t = CapsuleHullTOI(&CapsuleA, SimEntity->MoveDelta, HullB, TransformB, V3());
                                     UPDATE_HIT();
                                 } break;
                             }
@@ -296,40 +285,37 @@ toi_result FindStaticTOI(game* Game, entity_id EntityID)
             case COLLISION_VOLUME_TYPE_CONVEX_HULL:
             {                
                 convex_hull* HullA = VolumeA->ConvexHull;
-                sqt TransformA = ToParentCoordinates(HullA->Header.Transform, *EntityTransform);
+                sqt TransformA = ToParentCoordinates(HullA->Header.Transform, SimEntity->Transform);
                 
-                FOR_EACH(TestEntity, &Game->EntityStorage[WorldIndex])
+                FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
                 {
-                    if(!AreEqualIDs(TestEntity->ID, EntityID) && IsEntityType(TestEntity, ENTITY_TYPE_STATIC))
-                    {      
-                        sim_state* SimStateB = GetSimState(Game, TestEntity->ID);                        
-                        sqt* TestEntityTransform = GetEntityTransform(Game, TestEntity->ID);
-                        
-                        FOR_EACH(VolumeB, SimStateB->CollisionVolumes)
+                    if((TestSimEntity != SimEntity) && IsEntityType((entity*)TestSimEntity->UserData, ENTITY_TYPE_STATIC))
+                    {                              
+                        FOR_EACH(VolumeB, TestSimEntity->CollisionVolumes)
                         {
                             switch(VolumeB->Type)
                             {
                                 case COLLISION_VOLUME_TYPE_SPHERE:
                                 {
-                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, *TestEntityTransform);                                    
-                                    f32 t = SphereHullTOI(&SphereB, V3(), HullA, TransformA, SimStateA->MoveDelta);
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestSimEntity->Transform);                                    
+                                    f32 t = SphereHullTOI(&SphereB, V3(), HullA, TransformA, SimEntity->MoveDelta);
                                     UPDATE_HIT();
                                 } break;
                                 
                                 case COLLISION_VOLUME_TYPE_CAPSULE:
                                 {
-                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, *TestEntityTransform);
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestSimEntity->Transform);
                                     
-                                    f32 t = CapsuleHullTOI(&CapsuleB, V3(), HullA, TransformA, SimStateA->MoveDelta);
+                                    f32 t = CapsuleHullTOI(&CapsuleB, V3(), HullA, TransformA, SimEntity->MoveDelta);
                                     UPDATE_HIT();
                                 } break;
                                 
                                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                                 {
                                     convex_hull* HullB = VolumeB->ConvexHull;
-                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, *TestEntityTransform);                            
+                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, TestSimEntity->Transform);                            
                                     
-                                    f32 t = HullHullTOI(HullA, TransformA, SimStateA->MoveDelta, HullB, TransformB, V3());
+                                    f32 t = HullHullTOI(HullA, TransformA, SimEntity->MoveDelta, HullB, TransformB, V3());
                                     UPDATE_HIT();                                                        
                                 } break;
                             }

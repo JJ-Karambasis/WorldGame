@@ -5,11 +5,18 @@ GetEntity(game* Game, entity_id ID)
     return Result;
 }
 
-sim_state* GetSimState(game* Game, entity_id ID)
+inline sim_entity*
+GetSimEntity(game* Game, entity_id ID)
 {
-    u32 PoolIndex = Game->EntityStorage[ID.WorldIndex].GetIndex(ID.ID);
-    sim_state* Result = &Game->SimStates[ID.WorldIndex][PoolIndex];
-    return Result;
+    simulation* Simulation = GetSimulation(Game, ID);
+    entity* Entity = GetEntity(Game, ID);            
+    return Simulation->GetSimEntity(Entity->SimEntityID);
+}
+
+template <typename type>
+void AddCollisionVolume(game* Game, entity_id EntityID, type* Collider)
+{
+    GetSimEntity(Game, EntityID)->AddCollisionVolume(GetSimulation(Game, EntityID), Collider);    
 }
 
 inline sqt* GetEntityTransformOld(game* Game, entity_id ID)
@@ -33,16 +40,9 @@ inline v3f GetEntityPosition(game* Game, entity_id ID)
 }
 
 void FreeEntity(game* Game, entity_id ID)
-{
-    sim_state* SimState = GetSimState(Game, ID);
-    collision_volume* Volume = SimState->CollisionVolumes;
-    while(Volume)
-    {
-        collision_volume* VolumeToFree = Volume;
-        Volume = Volume->Next;        
-        Game->CollisionVolumeStorage[ID.WorldIndex].Free(VolumeToFree);        
-    }                    
-    
+{    
+    simulation* Simulation = GetSimulation(Game, ID.WorldIndex);            
+    Simulation->FreeSimEntity(GetEntity(Game, ID)->SimEntityID);        
     Game->EntityStorage[ID.WorldIndex].Free(ID.ID);    
 }
 
@@ -51,6 +51,8 @@ CreateEntity(game* Game, entity_type Type, u32 WorldIndex, v3f Position, v3f Sca
              mesh_asset_id MeshID, material Material, b32 NoMeshColliders = false)
 {
     entity_storage* EntityStorage = Game->EntityStorage + WorldIndex;
+    simulation* Simulation = GetSimulation(Game, WorldIndex);        
+    
     entity_id Result = MakeEntityID(EntityStorage->Allocate(), WorldIndex);
     
     entity* Entity = EntityStorage->Get(Result.ID);
@@ -58,6 +60,7 @@ CreateEntity(game* Game, entity_type Type, u32 WorldIndex, v3f Position, v3f Sca
     Entity->Type = Type;
     Entity->State = ENTITY_STATE_NONE;
     Entity->ID = Result;
+    Entity->SimEntityID = Simulation->AllocateSimEntity();
     Entity->LinkID = InvalidEntityID();    
     Entity->MeshID = MeshID; 
     Entity->Material = Material;
@@ -66,17 +69,19 @@ CreateEntity(game* Game, entity_type Type, u32 WorldIndex, v3f Position, v3f Sca
     
     u32 PoolIndex = EntityStorage->GetIndex(Result.ID);
     Game->PrevTransforms[WorldIndex][PoolIndex]    = Transform;
-    Game->CurrentTransforms[WorldIndex][PoolIndex] = Transform;
+    Game->CurrentTransforms[WorldIndex][PoolIndex] = Transform;    
+    
+    sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
+    SimEntity->Transform = Transform;
+    SimEntity->UserData = Entity;
     
     if((MeshID != INVALID_MESH_ID) && !NoMeshColliders)
-    {        
-        sim_state* SimState  = GetSimState(Game, Result);        
-        
+    {                              
         mesh_info* MeshInfo = GetMeshInfo(Game->Assets, MeshID);
         for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
         {
-            convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;                        
-            AddCollisionVolume(&Game->CollisionVolumeStorage[WorldIndex], SimState, ConvexHull);            
+            convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;
+            SimEntity->AddCollisionVolume(Simulation, ConvexHull);                        
         }        
     }
     
@@ -94,25 +99,32 @@ entity_id
 CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, material Material, capsule* Capsule)
 {
     entity_id Result = CreateEntity(Game, ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f), Euler, MESH_ASSET_ID_PLAYER, Material, true);
-    AddCollisionVolume(&Game->CollisionVolumeStorage[WorldIndex], GetSimState(Game, Result), Capsule);
+    AddCollisionVolume(Game, Result, Capsule);        
     return Result;
 }
 
 entity_id
-CreateSphereRigidBody(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Mass, material Material)
+CreateSphereRigidBody(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Mass, f32 Restitution, material Material)
 {
-    ASSERT(Mass != 0);
-    entity_id Result = CreateEntity(Game, ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f)*Radius, V3(), MESH_ASSET_ID_SPHERE, Material, true);
+    ASSERT(Mass != 0);    
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f)*Radius, V3(), MESH_ASSET_ID_SPHERE, Material, true);            
     
-    sim_state* SimState = GetSimState(Game, Result);
+    simulation* Simulation = GetSimulation(Game, WorldIndex);
+    
+    u64 SimEntityID = GetEntity(Game, Result)->SimEntityID;
+    sim_entity* SimEntity = Simulation->GetSimEntity(SimEntityID);
     
     sphere Sphere = CreateSphere(V3(0.0f, 0.0f, 0.0f), 1.0f);    
-    AddCollisionVolume(&Game->CollisionVolumeStorage[Result.WorldIndex], SimState, &Sphere);        
+    SimEntity->AddCollisionVolume(Simulation, &Sphere);
     
     f32 SphereRadius = Sphere.Radius*GetEntityTransform(Game, Result)->Scale.LargestComponent();
     
-    SimState->InvMass = 1.0f/Mass;
-    SimState->InvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);    
+    SimEntity->RigidBody = Simulation->RigidBodyStorage.Get(Simulation->RigidBodyStorage.Allocate());
+    rigid_body* RigidBody = SimEntity->RigidBody;
+    RigidBody->SimEntity = SimEntity;
+    RigidBody->Restitution = Restitution;
+    RigidBody->InvMass = 1.0f/Mass;
+    RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
     
     return Result;
 }
