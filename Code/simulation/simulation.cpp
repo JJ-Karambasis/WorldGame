@@ -45,7 +45,7 @@ u64 simulation::AllocateSimEntity()
     u64 Result = SimEntityStorage.Allocate();
     return Result;
 }
-
+ 
 manifold* simulation::GetManifold(rigid_body* A, rigid_body* B)
 {
     ASSERT(A);
@@ -77,14 +77,147 @@ continuous_collision simulation::DetectStaticContinuousCollisions(sim_entity* En
     return Result;
 }
 
-void simulation::GenerateContinuousContacts(collision_pair_list* RigidBodyPairs)
+void simulation::GenerateContacts(collision_pair_list* RigidBodyPairs)
 {
     for(u32 Index = 0; Index < RigidBodyPairs->Count; Index++)
-        AddContinuousContacts(this, &RigidBodyPairs->Ptr[Index].A, &RigidBodyPairs->Ptr[Index].B);
+        AddContacts(this, &RigidBodyPairs->Ptr[Index].A, &RigidBodyPairs->Ptr[Index].B);
 }
 
-void simulation::SolveConstraints(u32 MaxIterations)
+f32 Baumgarte(f32 D, f32 dt)
 {
+    f32 Result = -BAUMGARTE_CONSTANT * (1.0f/dt) * MinimumF32(0.0f, D+PENETRATION_SLOP);
+    return Result;
+}
+
+f32 MixRestitution(rigid_body* A, rigid_body* B)
+{
+    f32 Result = A->Restitution;
+    if(B) Result = MaximumF32(Result, B->Restitution);
+    return Result;
+}
+
+void simulation::SolveConstraints(u32 MaxIterations, f32 dt)
+{
+    FOR_EACH(Manifold, &ManifoldStorage)
+    {        
+        rigid_body* BodyA = Manifold->BodyA;        
+        rigid_body* BodyB = Manifold->BodyB;
+        
+        sim_entity* SimEntityA = BodyA->SimEntity;
+        sim_entity* SimEntityB = BodyB ? BodyB->SimEntity : NULL;
+        
+        v3f vA = SimEntityA->Velocity;
+        v3f wA = BodyA->AngularVelocity;
+        v3f vB = SimEntityB ? SimEntityB->Velocity : V3();
+        v3f wB = BodyB ? BodyB->AngularVelocity : V3();
+        
+        f32 Restitution = MixRestitution(BodyA, BodyB);
+        
+        FOR_EACH(Contact, &Manifold->Contacts)
+        {            
+            if(BodyB)
+            {                
+                Contact->LocalPositionA = Contact->WorldPosition - BodyA->WorldCenterOfMass;
+                Contact->LocalPositionB = Contact->WorldPosition - BodyB->WorldCenterOfMass;
+                
+                v3f ARotAxis = Cross(Contact->LocalPositionA, Contact->Normal);
+                v3f BRotAxis = Cross(Contact->LocalPositionB, Contact->Normal);
+                
+                Contact->NormalMass = BodyA->InvMass + BodyB->InvMass;
+                Contact->NormalMass += (Dot(ARotAxis, ARotAxis*BodyA->WorldInvInertiaTensor) +
+                                        Dot(BRotAxis, BRotAxis*BodyB->WorldInvInertiaTensor));
+                Contact->NormalMass = SafeInverse(Contact->NormalMass);
+                
+                Contact->Bias = Baumgarte(-Contact->Penetration, dt);
+                
+                f32 RelVelocityProjected = Dot(vB + Cross(wB, Contact->LocalPositionB) - vA - Cross(wA, Contact->LocalPositionA), Contact->Normal);                                               
+                if(RelVelocityProjected < -1)
+                    Contact->Bias += -(Restitution)*RelVelocityProjected;
+                
+            }
+            else
+            {
+                Contact->LocalPositionA = Contact->WorldPosition - BodyA->WorldCenterOfMass;                
+                v3f ARotAxis = Cross(Contact->LocalPositionA, Contact->Normal);
+                
+                Contact->NormalMass = BodyA->InvMass;
+                Contact->NormalMass += (Dot(ARotAxis, ARotAxis*BodyA->WorldInvInertiaTensor));
+                Contact->NormalMass = SafeInverse(Contact->NormalMass);
+                
+                Contact->Bias = Baumgarte(Contact->Penetration, dt);
+                
+                f32 RelVelocityProjected = Dot(-vA - Cross(wA, Contact->LocalPositionA), Contact->Normal);
+                if(RelVelocityProjected < -1)
+                    Contact->Bias += -(Restitution)*RelVelocityProjected;
+            }
+        }        
+    }
+    
+    for(u32 Iteration = 0; Iteration < MaxIterations; Iteration++)
+    {
+        FOR_EACH(Manifold, &ManifoldStorage)
+        {
+            rigid_body* BodyA = Manifold->BodyA;        
+            rigid_body* BodyB = Manifold->BodyB;
+            
+            sim_entity* SimEntityA = BodyA->SimEntity;
+            sim_entity* SimEntityB = BodyB ? BodyB->SimEntity : NULL;
+            
+            v3f vA = SimEntityA->Velocity;
+            v3f wA = BodyA->AngularVelocity;
+            v3f vB = SimEntityB ? SimEntityB->Velocity : V3();
+            v3f wB = BodyB ? BodyB->AngularVelocity : V3();
+            
+            FOR_EACH(Contact, &Manifold->Contacts)
+            {
+                if(BodyB)
+                {
+                    v3f RelVelocity = vB + Cross(wB, Contact->LocalPositionB) - vA - Cross(wA, Contact->LocalPositionA);
+                    f32 RelVelocityProj = Dot(RelVelocity, Contact->Normal);
+                    
+                    f32 Lambda = Contact->NormalMass * (-RelVelocityProj + Contact->Bias);
+                    
+                    f32 TempLambda = Contact->NormalLambda;
+                    Contact->NormalLambda = MaximumF32(TempLambda+Lambda, 0.0f);
+                    Lambda = Contact->NormalLambda - TempLambda;
+                    
+                    v3f Impulse = Contact->Normal*Lambda;
+                    
+                    vA -= Impulse*BodyA->InvMass;
+                    wA -= Cross(Contact->LocalPositionA, Impulse)*BodyA->WorldInvInertiaTensor;
+                    
+                    vB += Impulse*BodyB->InvMass;
+                    wB += Cross(Contact->LocalPositionB, Impulse)*BodyB->WorldInvInertiaTensor;                    
+                }
+                else
+                {
+                    v3f RelVelocity = -vA - Cross(wA, Contact->LocalPositionA);
+                    f32 RelVelocityProj = Dot(RelVelocity, Contact->Normal);
+                    
+                    f32 Lambda = Contact->NormalMass * (-RelVelocityProj + Contact->Bias);
+                    
+                    f32 TempLambda = Contact->NormalLambda;
+                    Contact->NormalLambda = MaximumF32(TempLambda+Lambda, 0.0f);
+                    Lambda = Contact->NormalLambda - TempLambda;
+                    
+                    v3f Impulse = Contact->Normal*Lambda;
+                    
+                    vA -= Impulse*BodyA->InvMass;
+                    wA -= Cross(Contact->LocalPositionA, Impulse)*BodyA->WorldInvInertiaTensor;
+                }
+                
+            }
+            
+            SimEntityA->Velocity   = vA;
+            BodyA->AngularVelocity = wA;
+            
+            if(SimEntityB && BodyB)
+            {
+                SimEntityB->Velocity = vB;
+                BodyB->AngularVelocity = wB;
+            }
+        }
+    }
 }
 
 inline 

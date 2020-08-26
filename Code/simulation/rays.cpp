@@ -191,6 +191,9 @@ f32 LineSegmentSphereIntersection(v3f* LineSegment, sphere* Sphere)
 {
     v3f D = LineSegment[1]-LineSegment[0];
     f32 SegmentLength = Magnitude(D);
+    if(IsFuzzyZero(SegmentLength))
+        return INFINITY;
+    
     D /= SegmentLength;
     
     f32 Result = RaySphereIntersection(LineSegment[0], D, Sphere);
@@ -208,6 +211,9 @@ f32 LineSegmentCapsuleIntersection(v3f* LineSegment, capsule* Capsule)
 {
     v3f D = LineSegment[1]-LineSegment[0];
     f32 SegmentLength = Magnitude(D);
+    if(IsFuzzyZero(SegmentLength))
+        return INFINITY;
+    
     D /= SegmentLength;
     
     f32 Result = RayCapsuleIntersection(LineSegment[0], D, Capsule);

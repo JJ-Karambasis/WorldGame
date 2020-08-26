@@ -28,9 +28,9 @@ contact_list GetSphereCapsuleContacts(sphere* Sphere, capsule* Capsule)
     //is on the capsule line thus a contact normal cannot be computed. Can probably just use an arbitrary normal
     ASSERT(!IsFuzzyZero(NormalLength)); 
     
-    f32 Radius = Sphere->Radius+Capsule->Radius;
-    
-    if(NormalLength <= Square(Radius))
+    f32 Radius = Sphere->Radius+Capsule->Radius;    
+    f32 Diff = NormalLength-Square(Radius);
+    if(Diff < 0 || IsFuzzyZero(Diff))
     {
         NormalLength = Sqrt(NormalLength);
         Normal /= NormalLength;
@@ -42,8 +42,8 @@ contact_list GetSphereCapsuleContacts(sphere* Sphere, capsule* Capsule)
         v3f PointOnCapsule = P1 - Normal*Capsule->Radius;
         
         Result.Ptr[0].Normal = Normal;        
-        Result.Ptr[0].Position = P0 + ((PointOnCapsule-PointOnSphere)*0.5f);
-        Result.Ptr[0].Penetration = Radius - NormalLength;        
+        Result.Ptr[0].Position = PointOnSphere + ((PointOnCapsule-PointOnSphere)*0.5f);
+        Result.Ptr[0].Penetration = Radius - NormalLength;
     }
     
     return Result;    
@@ -66,7 +66,8 @@ contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, sqt 
         f32 NormalLength = SquareMagnitude(Normal);
         ASSERT(!IsFuzzyZero(NormalLength));
         
-        Normal /= Sqrt(NormalLength);
+        NormalLength = Sqrt(NormalLength);
+        Normal /= NormalLength;
         
         Result.Count = 1;
         Result.Ptr = PushArray(Result.Count, contact, Clear, 0);
@@ -79,7 +80,28 @@ contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, sqt 
     return Result;
 }
 
-void AddContinuousContacts(simulation* Simulation, sim_entity_volume_pair* A, sim_entity_volume_pair* B)
+void AddSphereCapsuleContacts(simulation* Simulation, sim_entity_volume_pair* A, sim_entity_volume_pair* B)
+{    
+    sphere Sphere = TransformSphere(&A->Volume->Sphere, A->SimEntity->Transform);    
+    capsule Capsule = TransformCapsule(&B->Volume->Capsule, B->SimEntity->Transform);
+    
+    contact_list Contacts = GetSphereCapsuleContacts(&Sphere, &Capsule);
+    manifold* Manifold  = Simulation->GetManifold(A->SimEntity->RigidBody, B->SimEntity->RigidBody);
+    Manifold->AddContactConstraints(Simulation, &Contacts);    
+}
+
+void AddSphereConvexHullContacts(simulation* Simulation, sim_entity_volume_pair* A, sim_entity_volume_pair* B)
+{
+    sphere Sphere = TransformSphere(&A->Volume->Sphere, A->SimEntity->Transform);    
+    convex_hull* ConvexHull = B->Volume->ConvexHull;
+    sqt ConvexHullTransform = ToParentCoordinates(ConvexHull->Header.Transform, B->SimEntity->Transform);
+    
+    contact_list Contacts = GetSphereHullContacts(&Sphere, ConvexHull, ConvexHullTransform);            
+    manifold* Manifold = Simulation->GetManifold(A->SimEntity->RigidBody, B->SimEntity->RigidBody);
+    Manifold->AddContactConstraints(Simulation, &Contacts);                                                                             
+}
+
+void AddContacts(simulation* Simulation, sim_entity_volume_pair* A, sim_entity_volume_pair* B)
 {
     collision_volume* VolumeA = A->Volume;
     collision_volume* VolumeB = B->Volume;
@@ -87,9 +109,7 @@ void AddContinuousContacts(simulation* Simulation, sim_entity_volume_pair* A, si
     switch(VolumeA->Type)
     {
         case COLLISION_VOLUME_TYPE_SPHERE:
-        {
-            sphere Sphere = TransformSphere(&VolumeA->Sphere, A->SimEntity->Transform);
-            
+        {            
             switch(VolumeB->Type)
             {
                 case COLLISION_VOLUME_TYPE_SPHERE:
@@ -98,43 +118,37 @@ void AddContinuousContacts(simulation* Simulation, sim_entity_volume_pair* A, si
                 } break;
                 
                 case COLLISION_VOLUME_TYPE_CAPSULE:
-                {                                    
-                    capsule Capsule = TransformCapsule(&VolumeB->Capsule, B->SimEntity->Transform);
-                    
-                    f32 t = SphereCapsuleTOI(&Sphere, A->SimEntity->MoveDelta, &Capsule, B->SimEntity->MoveDelta);
-                    if(t != INFINITY)
-                    {
-                        A->SimEntity->MoveDelta *= t;
-                        B->SimEntity->MoveDelta *= t;
-                        
-                        TranslateSphere(&Sphere, A->SimEntity->MoveDelta);
-                        TranslateCapsule(&Capsule, B->SimEntity->MoveDelta);
-                        
-                        contact_list Contacts = GetSphereCapsuleContacts(&Sphere, &Capsule);
-                        manifold* Manifold  = Simulation->GetManifold(A->SimEntity->RigidBody, B->SimEntity->RigidBody);
-                        Manifold->AddContactConstraints(Simulation, &Contacts);
-                    }
-                    
+                {                       
+                    AddSphereCapsuleContacts(Simulation, A, B);                    
                 } break;
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {                    
-                    convex_hull* ConvexHull = VolumeB->ConvexHull;
-                    sqt ConvexHullTransform = ToParentCoordinates(ConvexHull->Header.Transform, B->SimEntity->Transform);
-                    
-                    f32 t = SphereHullTOI(&Sphere, A->SimEntity->MoveDelta, ConvexHull, ConvexHullTransform, B->SimEntity->MoveDelta);
-                    if(t != INFINITY)
-                    {
-                        A->SimEntity->MoveDelta *= t;
-                        B->SimEntity->MoveDelta *= t;
-                        
-                        TranslateSphere(&Sphere, A->SimEntity->MoveDelta);
-                        ConvexHullTransform.Translation += B->SimEntity->MoveDelta;
-                        
-                        contact_list Contacts = GetSphereHullContacts(&Sphere, ConvexHull, ConvexHullTransform);
-                        manifold* Manifold = Simulation->GetManifold(A->SimEntity->RigidBody, B->SimEntity->RigidBody);
-                        Manifold->AddContactConstraints(Simulation, &Contacts);
-                    }                                                
+                    AddSphereConvexHullContacts(Simulation, A, B);                                                                    
+                } break;
+            }
+        } break;
+        
+        case COLLISION_VOLUME_TYPE_CAPSULE:
+        {
+            switch(VolumeB->Type)
+            {
+                case COLLISION_VOLUME_TYPE_SPHERE:
+                {
+                    AddSphereCapsuleContacts(Simulation, B, A);
+                } break;
+                
+                INVALID_DEFAULT_CASE;
+            }
+        } break;
+        
+        case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+        {
+            switch(VolumeB->Type)
+            {
+                case COLLISION_VOLUME_TYPE_SPHERE:
+                {
+                    AddSphereConvexHullContacts(Simulation, B, A);
                 } break;
             }
         } break;

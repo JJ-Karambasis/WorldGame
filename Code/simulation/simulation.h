@@ -12,6 +12,9 @@ struct simulation;
 #include "rays.h"
 #include "contacts.h"
 
+#define BAUMGARTE_CONSTANT 0.2f
+#define PENETRATION_SLOP 0.01f
+
 struct sim_entity
 {
     sqt         Transform;           
@@ -33,6 +36,8 @@ struct rigid_body
     v3f AngularAcceleration;        
     f32 Restitution;
     f32 InvMass;
+    v3f LocalCenterOfMass;
+    v3f WorldCenterOfMass;
     m3  LocalInvInertiaTensor;
     m3  WorldInvInertiaTensor;    
 };
@@ -71,7 +76,7 @@ struct simulation
     contact_storage          ContactStorage;
     manifold_storage         ManifoldStorage;
     rigid_body_storage       RigidBodyStorage;
-    sim_entity_storage       SimEntityStorage;          
+    sim_entity_storage       SimEntityStorage;              
         
     sim_entity* GetSimEntity(u64 ID);        
     void        FreeSimEntity(u64 ID);
@@ -80,8 +85,8 @@ struct simulation
     manifold*   GetManifold(rigid_body* A, rigid_body* B);
     
     continuous_collision DetectStaticContinuousCollisions(sim_entity* Entity);        
-    void GenerateContinuousContacts(collision_pair_list* RigidBodyPairs);
-    void SolveConstraints(u32 MaxIterations);
+    void GenerateContacts(collision_pair_list* RigidBodyPairs);
+    void SolveConstraints(u32 MaxIterations, f32 dt);
 };
 
 #endif

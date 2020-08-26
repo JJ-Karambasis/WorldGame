@@ -91,8 +91,25 @@ collision_volume* GetNext(collision_volume_iter* Iter)
     return Result;
 }
 
+inline f32 
+GetCapsuleHeight(capsule* Capsule)
+{
+    f32 Result = Magnitude(Capsule->P1-Capsule->P0);
+    return Result;
+}
+
+inline v3f
+GetCapsuleCenter(capsule* Capsule)
+{
+    v3f Delta = (Capsule->P1-Capsule->P0)*0.5f;
+    v3f Result = Capsule->P0 + Delta;
+    return Result;
+}
+
 typedef pool<collision_volume> collision_volume_storage;
 
 m3 GetSphereInvInertiaTensor(f32 Radius, f32 Mass);
+m3 GetCylinderInvInertiaTensor(f32 Radius, f32 Height, f32 Mass);
+m3 GetBoxInvInertiaTensor(v3f Dim, f32 Mass);
 
 #endif

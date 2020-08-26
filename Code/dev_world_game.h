@@ -136,6 +136,7 @@ struct dev_context
     b32 DrawGrid;
     b32 EditMode;
     
+    f32 tInterpolated;
     graphics_render_buffer* RenderBuffer;
     
     frame_recording FrameRecording;

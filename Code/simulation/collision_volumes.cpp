@@ -63,3 +63,41 @@ m3 GetSphereInvInertiaTensor(f32 Radius, f32 Mass)
     };    
     return Result;
 }
+
+m3 GetCylinderInvInertiaTensor(f32 Radius, f32 Height, f32 Mass)
+{
+    f32 SqrRadius = Square(Radius);
+    
+    f32 Iz = 0.5f*Mass*SqrRadius;
+    f32 Ix = 0.833333f*Mass*(3*SqrRadius + Square(Height));
+    
+    Iz = SafeInverse(Iz);
+    Ix = SafeInverse(Ix);
+    
+    m3 Result = 
+    {
+        Ix, 0,  0, 
+        0,  Ix, 0, 
+        0,  0,  Iz
+    };
+    
+    return Result;
+}
+
+m3 GetBoxInvInertiaTensor(v3f HalfDim, f32 Mass)
+{
+    f32 MassC = Mass*0.833333f;
+    
+    f32 Ix = MassC * (Square(HalfDim.x)+Square(HalfDim.y));
+    f32 Iy = MassC * (Square(HalfDim.y)+Square(HalfDim.z));
+    f32 Iz = MassC * (Square(HalfDim.x)+Square(HalfDim.z));
+    
+    m3 Result = 
+    {
+        1.0f/Ix, 0,       0, 
+        0,       1.0f/Iy, 0,
+        0,       0,       1.0f/Iz
+    };
+    
+    return Result;
+}

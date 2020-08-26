@@ -96,10 +96,25 @@ CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Eule
 }
 
 entity_id 
-CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, material Material, capsule* Capsule)
+CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, f32 Mass, material Material, capsule* Capsule)
 {
-    entity_id Result = CreateEntity(Game, ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f), Euler, MESH_ASSET_ID_PLAYER, Material, true);
-    AddCollisionVolume(Game, Result, Capsule);        
+    Position.z += 0.01f;
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_PLAYER, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f), Euler, MESH_ASSET_ID_PLAYER, Material, true);    
+    
+    simulation* Simulation = GetSimulation(Game, WorldIndex);
+    sim_entity* SimEntity = Simulation->GetSimEntity(GetEntity(Game, Result)->SimEntityID);
+    
+    SimEntity->AddCollisionVolume(Simulation, Capsule);
+    
+    rigid_body* RigidBody = Simulation->RigidBodyStorage.Get(Simulation->RigidBodyStorage.Allocate());
+    RigidBody->SimEntity = SimEntity;
+    RigidBody->Restitution = 0;
+    RigidBody->InvMass = 1.0f/Mass;
+    RigidBody->LocalInvInertiaTensor = GetCylinderInvInertiaTensor(Capsule->Radius, GetCapsuleHeight(Capsule), Mass);
+    RigidBody->LocalCenterOfMass = GetCapsuleCenter(Capsule);
+    
+    SimEntity->RigidBody = RigidBody;
+    
     return Result;
 }
 
@@ -125,6 +140,7 @@ CreateSphereRigidBody(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 
     RigidBody->Restitution = Restitution;
     RigidBody->InvMass = 1.0f/Mass;
     RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
+    RigidBody->LocalCenterOfMass = V3();
     
     return Result;
 }

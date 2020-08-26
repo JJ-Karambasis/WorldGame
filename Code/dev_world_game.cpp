@@ -445,7 +445,7 @@ void DrawWireframeWorld(game* Game, graphics* Graphics, u32 WorldIndex, assets* 
     PushWireframe(Graphics, false);
 }
 
-void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex, graphics_state* GraphicsState)
+void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex, graphics_state* GraphicsState, f32 tRenderInterpolate)
 {           
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, WorldIndex);    
     
@@ -492,8 +492,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
     }
     
     PushDepth(DevContext->Graphics, false);
-    
-#if 1 
+     
     if(DevContext->DrawColliders)
     {
         FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
@@ -520,8 +519,19 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
                 }                                
             }
             
-            sqt EntityTransform = *GetEntityTransform(Game, Entity->ID);
+            sqt OldState = *GetEntityTransformOld(Game, Entity->ID);
+            sqt NewState = *GetEntityTransform(Game, Entity->ID);        
             
+            //CONFIRM(JJ): Should we be doing runtime changes on an entities scale? Definitely not on rigid bodies,
+            //but do other entities might want this? Keep this assertion just in case. Not sure if we even need to 
+            //interpolate them either
+            ASSERT(OldState.Scale == NewState.Scale);
+            
+            sqt InterpTransform;
+            InterpTransform.Translation = Lerp(OldState.Translation, tRenderInterpolate, NewState.Translation);    
+            InterpTransform.Orientation = Lerp(OldState.Orientation, tRenderInterpolate, NewState.Orientation);
+            InterpTransform.Scale = NewState.Scale;
+                        
             u32 ConvexHullIndex = 0;
             
             sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
@@ -531,13 +541,13 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
                 {
                     case COLLISION_VOLUME_TYPE_SPHERE:
                     {
-                        sphere Sphere = TransformSphere(&Volume->Sphere, EntityTransform);                    
+                        sphere Sphere = TransformSphere(&Volume->Sphere, InterpTransform);                    
                         DrawLineEllipsoid(DevContext, Sphere.CenterP, V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), Blue3());
                     } break;
                     
                     case COLLISION_VOLUME_TYPE_CAPSULE:
                     {
-                        capsule Capsule = TransformCapsule(&Volume->Capsule, EntityTransform);
+                        capsule Capsule = TransformCapsule(&Volume->Capsule, InterpTransform);
                         DrawLineCapsule(DevContext, Capsule.P0, Capsule.P1, Capsule.Radius, Blue3());                                                
                     } break;
                     
@@ -546,7 +556,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
                         ASSERT(Entity->MeshID != INVALID_MESH_ID && ConvexHullGDI);
                         ASSERT(ConvexHullGDI->Count != 0);
                         
-                        sqt Transform = ToParentCoordinates(Volume->ConvexHull->Header.Transform, EntityTransform);
+                        sqt Transform = ToParentCoordinates(Volume->ConvexHull->Header.Transform, InterpTransform);
                         m4 Model = TransformM4(Transform);
                         
                         PushDrawLineMesh(DevContext->Graphics, ConvexHullGDI->Meshes[ConvexHullIndex], Model, Blue3(), 
@@ -560,15 +570,8 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
             }                        
         }                        
     }   
-#endif
-    PushDepth(DevContext->Graphics, true);
-#if 0 
-    if(DevContext->DrawPlayerCollisionVolume)
-    {
-        world_entity* PlayerEntity = GetPlayerEntity(World);
-        DrawLineEllipsoid(DevContext, GetPlayerEllipsoid(DevContext->Game, (player*)PlayerEntity->UserData), Magenta3());
-    }    
-#endif
+    
+    PushDepth(DevContext->Graphics, true);    
 }
 
 void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f32 tRenderInterpolate)
@@ -587,12 +590,12 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
     
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);    
     
-    DrawWorld(DevContext, Game->RenderBuffer, Game->CurrentWorldIndex, GraphicsState);    
+    DrawWorld(DevContext, Game->RenderBuffer, Game->CurrentWorldIndex, GraphicsState, tRenderInterpolate);    
     if(DevContext->DrawOtherWorld)
     {
         graphics_state OtherGraphicsState = GetGraphicsState(Game, !Game->CurrentWorldIndex, tRenderInterpolate);        
         UpdateRenderBuffer(&DevContext->RenderBuffer, Graphics, Graphics->RenderDim/5);                           
-        DrawWorld(DevContext, DevContext->RenderBuffer, !Game->CurrentWorldIndex, &OtherGraphicsState);
+        DrawWorld(DevContext, DevContext->RenderBuffer, !Game->CurrentWorldIndex, &OtherGraphicsState, tRenderInterpolate);
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     

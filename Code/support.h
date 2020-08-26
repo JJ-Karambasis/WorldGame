@@ -16,6 +16,7 @@ ConvexHullSupport(convex_hull* ConvexHull, v3f Direction)
         
         do
         {
+            ASSERT(E != -1);
             half_edge* Edge = ConvexHull->Edges + E;
             
             i32 VertexIndex = Edge->Vertex;

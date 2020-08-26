@@ -48,7 +48,7 @@ void LoadTestLevel(game* Game)
         
         v3f P0 = V3() + Global_WorldZAxis*PLAYER_RADIUS;
         capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);        
-        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, V3(), V3(), Global_PlayerMaterial, &PlayerCapsule);
+        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, V3(), V3(), 35, Global_PlayerMaterial, &PlayerCapsule);
         
         game_camera* Camera = Game->CurrentCameras + WorldIndex;        
         Camera->Target = GetEntityPosition(Game, PlayerID);        
@@ -59,15 +59,15 @@ void LoadTestLevel(game* Game)
         
         Game->PrevCameras[WorldIndex] = *Camera;
     }
-    
-    CreateStaticEntity(Game, 0, V3(0.0f, 0.0f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_FLOOR, Global_Material0);                               
+        
+    CreateStaticEntity(Game, 0, V3(0, 0, -0.01f), V3(10.0f, 10.0f, 0.01f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material0);
     CreateStaticEntity(Game, 0, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f),  MESH_ASSET_ID_BOX,   Global_Material0);
     CreateStaticEntity(Game, 0, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.25f), MESH_ASSET_ID_BOX,   Global_Material0);
     CreateStaticEntity(Game, 0, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.33f), MESH_ASSET_ID_BOX,   Global_Material0);
     CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material1);
     CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f),  MESH_ASSET_ID_BOX,   Global_Material1);
     CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);                    
-    CreateSphereRigidBody(Game, 0, V3(2.0f, 0.0f, 0.5f), 0.5f, 30.0f, 0.0f, Global_Material0);
+    CreateSphereRigidBody(Game, 0, V3( 1.0f, 0.5f, 5.0f), 0.5f, 30.0f, 0.2f, Global_Material0);
     
     Game->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
     Game->JumpingQuads[0].Dimensions = V2(1.0f, 2.0f);
@@ -137,7 +137,10 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         
         rigid_body* RigidBody = SimEntity->RigidBody;
         if(RigidBody)            
+        {
             RigidBody->WorldInvInertiaTensor = GetWorldInvInertiaTensor(RigidBody->LocalInvInertiaTensor, SimEntity->Transform.Orientation);                
+            RigidBody->WorldCenterOfMass = TransformV3(RigidBody->LocalCenterOfMass, SimEntity->Transform);
+        }
     }
     
     FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
@@ -146,25 +149,26 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
-            {
+            {                
+                rigid_body* RigidBody = SimEntity->RigidBody;
+                RigidBody->AngularVelocity = {};
+                
                 SimEntity->Velocity += SimEntity->Acceleration*dt;                                
                 if(!IsEntityState(Entity, ENTITY_STATE_JUMPING))
-                    SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);
+                    SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);                                
             } break;
             
             case ENTITY_TYPE_RIGID_BODY:
             {
                 SimEntity->Velocity += SimEntity->Acceleration*dt;
-                SimEntity->Velocity *= GetDamp(dt, 5.0f);
+                SimEntity->Velocity.xy *= GetDamp(dt, 1.0f);
                 
                 rigid_body* RigidBody = SimEntity->RigidBody;
                 
                 RigidBody->AngularVelocity += RigidBody->AngularAcceleration*dt;
                 RigidBody->AngularAcceleration *= GetDamp(dt, 5.0f);
             } break;
-        }
-        
-        SimEntity->MoveDelta = SimEntity->Velocity*dt;
+        }                
     }
     
     //NOTE(EVERYONE): This checks for all possible collision pairs between non-static entities. There are no
@@ -263,19 +267,12 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         //NOTE(EVERYONE): This is where we generate other collision events here
     }
     
-    //NOTE(EVERYONE): Generate collision events with non-static entities and static entities now (not player since we need to interate that)
-    
-    sim_entity* PlayerSimEntity = NULL;
+    //NOTE(EVERYONE): Generate collision events with non-static entities and static entities now (not player since we need to interate that)        
     FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
     {
         entity* Entity = (entity*)SimEntity->UserData;
         switch(Entity->Type)
-        {
-            case ENTITY_TYPE_PLAYER:
-            {
-                PlayerSimEntity = SimEntity;
-            } break;
-            
+        {            
             case ENTITY_TYPE_RIGID_BODY:
             {
                 FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
@@ -297,58 +294,83 @@ EXPORT GAME_FIXED_TICK(FixedTick)
             } break;
         }
     }
-    ASSERT(PlayerSimEntity);
     
-    Simulation->GenerateContinuousContacts(&RigidBodyPairs);
-    Simulation->SolveConstraints(30);
+    Simulation->GenerateContacts(&RigidBodyPairs);
+    Simulation->SolveConstraints(30, Game->dtFixed);
+    
+    //NOTE(EVERYONE): After physics, for some objects, we need to perform continuous collision detection on their linear velocities. 
+    //This is primarily for entities that are small and fast and are critical for gameplay that cannot tunnel through the colliders,
+    //and for player movement to get a gliding mechanic (which is extremely expensive)
+    FOR_EACH(SimEntity, &Simulation->SimEntityStorage) SimEntity->MoveDelta = SimEntity->Velocity*Game->dtFixed;
     
     b32 HasCollided = false;
-        
-    //CONFIRM(JJ): I think we can limit the iterations to 3
-    for(u32 Iterations = 0; Iterations < 4; Iterations++)
+    
+    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
     {
-        f32 DeltaLength = Magnitude(PlayerSimEntity->MoveDelta);
+        entity* Entity = (entity*)SimEntity->UserData;                        
         
-        if(DeltaLength > 1e-4f)
-        {            
-            v3f TargetPosition = PlayerSimEntity->Transform.Translation + PlayerSimEntity->MoveDelta;                           
-            continuous_collision CollisionResult = Simulation->DetectStaticContinuousCollisions(PlayerSimEntity);
-            
-            if(!CollisionResult.HitEntity)
-            {
-                PlayerSimEntity->Transform.Translation = TargetPosition;                            
-                break;
-            }
-            else
-            {   
-                HasCollided = true;
-                penetration* Penetration = &CollisionResult.Penetration;
-                
-                PlayerSimEntity->Transform.Translation += PlayerSimEntity->MoveDelta*CollisionResult.t;
-                PlayerSimEntity->Transform.Translation += Penetration->Normal*1e-5f;
-                
-                PlayerSimEntity->MoveDelta = TargetPosition - PlayerSimEntity->Transform.Translation;
-                
-                PlayerSimEntity->MoveDelta -= Dot(PlayerSimEntity->MoveDelta, Penetration->Normal)*Penetration->Normal;
-                PlayerSimEntity->Velocity -= Dot(PlayerSimEntity->Velocity, Penetration->Normal)*Penetration->Normal;                                                        
-            }
-        }
-        else
+        switch(Entity->Type)
         {
-            break;
-        }                    
-    }      
-    
-    Game->CurrentCameras[Game->CurrentWorldIndex].Target = PlayerSimEntity->Transform.Translation;    
-    
-    
-    if(HasCollided)
-    {
-        entity* PlayerEntity = (entity*)PlayerSimEntity->UserData;
-        if(IsEntityState(PlayerEntity, ENTITY_STATE_JUMPING))
-            SetEntityState(PlayerEntity, ENTITY_STATE_NONE);
+            case ENTITY_TYPE_PLAYER:
+            {
+                //CONFIRM(JJ): I think we can limit the iterations to 3
+                for(u32 Iterations = 0; Iterations < 4; Iterations++)
+                {
+                    f32 DeltaLength = Magnitude(SimEntity->MoveDelta);
+                    
+                    if(DeltaLength > 1e-4f)
+                    {            
+                        v3f TargetPosition = SimEntity->Transform.Translation + SimEntity->MoveDelta;                           
+                        continuous_collision CollisionResult = Simulation->DetectStaticContinuousCollisions(SimEntity);
+                        
+                        if(!CollisionResult.HitEntity)
+                        {
+                            SimEntity->Transform.Translation = TargetPosition;                            
+                            break;
+                        }
+                        else
+                        {   
+                            HasCollided = true;
+                            penetration* Penetration = &CollisionResult.Penetration;
+                            
+                            SimEntity->Transform.Translation += SimEntity->MoveDelta*CollisionResult.t;
+                            SimEntity->Transform.Translation += Penetration->Normal*1e-5f;
+                            
+                            SimEntity->MoveDelta = TargetPosition - SimEntity->Transform.Translation;
+                            
+                            SimEntity->MoveDelta -= Dot(SimEntity->MoveDelta, Penetration->Normal)*Penetration->Normal;
+                            SimEntity->Velocity -= Dot(SimEntity->Velocity, Penetration->Normal)*Penetration->Normal;                                                        
+                        }
+                    }
+                    else
+                    {
+                        break;
+                    }                    
+                }      
+                
+                Game->CurrentCameras[Game->CurrentWorldIndex].Target = SimEntity->Transform.Translation;                
+                
+                if(HasCollided)
+                {
+                    entity* PlayerEntity = (entity*)SimEntity->UserData;
+                    if(IsEntityState(PlayerEntity, ENTITY_STATE_JUMPING))
+                        SetEntityState(PlayerEntity, ENTITY_STATE_NONE);
+                }
+            } break;
+            
+            case ENTITY_TYPE_RIGID_BODY:
+            {
+                //NOTE(EVERYONE): Constraint solver can apply an instant velocity, so we need to recompute the move delta. This is
+                //fine since the solver is in the last step.                 
+                SimEntity->Transform.Translation += SimEntity->MoveDelta;
+                rigid_body* RigidBody = SimEntity->RigidBody;
+                
+                quaternion Delta = RotQuat(RigidBody->AngularVelocity*Game->dtFixed, 0.0f)*SimEntity->Transform.Orientation;
+                SimEntity->Transform.Orientation = Normalize(SimEntity->Transform.Orientation + (Delta*0.5f));
+                
+            } break;
+        }
     }
-       
     FOR_EACH(Entity, WorldStorage)
     {
         sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
@@ -367,13 +389,14 @@ EXPORT GAME_TICK(Tick)
     FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
     {
         sim_entity* SimState = Simulation->GetSimEntity(Entity->SimEntityID);                
+        
+        SimState->Acceleration = {};
+        
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
             {                
                 v3f Position = GetEntityPosition(Game, Entity->ID);                
-                
-                SimState->Acceleration = {};
                 
                 if(!IsEntityState(Entity, ENTITY_STATE_JUMPING))                
                 {

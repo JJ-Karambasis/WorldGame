@@ -22,9 +22,12 @@ struct contact_constraint
     v3f Normal;
     f32 Penetration;
     
-    v3f LocalPositionA;        
-    f32 NormalImpulse;
+    v3f LocalPositionA;            
+    v3f LocalPositionB;
     f32 NormalMass;
+    f32 NormalLambda;
+    
+    f32 Bias;
 };
 
 struct manifold
