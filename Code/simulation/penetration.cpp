@@ -230,3 +230,22 @@ penetration GetPenetration(sim_entity* SimEntityA, sim_entity* SimEntityB, colli
     
     return Result;
 }
+
+penetration FindMaxPenetration(contact_list* ContactList)
+{    
+    contact* BestContact = NULL;
+    for(u32 ContactIndex = 0; ContactIndex < ContactList->Count; ContactIndex++)
+    {
+        contact* Contact = ContactList->Ptr+ContactIndex;        
+        if(!BestContact)        
+            BestContact = Contact;
+        else        
+            if(BestContact->Penetration < Contact->Penetration) BestContact = Contact;        
+    }
+    
+    if(!BestContact)
+        return InvalidPenetration();
+    
+    penetration Result = {BestContact->Normal, BestContact->Penetration};
+    return Result;
+}

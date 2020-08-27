@@ -33,6 +33,12 @@ inline sqt* GetEntityTransform(game* Game, entity_id ID)
     return Result;
 }
 
+inline v3f GetEntityPositionOld(game* Game, entity_id ID)
+{
+    v3f Result = GetEntityTransformOld(Game, ID)->Translation;
+    return Result;
+}
+
 inline v3f GetEntityPosition(game* Game, entity_id ID)
 {
     v3f Result = GetEntityTransform(Game, ID)->Translation;
@@ -57,13 +63,13 @@ CreateEntity(game* Game, entity_type Type, u32 WorldIndex, v3f Position, v3f Sca
     
     entity* Entity = EntityStorage->Get(Result.ID);
     
-    Entity->Type = Type;
-    Entity->State = ENTITY_STATE_NONE;
+    Entity->Type = Type;    
     Entity->ID = Result;
     Entity->SimEntityID = Simulation->AllocateSimEntity();
     Entity->LinkID = InvalidEntityID();    
     Entity->MeshID = MeshID; 
     Entity->Material = Material;
+    Entity->OnCollision = OnCollisionStub;
     
     sqt Transform = CreateSQT(Position, Scale, Euler);
     
@@ -91,8 +97,11 @@ CreateEntity(game* Game, entity_type Type, u32 WorldIndex, v3f Position, v3f Sca
 entity_id
 CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, 
                    mesh_asset_id Mesh, material Material, b32 NoMeshColliders = false)
-{
-    return CreateEntity(Game, ENTITY_TYPE_STATIC, WorldIndex, Position, Scale, Euler, Mesh, Material, NoMeshColliders);
+{    
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_STATIC, WorldIndex, Position, Scale, Euler, Mesh, Material, NoMeshColliders);
+    sim_entity* SimEntity = GetSimEntity(Game, Result);
+    SimEntity->DetectDuringCCD = true;
+    return Result;
 }
 
 entity_id 
@@ -103,6 +112,12 @@ CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, f32 Mass
     
     simulation* Simulation = GetSimulation(Game, WorldIndex);
     sim_entity* SimEntity = Simulation->GetSimEntity(GetEntity(Game, Result)->SimEntityID);
+    
+    entity* Entity = GetUserData(SimEntity, entity);
+    Entity->OnCollision = OnPlayerCollision;
+    
+    player* Player = PushStruct(Game->GameStorage, player, Clear, 0);
+    Entity->UserData = Player;
     
     SimEntity->AddCollisionVolume(Simulation, Capsule);
     
@@ -133,14 +148,41 @@ CreateSphereRigidBody(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 
     SimEntity->AddCollisionVolume(Simulation, &Sphere);
     
     f32 SphereRadius = Sphere.Radius*GetEntityTransform(Game, Result)->Scale.LargestComponent();
-    
-    SimEntity->RigidBody = Simulation->RigidBodyStorage.Get(Simulation->RigidBodyStorage.Allocate());
-    rigid_body* RigidBody = SimEntity->RigidBody;
+        
+    rigid_body* RigidBody =Simulation->RigidBodyStorage.Get(Simulation->RigidBodyStorage.Allocate()); SimEntity->RigidBody;
     RigidBody->SimEntity = SimEntity;
     RigidBody->Restitution = Restitution;
     RigidBody->InvMass = 1.0f/Mass;
     RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
     RigidBody->LocalCenterOfMass = V3();
+    
+    SimEntity->RigidBody = RigidBody;
+    
+    return Result;
+}
+
+entity_id
+CreatePushableBox(game* Game, u32 WorldIndex, v3f Position, f32 Dimensions, f32 Mass, material Material)
+{
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, WorldIndex, Position, V3(Dimensions, Dimensions, Dimensions), V3(), MESH_ASSET_ID_BOX, Material, false);
+    
+    simulation* Simulation = GetSimulation(Game, WorldIndex);
+    sim_entity* SimEntity = GetSimEntity(Game, Result);
+    SimEntity->DetectDuringCCD = true;
+    
+    entity* Entity = GetUserData(SimEntity, entity);
+    
+    pushing_object* PushingObject = PushStruct(Game->GameStorage, pushing_object, Clear, 0);
+    Entity->UserData = PushingObject;
+    
+    rigid_body* RigidBody = Simulation->RigidBodyStorage.Get(Simulation->RigidBodyStorage.Allocate());
+    RigidBody->SimEntity = SimEntity;
+    RigidBody->Restitution = 0;
+    RigidBody->InvMass = 1.0f/Mass;
+    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(V3(Dimensions, Dimensions, Dimensions), Mass);
+    RigidBody->LocalCenterOfMass = V3(0.0f, 0.0f, 0.5f);
+    
+    SimEntity->RigidBody = RigidBody;
     
     return Result;
 }
@@ -152,16 +194,4 @@ IsEntityType(entity* Entity, entity_type Type)
     return Result;
 }
 
-inline b32
-IsEntityState(entity* Entity, entity_state State)
-{
-    b32 Result = Entity->State == State;
-    return Result;
-}
-
-inline void
-SetEntityState(entity* Entity, entity_state State)
-{
-    ASSERT(Entity->State != State);    
-    Entity->State = State;
-}
+#include "player.cpp"

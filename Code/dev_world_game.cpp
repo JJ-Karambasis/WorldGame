@@ -638,8 +638,10 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
     DevContext->DebugPrimitives.Size = 0;
     
     if(DevContext->SelectedObject != nullptr)
-    {        
-        v3f Position = GetEntityPosition(Game, DevContext->SelectedObject->ID);
+    {                
+        v3f Position = Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
+                            tRenderInterpolate, 
+                            GetEntityPosition(Game, DevContext->SelectedObject->ID));
         DrawFrame(DevContext, Position, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
     }
     

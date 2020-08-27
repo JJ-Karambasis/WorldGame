@@ -80,28 +80,36 @@ contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, sqt 
     return Result;
 }
 
-void AddSphereCapsuleContacts(simulation* Simulation, sim_entity_volume_pair* A, sim_entity_volume_pair* B)
+void AddSphereCapsuleContacts(simulation* Simulation, sim_entity_rigid_body_volume_pair* A, sim_entity_rigid_body_volume_pair* B)
 {    
     sphere Sphere = TransformSphere(&A->Volume->Sphere, A->SimEntity->Transform);    
     capsule Capsule = TransformCapsule(&B->Volume->Capsule, B->SimEntity->Transform);
     
     contact_list Contacts = GetSphereCapsuleContacts(&Sphere, &Capsule);
-    manifold* Manifold  = Simulation->GetManifold(A->SimEntity->RigidBody, B->SimEntity->RigidBody);
+    manifold* Manifold  = Simulation->GetManifold(A->RigidBody, B->RigidBody);
     Manifold->AddContactConstraints(Simulation, &Contacts);    
+    
+    penetration Penetration = FindMaxPenetration(&Contacts);
+    if(!IsInvalidPenetration(&Penetration))
+        Simulation->AddCollisionEvent(A->SimEntity, B->SimEntity, Penetration);
 }
 
-void AddSphereConvexHullContacts(simulation* Simulation, sim_entity_volume_pair* A, sim_entity_volume_pair* B)
+void AddSphereConvexHullContacts(simulation* Simulation, sim_entity_rigid_body_volume_pair* A, sim_entity_rigid_body_volume_pair* B)
 {
     sphere Sphere = TransformSphere(&A->Volume->Sphere, A->SimEntity->Transform);    
     convex_hull* ConvexHull = B->Volume->ConvexHull;
     sqt ConvexHullTransform = ToParentCoordinates(ConvexHull->Header.Transform, B->SimEntity->Transform);
     
     contact_list Contacts = GetSphereHullContacts(&Sphere, ConvexHull, ConvexHullTransform);            
-    manifold* Manifold = Simulation->GetManifold(A->SimEntity->RigidBody, B->SimEntity->RigidBody);
+    manifold* Manifold = Simulation->GetManifold(A->RigidBody, B->RigidBody);
     Manifold->AddContactConstraints(Simulation, &Contacts);                                                                             
+        
+    penetration Penetration = FindMaxPenetration(&Contacts);
+    if(!IsInvalidPenetration(&Penetration))
+        Simulation->AddCollisionEvent(A->SimEntity, B->SimEntity, Penetration);
 }
 
-void AddContacts(simulation* Simulation, sim_entity_volume_pair* A, sim_entity_volume_pair* B)
+void AddContacts(simulation* Simulation, sim_entity_rigid_body_volume_pair* A, sim_entity_rigid_body_volume_pair* B)
 {
     collision_volume* VolumeA = A->Volume;
     collision_volume* VolumeB = B->Volume;

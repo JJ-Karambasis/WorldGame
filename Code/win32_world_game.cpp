@@ -681,7 +681,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     }
     
     return 0;
-    
+     
     handle_error:
     string ErrorMessage = GetGlobalErrorStream()->GetString();
     WriteEntireFile("Errors.log", ErrorMessage.Data, SafeU32(ErrorMessage.Length));

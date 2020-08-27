@@ -61,26 +61,26 @@ manifold* simulation::GetManifold(rigid_body* A, rigid_body* B)
     return Manifold;
 }
 
-continuous_collision simulation::DetectStaticContinuousCollisions(sim_entity* Entity)
-{
+continuous_collision simulation::DetectContinuousCollisions(sim_entity* SimEntity)
+{    
     continuous_collision Result = {};
     Result.t = INFINITY;
     
-    toi_result TOIResult = FindStaticTOI(this, Entity);
+    toi_result TOIResult = FindTOI(this, SimEntity);
     if(TOIResult.HitEntity)
     {
         Result.t = TOIResult.t;
         Result.HitEntity = TOIResult.HitEntity;
-        Result.Penetration = GetPenetration(Entity, TOIResult.HitEntity, TOIResult.VolumeA, TOIResult.VolumeB, TOIResult.t);
-    }    
-    
+        Result.Penetration = GetPenetration(SimEntity, TOIResult.HitEntity, TOIResult.VolumeA, TOIResult.VolumeB, TOIResult.t);                
+        AddCollisionEvent(Result.HitEntity, SimEntity, Result.Penetration);
+    }
     return Result;
 }
 
-void simulation::GenerateContacts(collision_pair_list* RigidBodyPairs)
+void simulation::GenerateContacts(contact_pair_list* ContactPairs)
 {
-    for(u32 Index = 0; Index < RigidBodyPairs->Count; Index++)
-        AddContacts(this, &RigidBodyPairs->Ptr[Index].A, &RigidBodyPairs->Ptr[Index].B);
+    for(u32 ContactPairIndex = 0; ContactPairIndex < ContactPairs->Count; ContactPairIndex++)
+        AddContacts(this, &ContactPairs->Ptr[ContactPairIndex].A, &ContactPairs->Ptr[ContactPairIndex].B);
 }
 
 f32 Baumgarte(f32 D, f32 dt)
@@ -220,10 +220,26 @@ void simulation::SolveConstraints(u32 MaxIterations, f32 dt)
     }
 }
 
+void simulation::AddCollisionEvent(sim_entity* A, sim_entity* B, penetration Penetration)
+{
+    ASSERT(CollisionEvents.Count < CollisionEvents.Capacity);
+    CollisionEvents.Ptr[CollisionEvents.Count++] = {A, B, Penetration};
+}
+
 inline 
 m3 GetWorldInvInertiaTensor(m3 LocalTensor, quaternion Orientation)
 {
     m3 OrientationMatrix = ToMatrix3(Orientation);    
     m3 Result = Transpose(OrientationMatrix)*LocalTensor*OrientationMatrix;    
     return Result;
+}
+
+inline void
+AddContactPair(contact_pair_list* List, sim_entity* SimEntityA, rigid_body* RigidBodyA, collision_volume* VolumeA,
+               sim_entity* SimEntityB, rigid_body* RigidBodyB, collision_volume* VolumeB)
+{
+    ASSERT(List->Count < List->Capacity);
+    contact_pair* Pair = List->Ptr + List->Count++;    
+    Pair->A = {SimEntityA, RigidBodyA, VolumeA};
+    Pair->B = {SimEntityB, RigidBodyB, VolumeB};    
 }

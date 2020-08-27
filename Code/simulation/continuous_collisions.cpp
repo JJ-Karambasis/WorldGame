@@ -186,6 +186,150 @@ f32 SphereCapsuleTOI(sphere* Sphere, v3f DeltaA, capsule* Capsule, v3f DeltaB)
     return Result;
 }
 
+toi_result FindTOI(simulation* Simulation, sim_entity* SimEntity)
+{
+    toi_result Result = InvalidTOIResult();    
+    
+#define UPDATE_HIT() \
+    if((t != INFINITY) && (t < Result.t)) \
+    { \
+        Result.HitEntity = TestSimEntity; \
+        Result.t = t; \
+        Result.VolumeA = VolumeA; \
+        Result.VolumeB = VolumeB; \
+    }
+    
+    FOR_EACH(VolumeA, SimEntity->CollisionVolumes)        
+    {        
+        switch(VolumeA->Type)
+        {
+            case COLLISION_VOLUME_TYPE_SPHERE:
+            {                
+                sphere SphereA = TransformSphere(&VolumeA->Sphere, SimEntity->Transform);
+                FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
+                {
+                    if(TestSimEntity->DetectDuringCCD && (TestSimEntity != SimEntity))
+                    {                        
+                        FOR_EACH(VolumeB, TestSimEntity->CollisionVolumes)                            
+                        {                            
+                            switch(VolumeB->Type)
+                            {
+                                case COLLISION_VOLUME_TYPE_SPHERE:
+                                {                                    
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestSimEntity->Transform);                                    
+                                    f32 t = SphereSphereTOI(&SphereA, SimEntity->MoveDelta, &SphereB, TestSimEntity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CAPSULE:
+                                {
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestSimEntity->Transform);                                    
+                                    f32 t = SphereCapsuleTOI(&SphereA, SimEntity->MoveDelta, &CapsuleB, TestSimEntity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                                {
+                                    convex_hull* HullB = VolumeB->ConvexHull;
+                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, TestSimEntity->Transform);
+                                    
+                                    f32 t = SphereHullTOI(&SphereA, SimEntity->MoveDelta, HullB, TransformB, TestSimEntity->MoveDelta);
+                                    UPDATE_HIT();                        
+                                } break;
+                            }
+                        }
+                    }
+                }
+                
+            } break;
+            
+            case COLLISION_VOLUME_TYPE_CAPSULE:
+            {                
+                capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntity->Transform);
+                FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
+                {
+                    if(TestSimEntity->DetectDuringCCD && (TestSimEntity != SimEntity))
+                    {                        
+                        FOR_EACH(VolumeB, TestSimEntity->CollisionVolumes)
+                        {
+                            switch(VolumeB->Type)
+                            {
+                                case COLLISION_VOLUME_TYPE_SPHERE:
+                                {
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestSimEntity->Transform);                                    
+                                    f32 t = SphereCapsuleTOI(&SphereB, TestSimEntity->MoveDelta, &CapsuleA, SimEntity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CAPSULE:
+                                {
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestSimEntity->Transform);                                    
+                                    f32 t = CapsuleCapsuleTOI(&CapsuleA, SimEntity->MoveDelta, &CapsuleB, TestSimEntity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;                                                
+                                
+                                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                                {
+                                    convex_hull* HullB = VolumeB->ConvexHull;
+                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, TestSimEntity->Transform);                                    
+                                    f32 t = CapsuleHullTOI(&CapsuleA, SimEntity->MoveDelta, HullB, TransformB, TestSimEntity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                            }
+                        }
+                    }
+                }            
+                
+            } break;
+            
+            case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+            {                
+                convex_hull* HullA = VolumeA->ConvexHull;
+                sqt TransformA = ToParentCoordinates(HullA->Header.Transform, SimEntity->Transform);
+                
+                FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
+                {
+                    if(TestSimEntity->DetectDuringCCD && (TestSimEntity != SimEntity))
+                    {                              
+                        FOR_EACH(VolumeB, TestSimEntity->CollisionVolumes)
+                        {
+                            switch(VolumeB->Type)
+                            {
+                                case COLLISION_VOLUME_TYPE_SPHERE:
+                                {
+                                    sphere SphereB = TransformSphere(&VolumeB->Sphere, TestSimEntity->Transform);                                    
+                                    f32 t = SphereHullTOI(&SphereB, TestSimEntity->MoveDelta, HullA, TransformA, SimEntity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CAPSULE:
+                                {
+                                    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, TestSimEntity->Transform);
+                                    
+                                    f32 t = CapsuleHullTOI(&CapsuleB, TestSimEntity->MoveDelta, HullA, TransformA, SimEntity->MoveDelta);
+                                    UPDATE_HIT();
+                                } break;
+                                
+                                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                                {
+                                    convex_hull* HullB = VolumeB->ConvexHull;
+                                    sqt TransformB = ToParentCoordinates(HullB->Header.Transform, TestSimEntity->Transform);                            
+                                    
+                                    f32 t = HullHullTOI(HullA, TransformA, SimEntity->MoveDelta, HullB, TransformB, TestSimEntity->MoveDelta);
+                                    UPDATE_HIT();                                                        
+                                } break;
+                            }
+                        }
+                    }
+                }            
+            }
+        }    
+    }
+#undef UPDATE_HIT
+    
+    return Result;
+}
+
 toi_result FindStaticTOI(simulation* Simulation, sim_entity* SimEntity)
 {
     toi_result Result = InvalidTOIResult();    

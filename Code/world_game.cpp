@@ -68,6 +68,7 @@ void LoadTestLevel(game* Game)
     CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f),  MESH_ASSET_ID_BOX,   Global_Material1);
     CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);                    
     CreateSphereRigidBody(Game, 0, V3( 1.0f, 0.5f, 5.0f), 0.5f, 30.0f, 0.2f, Global_Material0);
+    CreatePushableBox(Game, 0, V3(-2.0f, 0.0f, 0.001f), 1.0f, 35.0f, Global_Material0);
     
     Game->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
     Game->JumpingQuads[0].Dimensions = V2(1.0f, 2.0f);
@@ -117,6 +118,44 @@ inline f32 GetDamp(f32 dt, f32 Damping)
     return Result;
 }
 
+void AddRigidBodyContactPairs(contact_pair_list* ContactPairs, sim_entity_volume_pair* PairA, sim_entity_volume_pair* PairB, entity_type TypeB)
+{        
+    switch(TypeB)
+    {
+        case ENTITY_TYPE_STATIC:
+        {
+            AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, NULL, PairB->Volume);
+        } break;
+        
+        case ENTITY_TYPE_PLAYER:
+        {
+            entity* Entity = GetUserData(PairB->SimEntity, entity);
+            player* Player = GetUserData(Entity, player);            
+            if(Player->State == PLAYER_STATE_PUSHING)                
+                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, NULL, PairB->Volume);
+            else
+                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, PairB->SimEntity->RigidBody, PairB->Volume);
+        } break;
+        
+        case ENTITY_TYPE_PUSHABLE:
+        {
+            entity* Entity = GetUserData(PairB->SimEntity, entity);
+            pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+            if(PushingObject->PlayerEntity)
+                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, PairB->SimEntity->RigidBody, PairB->Volume);
+            else
+                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, NULL, PairB->Volume);
+        } break;
+        
+        case ENTITY_TYPE_RIGID_BODY:
+        {
+            AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, PairB->SimEntity->RigidBody, PairB->Volume);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }                
+}
+
 extern "C"
 EXPORT GAME_FIXED_TICK(FixedTick)
 {    
@@ -128,6 +167,10 @@ EXPORT GAME_FIXED_TICK(FixedTick)
     
     Simulation->ContactStorage.FreeAll();
     Simulation->ManifoldStorage.FreeAll();    
+    
+    Simulation->CollisionEvents.Capacity = 1024;
+    Simulation->CollisionEvents.Count = 0;
+    Simulation->CollisionEvents.Ptr = PushArray(Simulation->CollisionEvents.Capacity, collision_event, Clear, 0);
     
     FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
     {
@@ -149,13 +192,37 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
-            {                
-                rigid_body* RigidBody = SimEntity->RigidBody;
-                RigidBody->AngularVelocity = {};
+            {                                                
+                player* Player = GetUserData(Entity, player);
                 
-                SimEntity->Velocity += SimEntity->Acceleration*dt;                                
-                if(!IsEntityState(Entity, ENTITY_STATE_JUMPING))
-                    SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);                                
+                switch(Player->State)
+                {
+                    case PLAYER_STATE_NONE:
+                    {                        
+                        rigid_body* RigidBody = SimEntity->RigidBody;
+                        RigidBody->AngularVelocity = {};                
+                        SimEntity->Velocity += SimEntity->Acceleration*dt;                                                        
+                        SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);                        
+                    } break;
+                    
+                    case PLAYER_STATE_JUMPING:
+                    {
+                        SimEntity->Velocity += SimEntity->Acceleration*dt;
+                    } break;
+                }                                
+            } break;
+            
+            case ENTITY_TYPE_PUSHABLE:
+            {
+                pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+                if(PushingObject->PlayerEntity)
+                {                    
+                    ASSERT(GetUserData(PushingObject->PlayerEntity, player)->State == PLAYER_STATE_PUSHING);
+                    rigid_body* RigidBody = SimEntity->RigidBody;                    
+                    SimEntity->Velocity += SimEntity->Acceleration*dt;     
+                    SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);                    
+                    RigidBody->AngularVelocity = {};
+                }                                                
             } break;
             
             case ENTITY_TYPE_RIGID_BODY:
@@ -189,7 +256,7 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         {
             FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
             {
-                if(!IsEntityType((entity*)TestSimEntity->UserData, ENTITY_TYPE_STATIC) && (TestSimEntity != SimEntity))
+                if(TestSimEntity != SimEntity)
                 {
                     u32 AIndex = Simulation->SimEntityStorage.GetIndex(SimEntity);
                     u32 BIndex = Simulation->SimEntityStorage.GetIndex(TestSimEntity);
@@ -234,9 +301,9 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         }
     }
     
-    collision_pair_list RigidBodyPairs = {};
-    RigidBodyPairs.Capacity = 64;
-    RigidBodyPairs.Ptr = PushArray(RigidBodyPairs.Capacity, collision_pair, Clear, 0);
+    contact_pair_list ContactPairs = {};
+    ContactPairs.Capacity = 1024;
+    ContactPairs.Ptr = PushArray(ContactPairs.Capacity, contact_pair, Clear, 0);
     
     for(u32 PotentialPairIndex = 0; PotentialPairIndex < PotentialPairs.Count; PotentialPairIndex++)
     {
@@ -246,56 +313,27 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         sim_entity_volume_pair* PairB = &CollisionPair->B;                
         
         sim_entity* SimEntityA = PairA->SimEntity;
-        sim_entity* SimEntityB = PairB->SimEntity;        
+        sim_entity* SimEntityB = PairB->SimEntity;
         
-        //NOTE(EVERYONE): If any are rigid bodies add to list to generate later
-        if(SimEntityA->RigidBody || SimEntityB->RigidBody)
+        entity_type TypeA = ((entity*)SimEntityA->UserData)->Type;
+        entity_type TypeB = ((entity*)SimEntityB->UserData)->Type;
+        
+        if(TypeA == ENTITY_TYPE_RIGID_BODY)        
         {
-            collision_pair* RigidBodyPair = RigidBodyPairs.Ptr + RigidBodyPairs.Count++;
-            if(SimEntityB->RigidBody && !SimEntityA->RigidBody)
-            {
-                RigidBodyPair->A = *PairB;
-                RigidBodyPair->B = *PairA;
-            }
-            else
-            {
-                RigidBodyPair->A = *PairA;
-                RigidBodyPair->B = *PairB;
-            }           
-        }                
+            AddRigidBodyContactPairs(&ContactPairs, PairA, PairB, TypeB);                             
+            continue;
+        }
+        
+        if(TypeB == ENTITY_TYPE_RIGID_BODY)
+        {
+            AddRigidBodyContactPairs(&ContactPairs, PairB, PairA, TypeA);
+            continue;
+        }
         
         //NOTE(EVERYONE): This is where we generate other collision events here
     }
     
-    //NOTE(EVERYONE): Generate collision events with non-static entities and static entities now (not player since we need to interate that)        
-    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
-    {
-        entity* Entity = (entity*)SimEntity->UserData;
-        switch(Entity->Type)
-        {            
-            case ENTITY_TYPE_RIGID_BODY:
-            {
-                FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
-                {
-                    entity* TestEntity = (entity*)TestSimEntity->UserData;
-                    if(TestEntity->Type == ENTITY_TYPE_STATIC)
-                    {                        
-                        FOR_EACH(EntityVolume, SimEntity->CollisionVolumes)
-                        {
-                            FOR_EACH(TestEntityVolume, TestSimEntity->CollisionVolumes)
-                            {
-                                collision_pair* Pair = RigidBodyPairs.Ptr + RigidBodyPairs.Count++;
-                                Pair->A = {SimEntity,     EntityVolume};
-                                Pair->B = {TestSimEntity, TestEntityVolume};
-                            }
-                        }                        
-                    }
-                }
-            } break;
-        }
-    }
-    
-    Simulation->GenerateContacts(&RigidBodyPairs);
+    Simulation->GenerateContacts(&ContactPairs);
     Simulation->SolveConstraints(30, Game->dtFixed);
     
     //NOTE(EVERYONE): After physics, for some objects, we need to perform continuous collision detection on their linear velocities. 
@@ -303,29 +341,48 @@ EXPORT GAME_FIXED_TICK(FixedTick)
     //and for player movement to get a gliding mechanic (which is extremely expensive)
     FOR_EACH(SimEntity, &Simulation->SimEntityStorage) SimEntity->MoveDelta = SimEntity->Velocity*Game->dtFixed;
     
-    b32 HasCollided = false;
-    
+    b32 HasCollided = false;    
     FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
     {
-        entity* Entity = (entity*)SimEntity->UserData;                        
+        entity* Entity = (entity*)SimEntity->UserData;                                
         
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
+            case ENTITY_TYPE_PUSHABLE:
             {
+                sim_entity* TestEntity = SimEntity;                                
+                if(Entity->Type == ENTITY_TYPE_PUSHABLE)
+                {                    
+                    pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+                    if(!PushingObject->PlayerEntity)
+                        continue;
+                }
+                
+                if(Entity->Type == ENTITY_TYPE_PLAYER)
+                {
+                    player* Player = GetUserData(Entity, player);
+                    if(Player->State == PLAYER_STATE_PUSHING)
+                        continue;
+                }
+                
                 //CONFIRM(JJ): I think we can limit the iterations to 3
+                //TODO(JJ): The player movement system needs some work. It is workable for now and we can probably integrate it 
+                //with the dual-world system plus a special gravity loop, but some additional care needs to be taken for stability 
+                //and performance                
+                v3f StartPosition = TestEntity->Transform.Translation;
                 for(u32 Iterations = 0; Iterations < 4; Iterations++)
                 {
-                    f32 DeltaLength = Magnitude(SimEntity->MoveDelta);
+                    f32 DeltaLength = Magnitude(TestEntity->MoveDelta);
                     
                     if(DeltaLength > 1e-4f)
                     {            
-                        v3f TargetPosition = SimEntity->Transform.Translation + SimEntity->MoveDelta;                           
-                        continuous_collision CollisionResult = Simulation->DetectStaticContinuousCollisions(SimEntity);
+                        v3f TargetPosition = TestEntity->Transform.Translation + TestEntity->MoveDelta;                           
+                        continuous_collision CollisionResult = Simulation->DetectContinuousCollisions(TestEntity);
                         
                         if(!CollisionResult.HitEntity)
                         {
-                            SimEntity->Transform.Translation = TargetPosition;                            
+                            TestEntity->Transform.Translation = TargetPosition;                            
                             break;
                         }
                         else
@@ -333,29 +390,30 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                             HasCollided = true;
                             penetration* Penetration = &CollisionResult.Penetration;
                             
-                            SimEntity->Transform.Translation += SimEntity->MoveDelta*CollisionResult.t;
-                            SimEntity->Transform.Translation += Penetration->Normal*1e-5f;
+                            TestEntity->Transform.Translation += TestEntity->MoveDelta*CollisionResult.t;
+                            TestEntity->Transform.Translation += Penetration->Normal*1e-4f;
                             
-                            SimEntity->MoveDelta = TargetPosition - SimEntity->Transform.Translation;
+                            TestEntity->MoveDelta = TargetPosition - TestEntity->Transform.Translation;
                             
-                            SimEntity->MoveDelta -= Dot(SimEntity->MoveDelta, Penetration->Normal)*Penetration->Normal;
-                            SimEntity->Velocity -= Dot(SimEntity->Velocity, Penetration->Normal)*Penetration->Normal;                                                        
+                            TestEntity->MoveDelta -= Dot(TestEntity->MoveDelta, Penetration->Normal)*Penetration->Normal;
+                            TestEntity->Velocity -= Dot(TestEntity->Velocity, Penetration->Normal)*Penetration->Normal;                                                        
                         }
                     }
                     else
                     {
                         break;
-                    }                    
-                }      
+                    }                                                       
+                }               
                 
-                Game->CurrentCameras[Game->CurrentWorldIndex].Target = SimEntity->Transform.Translation;                
-                
-                if(HasCollided)
+                if(Entity->Type == ENTITY_TYPE_PUSHABLE)
                 {
-                    entity* PlayerEntity = (entity*)SimEntity->UserData;
-                    if(IsEntityState(PlayerEntity, ENTITY_STATE_JUMPING))
-                        SetEntityState(PlayerEntity, ENTITY_STATE_NONE);
+                    pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+                    sim_entity* PlayerSimEntity = Simulation->GetSimEntity(PushingObject->PlayerEntity->SimEntityID);                    
+                    PlayerSimEntity->Transform.Translation += (TestEntity->Transform.Translation-StartPosition);                    
+                    TestEntity = PlayerSimEntity;
                 }
+                
+                Game->CurrentCameras[Game->CurrentWorldIndex].Target = TestEntity->Transform.Translation;                                
             } break;
             
             case ENTITY_TYPE_RIGID_BODY:
@@ -371,6 +429,17 @@ EXPORT GAME_FIXED_TICK(FixedTick)
             } break;
         }
     }
+    
+    for(u32 CollisionEventIndex = 0; CollisionEventIndex < Simulation->CollisionEvents.Count; CollisionEventIndex++)
+    {
+        collision_event* CollisionEvent = Simulation->CollisionEvents.Ptr + CollisionEventIndex;
+        entity* EntityA = (entity*)CollisionEvent->A->UserData;        
+        entity* EntityB = (entity*)CollisionEvent->B->UserData;
+        
+        EntityA->OnCollision(Game, EntityA, EntityB,  CollisionEvent->Penetration.Normal, CollisionEvent->Penetration.Distance);                
+        EntityB->OnCollision(Game, EntityB, EntityA, -CollisionEvent->Penetration.Normal, CollisionEvent->Penetration.Distance);
+    }
+    
     FOR_EACH(Entity, WorldStorage)
     {
         sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
@@ -383,87 +452,125 @@ extern "C"
 EXPORT GAME_TICK(Tick)
 {    
     f32 dt = Game->dt;
+        
+    simulation* Simulation = GetSimulation(Game, Game->CurrentWorldIndex);
+    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
+    {        
+        SimEntity->MoveDelta = {};
+        SimEntity->Acceleration = {};
+    }
     
     input* Input = Game->Input;
-    simulation* Simulation = GetSimulation(Game, Game->CurrentWorldIndex);
+    
+    v2f MoveDirection = {};    
+    if(IsDown(Input->MoveForward))
+        MoveDirection.y = 1.0f;
+    
+    if(IsDown(Input->MoveBackward))
+        MoveDirection.y = -1.0f;
+    
+    if(IsDown(Input->MoveRight))
+        MoveDirection.x = 1.0f;
+    
+    if(IsDown(Input->MoveLeft))
+        MoveDirection.x = -1.0f;
+    
+    if(MoveDirection != 0)
+        MoveDirection = Normalize(MoveDirection);
+    
     FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
     {
-        sim_entity* SimState = Simulation->GetSimEntity(Entity->SimEntityID);                
-        
-        SimState->Acceleration = {};
-        
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
-            {                
-                v3f Position = GetEntityPosition(Game, Entity->ID);                
+            {
+                player* Player = GetUserData(Entity, player);    
+                sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
                 
-                if(!IsEntityState(Entity, ENTITY_STATE_JUMPING))                
+                switch(Player->State)
                 {
-                    for(u32 JumpingQuadIndex = 0; JumpingQuadIndex < ARRAYCOUNT(Game->JumpingQuads); JumpingQuadIndex++)
-                    {
-                        jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
-                        v2f HalfDim = JumpingQuad->Dimensions*0.5f;
-                        
-                        v2f Min = JumpingQuad->CenterP.xy - HalfDim;
-                        v2f Max = JumpingQuad->CenterP.xy + HalfDim;
-                        
-                        c3 QuadColor = Red3();
-                        if(Position.xy >= Min && Position.xy <= Max)
+                    case PLAYER_STATE_NONE:
+                    {            
+                        v3f Position = GetEntityPosition(Game, Entity->ID);                               
+                        for(u32 JumpingQuadIndex = 0; JumpingQuadIndex < ARRAYCOUNT(Game->JumpingQuads); JumpingQuadIndex++)
                         {
-                            if(Abs(Position.z - JumpingQuad->CenterP.z) < 1e-2f)
+                            jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
+                            v2f HalfDim = JumpingQuad->Dimensions*0.5f;
+                            
+                            v2f Min = JumpingQuad->CenterP.xy - HalfDim;
+                            v2f Max = JumpingQuad->CenterP.xy + HalfDim;
+                            
+                            c3 QuadColor = Red3();
+                            if(Position.xy >= Min && Position.xy <= Max)
                             {
-                                if(IsPressed(Input->Action))
+                                if(Abs(Position.z - JumpingQuad->CenterP.z) < 1e-2f)
                                 {
-                                    jumping_quad* TargetQuad = JumpingQuad->OtherQuad;
-                                    
-                                    v2f XDirection = TargetQuad->CenterP.xy-JumpingQuad->CenterP.xy;
-                                    f32 Displacement = Magnitude(XDirection);
-                                    XDirection /= Displacement;                    
-                                    
-                                    f32 InitialVelocity = Sqrt(Displacement*Global_Gravity);
-                                    
-                                    SimState->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
-                                    SimState->Velocity.z = InitialVelocity*SQRT2_2;
-                                    
-                                    SetEntityState(Entity, ENTITY_STATE_JUMPING);
-                                    
-                                    break;                    
-                                    
-                                }                
-                                QuadColor = Yellow3();
-                            }
-                        }       
+                                    if(IsPressed(Input->Action))
+                                    {
+                                        jumping_quad* TargetQuad = JumpingQuad->OtherQuad;
+                                        
+                                        v2f XDirection = TargetQuad->CenterP.xy-JumpingQuad->CenterP.xy;
+                                        f32 Displacement = Magnitude(XDirection);
+                                        XDirection /= Displacement;                    
+                                        
+                                        f32 InitialVelocity = Sqrt(Displacement*Global_Gravity);
+                                        
+                                        SimEntity->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
+                                        SimEntity->Velocity.z = InitialVelocity*SQRT2_2;
+                                        
+                                        Player->State = PLAYER_STATE_JUMPING;                                    
+                                        
+                                        break;                                                
+                                    }                
+                                    QuadColor = Yellow3();
+                                }
+                            }       
+                        }            
                         
-                        DEBUG_DRAW_QUAD(JumpingQuad->CenterP, Global_WorldZAxis, JumpingQuad->Dimensions, QuadColor);    
-                    }                    
+                        SimEntity->Acceleration = V3(MoveDirection*Global_PlayerAcceleration, -Global_Gravity);            
+                    } break;
                     
-                    if(IsDown(Input->MoveForward))
-                        SimState->Acceleration.y = 1.0f;
+                    case PLAYER_STATE_PUSHING:
+                    {
+                        SimEntity->Velocity = {};
+                    } break;
                     
-                    if(IsDown(Input->MoveBackward))
-                        SimState->Acceleration.y = -1.0f;
-                    
-                    if(IsDown(Input->MoveRight))
-                        SimState->Acceleration.x = 1.0f;
-                    
-                    if(IsDown(Input->MoveLeft))
-                        SimState->Acceleration.x = -1.0f;
-                    
-                    if(SimState->Acceleration.xy != 0)
-                        SimState->Acceleration.xy = Normalize(SimState->Acceleration.xy) * Global_PlayerAcceleration;                    
-                }                                   
+                    case PLAYER_STATE_JUMPING:
+                    {
+                        SimEntity->Acceleration.z -= Global_Gravity;
+                    } break;
+                }
+            } break;
+            
+            case ENTITY_TYPE_PUSHABLE:
+            {
+                sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
+                pushing_object* PushingObject = GetUserData(Entity, pushing_object);                
+                if(PushingObject->PlayerEntity)
+                {                
+                    player* Player = GetUserData(PushingObject->PlayerEntity, player);
+                    ASSERT(Player->State == PLAYER_STATE_PUSHING);
+                    if(CanBePushed(MoveDirection, PushingObject->Direction))
+                    {
+                        SimEntity->Acceleration.xy = MoveDirection*Global_PlayerAcceleration;
+                    }
+                    else
+                    {
+                        Player->State = PLAYER_STATE_NONE;
+                        PushingObject->PlayerEntity = NULL;
+                        SimEntity->Velocity = {};                        
+                    }
+                }
                 
-                SimState->Acceleration.z -= Global_Gravity;
+                SimEntity->Acceleration.z = -Global_Gravity;
             } break;
             
             case ENTITY_TYPE_RIGID_BODY:
             {
-                SimState->Acceleration.z -= Global_Gravity;
+                Simulation->GetSimEntity(Entity->SimEntityID)->Acceleration.z -= Global_Gravity;                
             } break;
         }
-    }
-    
+    }        
 }
 
 extern "C"

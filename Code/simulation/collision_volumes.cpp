@@ -84,13 +84,13 @@ m3 GetCylinderInvInertiaTensor(f32 Radius, f32 Height, f32 Mass)
     return Result;
 }
 
-m3 GetBoxInvInertiaTensor(v3f HalfDim, f32 Mass)
+m3 GetBoxInvInertiaTensor(v3f Dim, f32 Mass)
 {
     f32 MassC = Mass*0.833333f;
     
-    f32 Ix = MassC * (Square(HalfDim.x)+Square(HalfDim.y));
-    f32 Iy = MassC * (Square(HalfDim.y)+Square(HalfDim.z));
-    f32 Iz = MassC * (Square(HalfDim.x)+Square(HalfDim.z));
+    f32 Ix = MassC * (Square(Dim.x)+Square(Dim.y));
+    f32 Iy = MassC * (Square(Dim.y)+Square(Dim.z));
+    f32 Iz = MassC * (Square(Dim.x)+Square(Dim.z));
     
     m3 Result = 
     {

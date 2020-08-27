@@ -586,12 +586,7 @@ graphics_object InterpolateEntity(game* Game, entity* Entity, f32 t)
 {
     graphics_object Result;    
     sqt OldState = *GetEntityTransformOld(Game, Entity->ID);
-    sqt NewState = *GetEntityTransform(Game, Entity->ID);        
-    
-    //CONFIRM(JJ): Should we be doing runtime changes on an entities scale? Definitely not on rigid bodies,
-    //but do other entities might want this? Keep this assertion just in case. Not sure if we even need to 
-    //interpolate them either
-    ASSERT(OldState.Scale == NewState.Scale);
+    sqt NewState = *GetEntityTransform(Game, Entity->ID);                
     
     sqt InterpState;
     InterpState.Translation = Lerp(OldState.Translation, t, NewState.Translation);    
@@ -618,11 +613,6 @@ game_camera InterpolateCamera(game* Game, u32 WorldIndex, f32 t)
     //TODO(JJ): When we do some more game camera logic, we will need to interpolate the spherical coordinates as well
     //ASSERT(NewCamera->Coordinates == OldCamera->Coordinates);
     Result.Coordinates = NewCamera->Coordinates;    
-    
-    //NOTE(EVERYONE): These values are constant, they do not need to be interpolated    
-    //ASSERT(OldCamera->FieldOfView == NewCamera->FieldOfView);
-    //ASSERT(OldCamera->ZNear == NewCamera->ZNear);
-    //ASSERT(OldCamera->ZFar == NewCamera->ZFar);
     
     Result.FieldOfView = NewCamera->FieldOfView;
     Result.ZNear = NewCamera->ZNear;
