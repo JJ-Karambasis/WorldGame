@@ -4,7 +4,6 @@
 struct sim_entity;
 struct simulation;
 
-
 #include "support.h"
 #include "collision_volumes.h"
 #include "penetration.h"

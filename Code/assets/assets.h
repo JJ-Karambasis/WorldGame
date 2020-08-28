@@ -51,7 +51,9 @@ struct material
 };
 
 struct assets
-{        
+{
+    platform_file_handle AssetFile;
+    
     hash_map<char*, mesh_asset_id> MeshNameMap;        
     hash_map<char*, texture_asset_id> TextureNameMap;
     

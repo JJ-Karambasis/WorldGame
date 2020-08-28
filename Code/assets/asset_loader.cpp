@@ -22,16 +22,10 @@ platform_file_handle LoadAssetFile(string AssetPath)
     return {};
 }
 
-platform_file_handle* GetAssetFile()
-{
-    return &Global_Platform->AssetFile;
-}
-
-b32 LoadMeshInfo(arena* Arena, mesh_info* MeshInfo)
+b32 LoadMeshInfo(arena* Arena, platform_file_handle* File, mesh_info* MeshInfo)
 {
     //TODO(JJ): What constitutes a failure when loading mesh infos?
     
-    platform_file_handle* File = GetAssetFile();
     FileRead(File, &MeshInfo->Header, sizeof(mesh_info_header), NO_OFFSET); 
     MeshInfo->Name = PushArray(Arena, MeshInfo->Header.NameLength+1, char, Clear, 0);
     MeshInfo->ConvexHulls = PushArray(Arena, MeshInfo->Header.ConvexHullCount, convex_hull, Clear, 0);
@@ -60,12 +54,12 @@ b32 LoadMeshInfo(arena* Arena, mesh_info* MeshInfo)
     return true;
 }
 
-b32 LoadMeshInfos(arena* Arena, mesh_info* MeshInfos)
+b32 LoadMeshInfos(arena* Arena, platform_file_handle* File, mesh_info* MeshInfos)
 {
     for(u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
     {
         mesh_info* MeshInfo = MeshInfos + MeshIndex;
-        if(!LoadMeshInfo(Arena, MeshInfo))
+        if(!LoadMeshInfo(Arena, File, MeshInfo))
         {
             //TODO(JJ): Output some diagnostics
             return false;
@@ -74,10 +68,9 @@ b32 LoadMeshInfos(arena* Arena, mesh_info* MeshInfos)
     return true;
 }
 
-b32 LoadTextureInfo(arena* Arena, texture_info* TextureInfo)
+b32 LoadTextureInfo(arena* Arena, platform_file_handle* File, texture_info* TextureInfo)
 {
-    //TODO(JJ): What constitutes a failure when loading mesh infos?    
-    platform_file_handle* File = GetAssetFile();
+    //TODO(JJ): What constitutes a failure when loading mesh infos?        
     FileRead(File, &TextureInfo->Header, sizeof(texture_info_header), NO_OFFSET);
     
     TextureInfo->Name = PushArray(Arena, TextureInfo->Header.NameLength+1, char, Clear, 0);
@@ -87,12 +80,12 @@ b32 LoadTextureInfo(arena* Arena, texture_info* TextureInfo)
     return true;
 }
 
-b32 LoadTextureInfos(arena* Arena, texture_info* TextureInfos)
+b32 LoadTextureInfos(arena* Arena, platform_file_handle* File, texture_info* TextureInfos)
 {
     for(u32 TextureIndex = 0; TextureIndex < TEXTURE_ASSET_COUNT; TextureIndex++)
     {
         texture_info* TextureInfo = TextureInfos + TextureIndex;
-        if(!LoadTextureInfo(Arena, TextureInfo))
+        if(!LoadTextureInfo(Arena, File, TextureInfo))
         {
             //TODO(JJ): Output some diagnostics
             return false;
@@ -104,13 +97,15 @@ b32 LoadTextureInfos(arena* Arena, texture_info* TextureInfos)
 
 b32 LoadAssetInfos(assets* Assets, arena* Arena)
 {
-    if(!LoadMeshInfos(Arena, Assets->MeshInfos))
+    
+    
+    if(!LoadMeshInfos(Arena, &Assets->AssetFile, Assets->MeshInfos))
     {
         //TODO(JJ): Output some diagnostics
         return false;
     }
     
-    if(!LoadTextureInfos(Arena, Assets->TextureInfos))
+    if(!LoadTextureInfos(Arena, &Assets->AssetFile, Assets->TextureInfos))
     {
         //TODO(JJ): Output some diagnostics
         return false;
@@ -129,7 +124,7 @@ mesh* LoadMesh(assets* Assets, mesh_asset_id ID)
 {
     ASSERT(ID != INVALID_MESH_ID);
     
-    platform_file_handle* File = GetAssetFile();
+    platform_file_handle* File = &Assets->AssetFile;
     
     mesh_info* MeshInfo = Assets->MeshInfos + ID;            
     
@@ -151,7 +146,7 @@ texture* LoadTexture(assets* Assets, texture_asset_id ID)
 {
     ASSERT(ID != INVALID_TEXTURE_ID);
     
-    platform_file_handle* File = GetAssetFile();
+    platform_file_handle* File = &Assets->AssetFile;
     
     texture_info* TextureInfo = Assets->TextureInfos + ID;
     

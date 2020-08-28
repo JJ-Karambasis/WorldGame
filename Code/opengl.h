@@ -153,7 +153,9 @@ struct opengl_context
 {
     graphics Graphics;
     
-    arena Storage;    
+    arena* TempStorage;
+    
+    arena Storage;        
     opengl_mesh_pool MeshPool;
     opengl_texture_pool TexturePool;        
     

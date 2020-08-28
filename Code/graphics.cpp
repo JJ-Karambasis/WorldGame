@@ -482,7 +482,7 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     LightBuffer.DirectionalLights[0] = CreateDirectionalLight(V3(0.0f, 0.0f, 4.0f), White3(), 1.0f, Normalize(V3(0.0f, 0.3f, -0.6f)), 
                                                               -5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
     
-    LightBuffer.PointLightCount = 1;
+    LightBuffer.PointLightCount = 9;
     LightBuffer.PointLights[0] = CreatePointLight(White3(),  5.0f, V3(-1.0f,  1.0f, 3.0f), 10.0f);
     LightBuffer.PointLights[1] = CreatePointLight(Red3(),   2.0f, V3(-4.0f,  4.0f, 3.0f), 10.0f);
     LightBuffer.PointLights[2] = CreatePointLight(Green3(), 2.0f, V3(-4.0f, -4.0f, 3.0f), 10.0f);

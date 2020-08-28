@@ -16,15 +16,13 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse((dev_context*)Global_DevPointer, RawMouse)
 #define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard((dev_context*)Global_DevPointer, RawKeyboard)
 #define DEVELOPMENT_TICK(Game, Graphics, GraphicsObjects, RenderInterpolate) DevelopmentTick((dev_context*)Global_DevPointer, Game, Graphics, GraphicsObjects, RenderInterpolate)
-#define DEVELOPMENT_RECORD_FRAME(Game) DevelopmentRecordFrame((dev_context*)Global_DevPointer, Game)
-#define DEVELOPMENT_PLAY_FRAME(Game) DevelopmentPlayFrame((dev_context*)Global_DevPointer, Game)
+#define DEVELOPMENT_RECORD() DevelopmentRecord((dev_context*)Global_DevPointer)
 #else
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) false
 #define DEVELOPMENT_HANDLE_MOUSE(RawMouse) 
 #define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) 
 #define DEVELOPMENT_TICK(Game, Graphics)
-#define DEVELOPMENT_RECORD_FRAME(Game)
-#define DEVELOPMENT_PLAY_FRAME(Game)
+#define DEVELOPMENT_RECORD(Game)
 #endif
 
 global string Global_EXEFilePath;
@@ -204,24 +202,6 @@ Win32_UnloadGraphicsCode(win32_graphics_code* GraphicsCode, string TempDLLPath)
     }
 }
 
-#if DEVELOPER_BUILD
-PLATFORM_LOG(Win32_Log)
-{   
-    char String[1024];
-    
-    va_list Args;
-    va_start(Args, Format);
-    vsprintf(String, Format, Args);
-    va_end(Args);
-    
-    OutputDebugStringA(String);    
-}
-#else
-inline PLATFORM_LOG(Win32_Log)
-{
-}
-#endif
-
 win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
 {    
     HMODULE DSoundLibrary = LoadLibrary("dsound.dll");
@@ -269,27 +249,6 @@ win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
     
     handle_error:
     return {};
-}
-
-PLATFORM_TOGGLE_AUDIO(Win32_ToggleAudio)
-{
-    win32_audio_output* PlatformAudio = (win32_audio_output*)Audio;
-    if(State)
-    {
-        PlatformAudio->SoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
-    }
-    else
-    {
-        PlatformAudio->SoundBuffer->Stop();
-    }
-}
-
-platform* Win32_GetPlatformStruct()
-{
-    local platform Result;
-    Result.Log             = Win32_Log;                                            
-    Result.ToggleAudio     = Win32_ToggleAudio;
-    return &Result;
 }
 
 void Win32_ClearSoundBuffer(win32_audio_output* Output)
@@ -397,7 +356,7 @@ Win32_AudioThread(void* Paramter)
                 ASSERT(SamplesToWrite < AudioOutput->Samples.Count);
                 samples Samples = {SamplesToWrite, AudioOutput->Samples.Data};
                 
-                Global_GameCode.OutputSoundSamples(Game, Global_Platform, &Samples, &AudioThreadArena);
+                Global_GameCode.OutputSoundSamples(Game, &Samples, &AudioThreadArena);
                 
                 VOID* Region1;
                 VOID* Region2;
@@ -513,27 +472,18 @@ void Win32_ProcessMessages(input* Input)
 }
 
 int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
-{     
-    Global_Platform = Win32_GetPlatformStruct();
+{   
+    *Global_PlatformArena = CreateArena(MEGABYTE(1));
     
     error_stream ErrorStream = CreateErrorStream();
     SetGlobalErrorStream(&ErrorStream);
-    
-    arena DefaultArena = CreateArena(MEGABYTE(256));    
-    SetDefaultArena(&DefaultArena);
-    Global_Platform->TempArena = &DefaultArena;
-    Global_Platform->ErrorStream = &ErrorStream;
-    
-    *Global_PlatformArena = CreateArena(MEGABYTE(1));
     
     Global_EXEFilePath = GetProgramPath(Global_PlatformArena);
     string GameDLLPathName = Concat(Global_EXEFilePath, "World_Game.dll", Global_PlatformArena);
     string TempDLLPathName = Concat(Global_EXEFilePath, "World_Game_Temp.dll", Global_PlatformArena);    
     string OpenGLGraphicsDLLPathName = Concat(Global_EXEFilePath, "OpenGL.dll", Global_PlatformArena);
     string OpenGLGraphicsTempDLLPathName = Concat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
-    
-    Global_Platform->AssetFile = LoadAssetFile(Concat(Global_EXEFilePath, "WorldGame.assets"));
-    BOOL_CHECK_AND_HANDLE(Global_Platform->AssetFile.IsValid(), "Could not load the asset file.");
+    string AssetFilePath = Concat(Global_EXEFilePath, "WorldGame.assets", Global_PlatformArena);
     
     u16 KeyboardUsage = 6;
     u16 MouseUsage = 2;
@@ -567,7 +517,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");        
     
     input Input = {};
-        
+    
     Global_GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);
     if(!Global_GameCode.GameLibrary.Library)    
         WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
@@ -582,21 +532,23 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         Instance
     };
     
-    graphics* Graphics = GraphicsCode.InitGraphics(Global_Platform, PlatformData);
-    if(!Graphics)
-        WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
-            
 #if DEVELOPER_BUILD
     dev_context _DevContext_ = {};
     dev_context* DevContext = &_DevContext_;
     DevContext->InDevelopmentMode = true;
     DevContext->PlatformData = PlatformData;        
     Global_DevPointer = DevContext;
-#endif
+#endif        
     
-    game* Game = Global_GameCode.Initialize(&Input, &AudioOutput, Global_Platform, Global_DevPointer);                                                
+    game* Game = Global_GameCode.Initialize(&Input, &AudioOutput, AssetFilePath, &ErrorStream, Global_DevPointer);                                                
     CloseHandle(CreateThread(NULL, 0, Win32_AudioThread, Game, 0, NULL));    
-        
+    
+    SetDefaultArena(Game->TempStorage);
+    
+    graphics* Graphics = GraphicsCode.InitGraphics(Game->TempStorage, PlatformData);
+    if(!Graphics)
+        WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
+    
     Global_Running = true;
     
     Game->dtFixed = 1.0f/60.0f;        
@@ -639,7 +591,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         //DEVELOPMENT_RECORD_FRAME(Game);
         //DEVELOPMENT_PLAY_FRAME(Game);
-        
+                
         while(Accumulator >= Game->dtFixed)
         {            
             CopyMemory(Game->PrevTransforms[0], Game->CurrentTransforms[0], sizeof(sqt)*Game->EntityStorage[0].Capacity);
@@ -648,8 +600,15 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             Game->PrevCameras[1] = Game->CurrentCameras[1];
             
             if(!IN_EDIT_MODE())
+            {                
+                DEVELOPMENT_RECORD();                
+                Global_GameCode.FixedTick(Game, DevContext);                                
+            }
+            
+            if(Game->NoInterpolation)
             {
-                Global_GameCode.FixedTick(Game);                                
+                Accumulator = Game->dtFixed;
+                break;
             }
             
             Accumulator -= Game->dtFixed;
@@ -659,7 +618,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
         
         Win32_ProcessMessages(&Input);
-        Global_GameCode.Tick(Game);                                                
+        Global_GameCode.Tick(Game, DevContext);                                                
         
         Game->dt = FrameTime;                
         Graphics->RenderDim = Win32_GetWindowDim(Window);
@@ -674,7 +633,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         DEVELOPMENT_TICK(Game, Graphics, &GraphicsState, tRenderInterpolate);                                
         
-        GraphicsCode.ExecuteRenderCommands(Graphics, Global_Platform, Global_DevPointer);
+        GraphicsCode.ExecuteRenderCommands(Graphics, Global_DevPointer);
         
         EndTemporaryMemory(&FrameArena);        
         CHECK_ARENA(GetDefaultArena());
@@ -708,25 +667,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 }
 
 #if DEVELOPER_BUILD
-#include <shobjidl_core.h>
 
-wchar_t* Win32_ConvertToWide(char* String)
-{
-    int StringSize = (int)LiteralStringLength(String)+1;
-    wchar_t* Result = PushArray(StringSize, wchar_t, Clear, 0);
-    MultiByteToWideChar(CP_ACP, 0, String, -1, Result, StringSize);
-    return Result;
-}
-
-char* Win32_ConvertToStandard(wchar_t* String)
-{
-    //CONFIRM(JJ): Do we want to actually support wide strings in string.h? If so can we remove these wide string functions 
-    //from the c runtime libary?
-    int StringSize = (int)wcslen(String)+1;
-    char* Result = PushArray(StringSize, char, Clear, 0);
-    WideCharToMultiByte(CP_ACP, 0, String, -1, Result, StringSize, NULL, NULL);
-    return Result;
-}
 
 void Platform_InitImGui(void* PlatformData)
 {    
@@ -795,53 +736,6 @@ void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* 
     }      
 }
 
-global IFileOpenDialog* Global_OpenFileDialog;
-string Platform_OpenFileDialog(char* Extension)
-{
-    string Result = InvalidString();
-    
-    IFileOpenDialog* FileDialog = NULL;
-    if(SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, (void**)&FileDialog)))
-    {
-        DWORD FileFlags;
-        if(SUCCEEDED(FileDialog->GetOptions(&FileFlags)))
-        {
-            if(SUCCEEDED(FileDialog->SetOptions(FileFlags | FOS_FORCEFILESYSTEM)))
-            {
-                string StringExtension = Concat("*.", Extension); 
-                COMDLG_FILTERSPEC Filter = {L"File", Win32_ConvertToWide(StringExtension.Data)};
-                if(SUCCEEDED(FileDialog->SetFileTypes(1, &Filter)))
-                {
-                    if(SUCCEEDED(FileDialog->SetFileTypeIndex(0)))
-                    {
-                        if(SUCCEEDED(FileDialog->SetDefaultExtension(Win32_ConvertToWide(Extension))))
-                        {
-                            if(SUCCEEDED(FileDialog->Show(NULL)))
-                            {
-                                IShellItem* Item;
-                                if(SUCCEEDED(FileDialog->GetResult(&Item)))
-                                {
-                                    PWSTR FilePath = NULL;
-                                    if(SUCCEEDED(Item->GetDisplayName(SIGDN_FILESYSPATH, &FilePath)))
-                                    {
-                                        Result = PushLiteralString(Win32_ConvertToStandard(FilePath));
-                                        CoTaskMemFree(FilePath);
-                                    }                                    
-                                    RELEASE(Item);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        RELEASE(FileDialog);        
-    }
-    
-    return Result;        
-}
-
 const global char Global_FrameRecordingPrefix[] = "FrameRecording_";
 global char* Global_DataPath;
 global i32 Global_FrameRecordingIndex = 1;
@@ -872,7 +766,7 @@ string Platform_FindNewFrameRecordingPath()
             break;
     }        
     
-    Result = FormatString("%s\\frame_recordings\\FrameRecording_%d.arc_recording", Global_DataPath, Global_FrameRecordingIndex);    
+    Result = FormatString("%s\\frame_recordings\\FrameRecording_%d.recording", Global_DataPath, Global_FrameRecordingIndex);    
     return Result;
 }
 

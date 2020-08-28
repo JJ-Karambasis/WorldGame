@@ -55,8 +55,7 @@ i16 ConvertSamplesF32ToI16(f32 Sample)
 
 extern "C"
 EXPORT GAME_OUTPUT_SOUND_SAMPLES(OutputSoundSamples)
-{
-    Global_Platform = Platform;    
+{    
     audio_output* AudioOutput = Game->AudioOutput;        
     
     f32* RealDest = PushArray(TempArena, OutputSamples->Count*AUDIO_OUTPUT_CHANNEL_COUNT, f32, Clear, 0);    

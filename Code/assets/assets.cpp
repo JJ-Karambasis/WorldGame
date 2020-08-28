@@ -29,9 +29,14 @@ b32 PopulateAssetMap(assets* Assets)
     return true;
 }
 
-assets* InitAssets(arena* Storage)
+assets* InitAssets(arena* Storage, string AssetPath)
 {    
     assets* Assets = PushStruct(Storage, assets, Clear, 0);
+    
+    Assets->AssetFile = LoadAssetFile(AssetPath);
+    if(!Assets->AssetFile.IsValid())
+        return NULL;
+    
     Assets->MeshNameMap = CreateHashMap<char*, mesh_asset_id>(MESH_ASSET_COUNT*10, StringEquals, Storage);    
     Assets->TextureNameMap = CreateHashMap<char*, texture_asset_id>(TEXTURE_ASSET_COUNT*10, StringEquals, Storage);        
     

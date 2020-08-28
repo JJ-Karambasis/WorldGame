@@ -41,6 +41,135 @@ void DevelopmentUpdateSelectedObjectRotation(sqt* Transform, v3f* OldRotation, v
     Transform->Orientation = Normalize(EulerQuaternion(NewRotation.roll, NewRotation.pitch, NewRotation.yaw));
 }
 
+void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlayback)
+{
+    char* RecordButtonText = NULL;
+    
+    frame_recording* Recording = &FramePlayback->Recording;
+    
+    frame_playback_state State = FramePlayback->PlaybackState;
+    
+    if(State == FRAME_PLAYBACK_STATE_NONE)
+        RecordButtonText = "Start Recording";
+    
+    if(State == FRAME_PLAYBACK_STATE_RECORDING)
+        RecordButtonText = "Stop Recording";
+    
+    if(RecordButtonText)
+    {
+        if(ImGui::Button(RecordButtonText))
+        {
+            if(State == FRAME_PLAYBACK_STATE_NONE)
+            {
+                string RecordingPath = Platform_FindNewFrameRecordingPath();
+                if(!IsInvalidString(RecordingPath))
+                {
+                    ASSERT(RecordingPath.Length < FramePlayback->MaxRecordingPathLength);
+                    
+                    CopyMemory(FramePlayback->RecordingPath, RecordingPath.Data, RecordingPath.Length);
+                    FramePlayback->RecordingPath[RecordingPath.Length] = 0;
+                    
+                    Recording->StartRecording();
+                    
+                    State = FRAME_PLAYBACK_STATE_RECORDING;
+                }
+            }
+            else if(State == FRAME_PLAYBACK_STATE_RECORDING)
+            {
+                Recording->EndRecording(FramePlayback->RecordingPath);
+                State = FRAME_PLAYBACK_STATE_NONE;
+            }
+            INVALID_ELSE;
+        }        
+    }
+    
+    if(State == FRAME_PLAYBACK_STATE_NONE)
+    {
+        if(ImGui::Button("Load Recording"))
+        {
+            string RecordingPath = Platform_OpenFileDialog("recording");
+            if(!IsInvalidString(RecordingPath))
+            {
+                CopyMemory(FramePlayback->RecordingPath, RecordingPath.Data, RecordingPath.Length);
+                FramePlayback->RecordingPath[RecordingPath.Length] = 0;                
+            }
+        }        
+    }         
+    
+    if((FramePlayback->RecordingPath[0] != 0) && (State != FRAME_PLAYBACK_STATE_RECORDING))
+    {
+        char* PlayButtonText = "Start Playing";
+        
+        b32 StopPlaying = (State == FRAME_PLAYBACK_STATE_PLAYING) || (State == FRAME_PLAYBACK_STATE_INSPECT_FRAMES);
+        if(StopPlaying)
+            PlayButtonText = "Stop Playing";
+        
+        if(ImGui::Button(PlayButtonText))
+        {
+            if(StopPlaying)
+            {                
+                FramePlayback->CurrentFrameIndex = 0;
+                Recording->PlayFrame(DevContext->Game, 0);
+                Recording->EndPlaying();
+                State = FRAME_PLAYBACK_STATE_NONE;                
+            }
+            else
+            {
+                Recording->StartPlaying(FramePlayback->RecordingPath);
+                State = FRAME_PLAYBACK_STATE_PLAYING;
+            }
+        }               
+    }
+    
+    if(FramePlayback->RecordingPath[0] != 0)
+    {
+        ImGui::SameLine();
+        ImGui::Text("Recording File: %s\n", FramePlayback->RecordingPath);
+    }
+    
+    if((State == FRAME_PLAYBACK_STATE_PLAYING) || (State == FRAME_PLAYBACK_STATE_INSPECT_FRAMES))
+    {
+        char* InspectText = "Start Inspecting";        
+        b32 Inspecting = (State == FRAME_PLAYBACK_STATE_INSPECT_FRAMES);
+        if(Inspecting)
+            InspectText = "Stop Inspecting";
+        
+        if(ImGui::Button(InspectText))
+        {
+            if(Inspecting)            
+                State = FRAME_PLAYBACK_STATE_PLAYING;            
+            else            
+                State = FRAME_PLAYBACK_STATE_INSPECT_FRAMES;            
+        }
+        
+        ImGui::SameLine();
+        ImGui::Text("Frame %d/%d", FramePlayback->CurrentFrameIndex, Recording->FrameCount-1);                 
+        
+        if(Inspecting)
+        {            
+            ImGuiIO* IO = &ImGui::GetIO();
+            
+            if(ImGui::IsKeyPressedMap(ImGuiKey_LeftArrow))       
+            {
+                if(FramePlayback->CurrentFrameIndex == 0)
+                    FramePlayback->CurrentFrameIndex = Recording->FrameCount-1;
+                else
+                    FramePlayback->CurrentFrameIndex--;
+            }
+            
+            if(ImGui::IsKeyPressedMap(ImGuiKey_RightArrow))            
+            {
+                if(FramePlayback->CurrentFrameIndex == (Recording->FrameCount-1))
+                    FramePlayback->CurrentFrameIndex = 0;
+                else
+                    FramePlayback->CurrentFrameIndex++;                                                
+            }                        
+        }       
+    }
+    
+    FramePlayback->PlaybackState = State;
+}
+
 void DevelopmentImGuiUpdate(dev_context* DevContext)
 {
     graphics* Graphics = DevContext->Graphics;
@@ -81,6 +210,11 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         }
     }    
     
+    if(!DevContext->EditMode)
+    {        
+        DevelopmentFramePlayback(DevContext, &DevContext->FramePlayback);    
+    }
+    
     //const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading", "Wireframe on Normal Shading"};
     
     const char* ViewModeTypes[] = {"Lit", "Unlit", "Wireframe", "Wireframe on Lit"};
@@ -89,8 +223,6 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     SameLine();
     Combo("", (int*)&DevContext->ViewModeType, ViewModeTypes, ARRAYCOUNT(ViewModeTypes));
    
-    //DevelopmentFrameRecording(DevContext);    
-    
     ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    
     ImGui::Checkbox("Draw colliders", (bool*)&DevContext->DrawColliders);    
@@ -205,7 +337,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
             ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);
             ImGui::Text("WorldIndex: (%d)", DevContext->SelectedObject->ID.WorldIndex);
-            if(!IsInvalidEntityID(DevContext->SelectedObject->LinkID))
+            if(DevContext->SelectedObject->LinkID.IsValid())
             {
                 ImGui::Text("Link ID: (%d)", DevContext->SelectedObject->LinkID.ID);
                 ImGui::Text("Link WorldIndex: (%d)", DevContext->SelectedObject->LinkID.WorldIndex);

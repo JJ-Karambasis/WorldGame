@@ -2,7 +2,6 @@
 #define GRAPHICS_H
 
 #include <ak_common.h>
-#include "platform.h"
 
 #define MAX_JOINT_COUNT 256
 #define MAX_DIRECTIONAL_LIGHT_COUNT 1
@@ -194,13 +193,13 @@ typedef FREE_RENDER_BUFFER(free_render_buffer);
 #define STREAM_MESH_DATA(name) void name(graphics* Graphics, graphics_mesh_id MeshID, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
 typedef STREAM_MESH_DATA(stream_mesh_data);
 
-#define INIT_GRAPHICS(name) graphics* name(platform* Platform, void** PlatformData)
+#define INIT_GRAPHICS(name) graphics* name(arena* TempStorage, void** PlatformData)
 typedef INIT_GRAPHICS(init_graphics);
 
 #define BIND_GRAPHICS_FUNCTIONS(name) b32 name(graphics* Graphics)
 typedef BIND_GRAPHICS_FUNCTIONS(bind_graphics_functions);
 
-#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, platform* Platform, void* DevContext)
+#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, void* DevContext)
 typedef EXECUTE_RENDER_COMMANDS(execute_render_commands);
 
 #define INVALIDATE_SHADERS(name) void name(graphics* Graphics)

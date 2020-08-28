@@ -83,27 +83,30 @@ void LoadTestLevel(game* Game)
 extern "C"
 EXPORT GAME_INITIALIZE(Initialize)
 {
-    SET_DEVELOPER_CONTEXT(DevContext);
-    Global_Platform = Platform;
-    
-    SetDefaultArena(Global_Platform->TempArena);
-    SetGlobalErrorStream(Global_Platform->ErrorStream);
-    
+    SET_DEVELOPER_CONTEXT();
+            
     arena GameStorage = CreateArena(MEGABYTE(32));            
-    assets* Assets = InitAssets(&GameStorage);
+    assets* Assets = InitAssets(&GameStorage, AssetPath);
     if(!Assets)
     {
         //TODO(JJ): Diagnostic and error logging
         return false;
     }        
     
+    arena TempStorage = CreateArena(MEGABYTE(32));
+    
     game* Game = PushStruct(&GameStorage, game, Clear, 0);
     Game->_Internal_GameStorage_ = GameStorage;
     Game->GameStorage = &Game->_Internal_GameStorage_;
     
+    Game->_Internal_TempStorage_ = TempStorage;
+    Game->TempStorage = &Game->_Internal_TempStorage_;
+    
+    SetDefaultArena(Game->TempStorage);
+    
     Game->Input       = Input;
     Game->AudioOutput = AudioOutput;
-    Game->Assets      = Assets;
+    Game->Assets      = Assets;    
     
     //TODO(JJ): Load world/entity data at runtime    
     LoadTestLevel(Game);
@@ -141,7 +144,7 @@ void AddRigidBodyContactPairs(contact_pair_list* ContactPairs, sim_entity_volume
         {
             entity* Entity = GetUserData(PairB->SimEntity, entity);
             pushing_object* PushingObject = GetUserData(Entity, pushing_object);
-            if(PushingObject->PlayerEntity)
+            if(PushingObject->PlayerID.IsValid())
                 AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, PairB->SimEntity->RigidBody, PairB->Volume);
             else
                 AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, NULL, PairB->Volume);
@@ -158,7 +161,10 @@ void AddRigidBodyContactPairs(contact_pair_list* ContactPairs, sim_entity_volume
 
 extern "C"
 EXPORT GAME_FIXED_TICK(FixedTick)
-{    
+{   
+    SET_DEVELOPER_CONTEXT();
+    SetDefaultArena(Game->TempStorage);
+    
     f32 dt = Game->dtFixed;    
     platform_time Start = WallClock();
     
@@ -215,9 +221,10 @@ EXPORT GAME_FIXED_TICK(FixedTick)
             case ENTITY_TYPE_PUSHABLE:
             {
                 pushing_object* PushingObject = GetUserData(Entity, pushing_object);
-                if(PushingObject->PlayerEntity)
+                if(PushingObject->PlayerID.IsValid())
                 {                    
-                    ASSERT(GetUserData(PushingObject->PlayerEntity, player)->State == PLAYER_STATE_PUSHING);
+                    entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
+                    ASSERT(GetUserData(PlayerEntity, player)->State == PLAYER_STATE_PUSHING);
                     rigid_body* RigidBody = SimEntity->RigidBody;                    
                     SimEntity->Velocity += SimEntity->Acceleration*dt;     
                     SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);                    
@@ -355,7 +362,7 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                 if(Entity->Type == ENTITY_TYPE_PUSHABLE)
                 {                    
                     pushing_object* PushingObject = GetUserData(Entity, pushing_object);
-                    if(!PushingObject->PlayerEntity)
+                    if(!PushingObject->PlayerID.IsValid())
                         continue;
                 }
                 
@@ -408,7 +415,9 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                 if(Entity->Type == ENTITY_TYPE_PUSHABLE)
                 {
                     pushing_object* PushingObject = GetUserData(Entity, pushing_object);
-                    sim_entity* PlayerSimEntity = Simulation->GetSimEntity(PushingObject->PlayerEntity->SimEntityID);                    
+                    entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
+                    
+                    sim_entity* PlayerSimEntity = Simulation->GetSimEntity(PlayerEntity->SimEntityID);                    
                     PlayerSimEntity->Transform.Translation += (TestEntity->Transform.Translation-StartPosition);                    
                     TestEntity = PlayerSimEntity;
                 }
@@ -450,7 +459,10 @@ EXPORT GAME_FIXED_TICK(FixedTick)
 
 extern "C"
 EXPORT GAME_TICK(Tick)
-{    
+{   
+    SET_DEVELOPER_CONTEXT();
+    
+    SetDefaultArena(Game->TempStorage);
     f32 dt = Game->dt;
         
     simulation* Simulation = GetSimulation(Game, Game->CurrentWorldIndex);
@@ -546,9 +558,10 @@ EXPORT GAME_TICK(Tick)
             {
                 sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
                 pushing_object* PushingObject = GetUserData(Entity, pushing_object);                
-                if(PushingObject->PlayerEntity)
+                if(PushingObject->PlayerID.IsValid())
                 {                
-                    player* Player = GetUserData(PushingObject->PlayerEntity, player);
+                    entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
+                    player* Player = GetUserData(PlayerEntity, player);
                     ASSERT(Player->State == PLAYER_STATE_PUSHING);
                     if(CanBePushed(MoveDirection, PushingObject->Direction))
                     {
@@ -557,7 +570,7 @@ EXPORT GAME_TICK(Tick)
                     else
                     {
                         Player->State = PLAYER_STATE_NONE;
-                        PushingObject->PlayerEntity = NULL;
+                        PushingObject->PlayerID = InvalidEntityID();                        
                         SimEntity->Velocity = {};                        
                     }
                 }
@@ -576,6 +589,7 @@ EXPORT GAME_TICK(Tick)
 extern "C"
 EXPORT GAME_RENDER(Render)
 {
+    SetDefaultArena(Game->TempStorage);
     UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);        
     view_settings ViewSettings = GetViewSettings(&GraphicsState->Camera);
     PushWorldShadingCommands(Graphics, Game->RenderBuffer, &ViewSettings, Game->Assets, GraphicsState->GraphicsObjects);

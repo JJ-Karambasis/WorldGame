@@ -8,7 +8,6 @@
 
 struct game;
 
-#include "platform.h"
 #include "input.h"
 #include "graphics.h"
 #include "assets/assets.h"
@@ -54,7 +53,10 @@ struct block_puzzle
 struct game
 {            
     arena _Internal_GameStorage_;                        
+    arena _Internal_TempStorage_;
     arena* GameStorage;    
+    arena* TempStorage;
+    
     u32 CurrentWorldIndex;
     
     //This stuff is probably going to be our level data    
@@ -74,7 +76,10 @@ struct game
     assets* Assets;
     audio_output* AudioOutput;
     input* Input;              
-    graphics_render_buffer* RenderBuffer;    
+    graphics_render_buffer* RenderBuffer;        
+    error_stream* ErrorStream;
+    
+    b32 NoInterpolation;
 };
 
 struct graphics_object
@@ -147,19 +152,23 @@ GetSimulation(game* Game, entity_id ID)
     return Simulation;
 }
 
-#define GAME_INITIALIZE(name) game* name(input* Input, audio_output* AudioOutput, platform* Platform, void* DevContext)
-typedef GAME_INITIALIZE(game_initialize);
-
+#if DEVELOPER_BUILD
+#define GAME_INITIALIZE(name) game* name(input* Input, audio_output* AudioOutput, string AssetPath, error_stream* ErrorStream, void* DevContext)
+#define GAME_FIXED_TICK(name) void name(game* Game, void* DevContext)
+#define GAME_TICK(name) void name(game* Game, void* DevContext)
+#else
+#define GAME_INITIALIZE(name) game* name(input* Input, audio_output* AudioOutput, string AssetPath, error_stream* ErrorStream)
 #define GAME_FIXED_TICK(name) void name(game* Game)
-typedef GAME_FIXED_TICK(game_fixed_tick);
-
 #define GAME_TICK(name) void name(game* Game)
+#endif
+typedef GAME_INITIALIZE(game_initialize);
+typedef GAME_FIXED_TICK(game_fixed_tick);
 typedef GAME_TICK(game_tick);
 
 #define GAME_RENDER(name) void name(game* Game, graphics* Graphics, graphics_state* GraphicsState)
 typedef GAME_RENDER(game_render);
 
-#define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, platform* Platform, samples* OutputSamples, arena* TempArena)
+#define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, samples* OutputSamples, arena* TempArena)
 typedef GAME_OUTPUT_SOUND_SAMPLES(game_output_sound_samples);
 
 GAME_INITIALIZE(Game_InitializeStub)

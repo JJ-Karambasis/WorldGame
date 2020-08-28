@@ -28,7 +28,7 @@ COLLISION_EVENT(OnPlayerCollision)
                 {                    
                     Player->State = PLAYER_STATE_PUSHING;
                     pushing_object* PushingObject = GetUserData(CollidedEntity, pushing_object);
-                    PushingObject->PlayerEntity = Entity;                    
+                    PushingObject->PlayerID = Entity->ID;                    
                     PushingObject->Direction = N;
                 }                     
             }

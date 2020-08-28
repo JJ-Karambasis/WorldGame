@@ -34,6 +34,6 @@ if %COMPILE_GRAPHICS% == 1 (
 
 if %COMPILE_PLATFORM% == 1 (
     %Compiler% %Common% %Warnings% -DOS_WINDOWS ..\code\win32_world_game.cpp -link libfbxsdk-mt.lib user32.lib ole32.lib -opt:ref -out:World_Game.exe
-)
+) 
 
 popd

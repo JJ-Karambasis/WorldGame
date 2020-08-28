@@ -617,7 +617,8 @@ void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLs
     if((ID == 131185) || (ID == 131204) || (ID == 131218) || (ID == 131139) || (ID == 131169))        
         return;
     
-    CONSOLE_LOG("GL Debug Message: %s\n", Message);    
+    ConsoleLog("GL Debug Message: %s\n", Message);    
+    
     ASSERT(false);
 }
 
@@ -707,12 +708,12 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
 
 extern "C"
 EXPORT INIT_GRAPHICS(InitGraphics)
-{
-    Global_Platform = Platform;
-    SetDefaultArena(Global_Platform->TempArena);    
+{    
+    SetDefaultArena(TempStorage);    
     
     arena GraphicsStorage = CreateArena(KILOBYTE(128));    
     opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
+    OpenGL->TempStorage = TempStorage;
     
     OpenGL->Storage = GraphicsStorage;
     OpenGL->MeshPool = CreatePool<opengl_mesh>(&OpenGL->Storage, 128);
@@ -788,11 +789,10 @@ b32 BindShadowMapFBO(GLuint FBO, GLuint TextureArray, u32* Counter)
 extern "C"
 EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {
-    SET_DEVELOPER_CONTEXT(DevContext);
-    
-    Global_Platform = Platform;        
-    SetDefaultArena(Global_Platform->TempArena);
-    opengl_context* OpenGL = (opengl_context*)Graphics;        
+    SET_DEVELOPER_CONTEXT();
+        
+    opengl_context* OpenGL = (opengl_context*)Graphics;            
+    SetDefaultArena(OpenGL->TempStorage);
     
     if(!OpenGL->SkinningBuffers.Ptr)
     {

@@ -10,14 +10,13 @@ enum player_state
 
 struct pushing_object
 {
-    entity* PlayerEntity;
+    entity_id PlayerID;
     v2f Direction;
 };
 
 struct player
 {
-    player_state State;    
-    pushing_object PushingObject;
+    player_state State;        
 };
 
 COLLISION_EVENT(OnPlayerCollision);

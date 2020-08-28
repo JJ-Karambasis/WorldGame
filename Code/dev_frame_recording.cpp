@@ -1,200 +1,251 @@
-void ReadFrame(dev_context* DevContext, u32 FrameIndex)
+#define PLAYER_SIZE sizeof(recording_entity_header) + sizeof(player)
+#define RIGID_BODY_SIZE sizeof(recording_entity_header)
+#define PUSHABLE_SIZE sizeof(recording_entity_header) + sizeof(pushing_object)
+
+inline b32 
+ValidateSignature(frame_recording_header Header)
 {
-    game* Game = DevContext->Game;
-    frame_recording* Recording = &DevContext->FrameRecording;
-    
-    ASSERT(FrameIndex < Recording->TotalLoadedFrames);
-    
-    frame* Frames = (frame*)(Recording->RecordingBuffer.Data + sizeof(u32));        
-    frame* Frame = Frames + FrameIndex;
-    
-    ASSERT(Frame->dt != 0);
-    
-    Game->dt = Frame->dt;
-    *Game->Input = Frame->Input;
-    
-    world_entity* PlayerEntity0 = GetWorld(Game, 0)->PlayerEntity;
-    world_entity* PlayerEntity1 = GetWorld(Game, 1)->PlayerEntity;
-    
-    PlayerEntity0->Position       = Frame->PlayerPosition[0];
-    PlayerEntity0->Orientation    = Frame->PlayerOrientation[0];
-    PlayerEntity0->Velocity       = Frame->PlayerVelocity[0];    
-    
-    PlayerEntity1->Position       = Frame->PlayerPosition[1];
-    PlayerEntity1->Orientation    = Frame->PlayerOrientation[1];
-    PlayerEntity1->Velocity       = Frame->PlayerVelocity[1];    
+    b32 Result = (Header.MajorVersion == FRAME_RECORDING_MAJOR_VERSION) && (Header.MinorVersion == FRAME_RECORDING_MINOR_VERSION);
+    return Result;
 }
 
-void DevelopmentFrameRecording(dev_context* DevContext)
-{   
-    graphics* Graphics = DevContext->Graphics;
-    game* Game = DevContext->Game;    
-    
-    frame_recording* FrameRecording = &DevContext->FrameRecording;
-    {        
-        frame_recording_state LastState = FrameRecording->RecordingState;
-        if(FrameRecording->RecordingState == FRAME_RECORDING_STATE_NONE || FrameRecording->RecordingState == FRAME_RECORDING_STATE_RECORDING)
-        {                           
-            char* RecordingText = (FrameRecording->RecordingState == FRAME_RECORDING_STATE_RECORDING) ? "Stop Recording" : "Start Recording";                    
-            if(ImGui::Button(RecordingText)) 
-            {                
-                FrameRecording->RecordingState = (FrameRecording->RecordingState == FRAME_RECORDING_STATE_RECORDING) ? FRAME_RECORDING_STATE_NONE : FRAME_RECORDING_STATE_RECORDING;                
-                if(FrameRecording->RecordingState == FRAME_RECORDING_STATE_RECORDING)
-                {
-                    string RecordingPath = Platform_FindNewFrameRecordingPath();
-                    if(!IsInvalidString(RecordingPath))
-                    {
-                        CopyToStorage(&FrameRecording->RecordingPath, RecordingPath);
-                    }
-                }
-                else
-                {                    
-                    ptr DataSize = sizeof(u32)+sizeof(frame)*FrameRecording->RecordedFrames.Size;
-                    void* Data = PushSize(DataSize, NoClear, 0);                    
-                    *(u32*)Data = FrameRecording->RecordedFrames.Size;
-                    CopyMemory((u32*)Data+1, FrameRecording->RecordedFrames.Data, sizeof(frame)*FrameRecording->RecordedFrames.Size);                    
-                    WriteEntireFile(FrameRecording->RecordingPath.String, Data, (u32)DataSize);
-                    
-                    FrameRecording->RecordedFrames.Size = 0;
-                    
-                    if(!IsInvalidBuffer(FrameRecording->RecordingBuffer))
-                        FreeFileMemory(&FrameRecording->RecordingBuffer);            
-                    
-                    FrameRecording->RecordingBuffer = ReadEntireFile(FrameRecording->RecordingPath.String);
-                }
-            }            
-            
-            
-            if(FrameRecording->RecordingState == FRAME_RECORDING_STATE_RECORDING)
-            {
-                ImGui::SameLine();
-                ImGui::Text("Recording File: %s\n", FrameRecording->RecordingPath.String.Data);                    
-            }
-        }
-        
-        if(FrameRecording->RecordingState == FRAME_RECORDING_STATE_NONE)
-        {            
-            if(ImGui::Button("Load Recording"))
-            {
-                string RecordingPath = Platform_OpenFileDialog("arc_recording");
-                if(!IsInvalidString(RecordingPath))
-                {
-                    if(!IsInvalidBuffer(FrameRecording->RecordingBuffer))
-                        FreeFileMemory(&FrameRecording->RecordingBuffer);            
-                    
-                    FrameRecording->RecordingBuffer = ReadEntireFile(RecordingPath);
-                    CopyToStorage(&FrameRecording->RecordingPath, RecordingPath);
-                }
-            }
-            
-            if(!IsInvalidBuffer(FrameRecording->RecordingBuffer) && !IsInvalidString(FrameRecording->RecordingPath.String))
-            {
-                ImGui::SameLine();
-                ImGui::Text("Recording File: %s\n", FrameRecording->RecordingPath.String.Data);
-            }
-        }
-        
-        if(!IsInvalidBuffer(FrameRecording->RecordingBuffer) && (FrameRecording->RecordingState != FRAME_RECORDING_STATE_RECORDING))
-        {                
-            char* PlayRecordingText = (((FrameRecording->RecordingState == FRAME_RECORDING_STATE_PLAYING) || 
-                                        (FrameRecording->RecordingState == FRAME_RECORDING_STATE_INSPECT_FRAMES))
-                                       ? "Stop Playing" : "Start Playing");
-            
-            if(ImGui::Button(PlayRecordingText)) 
-            {                
-                if((FrameRecording->RecordingState != FRAME_RECORDING_STATE_PLAYING) &&
-                   (FrameRecording->RecordingState != FRAME_RECORDING_STATE_INSPECT_FRAMES))
-                {            
-                    FrameRecording->RecordingState = FRAME_RECORDING_STATE_PLAYING;
-                    FrameRecording->TotalLoadedFrames = *(u32*)FrameRecording->RecordingBuffer.Data;                                                
-                }
-                else
-                {                    
-                    FrameRecording->RecordingState = FRAME_RECORDING_STATE_NONE;
-                    ReadFrame(DevContext, 0);                        
-                    *Game->Input = {};
-                    FrameRecording->CurrentFrameIndex = 0;                                                                                             
-                }
-            }
-            
-            if((FrameRecording->RecordingState == FRAME_RECORDING_STATE_PLAYING) || (FrameRecording->RecordingState == FRAME_RECORDING_STATE_INSPECT_FRAMES))
-            {
-                ImGui::SameLine();
-                ImGui::Text("Recording File: %s\n", FrameRecording->RecordingPath.String.Data);                   
-                
-                char* InspectText = (FrameRecording->RecordingState == FRAME_RECORDING_STATE_INSPECT_FRAMES) ? "Stop Inspecting" : "Start Inspecting";
-                if(ImGui::Button(InspectText))
-                {
-                    if(FrameRecording->RecordingState == FRAME_RECORDING_STATE_INSPECT_FRAMES)
-                        FrameRecording->RecordingState = FRAME_RECORDING_STATE_PLAYING;
-                    else
-                        FrameRecording->RecordingState = FRAME_RECORDING_STATE_INSPECT_FRAMES;
-                }
-                
-                ImGui::SameLine();
-                ImGui::Text("Frame %d/%d", FrameRecording->CurrentFrameIndex, FrameRecording->TotalLoadedFrames-1);                 
-                
-                ImGuiIO* IO = &ImGui::GetIO();
-                
-                if(ImGui::IsKeyPressedMap(ImGuiKey_LeftArrow))
-                {
-                    if(FrameRecording->CurrentFrameIndex > 0)
-                        FrameRecording->CurrentFrameIndex--;                    
-                }
-                
-                if(ImGui::IsKeyPressedMap(ImGuiKey_RightArrow))
-                {
-                    FrameRecording->CurrentFrameIndex++;                    
-                    if(FrameRecording->CurrentFrameIndex == FrameRecording->TotalLoadedFrames)
-                        FrameRecording->CurrentFrameIndex = FrameRecording->TotalLoadedFrames-1;
-                }
-            }
-        }                
-    }
-    
-}
-void DevelopmentRecordFrame(dev_context* DevContext, game* Game)
+inline b32 
+ValidateVersion(frame_recording_header Header)
 {
-    frame_recording* Recording = &DevContext->FrameRecording;
-    if(Recording->RecordingState == FRAME_RECORDING_STATE_RECORDING)
-    {   
-        frame Frame;        
-        
-        input* Input = Game->Input;
-        
-        ASSERT(Game->dt != 0);
-        
-        Frame.dt = Game->dt;
-        Frame.Input = *Input; 
-        
-        world_entity* PlayerEntity0 = GetWorld(Game, 0)->PlayerEntity;
-        world_entity* PlayerEntity1 = GetWorld(Game, 1)->PlayerEntity;
-        
-        Frame.PlayerPosition[0] = PlayerEntity0->Position;
-        Frame.PlayerPosition[1] = PlayerEntity1->Position;
-        
-        Frame.PlayerOrientation[0] = PlayerEntity0->Orientation;
-        Frame.PlayerOrientation[1] = PlayerEntity1->Orientation;
-        
-        Frame.PlayerVelocity[0] = PlayerEntity0->Velocity;
-        Frame.PlayerVelocity[1] = PlayerEntity1->Velocity;                        
-        
-        Append(&Recording->RecordedFrames, Frame);
-    }
+    b32 Result = StringEquals(Header.Signature, FRAME_RECORDING_SIGNATURE);
+    return Result;
 }
 
-void DevelopmentPlayFrame(dev_context* DevContext, game* Game)
+void frame_recording::StartRecording()
 {
-    frame_recording* Recording = &DevContext->FrameRecording;
-    if((Recording->RecordingState == FRAME_RECORDING_STATE_PLAYING) ||
-       (Recording->RecordingState == FRAME_RECORDING_STATE_INSPECT_FRAMES))
-    {        
-        ReadFrame(DevContext, Recording->CurrentFrameIndex);                
-        if(Recording->RecordingState == FRAME_RECORDING_STATE_PLAYING)
-        {        
-            Recording->CurrentFrameIndex++;
-            if(Recording->CurrentFrameIndex >= Recording->TotalLoadedFrames)
-                Recording->CurrentFrameIndex = 0;        
+    ASSERT(RecordingState == FRAME_RECORDING_STATE_NONE);
+    RecordingState = FRAME_RECORDING_STATE_RECORDING;
+    
+    if(!WrittenFrameInfos.IsInitialized())
+        WrittenFrameInfos = CreateDynamicArray<frame_info>(2048);
+    
+    if(!WrittenFrameDatas.IsInitialized())
+        WrittenFrameDatas = CreateDynamicArray<frame_data>(2048);        
+    
+    if(!IsInitialized(&RecordingArena))
+        RecordingArena = CreateArena(MEGABYTE(4));                
+}
+
+void frame_recording::RecordFrame(game* Game)
+{
+    ASSERT(RecordingState == FRAME_RECORDING_STATE_RECORDING);
+    
+    u32 Size = 0;
+    u32 EntityCount = 0;
+    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+        {
+            switch(Entity->Type)
+            {
+                case ENTITY_TYPE_PLAYER:
+                {                    
+                    Size += PLAYER_SIZE;
+                    EntityCount++;
+                } break;
+                
+                case ENTITY_TYPE_RIGID_BODY:
+                {
+                    Size += RIGID_BODY_SIZE;
+                    EntityCount++;
+                } break;
+                
+                case ENTITY_TYPE_PUSHABLE:
+                {
+                    Size += PUSHABLE_SIZE;                    
+                    EntityCount++;
+                } break;
+            }
         }
-    }    
+    }
+    
+    Size += sizeof(input);
+    
+    frame_info FrameInfo = {};    
+    FrameInfo.Size = Size;
+    FrameInfo.RecordedEntityCount = EntityCount;
+    
+    u32 EntityBufferSize = Size-sizeof(input);
+    
+    frame_data FrameData;
+    FrameData.Input = *Game->Input;
+    FrameData.EntityBuffer = PushSize(&RecordingArena, EntityBufferSize, Clear, 0);
+    
+    u8* At = (u8*)FrameData.EntityBuffer;
+    u8* End = At + EntityBufferSize;
+    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+        {
+            switch(Entity->Type)
+            {
+                case ENTITY_TYPE_PLAYER:
+                {
+                    sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+                    recording_entity_header* Header = (recording_entity_header*)At;
+                    Header->ID = Entity->ID;
+                    Header->Transform = *GetEntityTransform(Game, Entity->ID);
+                    Header->Velocity = SimEntity->Velocity;
+                    Header->Acceleration = SimEntity->Acceleration;
+                    
+                    player* Player = (player*)(Header+1);
+                    *Player = *GetUserData(Entity, player);
+                    
+                    At += PLAYER_SIZE;
+                } break;
+                
+                case ENTITY_TYPE_RIGID_BODY:
+                {
+                    sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+                    recording_entity_header* Header = (recording_entity_header*)At;
+                    Header->ID = Entity->ID;
+                    Header->Transform = *GetEntityTransform(Game, Entity->ID);
+                    Header->Velocity = SimEntity->Velocity;
+                    Header->Acceleration = SimEntity->Acceleration;
+                    
+                    At += RIGID_BODY_SIZE;                    
+                } break;
+                
+                case ENTITY_TYPE_PUSHABLE:
+                {
+                    sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+                    recording_entity_header* Header = (recording_entity_header*)At;
+                    Header->ID = Entity->ID;
+                    Header->Transform = *GetEntityTransform(Game, Entity->ID);
+                    Header->Velocity = SimEntity->Velocity;
+                    Header->Acceleration = SimEntity->Acceleration;
+                    
+                    pushing_object* PushingObject = (pushing_object*)(Header+1);
+                    *PushingObject = *GetUserData(Entity, pushing_object);
+                    
+                    At += PUSHABLE_SIZE;                    
+                } break;
+            }
+        }
+    }
+    
+    ASSERT(At == End);
+    
+    WrittenFrameInfos.Add(FrameInfo);
+    WrittenFrameDatas.Add(FrameData);
+    FrameCount++;
+}
+
+void frame_recording::EndRecording(char* Path)
+{
+    ASSERT(RecordingState == FRAME_RECORDING_STATE_RECORDING);
+    RecordingState = FRAME_RECORDING_STATE_NONE;
+    
+    u32 DataSize = 0;
+    DataSize += sizeof(frame_recording_header);
+    DataSize += sizeof(frame_info)*FrameCount;
+    FOR_EACH(FrameInfo, &WrittenFrameInfos)    
+        DataSize += FrameInfo->Size;    
+    
+    void* Data = PushSize(DataSize, Clear, 0);
+    u8* DataAt = (u8*)Data;
+    
+    frame_recording_header* Header = (frame_recording_header*)DataAt;
+    CopyMemory((char*)Header->Signature, (char*)FRAME_RECORDING_SIGNATURE, sizeof(FRAME_RECORDING_SIGNATURE));
+    Header->MajorVersion = FRAME_RECORDING_MAJOR_VERSION;
+    Header->MinorVersion = FRAME_RECORDING_MINOR_VERSION;
+    Header->FrameCount = FrameCount;    
+    DataAt += sizeof(frame_recording_header);
+    
+    u32 OffsetToFrame = sizeof(frame_recording_header)+sizeof(frame_info)*FrameCount;
+    FOR_EACH(FrameInfo, &WrittenFrameInfos)
+    {
+        FrameInfo->OffsetToFrame = OffsetToFrame;
+        OffsetToFrame += FrameInfo->Size;        
+        *((frame_info*)DataAt) = *FrameInfo;
+        DataAt += sizeof(frame_info);
+    }
+    ASSERT(OffsetToFrame == DataSize);
+           
+    for(u32 FrameIndex = 0; FrameIndex < FrameCount; FrameIndex++)
+    {
+        frame_info* FrameInfo = &WrittenFrameInfos[FrameIndex];        
+        frame_data* FrameData = &WrittenFrameDatas[FrameIndex];
+        *(input*)DataAt = FrameData->Input;
+        CopyMemory(DataAt + sizeof(input), FrameData->EntityBuffer, FrameInfo->Size-sizeof(input));
+        DataAt += FrameInfo->Size;        
+    }        
+    
+    WriteEntireFile(Path, Data, DataSize);    
+    
+    WrittenFrameInfos.Reset();
+    WrittenFrameDatas.Reset();
+    ResetArena(&RecordingArena);
+    FrameCount = 0;
+}
+
+b32 frame_recording::StartPlaying(char* Path)
+{
+    ASSERT(RecordingState == FRAME_RECORDING_STATE_NONE);
+    ReadRecordingBuffer = ReadEntireFile(Path);
+    if(!ReadRecordingBuffer.IsValid()) return false;    
+    
+    frame_recording_header* Header = (frame_recording_header*)ReadRecordingBuffer.Data;
+    
+    if(!ValidateSignature(*Header)) return false;
+    if(!ValidateVersion(*Header))   return false;    
+    
+    FrameCount = Header->FrameCount;        
+    RecordingState = FRAME_RECORDING_STATE_PLAYING;
+    
+    return true;
+}
+
+void frame_recording::PlayFrame(game* Game, u32 FrameIndex)
+{
+    ASSERT(RecordingState == FRAME_RECORDING_STATE_PLAYING);
+    
+    frame_info* FrameInfoArray = (frame_info*)(ReadRecordingBuffer.Data + sizeof(frame_recording_header));   
+    frame_info FrameInfo = FrameInfoArray[FrameIndex];
+    
+    u8* FrameAt = ReadRecordingBuffer.Data + FrameInfo.OffsetToFrame;
+    u8* FrameEnd = FrameAt+FrameInfo.Size;
+    
+    *Game->Input = *(input*)FrameAt;
+    FrameAt += sizeof(input);
+    for(u32 EntityIndex = 0; EntityIndex < FrameInfo.RecordedEntityCount; EntityIndex++)
+    {
+        recording_entity_header* Header = (recording_entity_header*)FrameAt;        
+        entity* Entity = GetEntity(Game, Header->ID);        
+        *GetEntityTransform(Game, Entity->ID) = Header->Transform;
+        
+        sim_entity* SimEntity = GetSimEntity(Game, Header->ID);
+        SimEntity->Velocity = Header->Velocity;
+        SimEntity->Acceleration = Header->Acceleration;
+        
+        FrameAt += sizeof(recording_entity_header);
+        switch(Entity->Type)
+        {
+            case ENTITY_TYPE_PLAYER:
+            {
+                *GetUserData(Entity, player) = *(player*)FrameAt;
+                FrameAt += sizeof(player);
+            } break;
+            
+            case ENTITY_TYPE_PUSHABLE:
+            {
+                *GetUserData(Entity, pushing_object) = *(pushing_object*)FrameAt;
+                FrameAt += sizeof(pushing_object);
+            } break;
+        }
+    }        
+    ASSERT(FrameAt == FrameEnd);
+}
+
+void frame_recording::EndPlaying()
+{
+    ASSERT(RecordingState == FRAME_RECORDING_STATE_PLAYING);
+    RecordingState = FRAME_RECORDING_STATE_NONE;
+    FreeFileMemory(&ReadRecordingBuffer);
+    FrameCount = 0;
 }

@@ -690,8 +690,9 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
     {
         DevContext->DevStorage = CreateArena(KILOBYTE(32));                               
         DevContext->LogStorage = CreateArena(MEGABYTE(1));
-        DevContext->FrameRecording.RecordingPath = AllocateStringStorage(&DevContext->DevStorage, 8092);
-        DevContext->FrameRecording.RecordedFrames = CreateDynamicArray<frame>(1024);        
+        
+        DevContext->FramePlayback.MaxRecordingPathLength = 8092;
+        DevContext->FramePlayback.RecordingPath = (char*)PushSize(&DevContext->DevStorage, (DevContext->FramePlayback.MaxRecordingPathLength+1)*sizeof(char), Clear, 0); 
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         //DevContext->DrawGrid = true;
@@ -743,4 +744,25 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
 }
 
-//#include "dev_frame_recording.cpp"
+void DevelopmentRecord(dev_context* DevContext)
+{
+    frame_playback* Playback = &DevContext->FramePlayback;
+    
+    if((Playback->PlaybackState == FRAME_PLAYBACK_STATE_PLAYING) ||
+       (Playback->PlaybackState == FRAME_PLAYBACK_STATE_INSPECT_FRAMES))
+    {
+        Playback->Recording.PlayFrame(DevContext->Game, Playback->CurrentFrameIndex);        
+        if(Playback->PlaybackState == FRAME_PLAYBACK_STATE_PLAYING)
+        {
+            Playback->CurrentFrameIndex++;
+            if(Playback->CurrentFrameIndex == Playback->Recording.FrameCount)
+                Playback->CurrentFrameIndex = 0;                        
+        }
+    }
+    else if(Playback->PlaybackState == FRAME_PLAYBACK_STATE_RECORDING)
+    {        
+        Playback->Recording.RecordFrame(DevContext->Game);
+    }        
+}
+
+#include "dev_frame_recording.cpp"

@@ -13,7 +13,7 @@
 #define CAMERA_MIN_DISTANCE 0.1f        
 
 global struct dev_context* __Internal_Dev_Context__;
-#define SET_DEVELOPER_CONTEXT(context) __Internal_Dev_Context__ = (dev_context*)context
+#define SET_DEVELOPER_CONTEXT() __Internal_Dev_Context__ = (dev_context*)DevContext
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxGJKIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxGJKIterations, Iterations))
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
@@ -28,6 +28,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #include "camera.h"
 #include "input.h"
 #include "assets/assets.h"
+#include "entity.h"
 #include "dev_frame_recording.h"
 
 struct dev_input
@@ -121,6 +122,23 @@ struct mesh_convex_hull_gdi
     graphics_mesh_id* Meshes;
 };
 
+enum frame_playback_state
+{
+    FRAME_PLAYBACK_STATE_NONE,
+    FRAME_PLAYBACK_STATE_RECORDING,
+    FRAME_PLAYBACK_STATE_PLAYING,
+    FRAME_PLAYBACK_STATE_INSPECT_FRAMES
+};
+
+struct frame_playback
+{
+    u32 MaxRecordingPathLength;
+    char* RecordingPath;
+    frame_playback_state PlaybackState;    
+    u32 CurrentFrameIndex;    
+    frame_recording Recording;    
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -139,7 +157,7 @@ struct dev_context
     f32 tInterpolated;
     graphics_render_buffer* RenderBuffer;
     
-    frame_recording FrameRecording;
+    frame_playback FramePlayback;
     
     game_information GameInformation;
     
@@ -224,12 +242,11 @@ inline void DebugLog(dev_context* DevContext, char* Format, ...)
 {
     if(!DevContext->Logs.IsInitialized())
         DevContext->Logs = CreateDynamicArray<string>(16);    
-           
+    
     va_list Args;
     va_start(Args, Format);
     DevContext->Logs.Add(FormatString(Format, Args, &DevContext->LogStorage));    
-    va_end(Args);
-    CONSOLE_LOG(DevContext->Logs[DevContext->Logs.Size-1].Data);
+    va_end(Args);    
 }
 
 inline u32 
