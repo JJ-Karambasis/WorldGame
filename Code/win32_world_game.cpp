@@ -2,8 +2,8 @@
 #include "assets/assets.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
-#include "entity.cpp"
 #include "simulation/simulation.cpp"
+#include "entity.cpp"
 
 #include "graphics.cpp"
 

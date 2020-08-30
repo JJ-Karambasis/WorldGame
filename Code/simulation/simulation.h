@@ -1,129 +1,136 @@
 #ifndef SIMULATION_H
 #define SIMULATION_H
 
-struct sim_entity;
-struct simulation;
-
-#include "support.h"
-#include "collision_volumes.h"
-#include "penetration.h"
-#include "continuous_collisions.h"
-#include "rays.h"
-#include "contacts.h"
+#include "collision_volume.h"
+#include "sim_entity.h"
+#include "broad_phase.h"
+#include "collision_detection.h"
 
 #define BAUMGARTE_CONSTANT 0.2f
 #define PENETRATION_SLOP 0.01f
 
-struct sim_entity
+#define MAX_COLLISION_VOLUME_COUNT 1024
+#define MAX_SIM_ENTITY_COUNT 512
+#define MAX_RIGID_BODY_COUNT 128
+#define MAX_CONTACT_COUNT 32
+#define MAX_MANIFOLD_COUNT 8
+#define MAX_CONSTRAINT_COUNT 8
+#define MAX_COLLISION_EVENT_COUNT 64
+
+struct contact_constraint
 {
-    sqt         Transform;           
-    v3f         Velocity;        
-    v3f         Acceleration;        
-    v3f         MoveDelta;
-    b32         DetectDuringCCD;    
-    rigid_body* RigidBody;    
-    collision_volume* CollisionVolumes;    
+    v3f WorldPosition;
+    v3f Normal;
+    f32 Penetration;
     
-    void* UserData;
+    v3f LocalPositionA;            
+    v3f LocalPositionB;
+    f32 NormalMass;
+    f32 NormalLambda;
     
-    template <typename type> void AddCollisionVolume(simulation* Simulation, type* Collider);
+    f32 Bias;
 };
 
-struct rigid_body
+#define CONSTRAINT_CALLBACK(name) void name(rigid_body* RigidBodyA, rigid_body* RigidBodyB)
+typedef CONSTRAINT_CALLBACK(constraint_callback);
+
+struct constraint
 {
-    sim_entity* SimEntity;      
-    v3f AngularVelocity;    
-    v3f AngularAcceleration;        
-    f32 Restitution;
-    f32 InvMass;
-    v3f LocalCenterOfMass;
-    v3f WorldCenterOfMass;
-    m3  LocalInvInertiaTensor;
-    m3  WorldInvInertiaTensor;    
+    rigid_body* RigidBodyA;
+    rigid_body* RigidBodyB;    
+    constraint_callback* Callback;
 };
 
-struct sim_entity_volume_pair
+struct constraint_list
 {
-    sim_entity*       SimEntity;    
-    collision_volume* Volume;       
+    constraint Ptr[MAX_CONSTRAINT_COUNT];
+    u32 Count;    
 };
 
-struct collision_pair
-{    
-    sim_entity_volume_pair A;
-    sim_entity_volume_pair B;    
-};
-
-struct collision_pair_list
+struct manifold
 {
-    collision_pair* Ptr;
-    u32 Count;
-    u32 Capacity;
+    rigid_body* RigidBodyA;
+    rigid_body* RigidBodyB;        
+    u64 Contacts[4];    
+    
+    inline u32 GetFreeContactIndex()
+    {
+        for(u32 ContactIndex = 0; ContactIndex < 4; ContactIndex++)
+        {
+            if(Contacts[ContactIndex] == 0)
+                return ContactIndex;
+        }
+        return (u32)-1;
+    }
 };
 
-struct collision_pair_check
+struct ray_mesh_intersection_result
 {
-    u64 ID;
-    b32 Collided;
+    b32 FoundCollision;
+    f32 t;
+    f32 u;
+    f32 v;
 };
-
-struct sim_entity_rigid_body_volume_pair
-{
-    sim_entity* SimEntity;
-    rigid_body* RigidBody;
-    collision_volume* Volume;
-};
-
-struct contact_pair
-{
-    sim_entity_rigid_body_volume_pair A;
-    sim_entity_rigid_body_volume_pair B;
-};
-
-struct contact_pair_list
-{
-    contact_pair* Ptr;
-    u32 Count;
-    u32 Capacity;
-};
-
-typedef pool<rigid_body> rigid_body_storage;
-typedef pool<sim_entity> sim_entity_storage;
 
 struct collision_event
 {
-    sim_entity* A;
-    sim_entity* B;
-    penetration Penetration;
+    sim_entity* SimEntityA;
+    sim_entity* SimEntityB;
+    v3f         Normal;
 };
 
 struct collision_event_list
-{    
-    collision_event* Ptr;
-    u32 Capacity;
+{
+    collision_event Ptr[MAX_COLLISION_EVENT_COUNT];
     u32 Count;
 };
+
+typedef pool<collision_volume> collision_volume_storage;
+typedef pool<sim_entity> sim_entity_storage;
+typedef pool<rigid_body> rigid_body_storage;
+typedef pool<manifold> manifold_storage;
+typedef pool<contact_constraint> contact_storage;
+typedef pool<constraint> constraint_storage;
+
+#define BROAD_PHASE_PAIR_FILTER_FUNC(name) b32 name(broad_phase_pair* Pair)
+typedef BROAD_PHASE_PAIR_FILTER_FUNC(broad_phase_pair_filter_func);
 
 struct simulation
 {
     collision_volume_storage CollisionVolumeStorage;
-    contact_storage          ContactStorage;
-    manifold_storage         ManifoldStorage;
-    rigid_body_storage       RigidBodyStorage;
-    sim_entity_storage       SimEntityStorage;                          
+    sim_entity_storage SimEntityStorage;
+    rigid_body_storage RigidBodyStorage;
+    manifold_storage   ManifoldStorage;
+    contact_storage    ContactStorage;    
+    constraint_list    Constraints;    
     collision_event_list CollisionEvents;
     
-    sim_entity* GetSimEntity(u64 ID);        
-    void        FreeSimEntity(u64 ID);
+    void AddCollisionEvent(sim_entity* SimEntityA, sim_entity* SimEntityB, v3f Normal);
     
-    u64         AllocateSimEntity();        
-    manifold*   GetManifold(rigid_body* A, rigid_body* B);
+    sim_entity_id CreateSimEntity(sim_entity_type Type);
+    void          DeleteSimEntity(sim_entity_id ID);    
+    sim_entity*   GetSimEntity(sim_entity_id ID);
+    template <typename type> void AddCollisionVolume(sim_entity* SimEntity, type* Collider);        
     
-    continuous_collision DetectContinuousCollisions(sim_entity* Entity);        
-    void GenerateContacts(contact_pair_list* RigidBodyPairs);
-    void SolveConstraints(u32 MaxIterations, f32 dt);
+    broad_phase_pair_list AllocatePairList(u32 Capacity);                    
+    broad_phase_pair_list GetAllPairs();
+    broad_phase_pair_list GetAllPairs(rigid_body* RigidBody);
+    broad_phase_pair_list GetSimEntityOnlyPairs(rigid_body* RigidBody);
+    broad_phase_pair_list FilterPairs(broad_phase_pair_list Pairs, broad_phase_pair_filter_func* FilterFunc);
     
-    void AddCollisionEvent(sim_entity* A, sim_entity* B, penetration Penetration);
+    void Integrate(f32 dt);
+    void AddContactConstraints(rigid_body* RigidBodyA, rigid_body* RigidBodyB, contact_list Contacts);
+    void AddContactConstraint(rigid_body* RigidBodyA, rigid_body* RigidBodyB, contact Contact);
+    void AddConstraint(rigid_body* RigidBodyA, rigid_body* RigidBodyB, constraint_callback* Callback); 
+    void ComputeContacts(broad_phase_pair* Pair);
+    void SolveConstraints(u32 MaxIterations, f32 dt);        
+    continuous_contact ComputeTOI(rigid_body* RigidBody, broad_phase_pair_list Pairs);
 };
+
+#if DEVELOPER_BUILD
+#define DEBUG_DRAW_CONTACT(Contact) DEBUG_DRAW_EDGE(Contact->Position, Contact->Position+Contact->Normal, White3()); DEBUG_DRAW_POINT(Contact->Position, Yellow3())
+#else
+#define DEBUG_DRAW_CONTACT(Contact)
+#endif
 
 #endif

@@ -284,10 +284,11 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         if(DevContext->SelectedObject != nullptr)
         {               
             entity_id EntityID = DevContext->SelectedObject->ID;
+            entity* Entity = GetEntity(Game, EntityID);
             
-            sim_entity* SimEntity = GetSimEntity(Game, EntityID);
+            simulation* Simulation = GetSimulation(Game, EntityID);
             
-            v3f ObjectVelocity = SimEntity->Velocity;
+            sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
             
             sqt* Transform = GetEntityTransform(Game, EntityID);
             
@@ -332,7 +333,13 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 DragFloat("Pitch", &ObjectPitch, 0.0f, ObjectPitch, ObjectPitch, "%.3f");
                 DragFloat("Yaw", &ObjectYaw, 0.0f, ObjectYaw, ObjectYaw, "%.3f");
             }
-                       
+            
+            
+            v3f ObjectVelocity = {};
+            rigid_body* RigidBody = SimEntity->ToRigidBody();
+            if(RigidBody)
+                ObjectVelocity = RigidBody->Velocity;            
+            
             ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
             ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
             ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);

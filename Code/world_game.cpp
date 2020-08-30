@@ -2,9 +2,8 @@
 #include "assets/assets.cpp"
 #include "audio.cpp"
 #include "animation.cpp"
-#include "entity.cpp"
-
 #include "simulation/simulation.cpp"
+#include "entity.cpp"
 //#include "player.cpp"
 #include "graphics.cpp"
 
@@ -39,16 +38,11 @@ void LoadTestLevel(game* Game)
         Game->PrevTransforms[WorldIndex] = PushArray(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity, sqt, Clear, 0);        
         Game->CurrentTransforms[WorldIndex] = PushArray(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity, sqt, Clear, 0);        
         
-        simulation* Simulation = Game->Simulations + WorldIndex;
-        Simulation->CollisionVolumeStorage = CreatePool<collision_volume>(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity*4);
-        Simulation->ContactStorage = CreatePool<list_entry<contact_constraint>>(Game->GameStorage, 128);
-        Simulation->ManifoldStorage = CreatePool<manifold>(Game->GameStorage, 32);
-        Simulation->RigidBodyStorage = CreatePool<rigid_body>(Game->GameStorage, 64);
-        Simulation->SimEntityStorage = CreatePool<sim_entity>(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity);
+        Game->Simulations[WorldIndex] = CreateSimulation(Game->GameStorage);
         
         v3f P0 = V3() + Global_WorldZAxis*PLAYER_RADIUS;
         capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);        
-        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, V3(), V3(), 35, Global_PlayerMaterial, &PlayerCapsule);
+        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, V3(), V3(), 65, Global_PlayerMaterial, &PlayerCapsule);
         
         game_camera* Camera = Game->CurrentCameras + WorldIndex;        
         Camera->Target = GetEntityPosition(Game, PlayerID);        
@@ -67,7 +61,7 @@ void LoadTestLevel(game* Game)
     CreateStaticEntity(Game, 0, V3(-1.6f, -5.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material1);
     CreateStaticEntity(Game, 0, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f),  MESH_ASSET_ID_BOX,   Global_Material1);
     CreateStaticEntity(Game, 0, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);                    
-    CreateSphereRigidBody(Game, 0, V3( 1.0f, 0.5f, 5.0f), 0.5f, 30.0f, 0.2f, Global_Material0);
+    CreateSphereRigidBody(Game, 0, V3( 1.0f, 1.0f, 5.0f), 0.5f, 30.0f, 0.2f, Global_Material0);
     CreatePushableBox(Game, 0, V3(-2.0f, 0.0f, 0.001f), 1.0f, 35.0f, Global_Material0);
     
     Game->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
@@ -114,347 +108,239 @@ EXPORT GAME_INITIALIZE(Initialize)
     return Game;
 }
 
-inline f32 GetDamp(f32 dt, f32 Damping)
-{
-    //CONFIRM(JJ): Should the damping constant be configurable per entity?
-    f32 Result = 1.0f / (1.0f + dt * Damping);
-    return Result;
-}
-
-void AddRigidBodyContactPairs(contact_pair_list* ContactPairs, sim_entity_volume_pair* PairA, sim_entity_volume_pair* PairB, entity_type TypeB)
-{        
-    switch(TypeB)
-    {
-        case ENTITY_TYPE_STATIC:
-        {
-            AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, NULL, PairB->Volume);
-        } break;
-        
-        case ENTITY_TYPE_PLAYER:
-        {
-            entity* Entity = GetUserData(PairB->SimEntity, entity);
-            player* Player = GetUserData(Entity, player);            
-            if(Player->State == PLAYER_STATE_PUSHING)                
-                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, NULL, PairB->Volume);
-            else
-                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, PairB->SimEntity->RigidBody, PairB->Volume);
-        } break;
-        
-        case ENTITY_TYPE_PUSHABLE:
-        {
-            entity* Entity = GetUserData(PairB->SimEntity, entity);
-            pushing_object* PushingObject = GetUserData(Entity, pushing_object);
-            if(PushingObject->PlayerID.IsValid())
-                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, PairB->SimEntity->RigidBody, PairB->Volume);
-            else
-                AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, NULL, PairB->Volume);
-        } break;
-        
-        case ENTITY_TYPE_RIGID_BODY:
-        {
-            AddContactPair(ContactPairs, PairA->SimEntity, PairA->SimEntity->RigidBody, PairA->Volume, PairB->SimEntity, PairB->SimEntity->RigidBody, PairB->Volume);
-        } break;
-        
-        INVALID_DEFAULT_CASE;
-    }                
-}
-
 extern "C"
 EXPORT GAME_FIXED_TICK(FixedTick)
 {   
-    SET_DEVELOPER_CONTEXT();
+    platform_time Start = WallClock();    
     SetDefaultArena(Game->TempStorage);
-    
-    f32 dt = Game->dtFixed;    
-    platform_time Start = WallClock();
     
     entity_storage* WorldStorage = Game->EntityStorage + Game->CurrentWorldIndex;
     simulation* Simulation = GetSimulation(Game, Game->CurrentWorldIndex);
     
-    Simulation->ContactStorage.FreeAll();
-    Simulation->ManifoldStorage.FreeAll();    
+    f32 dt = Game->dtFixed;
     
-    Simulation->CollisionEvents.Capacity = 1024;
-    Simulation->CollisionEvents.Count = 0;
-    Simulation->CollisionEvents.Ptr = PushArray(Simulation->CollisionEvents.Capacity, collision_event, Clear, 0);
-    
-    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
+    FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
     {
-        entity* Entity = (entity*)SimEntity->UserData;
-        sqt* SQT = GetEntityTransform(Game, Entity->ID);
-        SimEntity->Transform = *SQT;
+        entity* Entity = GetUserData(RigidBody, entity);
+        RigidBody->Transform = *GetEntityTransform(Game, Entity->ID);
         
-        rigid_body* RigidBody = SimEntity->RigidBody;
-        if(RigidBody)            
-        {
-            RigidBody->WorldInvInertiaTensor = GetWorldInvInertiaTensor(RigidBody->LocalInvInertiaTensor, SimEntity->Transform.Orientation);                
-            RigidBody->WorldCenterOfMass = TransformV3(RigidBody->LocalCenterOfMass, SimEntity->Transform);
-        }
-    }
-    
-    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
-    {
-        entity* Entity = (entity*)SimEntity->UserData;
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
-            {                                                
+            {
+                Entity->OnCollision = OnPlayerCollision;                
+                Simulation->AddConstraint(RigidBody, NULL, LockConstraint);
+                
                 player* Player = GetUserData(Entity, player);
                 
                 switch(Player->State)
                 {
                     case PLAYER_STATE_NONE:
-                    {                        
-                        rigid_body* RigidBody = SimEntity->RigidBody;
-                        RigidBody->AngularVelocity = {};                
-                        SimEntity->Velocity += SimEntity->Acceleration*dt;                                                        
-                        SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);                        
+                    {
+                        RigidBody->LinearDamping = V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
                     } break;
                     
                     case PLAYER_STATE_JUMPING:
                     {
-                        SimEntity->Velocity += SimEntity->Acceleration*dt;
+                        RigidBody->LinearDamping = {};
                     } break;
                 }                                
             } break;
             
             case ENTITY_TYPE_PUSHABLE:
             {
+                Simulation->AddConstraint(RigidBody, NULL, LockConstraint);
+                
                 pushing_object* PushingObject = GetUserData(Entity, pushing_object);
                 if(PushingObject->PlayerID.IsValid())
                 {                    
-                    entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
-                    ASSERT(GetUserData(PlayerEntity, player)->State == PLAYER_STATE_PUSHING);
-                    rigid_body* RigidBody = SimEntity->RigidBody;                    
-                    SimEntity->Velocity += SimEntity->Acceleration*dt;     
-                    SimEntity->Velocity.xy *= GetDamp(dt, Global_PlayerDamping);                    
-                    RigidBody->AngularVelocity = {};
-                }                                                
+                    ASSERT(GetUserData(GetEntity(Game, PushingObject->PlayerID), player)->State == PLAYER_STATE_PUSHING);                    
+                    RigidBody->LinearDamping = V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
+                }
             } break;
             
             case ENTITY_TYPE_RIGID_BODY:
             {
-                SimEntity->Velocity += SimEntity->Acceleration*dt;
-                SimEntity->Velocity.xy *= GetDamp(dt, 1.0f);
-                
-                rigid_body* RigidBody = SimEntity->RigidBody;
-                
-                RigidBody->AngularVelocity += RigidBody->AngularAcceleration*dt;
-                RigidBody->AngularAcceleration *= GetDamp(dt, 5.0f);
-            } break;
-        }                
-    }
-    
-    //NOTE(EVERYONE): This checks for all possible collision pairs between non-static entities. There are no
-    //duplicate entries. 
-    //TODO(SOMEONE): Right now this is will give O(n^2) pairs so if n starts getting pretty large we should probably use
-    //some sort of spatial partioning to reduce the amount of pairs even further. Recommand a bounding-volume hierarchy
-    //but other types of spatial partioning data structures may work well too.
-    collision_pair_list PotentialPairs = {};
-    PotentialPairs.Capacity = 1024;
-    PotentialPairs.Ptr = PushArray(PotentialPairs.Capacity, collision_pair, Clear, 0);    
-    
-#define PAIR_CHECK_COUNT 8092
-    collision_pair_check PairCheck[PAIR_CHECK_COUNT] = {};
-    
-    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
-    {
-        if(!IsEntityType((entity*)SimEntity->UserData, ENTITY_TYPE_STATIC))
-        {
-            FOR_EACH(TestSimEntity, &Simulation->SimEntityStorage)
-            {
-                if(TestSimEntity != SimEntity)
-                {
-                    u32 AIndex = Simulation->SimEntityStorage.GetIndex(SimEntity);
-                    u32 BIndex = Simulation->SimEntityStorage.GetIndex(TestSimEntity);
-                    
-                    if(BIndex < AIndex)
-                        SWAP(AIndex, BIndex);
-                    
-                    u64 ID = BijectiveMap(AIndex, BIndex);
-                    u64 Index = ID % PAIR_CHECK_COUNT;
-                    
-                    collision_pair_check* Check = PairCheck + Index++;
-                    
-                    b32 AlreadyCollided = false;
-                    while(Check->Collided)
-                    {
-                        if(Check->ID == ID)
-                        {
-                            AlreadyCollided = true;
-                            break;
-                        }                        
-                        Check = PairCheck + Index++;
-                        ASSERT(Index < PAIR_CHECK_COUNT);
-                    }
-                    
-                    if(!AlreadyCollided)
-                    {
-                        Check->Collided = true;
-                        Check->ID = ID;
-                        
-                        FOR_EACH(EntityVolume, SimEntity->CollisionVolumes)
-                        {
-                            FOR_EACH(TestEntityVolume, TestSimEntity->CollisionVolumes)
-                            {
-                                collision_pair* Pair = PotentialPairs.Ptr + PotentialPairs.Count++;
-                                Pair->A = {SimEntity,     EntityVolume};
-                                Pair->B = {TestSimEntity, TestEntityVolume};
-                            }
-                        }                        
-                    }
-                }
-            }
+                RigidBody->LinearDamping = V3(4.0f, 4.0f, 0.0f);
+                RigidBody->AngularDamping = V3(1.0f, 1.0f, 1.0f);
+            } break;            
         }
     }
     
-    contact_pair_list ContactPairs = {};
-    ContactPairs.Capacity = 1024;
-    ContactPairs.Ptr = PushArray(ContactPairs.Capacity, contact_pair, Clear, 0);
-    
-    for(u32 PotentialPairIndex = 0; PotentialPairIndex < PotentialPairs.Count; PotentialPairIndex++)
+    broad_phase_pair_list PairList = Simulation->GetAllPairs();
+    for(u32 PairIndex = 0; PairIndex < PairList.Count; PairIndex++)
     {
-        collision_pair* CollisionPair = PotentialPairs.Ptr + PotentialPairIndex;
+        broad_phase_pair* Pair = PairList.Ptr + PairIndex;
         
-        sim_entity_volume_pair* PairA = &CollisionPair->A;
-        sim_entity_volume_pair* PairB = &CollisionPair->B;                
-        
-        sim_entity* SimEntityA = PairA->SimEntity;
-        sim_entity* SimEntityB = PairB->SimEntity;
-        
-        entity_type TypeA = ((entity*)SimEntityA->UserData)->Type;
-        entity_type TypeB = ((entity*)SimEntityB->UserData)->Type;
-        
-        if(TypeA == ENTITY_TYPE_RIGID_BODY)        
+        if((GetUserData(Pair->SimEntityA, entity)->Type == ENTITY_TYPE_RIGID_BODY) ||
+           (GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY))
         {
-            AddRigidBodyContactPairs(&ContactPairs, PairA, PairB, TypeB);                             
-            continue;
+            Simulation->ComputeContacts(Pair);            
         }
-        
-        if(TypeB == ENTITY_TYPE_RIGID_BODY)
-        {
-            AddRigidBodyContactPairs(&ContactPairs, PairB, PairA, TypeA);
-            continue;
-        }
-        
-        //NOTE(EVERYONE): This is where we generate other collision events here
     }
     
-    Simulation->GenerateContacts(&ContactPairs);
-    Simulation->SolveConstraints(30, Game->dtFixed);
+    Simulation->Integrate(dt);    
+    Simulation->SolveConstraints(30, dt);
     
-    //NOTE(EVERYONE): After physics, for some objects, we need to perform continuous collision detection on their linear velocities. 
-    //This is primarily for entities that are small and fast and are critical for gameplay that cannot tunnel through the colliders,
-    //and for player movement to get a gliding mechanic (which is extremely expensive)
-    FOR_EACH(SimEntity, &Simulation->SimEntityStorage) SimEntity->MoveDelta = SimEntity->Velocity*Game->dtFixed;
-    
-    b32 HasCollided = false;    
-    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
+    FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
     {
-        entity* Entity = (entity*)SimEntity->UserData;                                
-        
+        entity* Entity = GetUserData(RigidBody, entity);
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
-            case ENTITY_TYPE_PUSHABLE:
             {
-                sim_entity* TestEntity = SimEntity;                                
-                if(Entity->Type == ENTITY_TYPE_PUSHABLE)
-                {                    
-                    pushing_object* PushingObject = GetUserData(Entity, pushing_object);
-                    if(!PushingObject->PlayerID.IsValid())
-                        continue;
-                }
+                player* Player = GetUserData(Entity, player);
+                if(Player->State == PLAYER_STATE_PUSHING)
+                    continue;
                 
-                if(Entity->Type == ENTITY_TYPE_PLAYER)
-                {
-                    player* Player = GetUserData(Entity, player);
-                    if(Player->State == PLAYER_STATE_PUSHING)
-                        continue;
-                }
-                
-                //CONFIRM(JJ): I think we can limit the iterations to 3
-                //TODO(JJ): The player movement system needs some work. It is workable for now and we can probably integrate it 
-                //with the dual-world system plus a special gravity loop, but some additional care needs to be taken for stability 
-                //and performance                
-                v3f StartPosition = TestEntity->Transform.Translation;
                 for(u32 Iterations = 0; Iterations < 4; Iterations++)
                 {
-                    f32 DeltaLength = Magnitude(TestEntity->MoveDelta);
+                    f32 DeltaLength = Magnitude(RigidBody->MoveDelta);
                     
                     if(DeltaLength > 1e-4f)
                     {            
-                        v3f TargetPosition = TestEntity->Transform.Translation + TestEntity->MoveDelta;                           
-                        continuous_collision CollisionResult = Simulation->DetectContinuousCollisions(TestEntity);
+                        v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;           
                         
-                        if(!CollisionResult.HitEntity)
+                        broad_phase_pair_list Pairs = Simulation->FilterPairs(Simulation->GetAllPairs(RigidBody), 
+                                                                              [](broad_phase_pair* Pair) -> b32
+                                                                              {
+                                                                                  if(GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY)
+                                                                                      return false;
+                                                                                  return true;
+                                                                              });
+                                                
+                        continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
+                        
+                        sim_entity* HitEntity = ContactTOI.HitEntity;
+                        if(!HitEntity)
                         {
-                            TestEntity->Transform.Translation = TargetPosition;                            
+                            RigidBody->Transform.Translation = TargetPosition;                            
                             break;
                         }
                         else
-                        {   
-                            HasCollided = true;
-                            penetration* Penetration = &CollisionResult.Penetration;
+                        {
+                            contact* Contact = &ContactTOI.Contact;
+                            DEBUG_DRAW_CONTACT(Contact);                 
                             
-                            TestEntity->Transform.Translation += TestEntity->MoveDelta*CollisionResult.t;
-                            TestEntity->Transform.Translation += Penetration->Normal*1e-4f;
+                            v3f Normal = -Contact->Normal;
                             
-                            TestEntity->MoveDelta = TargetPosition - TestEntity->Transform.Translation;
+                            RigidBody->Transform.Translation += RigidBody->MoveDelta*ContactTOI.t;
+                            RigidBody->Transform.Translation += Normal*1e-4f;
                             
-                            TestEntity->MoveDelta -= Dot(TestEntity->MoveDelta, Penetration->Normal)*Penetration->Normal;
-                            TestEntity->Velocity -= Dot(TestEntity->Velocity, Penetration->Normal)*Penetration->Normal;                                                        
-                        }
+                            RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;
+                            
+                            RigidBody->MoveDelta -= Dot(RigidBody->MoveDelta, Normal)*Normal;
+                            RigidBody->Velocity -= Dot(RigidBody->Velocity, Normal)*Normal;                                                        
+                        }                        
                     }
                     else
                     {
                         break;
                     }                                                       
-                }               
+                }     
                 
-                if(Entity->Type == ENTITY_TYPE_PUSHABLE)
+                Game->CurrentCameras[Game->CurrentWorldIndex].Target = RigidBody->Transform.Translation;                   
+            } break;
+            
+            case ENTITY_TYPE_PUSHABLE:
+            {           
+                v3f StartPosition = RigidBody->Transform.Translation;
+                for(u32 Iterations = 0; Iterations < 4; Iterations++)
                 {
-                    pushing_object* PushingObject = GetUserData(Entity, pushing_object);
-                    entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
+                    f32 DeltaLength = Magnitude(RigidBody->MoveDelta);
                     
-                    sim_entity* PlayerSimEntity = Simulation->GetSimEntity(PlayerEntity->SimEntityID);                    
-                    PlayerSimEntity->Transform.Translation += (TestEntity->Transform.Translation-StartPosition);                    
-                    TestEntity = PlayerSimEntity;
+                    if(DeltaLength > 1e-4f)
+                    {            
+                        v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;           
+                        
+                        broad_phase_pair_list Pairs = Simulation->FilterPairs(Simulation->GetAllPairs(RigidBody), 
+                                                                              [](broad_phase_pair* Pair) -> b32
+                                                                              {
+                                                                                  if(GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY)
+                                                                                      return false;
+                                                                                  return true;
+                                                                              });
+                        
+                        continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
+                        
+                        sim_entity* HitEntity = ContactTOI.HitEntity;
+                        if(!HitEntity)
+                        {
+                            RigidBody->Transform.Translation = TargetPosition;                            
+                            break;
+                        }
+                        else
+                        {
+                            contact* Contact = &ContactTOI.Contact;
+                            DEBUG_DRAW_CONTACT(Contact);                 
+                            
+                            v3f Normal = -Contact->Normal;
+                            
+                            RigidBody->Transform.Translation += RigidBody->MoveDelta*ContactTOI.t;
+                            RigidBody->Transform.Translation += Normal*1e-4f;
+                            
+                            RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;
+                            
+                            RigidBody->MoveDelta -= Dot(RigidBody->MoveDelta, Normal)*Normal;
+                            RigidBody->Velocity -= Dot(RigidBody->Velocity, Normal)*Normal;                                                        
+                        }                        
+                    }
+                    else
+                    {
+                        break;
+                    }                                                       
+                }     
+                
+                pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+                if(PushingObject->PlayerID.IsValid())
+                {
+                    entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
+                    sim_entity* PlayerRigidBody = Simulation->GetSimEntity(PlayerEntity->SimEntityID);
+                    
+                    PlayerRigidBody->Transform.Translation += (RigidBody->Transform.Translation-StartPosition);
+                    Game->CurrentCameras[Game->CurrentWorldIndex].Target = PlayerRigidBody->Transform.Translation;                    
                 }
                 
-                Game->CurrentCameras[Game->CurrentWorldIndex].Target = TestEntity->Transform.Translation;                                
             } break;
             
             case ENTITY_TYPE_RIGID_BODY:
             {
-                //NOTE(EVERYONE): Constraint solver can apply an instant velocity, so we need to recompute the move delta. This is
-                //fine since the solver is in the last step.                 
-                SimEntity->Transform.Translation += SimEntity->MoveDelta;
-                rigid_body* RigidBody = SimEntity->RigidBody;
                 
-                quaternion Delta = RotQuat(RigidBody->AngularVelocity*Game->dtFixed, 0.0f)*SimEntity->Transform.Orientation;
-                SimEntity->Transform.Orientation = Normalize(SimEntity->Transform.Orientation + (Delta*0.5f));
+                broad_phase_pair_list StaticOnlyPairs = Simulation->GetSimEntityOnlyPairs(RigidBody);
+                continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, StaticOnlyPairs);
                 
+                f32 t = 1.0f;
+                if(ContactTOI.HitEntity)
+                {                    
+                    t = ContactTOI.t;                    
+                    if(t != 0)
+                        Simulation->AddContactConstraint(RigidBody, NULL, ContactTOI.Contact);                                                                                    
+                    else
+                        t = 1.0f;
+                }
+                
+                RigidBody->Transform.Translation += RigidBody->MoveDelta*t;
             } break;
         }
     }
     
     for(u32 CollisionEventIndex = 0; CollisionEventIndex < Simulation->CollisionEvents.Count; CollisionEventIndex++)
     {
-        collision_event* CollisionEvent = Simulation->CollisionEvents.Ptr + CollisionEventIndex;
-        entity* EntityA = (entity*)CollisionEvent->A->UserData;        
-        entity* EntityB = (entity*)CollisionEvent->B->UserData;
+        collision_event* Event = &Simulation->CollisionEvents.Ptr[CollisionEventIndex];
         
-        EntityA->OnCollision(Game, EntityA, EntityB,  CollisionEvent->Penetration.Normal, CollisionEvent->Penetration.Distance);                
-        EntityB->OnCollision(Game, EntityB, EntityA, -CollisionEvent->Penetration.Normal, CollisionEvent->Penetration.Distance);
+        entity* EntityA = GetUserData(Event->SimEntityA, entity);
+        entity* EntityB = GetUserData(Event->SimEntityB, entity);
+        
+        if(EntityA->OnCollision) EntityA->OnCollision(Game, EntityA, EntityB,  Event->Normal);
+        if(EntityB->OnCollision) EntityB->OnCollision(Game, EntityB, EntityA, -Event->Normal);
     }
+    Simulation->CollisionEvents.Count = 0;
     
-    FOR_EACH(Entity, WorldStorage)
-    {
-        sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
-        sqt* SQT = GetEntityTransform(Game, Entity->ID);        
-        *SQT = SimEntity->Transform;        
-    }            
+    FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
+    {        
+        sqt* SQT = GetEntityTransform(Game, GetUserData(RigidBody, entity)->ID);        
+        *SQT = RigidBody->Transform;        
+    }                
 }
 
 extern "C"
@@ -465,13 +351,6 @@ EXPORT GAME_TICK(Tick)
     SetDefaultArena(Game->TempStorage);
     f32 dt = Game->dt;
         
-    simulation* Simulation = GetSimulation(Game, Game->CurrentWorldIndex);
-    FOR_EACH(SimEntity, &Simulation->SimEntityStorage)
-    {        
-        SimEntity->MoveDelta = {};
-        SimEntity->Acceleration = {};
-    }
-    
     input* Input = Game->Input;
     
     v2f MoveDirection = {};    
@@ -490,14 +369,21 @@ EXPORT GAME_TICK(Tick)
     if(MoveDirection != 0)
         MoveDirection = Normalize(MoveDirection);
     
-    FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
-    {
+    simulation* Simulation = GetSimulation(Game, Game->CurrentWorldIndex);
+    FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
+    {   
+        RigidBody->MoveDelta = {};
+        RigidBody->Acceleration = {};
+        RigidBody->AngularAcceleration = {};
+        RigidBody->ClearForce();
+        RigidBody->ClearTorque();
+        
+        entity* Entity = GetUserData(RigidBody, entity);
         switch(Entity->Type)
         {
             case ENTITY_TYPE_PLAYER:
             {
-                player* Player = GetUserData(Entity, player);    
-                sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
+                player* Player = GetUserData(Entity, player);
                 
                 switch(Player->State)
                 {
@@ -527,8 +413,8 @@ EXPORT GAME_TICK(Tick)
                                         
                                         f32 InitialVelocity = Sqrt(Displacement*Global_Gravity);
                                         
-                                        SimEntity->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
-                                        SimEntity->Velocity.z = InitialVelocity*SQRT2_2;
+                                        RigidBody->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
+                                        RigidBody->Velocity.z = InitialVelocity*SQRT2_2;
                                         
                                         Player->State = PLAYER_STATE_JUMPING;                                    
                                         
@@ -539,51 +425,55 @@ EXPORT GAME_TICK(Tick)
                             }       
                         }            
                         
-                        SimEntity->Acceleration = V3(MoveDirection*Global_PlayerAcceleration, -Global_Gravity);            
+                        RigidBody->ApplyConstantAcceleration(MoveDirection, Global_PlayerAcceleration);
+                        RigidBody->ApplyGravity(Global_Gravity);                        
                     } break;
                     
                     case PLAYER_STATE_PUSHING:
                     {
-                        SimEntity->Velocity = {};
+                        RigidBody->Velocity = {};
+                        RigidBody->AngularVelocity = {};
                     } break;
                     
                     case PLAYER_STATE_JUMPING:
                     {
-                        SimEntity->Acceleration.z -= Global_Gravity;
+                        RigidBody->ApplyGravity(Global_Gravity);                        
                     } break;
                 }
+                
             } break;
             
             case ENTITY_TYPE_PUSHABLE:
             {
-                sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
-                pushing_object* PushingObject = GetUserData(Entity, pushing_object);                
+                pushing_object* PushingObject = GetUserData(Entity, pushing_object);
                 if(PushingObject->PlayerID.IsValid())
-                {                
+                {
                     entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
                     player* Player = GetUserData(PlayerEntity, player);
                     ASSERT(Player->State == PLAYER_STATE_PUSHING);
+                    
                     if(CanBePushed(MoveDirection, PushingObject->Direction))
                     {
-                        SimEntity->Acceleration.xy = MoveDirection*Global_PlayerAcceleration;
-                    }
+                        RigidBody->ApplyConstantAcceleration(MoveDirection, Global_PlayerAcceleration);
+                    }                    
                     else
                     {
                         Player->State = PLAYER_STATE_NONE;
-                        PushingObject->PlayerID = InvalidEntityID();                        
-                        SimEntity->Velocity = {};                        
+                        PushingObject->PlayerID = InvalidEntityID();
+                        Simulation->GetSimEntity(PlayerEntity->SimEntityID)->ToRigidBody()->Velocity = RigidBody->Velocity;
+                        RigidBody->Velocity = {};
                     }
                 }
                 
-                SimEntity->Acceleration.z = -Global_Gravity;
+                RigidBody->ApplyGravity(Global_Gravity);
             } break;
             
             case ENTITY_TYPE_RIGID_BODY:
-            {
-                Simulation->GetSimEntity(Entity->SimEntityID)->Acceleration.z -= Global_Gravity;                
+            {                
+                RigidBody->ApplyGravity(Global_Gravity); 
             } break;
         }
-    }        
+    }                    
 }
 
 extern "C"

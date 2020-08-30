@@ -20,10 +20,10 @@ COLLISION_EVENT(OnPlayerCollision)
         {   
             if(CollidedEntity->Type == ENTITY_TYPE_PUSHABLE)
             {
-                sim_entity* PlayerSimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
+                rigid_body* PlayerRigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
                 
                 v2f N = Normalize(Normal.xy);                
-                v2f MoveDirection = Normalize(PlayerSimEntity->Acceleration.xy);
+                v2f MoveDirection = Normalize(PlayerRigidBody->Acceleration.xy);
                 if(CanBePushed(MoveDirection, N))                
                 {                    
                     Player->State = PLAYER_STATE_PUSHING;

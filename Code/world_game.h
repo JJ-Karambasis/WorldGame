@@ -22,10 +22,8 @@ struct jumping_quad
     jumping_quad* OtherQuad;
 };
 
-//#include "world.h"
-#include "entity.h"
-
 #include "simulation/simulation.h"
+#include "entity.h"
 
 struct goal_rect
 {

@@ -28,6 +28,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #include "camera.h"
 #include "input.h"
 #include "assets/assets.h"
+#include "simulation/simulation.h"
 #include "entity.h"
 #include "dev_frame_recording.h"
 

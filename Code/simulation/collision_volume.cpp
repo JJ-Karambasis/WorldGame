@@ -1,3 +1,24 @@
+inline sphere 
+CreateSphere(v3f CenterP, f32 Radius) 
+{
+    sphere Sphere = {CenterP, Radius};
+    return Sphere;
+}
+
+inline capsule 
+CreateCapsule(v3f P0, v3f P1, f32 Radius)
+{
+    capsule Capsule = {P0, P1, Radius};
+    return Capsule;
+}
+
+inline capsule 
+CreateCapsule(v3f Bottom, f32 Height, f32 Radius)
+{
+    v3f P0 = Bottom + Global_WorldZAxis*Radius;
+    return CreateCapsule(P0, P0+Global_WorldZAxis*Height, Radius);
+}
+
 void AttachToCollisionVolume(collision_volume* CollisionVolume, convex_hull* ConvexHull)
 {
     CollisionVolume->Type = COLLISION_VOLUME_TYPE_CONVEX_HULL;

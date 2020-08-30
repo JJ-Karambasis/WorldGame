@@ -80,18 +80,19 @@ void frame_recording::RecordFrame(game* Game)
     u8* End = At + EntityBufferSize;
     for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
+        simulation* Simulation = GetSimulation(Game, WorldIndex);
         FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
         {
             switch(Entity->Type)
             {
                 case ENTITY_TYPE_PLAYER:
-                {
-                    sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+                {                    
+                    rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
                     recording_entity_header* Header = (recording_entity_header*)At;
                     Header->ID = Entity->ID;
                     Header->Transform = *GetEntityTransform(Game, Entity->ID);
-                    Header->Velocity = SimEntity->Velocity;
-                    Header->Acceleration = SimEntity->Acceleration;
+                    Header->Velocity = RigidBody->Velocity;
+                    Header->Acceleration = RigidBody->Acceleration;
                     
                     player* Player = (player*)(Header+1);
                     *Player = *GetUserData(Entity, player);
@@ -101,24 +102,24 @@ void frame_recording::RecordFrame(game* Game)
                 
                 case ENTITY_TYPE_RIGID_BODY:
                 {
-                    sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+                    rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
                     recording_entity_header* Header = (recording_entity_header*)At;
                     Header->ID = Entity->ID;
                     Header->Transform = *GetEntityTransform(Game, Entity->ID);
-                    Header->Velocity = SimEntity->Velocity;
-                    Header->Acceleration = SimEntity->Acceleration;
+                    Header->Velocity = RigidBody->Velocity;
+                    Header->Acceleration = RigidBody->Acceleration;
                     
                     At += RIGID_BODY_SIZE;                    
                 } break;
                 
                 case ENTITY_TYPE_PUSHABLE:
                 {
-                    sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+                    rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
                     recording_entity_header* Header = (recording_entity_header*)At;
                     Header->ID = Entity->ID;
                     Header->Transform = *GetEntityTransform(Game, Entity->ID);
-                    Header->Velocity = SimEntity->Velocity;
-                    Header->Acceleration = SimEntity->Acceleration;
+                    Header->Velocity = RigidBody->Velocity;
+                    Header->Acceleration = RigidBody->Acceleration;
                     
                     pushing_object* PushingObject = (pushing_object*)(Header+1);
                     *PushingObject = *GetUserData(Entity, pushing_object);
@@ -166,7 +167,7 @@ void frame_recording::EndRecording(char* Path)
         DataAt += sizeof(frame_info);
     }
     ASSERT(OffsetToFrame == DataSize);
-           
+    
     for(u32 FrameIndex = 0; FrameIndex < FrameCount; FrameIndex++)
     {
         frame_info* FrameInfo = &WrittenFrameInfos[FrameIndex];        
@@ -219,9 +220,11 @@ void frame_recording::PlayFrame(game* Game, u32 FrameIndex)
         entity* Entity = GetEntity(Game, Header->ID);        
         *GetEntityTransform(Game, Entity->ID) = Header->Transform;
         
-        sim_entity* SimEntity = GetSimEntity(Game, Header->ID);
-        SimEntity->Velocity = Header->Velocity;
-        SimEntity->Acceleration = Header->Acceleration;
+        simulation* Simulation = GetSimulation(Game, Header->ID);
+        
+        rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+        RigidBody->Velocity = Header->Velocity;
+        RigidBody->Acceleration = Header->Acceleration;
         
         FrameAt += sizeof(recording_entity_header);
         switch(Entity->Type)

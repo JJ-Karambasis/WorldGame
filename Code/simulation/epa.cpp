@@ -329,7 +329,7 @@ struct epa_context
                     break;
                 }                
             }
-                        
+            
             v3f Projection = Best->Normal*Best->Distance;
             
             f32 P[3] = 
@@ -351,10 +351,10 @@ struct epa_context
                 Result.Witness[0] += Support.A*P[Index];
                 Result.Witness[1] += Support.B*P[Index];                
             }
-                                    
+            
             Result.Status  = Status;
             Result.IsValid = true;                
-            Result.Normal = -Best->Normal;
+            Result.Normal = Best->Normal;
             Result.Penetration = Best->Distance;                                                            
             
             return Result;

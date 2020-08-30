@@ -1,6 +1,8 @@
 #ifndef ENTITY_H
 #define ENTITY_H
 
+struct sim_entity_base;
+
 enum entity_type
 {
     ENTITY_TYPE_STATIC,
@@ -33,7 +35,7 @@ inline b32 AreEqualIDs(entity_id A, entity_id B) { return (A.ID == B.ID) && (A.W
 
 struct entity;
 
-#define COLLISION_EVENT(name) void name(struct game* Game, entity* Entity, entity* CollidedEntity, v3f Normal, f32 PenetrationDistance) 
+#define COLLISION_EVENT(name) void name(struct game* Game, entity* Entity, entity* CollidedEntity, v3f Normal) 
 typedef COLLISION_EVENT(collision_event_function);
 
 struct entity
@@ -41,10 +43,11 @@ struct entity
     entity_type Type;    
     entity_id ID;
     entity_id LinkID;         
-    u64 SimEntityID;            
+    sim_entity_id SimEntityID;    
     mesh_asset_id MeshID;
     material Material;                
-    void* UserData;    
+    void* UserData;            
+    
     collision_event_function* OnCollision;
 };
 

@@ -329,7 +329,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     dev_input* Input = &DevContext->Input;
     game* Game = DevContext->Game;
     graphics* Graphics = DevContext->Graphics;
-        
+    
     if(DevContext->UseDevCamera)
     {
         camera* Camera = DevContext->Cameras + Game->CurrentWorldIndex;
@@ -380,7 +380,7 @@ entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
     dev_input* Input = &DevContext->Input;
-        
+    
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);    
     
     //For not just getting the player entity. need to change to cast the ray and get the intersected object
@@ -492,7 +492,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
     }
     
     PushDepth(DevContext->Graphics, false);
-     
+    
     if(DevContext->DrawColliders)
     {
         FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
@@ -531,10 +531,11 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
             InterpTransform.Translation = Lerp(OldState.Translation, tRenderInterpolate, NewState.Translation);    
             InterpTransform.Orientation = Lerp(OldState.Orientation, tRenderInterpolate, NewState.Orientation);
             InterpTransform.Scale = NewState.Scale;
-                        
+            
             u32 ConvexHullIndex = 0;
             
-            sim_entity* SimEntity = GetSimEntity(Game, Entity->ID);
+            simulation* Simulation = GetSimulation(Game, Entity->ID);
+            sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
             FOR_EACH(Volume, SimEntity->CollisionVolumes)
             {                
                 switch(Volume->Type)
