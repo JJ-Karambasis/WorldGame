@@ -146,8 +146,6 @@ void AddRigidBodyContacts(simulation* Simulation, rigid_body* RigidBody, sim_ent
     }
 }
 
-const f32 VeryCloseDistance = 0.005f;
-
 void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
 {            
     v3f MoveDelta = RigidBody->MoveDelta;
@@ -230,155 +228,6 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
         }
     }    
     
-}
-
-b32 HandleMovementCollisions(simulation* Simulation, rigid_body* RigidBody, v2f MoveDelta)
-{
-    b32 Result = false;
-    
-    RigidBody->MoveDelta = V3(MoveDelta);
-    v3f Destination = RigidBody->Transform.Translation + RigidBody->MoveDelta;    
-    
-    v3f FirstNormal = {};    
-    for(u32 Iterations = 0; Iterations < 3; Iterations++)
-    {        
-        broad_phase_pair_list Pairs = Simulation->FilterPairs(Simulation->GetAllPairs(RigidBody), 
-                                                              [](broad_phase_pair* Pair) -> b32
-                                                              {
-                                                                  if(GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY)
-                                                                      return false;
-                                                                  return true;
-                                                              });        
-        continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
-        if(!ContactTOI.HitEntity)        
-        {
-            RigidBody->Transform.Translation = Destination;
-            break;
-        }
-        
-        v3f Normal = -ContactTOI.Contact.Normal;
-        if(Dot(Global_WorldZAxis, Normal) < 0.1f)
-            Result = true;
-        
-        f32 Distance = Magnitude(RigidBody->MoveDelta)*ContactTOI.t;
-        f32 ShortDistance = MaximumF32(Distance-VeryCloseDistance, 0.0f);
-        RigidBody->Transform.Translation += Normalize(RigidBody->MoveDelta)*ShortDistance;        
-        
-        if(Iterations == 0)
-        {
-            f32 LongDistance = ContactTOI.Contact.Penetration+VeryCloseDistance;
-            FirstNormal = Normal;
-            RigidBody->Velocity -= Dot(RigidBody->Velocity, Normal)*Normal;  
-            Destination += LongDistance*Normal;
-            RigidBody->MoveDelta = Destination - RigidBody->Transform.Translation;
-        }
-        else if(Iterations == 1)
-        {
-            v3f Crease = Cross(FirstNormal, Normal);
-            RigidBody->Velocity -= Dot(RigidBody->Velocity, Crease)*Crease;  
-            f32 Displacement = Dot(Destination-RigidBody->Transform.Translation, Crease);
-            RigidBody->MoveDelta = Displacement*Crease;
-            Destination = RigidBody->Transform.Translation + RigidBody->MoveDelta;
-        }
-    }    
-    
-    return Result;
-}
-
-void HandleGravityCollisions(simulation* Simulation, rigid_body* RigidBody, f32 ZDelta)
-{    
-    RigidBody->MoveDelta = V3(0.0f, 0.0f, ZDelta);
-    v3f Destination = RigidBody->Transform.Translation + RigidBody->MoveDelta;    
-    
-    v3f FirstNormal = {};    
-    for(u32 Iterations = 0; Iterations < 3; Iterations++)
-    {        
-        broad_phase_pair_list Pairs = Simulation->FilterPairs(Simulation->GetAllPairs(RigidBody), 
-                                                              [](broad_phase_pair* Pair) -> b32
-                                                              {
-                                                                  if(GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY)
-                                                                      return false;
-                                                                  return true;
-                                                              });        
-        continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
-        if(!ContactTOI.HitEntity)        
-        {
-            RigidBody->Transform.Translation = Destination;
-            break;
-        }
-        
-        v3f Normal = -ContactTOI.Contact.Normal;
-        
-        f32 Distance = Magnitude(RigidBody->MoveDelta)*ContactTOI.t;
-        f32 ShortDistance = MaximumF32(Distance-VeryCloseDistance, 0.0f);
-        RigidBody->Transform.Translation += Normalize(RigidBody->MoveDelta)*ShortDistance;        
-        
-        if(Iterations == 0)
-        {
-            f32 LongDistance = ContactTOI.Contact.Penetration+VeryCloseDistance;
-            FirstNormal = Normal;
-            RigidBody->Velocity -= Dot(RigidBody->Velocity, Normal)*Normal;  
-            Destination += LongDistance*Normal;
-            RigidBody->MoveDelta = Destination - RigidBody->Transform.Translation;
-        }
-        else if(Iterations == 1)
-        {
-            v3f Crease = Cross(FirstNormal, Normal);
-            RigidBody->Velocity -= Dot(RigidBody->Velocity, Crease)*Crease;  
-            f32 Displacement = Dot(Destination-RigidBody->Transform.Translation, Crease);
-            RigidBody->MoveDelta = Displacement*Crease;
-            Destination = RigidBody->Transform.Translation + RigidBody->MoveDelta;
-        }
-    }    
-    
-}
-
-void HandleSlidingCollisions2(simulation* Simulation, rigid_body* RigidBody)
-{    
-    for(u32 Iterations = 0; Iterations < 4; Iterations++)
-    {
-        f32 DeltaLength = Magnitude(RigidBody->MoveDelta);
-        
-        if(DeltaLength > 0)
-        {            
-            v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;           
-            
-            broad_phase_pair_list Pairs = Simulation->FilterPairs(Simulation->GetAllPairs(RigidBody), 
-                                                                  [](broad_phase_pair* Pair) -> b32
-                                                                  {
-                                                                      if(GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY)
-                                                                          return false;
-                                                                      return true;
-                                                                  });
-            
-            continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
-            
-            sim_entity* HitEntity = ContactTOI.HitEntity;
-            if(!HitEntity)
-            {
-                RigidBody->Transform.Translation = TargetPosition;                            
-                break;
-            }
-            else
-            {
-                contact* Contact = &ContactTOI.Contact;                            
-                
-                v3f Normal = -Contact->Normal;
-                
-                RigidBody->Transform.Translation += RigidBody->MoveDelta*ContactTOI.t;
-                RigidBody->Transform.Translation += Normal*1e-4f;
-                
-                RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;
-                
-                RigidBody->MoveDelta -= Dot(RigidBody->MoveDelta, Normal)*Normal;
-                RigidBody->Velocity -= Dot(RigidBody->Velocity, Normal)*Normal;                                                        
-            }                        
-        }
-        else
-        {
-            break;
-        }                                                       
-    }         
 }
 
 extern "C"
@@ -701,6 +550,11 @@ EXPORT GAME_TICK(Tick)
                                 PushingObject->PlayerID = InvalidEntityID();
                                 Simulation->GetSimEntity(PlayerEntity->SimEntityID)->ToRigidBody()->Velocity = RigidBody->Velocity;
                                 RigidBody->Velocity = {};
+                                if(Entity->LinkID.IsValid())
+                                {
+                                    rigid_body* OtherRigidBody = GetRigidBody(Game, Entity->LinkID);
+                                    OtherRigidBody->Velocity = {};
+                                }
                             }
                         }
                         
