@@ -260,15 +260,14 @@ void simulation::AddConstraint(rigid_body* RigidBodyA, rigid_body* RigidBodyB, c
     Constraint->Callback   = Callback;
 }
 
-void simulation::ComputeContacts(broad_phase_pair* Pair)
+contact_list simulation::ComputeContacts(broad_phase_pair* Pair)
 {
     contact_function* ContactFunction = ContactFunctions[Pair->VolumeA->Type][Pair->VolumeB->Type];
     contact_list ContactList = ContactFunction(Pair->SimEntityA, Pair->SimEntityB, Pair->VolumeA, Pair->VolumeB);            
-    if(ContactList.Count > 0)
-    {
-        AddCollisionEvent(Pair->SimEntityA, Pair->SimEntityB, ContactList.GetDeepestContact()->Normal);
-        AddContactConstraints(Pair->SimEntityA->ToRigidBody(), Pair->SimEntityB->ToRigidBody(), ContactList);            
-    }
+    if(ContactList.Count > 0)    
+        AddCollisionEvent(Pair->SimEntityA, Pair->SimEntityB, ContactList.GetDeepestContact()->Normal);            
+    
+    return ContactList;
 }
 
 inline f32 
@@ -438,13 +437,13 @@ continuous_contact simulation::ComputeTOI(rigid_body* RigidBody, broad_phase_pai
 {
     
 #define UPDATE_HIT() \
-if((t != INFINITY) && (t < TOIResult.t)) \
-{ \
-TOIResult.HitEntity = Pair->SimEntityB; \
-TOIResult.t = t; \
-TOIResult.VolumeA = Pair->VolumeA; \
-TOIResult.VolumeB = Pair->VolumeB; \
-}
+    if((t != INFINITY) && (t < TOIResult.t)) \
+    { \
+        TOIResult.HitEntity = Pair->SimEntityB; \
+        TOIResult.t = MaximumF32(0.0f, t-1e-3f); \
+        TOIResult.VolumeA = Pair->VolumeA; \
+        TOIResult.VolumeB = Pair->VolumeB; \
+    }
     
     toi_result TOIResult = InvalidTOIResult();
     for(u32 PairIndex = 0; PairIndex < Pairs.Count; PairIndex++)

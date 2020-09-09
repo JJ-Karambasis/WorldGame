@@ -122,7 +122,7 @@ struct simulation
     void AddContactConstraints(rigid_body* RigidBodyA, rigid_body* RigidBodyB, contact_list Contacts);
     void AddContactConstraint(rigid_body* RigidBodyA, rigid_body* RigidBodyB, contact Contact);
     void AddConstraint(rigid_body* RigidBodyA, rigid_body* RigidBodyB, constraint_callback* Callback); 
-    void ComputeContacts(broad_phase_pair* Pair);
+    contact_list ComputeContacts(broad_phase_pair* Pair);
     void SolveConstraints(u32 MaxIterations, f32 dt);        
     continuous_contact ComputeTOI(rigid_body* RigidBody, broad_phase_pair_list Pairs);
 };

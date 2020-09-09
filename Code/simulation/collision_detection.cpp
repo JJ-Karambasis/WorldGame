@@ -474,9 +474,9 @@ b32 EPATest(contact* Contact, convex_hull* ConvexHullA, sqt ConvexHullTransformA
     epa_result EPAResult = EPA(&AEPA, &BEPA);        
     if(!EPAResult.IsValid)
         return false;    
-        
+    
     Contact->Normal = EPAResult.Normal;        
-    Contact->Penetration = (AEPA.Margin + BEPA.Margin) - EPAResult.Penetration;
+    Contact->Penetration = MaximumF32((AEPA.Margin + BEPA.Margin) - EPAResult.Penetration, 0.0f);
     v3f PointOnA = EPAResult.Witness[0] + Contact->Normal*AEPA.Margin;
     v3f PointOnB = EPAResult.Witness[1] - Contact->Normal*BEPA.Margin;    
     Contact->Position = PointOnA + ((PointOnB-PointOnA)*0.5f);        

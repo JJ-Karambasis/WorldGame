@@ -355,6 +355,8 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 ImGui::Text("Link WorldIndex: (%s)", "No Linked Entity");
             }
             ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);            
+            
+            SimEntity->Transform = *Transform;
         }
         else
         {

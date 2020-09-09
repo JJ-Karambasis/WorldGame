@@ -30,6 +30,8 @@ COLLISION_EVENT(OnPlayerCollision)
                     pushing_object* PushingObject = GetUserData(CollidedEntity, pushing_object);
                     PushingObject->PlayerID = Entity->ID;                    
                     PushingObject->Direction = N;
+                    
+                    PlayerRigidBody->Velocity = {};
                 }                     
             }
             

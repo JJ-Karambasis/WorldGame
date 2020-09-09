@@ -59,7 +59,7 @@ typedef pool<entity> entity_storage;
 
 global f32 Global_PlayerAcceleration = 20.0f;
 global f32 Global_PlayerDamping = 5.0f;
-global f32 Global_Gravity = 20.0f;
+global f32 Global_Gravity = 10.0f;
 
 #include "player.h"
 

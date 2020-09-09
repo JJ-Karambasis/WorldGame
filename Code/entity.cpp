@@ -5,6 +5,13 @@ GetEntity(game* Game, entity_id ID)
     return Result;
 }
 
+inline rigid_body*
+GetRigidBody(game* Game, entity_id ID)
+{
+    entity* Entity = GetEntity(Game, ID);
+    return GetSimulation(Game, ID)->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+}
+
 template <typename type>
 void AddCollisionVolume(game* Game, entity_id EntityID, type* Collider)
 {
@@ -94,6 +101,16 @@ CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Eule
     return Result;
 }
 
+dual_entity_id
+CreateDualStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler,
+                       mesh_asset_id Mesh, material Material, b32 NoMeshColliders = false)
+{
+    dual_entity_id Result;
+    Result.EntityA = CreateStaticEntity(Game, 0, Position, Scale, Euler, Mesh, Material, NoMeshColliders);
+    Result.EntityB = CreateStaticEntity(Game, 1, Position, Scale, Euler, Mesh, Material, NoMeshColliders);
+    return Result;
+}
+
 entity_id 
 CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, f32 Mass, material Material, capsule* Capsule)
 {
@@ -142,7 +159,8 @@ CreateSphereRigidBody(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 
 entity_id
 CreatePushableBox(game* Game, u32 WorldIndex, v3f Position, f32 Dimensions, f32 Mass, material Material)
 {
-    entity_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, V3(Dimensions, Dimensions, Dimensions), V3(), MESH_ASSET_ID_BOX, Material, false);        
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, 
+                                    Position, V3(Dimensions, Dimensions, Dimensions), V3(), MESH_ASSET_ID_BOX, Material, false);        
     entity* Entity = GetEntity(Game, Result);
     Entity->UserData = PushStruct(Game->GameStorage, pushing_object, Clear, 0);
     
@@ -153,6 +171,22 @@ CreatePushableBox(game* Game, u32 WorldIndex, v3f Position, f32 Dimensions, f32 
     RigidBody->InvMass = 1.0f/Mass;
     RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(V3(Dimensions, Dimensions, Dimensions), Mass);
     RigidBody->LocalCenterOfMass = V3(0.0f, 0.0f, Dimensions*0.5f);
+    
+    return Result;
+}
+
+dual_entity_id
+CreateDualPushableBox(game* Game, v3f Position, f32 Dimensions, f32 Mass, material Material)
+{
+    dual_entity_id Result;
+    Result.EntityA = CreatePushableBox(Game, 0, Position, Dimensions, Mass, Material);
+    Result.EntityB = CreatePushableBox(Game, 1, Position, Dimensions, Mass, Material);
+    
+    entity* EntityA = GetEntity(Game, Result.EntityA);
+    entity* EntityB = GetEntity(Game, Result.EntityB);    
+    
+    EntityA->LinkID = EntityB->ID;
+    EntityB->LinkID = EntityA->ID;
     
     return Result;
 }
