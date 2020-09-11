@@ -32,6 +32,23 @@ global struct dev_context* __Internal_Dev_Context__;
 #include "entity.h"
 #include "dev_frame_recording.h"
 
+enum gizmo_movement_type
+{
+    TRANSLATE,
+    SCALE,
+    ROTATE
+};
+
+enum gizmo_movement_direction
+{
+    X,
+    Y,
+    Z,
+    XY,
+    XZ,
+    YZ
+};
+
 struct dev_input
 {
     union
@@ -60,6 +77,10 @@ struct dev_mesh
 {
     i64 MeshID;
     u32 IndexCount;
+    u32 VertexCount;
+    u16 IndexOffSet;
+    void* Vertices;
+    void* Indices;
 };
 
 struct dev_capsule_mesh
@@ -89,6 +110,21 @@ struct debug_quad
     v3f Normal;
     v2f Dim;
     c3 Color;
+};
+
+struct gizmo
+{
+    dev_mesh* Mesh;
+    sqt Transform;
+    gizmo_movement_type MovementType;
+    v3f IntersectionPlane;
+    gizmo_movement_direction MovementDirection;
+};
+
+struct gizmo_hit
+{
+    v3f HitMousePosition;
+    gizmo* Gizmo;
 };
 
 enum debug_primitive_type
@@ -154,6 +190,7 @@ struct dev_context
     view_mode_type ViewModeType;    
     b32 DrawGrid;
     b32 EditMode;
+    b32 IsGizmoHit;
     
     f32 tInterpolated;
     graphics_render_buffer* RenderBuffer;
@@ -192,6 +229,8 @@ struct dev_context
     char DebugMessage[100];
     
     v3f* EntityRotations[2];
+    gizmo Gizmo[3];
+    gizmo_hit GizmoHit;
 };
 
 void Platform_InitImGui(void* PlatformData);
@@ -255,6 +294,28 @@ ConvexHullIndexCount(convex_hull* Hull)
 {
     u32 Result = Hull->Header.FaceCount*3*2;
     return Result;
+}
+
+inline mesh
+GetMeshFromDevMesh(dev_mesh DevMesh)
+{
+    mesh Mesh;
+    Mesh.Vertices = DevMesh.Vertices;
+    Mesh.Indices = DevMesh.Indices;
+
+    return Mesh;
+}
+
+inline mesh_info
+GetMeshInfoFromDevMesh(dev_mesh DevMesh)
+{
+    mesh_info MeshInfo;
+    MeshInfo.Header.VertexCount = DevMesh.VertexCount;
+    MeshInfo.Header.IndexCount = DevMesh.IndexCount;
+    MeshInfo.Header.IsIndexFormat32 = false;
+    MeshInfo.Header.IsSkeletalMesh = false;
+
+    return MeshInfo;
 }
 
 #else

@@ -1,6 +1,14 @@
 #include "support.cpp"
 #include "gjk.cpp"
 #include "epa.cpp"
+
+struct ray
+{
+    v3f Origin;
+    v3f Direction;
+};
+
+
 f32 RaySphereIntersection(v3f Origin, v3f Direction, sphere* Sphere)
 {
     v3f CO = Origin-Sphere->CenterP;
@@ -112,7 +120,7 @@ b32 RayTriangleIntersection(v3f RayOrigin, v3f RayDirection, v3f P0, v3f P1, v3f
     return true;
 }
 
-ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, sqt MeshTransform)
+ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, sqt MeshTransform, b32 IsDevMesh = false)
 {
     ray_mesh_intersection_result Result = {};    
     
@@ -149,7 +157,18 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
             i++;
         }        
         
-        if(MeshInfo->Header.IsSkeletalMesh)
+        if(IsDevMesh)
+        {
+            VertexStride = sizeof(vertex_p3);
+            vertex_p3 TVertex1 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index1*VertexStride));
+            vertex_p3 TVertex2 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index2*VertexStride));
+            vertex_p3 TVertex3 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index3*VertexStride));
+            
+            Vertex1 = TVertex1.P;
+            Vertex2 = TVertex2.P;
+            Vertex3 = TVertex3.P;
+        }
+        else if(MeshInfo->Header.IsSkeletalMesh)
         {
             vertex_p3_n3_uv_weights TVertex1 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index1*VertexStride));
             vertex_p3_n3_uv_weights TVertex2 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index2*VertexStride));
@@ -187,6 +206,27 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
         }        
     }
     
+    return Result;
+}
+
+ray_mesh_intersection_result RayPlaneIntersection(v3f PlaneNormal, v3f PlanePoint, ray RayCast)
+{
+    ray_mesh_intersection_result Result = {};
+    f32 denom = Dot(PlaneNormal, RayCast.Direction);
+    if(denom == 0)
+    {
+        return Result;
+    }
+
+    f32 t = Dot(PlanePoint - RayCast.Origin, PlaneNormal) / denom;
+    if(t <= 0)
+    {
+        return Result;
+    }
+
+    Result.FoundCollision = true;
+    Result.t = t;
+
     return Result;
 }
 

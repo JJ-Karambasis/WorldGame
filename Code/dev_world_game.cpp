@@ -84,7 +84,7 @@ void CreateDevTriangleArrowMesh(dev_context* DevContext, u16 CircleSampleCount, 
     mesh_generation_result BodyResult = GenerateTriangleCylinder(GetDefaultArena(), Radius, Height, CircleSampleCount);
     mesh_generation_result ArrowResult = GenerateTriangleCone(GetDefaultArena(), ArrowRadius, ArrowHeight, CircleSampleCount, V3(0.0f, 0.0f, Height));
     
-    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(GetDefaultArena(), BodyResult.VertexCount+ArrowResult.VertexCount, 
+    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(&DevContext->DevStorage, BodyResult.VertexCount+ArrowResult.VertexCount, 
                                                                                BodyResult.IndexCount+ArrowResult.IndexCount);
     
     ptr BodyResultVerticesSize = sizeof(vertex_p3)*BodyResult.VertexCount;
@@ -97,6 +97,9 @@ void CreateDevTriangleArrowMesh(dev_context* DevContext, u16 CircleSampleCount, 
     OffsetIndices(MeshGenerationResult.Indices+BodyResult.IndexCount, SafeU16(ArrowResult.IndexCount), SafeU16(BodyResult.VertexCount));
     
     DevContext->TriangleArrowMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleArrowMesh.VertexCount = MeshGenerationResult.VertexCount;
+    DevContext->TriangleArrowMesh.Vertices = MeshGenerationResult.Vertices;
+    DevContext->TriangleArrowMesh.Indices = MeshGenerationResult.Indices;
     DevContext->TriangleArrowMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
 }
 
@@ -375,8 +378,57 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     }    
 }
 
-entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState)
+void PopulateGizmo(dev_context* DevContext, v3f Position)
 {
+    {
+        v3f X, Y, Z;
+        Z = Global_WorldXAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position, X, Y, Z);
+        gizmo Gizmo;
+        Gizmo.Mesh = &DevContext->TriangleArrowMesh;
+        Gizmo.Transform = CreateSQT(Transform);
+        Gizmo.MovementType = TRANSLATE;
+        Gizmo.IntersectionPlane = V3(0, 0, 1);
+        Gizmo.MovementDirection = gizmo_movement_direction::X;
+        DevContext->Gizmo[0] =  Gizmo;
+    }
+    
+    {
+        v3f X, Y, Z;
+        Z = Global_WorldYAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position, X, Y, Z);
+        gizmo Gizmo;
+        Gizmo.Mesh = &DevContext->TriangleArrowMesh;
+        Gizmo.Transform = CreateSQT(Transform);
+        Gizmo.MovementType = TRANSLATE;
+        Gizmo.IntersectionPlane = V3(0, 0, 1);
+        Gizmo.MovementDirection = gizmo_movement_direction::Y;
+        DevContext->Gizmo[1] =  Gizmo;
+    }
+    
+    {
+        v3f X, Y, Z;
+        Z = Global_WorldZAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position, X, Y, Z);
+        gizmo Gizmo;
+        Gizmo.Mesh = &DevContext->TriangleArrowMesh;
+        Gizmo.Transform = CreateSQT(Transform);
+        Gizmo.MovementType = TRANSLATE;
+        Gizmo.IntersectionPlane = V3(0, 1, 0);
+        Gizmo.MovementDirection = gizmo_movement_direction::Z;
+        DevContext->Gizmo[2] =  Gizmo;
+    }
+}
+
+ray CastRayFromCameraToMouse(dev_context* DevContext, graphics_state* GraphicsState)
+{
+    ray Result;
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
     dev_input* Input = &DevContext->Input;
@@ -396,10 +448,26 @@ entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState
     ray_eye = V4(ray_eye.xy, -1.0, 0.0);
     v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
     ray_wor = Normalize(ray_wor);
-    
+
+    Result.Origin = ViewSettings.Position;
+    Result.Direction = ray_wor;
+
+    return Result;
+}
+
+entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)
+{
     f32 tBest = INFINITY;
     entity* Result = NULL;
-    
+    game* Game = DevContext->Game;
+
+    if(DevContext->IsGizmoHit)
+    {
+        return DevContext->SelectedObject;
+    }
+
+    view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);  
+
     FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
     {        
         if(Entity->MeshID != INVALID_MESH_ID)
@@ -410,7 +478,7 @@ entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState
                 Mesh = LoadMesh(DevContext->Game->Assets, Entity->MeshID);
             
             sqt Transform = *GetEntityTransform(Game, Entity->ID);
-            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Mesh, MeshInfo, Transform);
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(RayCast.Origin, RayCast.Direction, Mesh, MeshInfo, Transform);
             if(IntersectionResult.FoundCollision)
             {
                 if(tBest > IntersectionResult.t && IntersectionResult.t > ViewSettings.ZNear)
@@ -420,9 +488,51 @@ entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState
                 }
             }            
         }
-    }    
-    DevContext->InspectRay = ray_wor;
+    }
     
+    return Result;
+}
+
+gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)
+{
+    f32 tBest = INFINITY;
+    gizmo_hit* Result = &DevContext->GizmoHit;
+    game* Game = DevContext->Game;
+
+    if(DevContext->SelectedObject == nullptr)
+    {
+        DevContext->IsGizmoHit = false;
+        return Result;
+    }
+
+    if(DevContext->IsGizmoHit)
+    {
+        return &DevContext->GizmoHit;
+    }
+
+    view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);  
+
+    for(int i = 0; i < 3; i++)
+    {
+        if(DevContext->Gizmo[i].Mesh != nullptr)
+        {
+            mesh_info MeshInfo = GetMeshInfoFromDevMesh(*DevContext->Gizmo[i].Mesh);
+            mesh Mesh = GetMeshFromDevMesh(*DevContext->Gizmo[i].Mesh);
+            
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(RayCast.Origin, RayCast.Direction, &Mesh, &MeshInfo, DevContext->Gizmo[i].Transform, true);
+            if(IntersectionResult.FoundCollision)
+            {
+                if(tBest > IntersectionResult.t && IntersectionResult.t > ViewSettings.ZNear)
+                {
+                    tBest = IntersectionResult.t;
+                    Result->Gizmo = &DevContext->Gizmo[i];
+                    Result->HitMousePosition = RayCast.Origin + (IntersectionResult.t * RayCast.Direction);
+                    DevContext->IsGizmoHit = true;
+                    DebugLog(DevContext, "Hit Gizmo");
+                }
+            }
+        }
+    }
     return Result;
 }
 
@@ -575,6 +685,73 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
     PushDepth(DevContext->Graphics, true);    
 }
 
+void DevelopmentHandleGizmoTranslate(dev_context* DevContext, graphics_state* GraphicsState, v3f PointDiff)
+{
+    game* Game = DevContext->Game;
+    gizmo_hit* GizmoHit = &DevContext->GizmoHit;
+
+    entity_id EntityID = DevContext->SelectedObject->ID;
+    entity* Entity = GetEntity(Game, EntityID);
+    
+    simulation* Simulation = GetSimulation(Game, EntityID);
+    
+    sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
+    
+    sqt* Transform = GetEntityTransform(Game, EntityID);
+    Transform->Translation -= PointDiff;
+}
+
+v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* GraphicsState)
+{
+    ray RayCast = CastRayFromCameraToMouse(DevContext, GraphicsState);
+    ray_mesh_intersection_result IntersectionResult = RayPlaneIntersection(DevContext->GizmoHit.Gizmo->IntersectionPlane, DevContext->GizmoHit.HitMousePosition, RayCast);
+
+    v3f Result = V3();
+    if(!IntersectionResult.FoundCollision)
+    {
+        DebugLog(DevContext, "There was not intersection with Gizmp diff plane");
+        return Result;
+    }
+
+    v3f NewPoint = RayCast.Origin + (RayCast.Direction * IntersectionResult.t);
+
+    switch(DevContext->GizmoHit.Gizmo->MovementDirection)
+    {
+        case gizmo_movement_direction::X:
+        {
+            Result = V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0, 0);
+        } break;
+        case gizmo_movement_direction::Y:
+        {
+            Result = V3(0, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0);
+        } break;
+        case gizmo_movement_direction::Z:
+        {
+            Result = V3(0, 0, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
+        } break;
+
+        INVALID_DEFAULT_CASE;
+    }
+
+    DevContext->GizmoHit.HitMousePosition = NewPoint;
+    return Result;
+}
+
+void DevelopmentHandleGizmoTransform(dev_context* DevContext, graphics_state* GraphicsState)
+{
+    v3f PointDiff = DevelopmentGetGizmoPointDiff(DevContext, GraphicsState);
+
+    switch(DevContext->GizmoHit.Gizmo->MovementType)
+    {
+        case gizmo_movement_type::TRANSLATE:
+        {
+            DevelopmentHandleGizmoTranslate(DevContext, GraphicsState, PointDiff);
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+}
+
 void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f32 tRenderInterpolate)
 {   
     graphics* Graphics = DevContext->Graphics;
@@ -600,19 +777,42 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
+    PushDepth(Graphics, false); 
+    v3f SelectedObjectPosition;
+    if(DevContext->SelectedObject != nullptr)
+    {                
+        SelectedObjectPosition = Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
+                            tRenderInterpolate, 
+                            GetEntityPosition(Game, DevContext->SelectedObject->ID));
+        PopulateGizmo(DevContext, SelectedObjectPosition);
+        DrawFrame(DevContext, SelectedObjectPosition, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
+    }
+
+    if(DevContext->IsGizmoHit && DevContext->EditMode)
+    {
+        DevelopmentHandleGizmoTransform(DevContext, GraphicsState);
+    }
+
     if(!IsDown(Input->Alt) && !ImGui::GetIO().WantCaptureMouse)
     {
         if(IsPressed(Input->LMB))
         {
-            DevContext->SelectedObject = GetSelectedObject(DevContext, GraphicsState);                
+            ray RayCast = CastRayFromCameraToMouse(DevContext, GraphicsState);
+            DevContext->InspectRay = RayCast.Direction;
+            GetSelectedGizmo(DevContext, GraphicsState, RayCast);
+            DevContext->SelectedObject = GetSelectedObject(DevContext, GraphicsState, RayCast);
         }
         if(IsPressed(Input->MMB))
         {
             DevContext->SelectedObject = nullptr;
         }
-    }          
+        if(IsReleased(Input->LMB))
+        {
+            DevContext->IsGizmoHit = false;
+        }
+    }
     
-    PushDepth(Graphics, false);    
+       
     for(u32 PrimitiveIndex = 0; PrimitiveIndex < DevContext->DebugPrimitives.Size; PrimitiveIndex++)
     {
         debug_primitive* Primitive = DevContext->DebugPrimitives + PrimitiveIndex;
@@ -637,14 +837,6 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
         }
     }
     DevContext->DebugPrimitives.Size = 0;
-    
-    if(DevContext->SelectedObject != nullptr)
-    {                
-        v3f Position = Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
-                            tRenderInterpolate, 
-                            GetEntityPosition(Game, DevContext->SelectedObject->ID));
-        DrawFrame(DevContext, Position, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
-    }
     
     PushDepth(Graphics, true);
     
