@@ -10,7 +10,8 @@
 #define CAMERA_LINEAR_ACCELERATION 7.5f
 #define CAMERA_SCROLL_ACCELERATION 300.0f*5
 #define CAMERA_SCROLL_DAMPING 7.5f
-#define CAMERA_MIN_DISTANCE 0.1f        
+#define CAMERA_MIN_DISTANCE 0.1f
+#define GIZMO_PLANE_DISTANCE 0.4f
 
 global struct dev_context* __Internal_Dev_Context__;
 #define SET_DEVELOPER_CONTEXT() __Internal_Dev_Context__ = (dev_context*)DevContext

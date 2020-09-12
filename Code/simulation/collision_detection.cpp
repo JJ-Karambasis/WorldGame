@@ -120,7 +120,44 @@ b32 RayTriangleIntersection(v3f RayOrigin, v3f RayDirection, v3f P0, v3f P1, v3f
     return true;
 }
 
-ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, sqt MeshTransform, b32 IsDevMesh = false)
+b32 RayTriangleIntersectionNoCull(v3f RayOrigin, v3f RayDirection, v3f P0, v3f P1, v3f P2, f32* t, f32* u, f32* v)
+{    
+    v3f Edge1 = P1 - P0;
+    v3f Edge2 = P2 - P0;
+    
+    v3f PVec = Cross(RayDirection, Edge2);
+    
+    f32 Det = Dot(Edge1, PVec);
+    
+    if(Det == 0)
+    {
+        return false;
+    }
+
+    f32 InverseDeterminant = 1.0f / Det;
+
+    v3f TVec = RayOrigin - P0;
+
+    *u = Dot(TVec, PVec) * InverseDeterminant;
+    if(*u < 0 || *u > 1)
+    {
+        return false;
+    }
+
+    v3f QVec = Cross(TVec, Edge1);
+
+    *v = Dot(RayDirection, QVec) * InverseDeterminant;
+    if(*v < 0 || *u + *v > 1)
+    {
+        return false;
+    }
+
+    *t = Dot(Edge2, QVec) * InverseDeterminant;
+    
+    return true;
+}
+
+ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, sqt MeshTransform, b32 IsDevMesh = false, b32 TestCull = true)
 {
     ray_mesh_intersection_result Result = {};    
     
@@ -193,8 +230,18 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
         Vertex2 = TransformV3(Vertex2, MeshTransform);
         Vertex3 = TransformV3(Vertex3, MeshTransform);
         
-        f32 t, u, v;        
-        if(RayTriangleIntersection(RayOrigin, RayDirection, Vertex1, Vertex2, Vertex3, &t, &u, &v))
+        f32 t, u, v;
+        b32 IntersectionFound = false;
+        if(TestCull)
+        {
+            IntersectionFound = RayTriangleIntersection(RayOrigin, RayDirection, Vertex1, Vertex2, Vertex3, &t, &u, &v);
+        }
+        else
+        {
+            IntersectionFound = RayTriangleIntersectionNoCull(RayOrigin, RayDirection, Vertex1, Vertex2, Vertex3, &t, &u, &v);
+        }
+
+        if(IntersectionFound)
         {
             if(!Result.FoundCollision || (t < Result.t))
             {

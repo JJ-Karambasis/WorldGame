@@ -144,17 +144,19 @@ void CreateDevLineCapsuleMesh(dev_context* DevContext, f32 Radius, u16 CircleSam
 
 void CreateDevPlaneMesh(dev_context* DevContext, f32 Width, f32 Height)
 {     
-    mesh_generation_result BodyResult = AllocateMeshGenerationResult(GetDefaultArena(), 4, 4);
+    mesh_generation_result BodyResult = AllocateMeshGenerationResult(GetDefaultArena(), 4, 6);
     
-    BodyResult.Vertices[0] = {V3(-0.5f*Width,  0.5f*Height, 0.0f)};
-    BodyResult.Vertices[1] = {V3( 0.5f*Width,  0.5f*Height, 0.0f)};
-    BodyResult.Vertices[2] = {V3(-0.5f*Width, -0.5f*Height, 0.0f)};
-    BodyResult.Vertices[3] = {V3( 0.5f*Width, -0.5f*Height, 0.0f)};
-    
-    BodyResult.Indices[0] = 0;
-    BodyResult.Indices[1] = 1;
-    BodyResult.Indices[2] = 3;
-    BodyResult.Indices[3] = 2;
+    BodyResult.Vertices[0] = {V3(-0.5f*Width,  0.5f*Height, 0.0f)}; //TopLeft
+    BodyResult.Vertices[1] = {V3( 0.5f*Width,  0.5f*Height, 0.0f)}; //TopRight
+    BodyResult.Vertices[2] = {V3(-0.5f*Width, -0.5f*Height, 0.0f)}; //BottomLeft
+    BodyResult.Vertices[3] = {V3( 0.5f*Width, -0.5f*Height, 0.0f)}; //BottomRight
+
+    BodyResult.Indices[0] = 2;
+    BodyResult.Indices[1] = 3;
+    BodyResult.Indices[2] = 1;
+    BodyResult.Indices[3] = 1;
+    BodyResult.Indices[4] = 0;
+    BodyResult.Indices[5] = 2;
     
     mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(&DevContext->DevStorage, BodyResult.VertexCount, BodyResult.IndexCount);
     
@@ -328,41 +330,56 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
     DrawSphere(DevContext, Position, 0.04f, White3());    
 }
 
+v3f GetGizmoColor(gizmo Gizmo)
+{
+    switch(Gizmo.MovementDirection)
+    {
+        case gizmo_movement_direction::X:
+        {
+            return Red3();
+        } break;
+        case gizmo_movement_direction::Y:
+        {
+            return Green3();
+        } break;
+        case gizmo_movement_direction::Z:
+        {
+            return Blue3();
+        } break;
+        case gizmo_movement_direction::XY:
+        {
+            return Blue3();
+        } break;
+        case gizmo_movement_direction::XZ:
+        {
+            return Green3();
+        } break;
+        case gizmo_movement_direction::YZ:
+        {
+            return Red3();
+        } break;
+        
+        INVALID_DEFAULT_CASE;
+    }
+    return White3();
+}
+
 void DrawGizmos(dev_context* DevContext, v3f Position)
 {        
-    for(int i = 0; i < 6; i++)
+    for(int i = 0; i < 3; i++)
     {
         gizmo CurrentGizmo = DevContext->Gizmo[i];
-        v3f Color = White3();
-        switch(CurrentGizmo.MovementDirection)
-        {
-            case gizmo_movement_direction::X:
-            {
-                Color = Red3();
-            } break;
-            case gizmo_movement_direction::Y:
-            {
-                Color = Green3();
-            } break;
-            case gizmo_movement_direction::Z:
-            {
-                Color = Blue3();
-            } break;
-            case gizmo_movement_direction::XY:
-            {
-                Color = Red3() + Green3();
-            } break;
-            case gizmo_movement_direction::XZ:
-            {
-                Color = Red3() + Blue3();
-            } break;
-            case gizmo_movement_direction::YZ:
-            {
-                Color = Green3() + Blue3();
-            } break;
-        }
+        v3f Color = GetGizmoColor(CurrentGizmo);
         PushDrawUnlitMesh(DevContext->Graphics, CurrentGizmo.Mesh->MeshID, CurrentGizmo.Transform, CreateDiffuseMaterialSlot(Color), CurrentGizmo.Mesh->IndexCount, 0, 0);  
     }
+    PushCull(DevContext->Graphics, graphics_cull_mode::GRAPHICS_CULL_MODE_NONE);
+    for(int i = 3; i < 6; i++)
+    {
+        gizmo CurrentGizmo = DevContext->Gizmo[i];
+        v3f Color = GetGizmoColor(CurrentGizmo);
+        PushDrawUnlitMesh(DevContext->Graphics, CurrentGizmo.Mesh->MeshID, CurrentGizmo.Transform, CreateDiffuseMaterialSlot(Color), CurrentGizmo.Mesh->IndexCount, 0, 0);  
+    }
+    PushCull(DevContext->Graphics, graphics_cull_mode::GRAPHICS_CULL_MODE_FRONT);
     
     DrawSphere(DevContext, Position, 0.04f, White3());    
 }
@@ -494,7 +511,7 @@ void PopulateGizmo(dev_context* DevContext, v3f Position)
         Z = Global_WorldZAxis;
         CreateBasis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position + V3(0.75f, 0.75f, 0), X, Y, Z);
+        m4 Transform = TransformM4(Position + V3(GIZMO_PLANE_DISTANCE, GIZMO_PLANE_DISTANCE, 0), X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->PlaneMesh;
         Gizmo.Transform = CreateSQT(Transform);
@@ -509,7 +526,7 @@ void PopulateGizmo(dev_context* DevContext, v3f Position)
         Z = Global_WorldYAxis;
         CreateBasis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position + V3(0.75f, 0, 0.75f), X, Y, Z);
+        m4 Transform = TransformM4(Position + V3(GIZMO_PLANE_DISTANCE, 0, GIZMO_PLANE_DISTANCE), X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->PlaneMesh;
         Gizmo.Transform = CreateSQT(Transform);
@@ -524,7 +541,7 @@ void PopulateGizmo(dev_context* DevContext, v3f Position)
         Z = Global_WorldXAxis;
         CreateBasis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position + V3(0, 0.75f, 0.75f), X, Y, Z);
+        m4 Transform = TransformM4(Position + V3(0, GIZMO_PLANE_DISTANCE, GIZMO_PLANE_DISTANCE), X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->PlaneMesh;
         Gizmo.Transform = CreateSQT(Transform);
@@ -628,7 +645,7 @@ gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsSta
             mesh_info MeshInfo = GetMeshInfoFromDevMesh(*DevContext->Gizmo[i].Mesh);
             mesh Mesh = GetMeshFromDevMesh(*DevContext->Gizmo[i].Mesh);
             
-            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(RayCast.Origin, RayCast.Direction, &Mesh, &MeshInfo, DevContext->Gizmo[i].Transform, true);
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(RayCast.Origin, RayCast.Direction, &Mesh, &MeshInfo, DevContext->Gizmo[i].Transform, true, false);
             if(IntersectionResult.FoundCollision)
             {
                 if(tBest > IntersectionResult.t && IntersectionResult.t > ViewSettings.ZNear)
@@ -1031,7 +1048,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         CreateDevTriangleCylinderMesh(DevContext, 60);
         CreateDevTriangleConeMesh(DevContext, 60);
         CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);
-        CreateDevPlaneMesh(DevContext, 0.5f, 0.5f);
+        CreateDevPlaneMesh(DevContext, 0.4f, 0.4f);
         
         DevContext->EntityRotations[0] = PushArray(&DevContext->DevStorage, Game->EntityStorage[0].Capacity, v3f, Clear, 0);
         DevContext->EntityRotations[1] = PushArray(&DevContext->DevStorage, Game->EntityStorage[1].Capacity, v3f, Clear, 0);
