@@ -142,6 +142,32 @@ void CreateDevLineCapsuleMesh(dev_context* DevContext, f32 Radius, u16 CircleSam
     DevContext->LineCapsuleMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
 }
 
+void CreateDevPlaneMesh(dev_context* DevContext, f32 Width, f32 Height)
+{     
+    mesh_generation_result BodyResult = AllocateMeshGenerationResult(GetDefaultArena(), 4, 4);
+    
+    BodyResult.Vertices[0] = {V3(-0.5f*Width,  0.5f*Height, 0.0f)};
+    BodyResult.Vertices[1] = {V3( 0.5f*Width,  0.5f*Height, 0.0f)};
+    BodyResult.Vertices[2] = {V3(-0.5f*Width, -0.5f*Height, 0.0f)};
+    BodyResult.Vertices[3] = {V3( 0.5f*Width, -0.5f*Height, 0.0f)};
+    
+    BodyResult.Indices[0] = 0;
+    BodyResult.Indices[1] = 1;
+    BodyResult.Indices[2] = 3;
+    BodyResult.Indices[3] = 2;
+    
+    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(&DevContext->DevStorage, BodyResult.VertexCount, BodyResult.IndexCount);
+    
+    CopyMemory(MeshGenerationResult.Vertices, BodyResult.Vertices, sizeof(vertex_p3)*BodyResult.VertexCount);
+    CopyMemory(MeshGenerationResult.Indices, BodyResult.Indices, sizeof(u16)*BodyResult.IndexCount);
+    
+    DevContext->PlaneMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->PlaneMesh.VertexCount = MeshGenerationResult.VertexCount;
+    DevContext->PlaneMesh.Vertices = MeshGenerationResult.Vertices;
+    DevContext->PlaneMesh.Indices = MeshGenerationResult.Indices;
+    DevContext->PlaneMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+}
+
 void DrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
 {
     NOT_IMPLEMENTED;    
@@ -302,6 +328,44 @@ void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXA
     DrawSphere(DevContext, Position, 0.04f, White3());    
 }
 
+void DrawGizmos(dev_context* DevContext, v3f Position)
+{        
+    for(int i = 0; i < 6; i++)
+    {
+        gizmo CurrentGizmo = DevContext->Gizmo[i];
+        v3f Color = White3();
+        switch(CurrentGizmo.MovementDirection)
+        {
+            case gizmo_movement_direction::X:
+            {
+                Color = Red3();
+            } break;
+            case gizmo_movement_direction::Y:
+            {
+                Color = Green3();
+            } break;
+            case gizmo_movement_direction::Z:
+            {
+                Color = Blue3();
+            } break;
+            case gizmo_movement_direction::XY:
+            {
+                Color = Red3() + Green3();
+            } break;
+            case gizmo_movement_direction::XZ:
+            {
+                Color = Red3() + Blue3();
+            } break;
+            case gizmo_movement_direction::YZ:
+            {
+                Color = Green3() + Blue3();
+            } break;
+        }
+        PushDrawUnlitMesh(DevContext->Graphics, CurrentGizmo.Mesh->MeshID, CurrentGizmo.Transform, CreateDiffuseMaterialSlot(Color), CurrentGizmo.Mesh->IndexCount, 0, 0);  
+    }
+    
+    DrawSphere(DevContext, Position, 0.04f, White3());    
+}
 
 
 inline view_settings
@@ -424,6 +488,51 @@ void PopulateGizmo(dev_context* DevContext, v3f Position)
         Gizmo.MovementDirection = gizmo_movement_direction::Z;
         DevContext->Gizmo[2] =  Gizmo;
     }
+
+    {
+        v3f X, Y, Z;
+        Z = Global_WorldZAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position + V3(0.75f, 0.75f, 0), X, Y, Z);
+        gizmo Gizmo;
+        Gizmo.Mesh = &DevContext->PlaneMesh;
+        Gizmo.Transform = CreateSQT(Transform);
+        Gizmo.MovementType = TRANSLATE;
+        Gizmo.IntersectionPlane = V3(0, 0, 1);
+        Gizmo.MovementDirection = gizmo_movement_direction::XY;
+        DevContext->Gizmo[3] =  Gizmo;
+    }
+
+    {
+        v3f X, Y, Z;
+        Z = Global_WorldYAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position + V3(0.75f, 0, 0.75f), X, Y, Z);
+        gizmo Gizmo;
+        Gizmo.Mesh = &DevContext->PlaneMesh;
+        Gizmo.Transform = CreateSQT(Transform);
+        Gizmo.MovementType = TRANSLATE;
+        Gizmo.IntersectionPlane = V3(0, 1, 0);
+        Gizmo.MovementDirection = gizmo_movement_direction::XZ;
+        DevContext->Gizmo[4] =  Gizmo;
+    }
+
+    {
+        v3f X, Y, Z;
+        Z = Global_WorldXAxis;
+        CreateBasis(Z, &X, &Y);
+        
+        m4 Transform = TransformM4(Position + V3(0, 0.75f, 0.75f), X, Y, Z);
+        gizmo Gizmo;
+        Gizmo.Mesh = &DevContext->PlaneMesh;
+        Gizmo.Transform = CreateSQT(Transform);
+        Gizmo.MovementType = TRANSLATE;
+        Gizmo.IntersectionPlane = V3(1, 0, 0);
+        Gizmo.MovementDirection = gizmo_movement_direction::YZ;
+        DevContext->Gizmo[5] =  Gizmo;
+    }
 }
 
 ray CastRayFromCameraToMouse(dev_context* DevContext, graphics_state* GraphicsState)
@@ -499,7 +608,7 @@ gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsSta
     gizmo_hit* Result = &DevContext->GizmoHit;
     game* Game = DevContext->Game;
 
-    if(DevContext->SelectedObject == nullptr)
+    if(DevContext->SelectedObject == nullptr || !DevContext->EditMode)
     {
         DevContext->IsGizmoHit = false;
         return Result;
@@ -512,7 +621,7 @@ gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsSta
 
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);  
 
-    for(int i = 0; i < 3; i++)
+    for(int i = 0; i < 6; i++)
     {
         if(DevContext->Gizmo[i].Mesh != nullptr)
         {
@@ -729,6 +838,18 @@ v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Graphi
         {
             Result = V3(0, 0, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
         } break;
+        case gizmo_movement_direction::XY:
+        {
+            Result = V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0);
+        } break;
+        case gizmo_movement_direction::XZ:
+        {
+            Result = V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
+        } break;
+        case gizmo_movement_direction::YZ:
+        {
+            Result = V3(0, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
+        } break;
 
         INVALID_DEFAULT_CASE;
     }
@@ -784,8 +905,15 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
         SelectedObjectPosition = Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
                             tRenderInterpolate, 
                             GetEntityPosition(Game, DevContext->SelectedObject->ID));
-        PopulateGizmo(DevContext, SelectedObjectPosition);
-        DrawFrame(DevContext, SelectedObjectPosition, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
+        if(!DevContext->EditMode)
+        {
+            DrawFrame(DevContext, SelectedObjectPosition, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
+        }
+        else
+        {
+            PopulateGizmo(DevContext, SelectedObjectPosition);
+            DrawGizmos(DevContext, SelectedObjectPosition);
+        }
     }
 
     if(DevContext->IsGizmoHit && DevContext->EditMode)
@@ -903,6 +1031,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         CreateDevTriangleCylinderMesh(DevContext, 60);
         CreateDevTriangleConeMesh(DevContext, 60);
         CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);
+        CreateDevPlaneMesh(DevContext, 0.5f, 0.5f);
         
         DevContext->EntityRotations[0] = PushArray(&DevContext->DevStorage, Game->EntityStorage[0].Capacity, v3f, Clear, 0);
         DevContext->EntityRotations[1] = PushArray(&DevContext->DevStorage, Game->EntityStorage[1].Capacity, v3f, Clear, 0);

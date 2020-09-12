@@ -207,6 +207,7 @@ struct dev_context
     
     dev_capsule_mesh LineCapsuleMesh;
     
+    dev_mesh PlaneMesh;
     dev_mesh LineBoxMesh;
     dev_mesh LineSphereMesh;    
     dev_mesh TriangleBoxMesh;
@@ -229,7 +230,7 @@ struct dev_context
     char DebugMessage[100];
     
     v3f* EntityRotations[2];
-    gizmo Gizmo[3];
+    gizmo Gizmo[6];
     gizmo_hit GizmoHit;
 };
 
