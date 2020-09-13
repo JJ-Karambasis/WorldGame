@@ -222,6 +222,12 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     Text("View Modes");
     SameLine();
     Combo("", (int*)&DevContext->ViewModeType, ViewModeTypes, ARRAYCOUNT(ViewModeTypes));
+
+    const char* TransformTypes[] = {"Translate", "Scale", "Rotate"};
+    AlignTextToFramePadding();
+    Text("Object Transform Mode");
+    SameLine();
+    Combo("TransformMode", (int*)&DevContext->TransformationMode, TransformTypes, ARRAYCOUNT(TransformTypes));
    
     ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    

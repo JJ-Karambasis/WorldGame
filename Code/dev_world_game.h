@@ -117,7 +117,6 @@ struct gizmo
 {
     dev_mesh* Mesh;
     sqt Transform;
-    gizmo_movement_type MovementType;
     v3f IntersectionPlane;
     gizmo_movement_direction MovementDirection;
 };
@@ -216,6 +215,7 @@ struct dev_context
     dev_mesh TriangleCylinderMesh;
     dev_mesh TriangleConeMesh;
     dev_mesh TriangleArrowMesh;
+    dev_mesh TriangleCircleMesh;
     
     dynamic_array<debug_primitive> DebugPrimitives;
     
@@ -233,6 +233,7 @@ struct dev_context
     v3f* EntityRotations[2];
     gizmo Gizmo[6];
     gizmo_hit GizmoHit;
+    gizmo_movement_type TransformationMode;
 };
 
 void Platform_InitImGui(void* PlatformData);
