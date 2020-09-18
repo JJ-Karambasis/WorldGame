@@ -511,7 +511,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
         Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
         ak_v3f Eulers = (Camera->AngularVelocity*Game->dt);            
         
-        ak_quatf Orientation = AK_Normalize(AK_RotQuat(Camera->Orientation.XAxis, Eulers.r)*AK_RotQuat(Camera->Orientation.YAxis, Eulers.p));
+        ak_quatf Orientation = AK_Normalize(AK_RotQuat(Camera->Orientation.XAxis, Eulers.roll)*AK_RotQuat(Camera->Orientation.YAxis, Eulers.pitch));
         Camera->Orientation *= AK_QuatToMatrix(Orientation);
         
         Camera->Velocity.xy *= (1.0f /  (1.0f+Game->dt*CAMERA_LINEAR_DAMPING));            
@@ -964,6 +964,8 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, ak
 
 void DevelopmentHandleGizmoTranslate(dev_context* DevContext, graphics_state* GraphicsState, ak_v3f PointDiff)
 {
+    
+    
     game* Game = DevContext->Game;
     gizmo_hit* GizmoHit = &DevContext->GizmoHit;
 
@@ -1078,8 +1080,12 @@ ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Gra
     {
         ak_v3f DirectionToOld = DevContext->GizmoHit.HitMousePosition - SelectedObjectPosition;
         ak_v3f DirectionToNew = NewPoint - SelectedObjectPosition;
-        ak_f32 AngleDiff = AK_ATan2(AK_Dot(AK_Cross(DirectionToNew, DirectionToOld), DevContext->GizmoHit.Gizmo->IntersectionPlane), 
+        ak_f32 AngleDiff = AK_ATan2(AK_Dot(AK_Cross(DirectionToNew, DirectionToOld), 
+                                           DevContext->GizmoHit.Gizmo->IntersectionPlane), 
                                     AK_Dot(DirectionToOld, DirectionToNew));
+        
+        if(AngleDiff != 0)
+            int x = 0;
         
         switch(DevContext->GizmoHit.Gizmo->MovementDirection)
         {

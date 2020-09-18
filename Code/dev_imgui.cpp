@@ -36,7 +36,7 @@ void DevelopmentImGuiInit(dev_context* DevContext)
 void DevelopmentUpdateSelectedObjectRotation(ak_sqtf* Transform, ak_v3f* OldRotation, ak_v3f NewRotation)
 {
     *OldRotation = NewRotation;
-    Transform->Orientation = AK_EulerToQuat(NewRotation.r, NewRotation.p, NewRotation.y);
+    Transform->Orientation = AK_EulerToQuat(NewRotation.roll, NewRotation.pitch, NewRotation.yaw);
 }
 
 void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlayback)
@@ -312,9 +312,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 DragFloat("Y Scale", &Transform->Scale.y, 0.1f, 0.0f, 100.0f);
                 DragFloat("Z Scale", &Transform->Scale.z, 0.1f, 0.0f, 100.0f);
                 
-                ak_f32 ObjectRoll = AK_ToDegree(Rotation->r);
-                ak_f32 ObjectPitch = AK_ToDegree(Rotation->p);
-                ak_f32 ObjectYaw = AK_ToDegree(Rotation->y);
+                ak_f32 ObjectRoll = AK_ToDegree(Rotation->roll);
+                ak_f32 ObjectPitch = AK_ToDegree(Rotation->pitch);
+                ak_f32 ObjectYaw = AK_ToDegree(Rotation->yaw);
                 DragFloat("Roll", &ObjectRoll, 0.1f, -180.0f, 180.0f, "%.3f");
                 DragFloat("Pitch", &ObjectPitch, 0.1f, -180.0f, 180.0f, "%.3f");
                 DragFloat("Yaw", &ObjectYaw, 0.1f, -180.0f, 180.0f, "%.3f");
@@ -334,9 +334,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 DragFloat("Y Scale", &Scale.y, 0.0f, Scale.y, Scale.y);
                 DragFloat("Z Scale", &Scale.z, 0.0f, Scale.z, Scale.z);
                                 
-                ak_f32 ObjectRoll = AK_ToDegree(Rotation->r);
-                ak_f32 ObjectPitch = AK_ToDegree(Rotation->p);
-                ak_f32 ObjectYaw = AK_ToDegree(Rotation->y);
+                ak_f32 ObjectRoll = AK_ToDegree(Rotation->roll);
+                ak_f32 ObjectPitch = AK_ToDegree(Rotation->pitch);
+                ak_f32 ObjectYaw = AK_ToDegree(Rotation->yaw);
                 DragFloat("Roll", &ObjectRoll, 0.0f, ObjectRoll, ObjectRoll, "%.3f");
                 DragFloat("Pitch", &ObjectPitch, 0.0f, ObjectPitch, ObjectPitch, "%.3f");
                 DragFloat("Yaw", &ObjectYaw, 0.0f, ObjectYaw, ObjectYaw, "%.3f");
