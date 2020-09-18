@@ -2,44 +2,38 @@
 #define RIGID_BODY_SIZE sizeof(recording_entity_header)
 #define PUSHABLE_SIZE sizeof(recording_entity_header) + sizeof(pushing_object)
 
-inline b32 
+inline ak_bool 
 ValidateSignature(frame_recording_header Header)
 {
-    b32 Result = (Header.MajorVersion == FRAME_RECORDING_MAJOR_VERSION) && (Header.MinorVersion == FRAME_RECORDING_MINOR_VERSION);
+    ak_bool Result = (Header.MajorVersion == FRAME_RECORDING_MAJOR_VERSION) && (Header.MinorVersion == FRAME_RECORDING_MINOR_VERSION);
     return Result;
 }
 
-inline b32 
+inline ak_bool
 ValidateVersion(frame_recording_header Header)
 {
-    b32 Result = StringEquals(Header.Signature, FRAME_RECORDING_SIGNATURE);
+    ak_bool Result = AK_StringEquals(Header.Signature, FRAME_RECORDING_SIGNATURE);
     return Result;
 }
 
 void frame_recording::StartRecording()
 {
-    ASSERT(RecordingState == FRAME_RECORDING_STATE_NONE);
+    AK_Assert(RecordingState == FRAME_RECORDING_STATE_NONE, "Recording state should be set to none before you start recording");
     RecordingState = FRAME_RECORDING_STATE_RECORDING;
     
-    if(!WrittenFrameInfos.IsInitialized())
-        WrittenFrameInfos = CreateDynamicArray<frame_info>(2048);
-    
-    if(!WrittenFrameDatas.IsInitialized())
-        WrittenFrameDatas = CreateDynamicArray<frame_data>(2048);        
-    
-    if(!IsInitialized(&RecordingArena))
-        RecordingArena = CreateArena(MEGABYTE(4));                
+    if(!RecordingArena)        
+        RecordingArena = AK_CreateArena(AK_Megabyte(4));                
 }
 
 void frame_recording::RecordFrame(game* Game)
 {
-    ASSERT(RecordingState == FRAME_RECORDING_STATE_RECORDING);
+    AK_Assert(RecordingState == FRAME_RECORDING_STATE_RECORDING, "Recording state should be recording before you record a frame");
     
-    u32 Size = 0;
-    u32 EntityCount = 0;
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    ak_u32 Size = 0;
+    ak_u32 EntityCount = 0;
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+        AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
         {
             switch(Entity->Type)
             {
@@ -70,18 +64,18 @@ void frame_recording::RecordFrame(game* Game)
     FrameInfo.Size = Size;
     FrameInfo.RecordedEntityCount = EntityCount;
     
-    u32 EntityBufferSize = Size-sizeof(input);
+    ak_u32 EntityBufferSize = Size-sizeof(input);
     
     frame_data FrameData;
     FrameData.Input = *Game->Input;
-    FrameData.EntityBuffer = PushSize(&RecordingArena, EntityBufferSize, Clear, 0);
+    FrameData.EntityBuffer = RecordingArena->Push(EntityBufferSize);
     
-    u8* At = (u8*)FrameData.EntityBuffer;
-    u8* End = At + EntityBufferSize;
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    ak_u8* At = (ak_u8*)FrameData.EntityBuffer;
+    ak_u8* End = At + EntityBufferSize;
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);
-        FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+        AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
         {
             switch(Entity->Type)
             {
@@ -130,7 +124,7 @@ void frame_recording::RecordFrame(game* Game)
         }
     }
     
-    ASSERT(At == End);
+    AK_Assert(At == End, "Frame recording is corrupted. This is a programming error");
     
     WrittenFrameInfos.Add(FrameInfo);
     WrittenFrameDatas.Add(FrameData);
@@ -139,56 +133,60 @@ void frame_recording::RecordFrame(game* Game)
 
 void frame_recording::EndRecording(char* Path)
 {
-    ASSERT(RecordingState == FRAME_RECORDING_STATE_RECORDING);
+    AK_Assert(RecordingState == FRAME_RECORDING_STATE_RECORDING, "Recording state should be recording before you end recording");
     RecordingState = FRAME_RECORDING_STATE_NONE;
     
-    u32 DataSize = 0;
+    ak_u32 DataSize = 0;
     DataSize += sizeof(frame_recording_header);
     DataSize += sizeof(frame_info)*FrameCount;
-    FOR_EACH(FrameInfo, &WrittenFrameInfos)    
+    AK_ForEach(FrameInfo, &WrittenFrameInfos)    
         DataSize += FrameInfo->Size;    
     
-    void* Data = PushSize(DataSize, Clear, 0);
-    u8* DataAt = (u8*)Data;
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    void* Data = GlobalArena->Push(DataSize);
+    ak_u8* DataAt = (ak_u8*)Data;
     
     frame_recording_header* Header = (frame_recording_header*)DataAt;
-    CopyMemory((char*)Header->Signature, (char*)FRAME_RECORDING_SIGNATURE, sizeof(FRAME_RECORDING_SIGNATURE));
+    AK_MemoryCopy((char*)Header->Signature, (char*)FRAME_RECORDING_SIGNATURE, sizeof(FRAME_RECORDING_SIGNATURE));
     Header->MajorVersion = FRAME_RECORDING_MAJOR_VERSION;
     Header->MinorVersion = FRAME_RECORDING_MINOR_VERSION;
     Header->FrameCount = FrameCount;    
     DataAt += sizeof(frame_recording_header);
     
-    u32 OffsetToFrame = sizeof(frame_recording_header)+sizeof(frame_info)*FrameCount;
-    FOR_EACH(FrameInfo, &WrittenFrameInfos)
+    ak_u32 OffsetToFrame = sizeof(frame_recording_header)+sizeof(frame_info)*FrameCount;
+    AK_ForEach(FrameInfo, &WrittenFrameInfos)
     {
         FrameInfo->OffsetToFrame = OffsetToFrame;
         OffsetToFrame += FrameInfo->Size;        
         *((frame_info*)DataAt) = *FrameInfo;
         DataAt += sizeof(frame_info);
     }
-    ASSERT(OffsetToFrame == DataSize);
+    AK_Assert(OffsetToFrame == DataSize, "Frame recording is corrupted. This is a programming error");
     
-    for(u32 FrameIndex = 0; FrameIndex < FrameCount; FrameIndex++)
+    for(ak_u32 FrameIndex = 0; FrameIndex < FrameCount; FrameIndex++)
     {
         frame_info* FrameInfo = &WrittenFrameInfos[FrameIndex];        
         frame_data* FrameData = &WrittenFrameDatas[FrameIndex];
         *(input*)DataAt = FrameData->Input;
-        CopyMemory(DataAt + sizeof(input), FrameData->EntityBuffer, FrameInfo->Size-sizeof(input));
+        AK_MemoryCopy(DataAt + sizeof(input), FrameData->EntityBuffer, FrameInfo->Size-sizeof(input));
         DataAt += FrameInfo->Size;        
     }        
     
-    WriteEntireFile(Path, Data, DataSize);    
+    AK_WriteEntireFile(Path, Data, DataSize);    
     
-    WrittenFrameInfos.Reset();
-    WrittenFrameDatas.Reset();
-    ResetArena(&RecordingArena);
+    WrittenFrameInfos.Clear();
+    WrittenFrameDatas.Clear();
+    RecordingArena->Clear();
+    GlobalArena->EndTemp(&TempArena);
     FrameCount = 0;
 }
 
-b32 frame_recording::StartPlaying(char* Path)
+ak_bool frame_recording::StartPlaying(ak_char* Path)
 {
-    ASSERT(RecordingState == FRAME_RECORDING_STATE_NONE);
-    ReadRecordingBuffer = ReadEntireFile(Path);
+    AK_Assert(RecordingState == FRAME_RECORDING_STATE_NONE, "Recording state should be set to none before you start playing");
+    ReadRecordingBuffer = AK_ReadEntireFile(Path, RecordingArena);
     if(!ReadRecordingBuffer.IsValid()) return false;    
     
     frame_recording_header* Header = (frame_recording_header*)ReadRecordingBuffer.Data;
@@ -202,19 +200,19 @@ b32 frame_recording::StartPlaying(char* Path)
     return true;
 }
 
-void frame_recording::PlayFrame(game* Game, u32 FrameIndex)
+void frame_recording::PlayFrame(game* Game, ak_u32 FrameIndex)
 {
-    ASSERT(RecordingState == FRAME_RECORDING_STATE_PLAYING);
+    AK_Assert(RecordingState == FRAME_RECORDING_STATE_PLAYING, "Recording state should be playing before you play a frame");
     
     frame_info* FrameInfoArray = (frame_info*)(ReadRecordingBuffer.Data + sizeof(frame_recording_header));   
     frame_info FrameInfo = FrameInfoArray[FrameIndex];
     
-    u8* FrameAt = ReadRecordingBuffer.Data + FrameInfo.OffsetToFrame;
-    u8* FrameEnd = FrameAt+FrameInfo.Size;
+    ak_u8* FrameAt = ReadRecordingBuffer.Data + FrameInfo.OffsetToFrame;
+    ak_u8* FrameEnd = FrameAt+FrameInfo.Size;
     
     *Game->Input = *(input*)FrameAt;
     FrameAt += sizeof(input);
-    for(u32 EntityIndex = 0; EntityIndex < FrameInfo.RecordedEntityCount; EntityIndex++)
+    for(ak_u32 EntityIndex = 0; EntityIndex < FrameInfo.RecordedEntityCount; EntityIndex++)
     {
         recording_entity_header* Header = (recording_entity_header*)FrameAt;        
         entity* Entity = GetEntity(Game, Header->ID);        
@@ -242,13 +240,13 @@ void frame_recording::PlayFrame(game* Game, u32 FrameIndex)
             } break;
         }
     }        
-    ASSERT(FrameAt == FrameEnd);
+    AK_Assert(FrameAt == FrameEnd, "Frame is courrpted. This is a programming error or the file is corrupted");
 }
 
 void frame_recording::EndPlaying()
 {
-    ASSERT(RecordingState == FRAME_RECORDING_STATE_PLAYING);
+    AK_Assert(RecordingState == FRAME_RECORDING_STATE_PLAYING, "Recording state should be playing before end playing");
     RecordingState = FRAME_RECORDING_STATE_NONE;
-    FreeFileMemory(&ReadRecordingBuffer);
+    RecordingArena->Clear();    
     FrameCount = 0;
 }

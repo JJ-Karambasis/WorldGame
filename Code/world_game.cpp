@@ -16,14 +16,14 @@ PUZZLE_COMPLETE_CALLBACK(DespawnWallCompleteCallback)
 }
 
 inline goal_rect 
-CreateGoalRect(v3f RectMin, v3f RectMax, u32 WorldIndex)
+CreateGoalRect(ak_v3f RectMin, ak_v3f RectMax, ak_u32 WorldIndex)
 {
-    goal_rect Result = {WorldIndex, CreateRect3D(RectMin, RectMax)};
+    goal_rect Result = {WorldIndex, AK_Rect(RectMin, RectMax)};
     return Result;
 }
 
 inline goal_rect 
-CreateGoalRect(v3f RectMin, v3f RectMax, u32 WorldIndex, f32 Padding)
+CreateGoalRect(ak_v3f RectMin, ak_v3f RectMax, ak_u32 WorldIndex, ak_f32 Padding)
 {
     goal_rect Result = CreateGoalRect(RectMin-Padding, RectMax+Padding, WorldIndex);
     return Result;
@@ -32,71 +32,66 @@ CreateGoalRect(v3f RectMin, v3f RectMax, u32 WorldIndex, f32 Padding)
 void LoadTestLevel(game* Game)
 {    
     //TODO(JJ): Load entity data at runtime    
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {           
-        Game->EntityStorage[WorldIndex] = CreatePool<entity>(Game->GameStorage, 512);                
-        Game->PrevTransforms[WorldIndex] = PushArray(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity, sqt, Clear, 0);        
-        Game->CurrentTransforms[WorldIndex] = PushArray(Game->GameStorage, Game->EntityStorage[WorldIndex].Capacity, sqt, Clear, 0);        
+        Game->EntityStorage[WorldIndex] = AK_CreatePool<entity>(512);                
+        Game->PrevTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
+        Game->CurrentTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
         
-        Game->Simulations[WorldIndex] = CreateSimulation(Game->GameStorage);
+        Game->Simulations[WorldIndex] = CreateSimulation();
         
-        v3f P0 = V3() + Global_WorldZAxis*PLAYER_RADIUS;
-        capsule PlayerCapsule = CreateCapsule(P0, P0+Global_WorldZAxis*PLAYER_HEIGHT, PLAYER_RADIUS);        
-        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, V3(0.0f, 0.0f, 0.1f), V3(), 65, Global_PlayerMaterial, &PlayerCapsule);
+        ak_v3f P0 = AK_V3<ak_f32>() + AK_ZAxis()*PLAYER_RADIUS;
+        capsule PlayerCapsule = CreateCapsule(P0, P0+AK_ZAxis()*PLAYER_HEIGHT, PLAYER_RADIUS);        
+        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, AK_V3(0.0f, 0.0f, 0.1f), AK_V3<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
         
         game_camera* Camera = Game->CurrentCameras + WorldIndex;        
         Camera->Target = GetEntityPosition(Game, PlayerID);        
-        Camera->Coordinates = SphericalCoordinates(6, TO_RAD(-90.0f), TO_RAD(35.0f));        
-        Camera->FieldOfView = TO_RAD(65.0f);                        
+        Camera->SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(-90.0f), AK_ToRadians(35.0f));        
+        Camera->FieldOfView = AK_ToRadians(65.0f);                        
         Camera->ZNear = CAMERA_ZNEAR;
         Camera->ZFar = CAMERA_ZFAR;        
         
         Game->PrevCameras[WorldIndex] = *Camera;
     }
         
-    CreateDualStaticEntity(Game, V3(0, 0, -0.01f), V3(10.0f, 10.0f, 0.01f), V3(0.0f, 0.0f, PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, V3(-6.2f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.1f),  MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, V3(-3.0f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.25f), MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, V3(-4.6f, -4.5f, 0.0f), V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.33f), MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, V3(-1.6f, -3.5f, -2.0f), V3(1.0f, 1.0f, 10.0f), V3(PI*0.3f, 0.0f, PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material1);
-    CreateDualStaticEntity(Game, V3(-1.0f, 5.5f, 0.0f),  V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.2f),  MESH_ASSET_ID_BOX,   Global_Material1);
-    CreateDualStaticEntity(Game, V3(1.0f, 4.5f, 0.0f),   V3(1.0f, 1.0f, 1.0f), V3(0.0f, 0.0f, PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);                    
-    CreateSphereRigidBody(Game, 0, V3( 1.0f, 1.0f, 5.0f), 0.5f, 30.0f, 0.2f, Global_Material0);
-    CreateDualPushableBox(Game, V3(-2.0f, 0.0f, 0.001f), 1.0f, 35.0f, Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(0.0f, 0.0f, -0.01f), AK_V3(10.0f, 10.0f, 0.01f), AK_V3(0.0f, 0.0f, AK_PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-6.2f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.1f),  MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-3.0f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.25f), MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-4.6f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.33f), MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-1.6f, -3.5f, -2.0f), AK_V3(1.0f, 1.0f, 10.0f), AK_V3(AK_PI*0.3f, 0.0f, AK_PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material1);
+    CreateDualStaticEntity(Game, AK_V3(-1.0f, 5.5f, 0.0f),  AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.2f),  MESH_ASSET_ID_BOX,   Global_Material1);
+    CreateDualStaticEntity(Game, AK_V3(1.0f, 4.5f, 0.0f),   AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);                    
+    CreateSphereRigidBody(Game, 0, AK_V3( 1.0f, 1.0f, 5.0f), 0.5f, 30.0f, 0.2f, Global_Material0);
+    CreateDualPushableBox(Game, AK_V3(-2.0f, 0.0f, 0.001f), 1.0f, 35.0f, Global_Material0);
     
-    Game->JumpingQuads[0].CenterP = V3(-1.0f, 0.0f, 0.0f);
-    Game->JumpingQuads[0].Dimensions = V2(1.0f, 2.0f);
+    Game->JumpingQuads[0].CenterP = AK_V3(-1.0f, 0.0f, 0.0f);
+    Game->JumpingQuads[0].Dimensions = AK_V2(1.0f, 2.0f);
     
-    Game->JumpingQuads[1].CenterP = V3(-4.0f, 0.0f, 0.0f);
-    Game->JumpingQuads[1].Dimensions = V2(1.0f, 2.0f);
+    Game->JumpingQuads[1].CenterP = AK_V3(-4.0f, 0.0f, 0.0f);
+    Game->JumpingQuads[1].Dimensions = AK_V2(1.0f, 2.0f);
     
     Game->JumpingQuads[0].OtherQuad = &Game->JumpingQuads[1];
     Game->JumpingQuads[1].OtherQuad = &Game->JumpingQuads[0];
 }
 
 extern "C"
-EXPORT GAME_INITIALIZE(Initialize)
+AK_EXPORT GAME_INITIALIZE(Initialize)
 {
     SET_DEVELOPER_CONTEXT();
-            
-    arena GameStorage = CreateArena(MEGABYTE(32));            
-    assets* Assets = InitAssets(&GameStorage, AssetPath);
+    
+    ak_arena* GameStorage = AK_CreateArena(AK_Megabyte(32));            
+    assets* Assets = InitAssets(GameStorage, AssetPath);
     if(!Assets)
     {
         //TODO(JJ): Diagnostic and error logging
         return false;
     }        
     
-    arena TempStorage = CreateArena(MEGABYTE(32));
+    game* Game = GameStorage->Push<game>();    
+    Game->GameStorage = GameStorage;        
+    Game->TempStorage = TempStorage;
     
-    game* Game = PushStruct(&GameStorage, game, Clear, 0);
-    Game->_Internal_GameStorage_ = GameStorage;
-    Game->GameStorage = &Game->_Internal_GameStorage_;
-    
-    Game->_Internal_TempStorage_ = TempStorage;
-    Game->TempStorage = &Game->_Internal_TempStorage_;
-    
-    SetDefaultArena(Game->TempStorage);
+    AK_SetGlobalArena(Game->TempStorage);
     
     Game->Input       = Input;
     Game->AudioOutput = AudioOutput;
@@ -137,7 +132,7 @@ void AddRigidBodyContacts(simulation* Simulation, rigid_body* RigidBody, sim_ent
                 Simulation->AddContactConstraints(RigidBody, NULL, ContactList);
             }
         } break;
-                        
+        
         case ENTITY_TYPE_RIGID_BODY:
         case ENTITY_TYPE_STATIC:
         {
@@ -148,17 +143,17 @@ void AddRigidBodyContacts(simulation* Simulation, rigid_body* RigidBody, sim_ent
 
 void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
 {            
-    v3f MoveDelta = RigidBody->MoveDelta;
-    RigidBody->MoveDelta = V3(MoveDelta.xy);
+    ak_v3f MoveDelta = RigidBody->MoveDelta;
+    RigidBody->MoveDelta = AK_V3(MoveDelta.xy);
     
-    for(u32 Iterations = 0; Iterations < 4; Iterations++)
+    for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
     {
-        f32 DeltaLength = Magnitude(RigidBody->MoveDelta);
+        ak_f32 DeltaLength = AK_Magnitude(RigidBody->MoveDelta);
         if(DeltaLength > 0)
         {
-            v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
+            ak_v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
             broad_phase_pair_list Pairs = Simulation->FilterPairs(Simulation->GetAllPairs(RigidBody), 
-                                                                  [](broad_phase_pair* Pair) -> b32
+                                                                  [](broad_phase_pair* Pair) -> ak_bool
                                                                   {
                                                                       if(GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY)
                                                                           return false;
@@ -167,15 +162,15 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
             continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
             if(ContactTOI.HitEntity)
             {
-                v3f Normal = -ContactTOI.Contact.Normal;
-                f32 tMin = ContactTOI.t;
+                ak_v3f Normal = -ContactTOI.Contact.Normal;
+                ak_f32 tMin = ContactTOI.t;
                 
                 RigidBody->Transform.Translation += Normal*(ContactTOI.Contact.Penetration+0.001f);
                 RigidBody->Transform.Translation += tMin*RigidBody->MoveDelta;                                
                 
                 RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;                
-                RigidBody->MoveDelta -= Dot(RigidBody->MoveDelta, Normal)*Normal;
-                RigidBody->Velocity -= Dot(RigidBody->Velocity, Normal)*Normal;
+                RigidBody->MoveDelta -= AK_Dot(RigidBody->MoveDelta, Normal)*Normal;
+                RigidBody->Velocity -= AK_Dot(RigidBody->Velocity, Normal)*Normal;
             }
             else
             {
@@ -189,15 +184,15 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
         }
     }    
     
-    RigidBody->MoveDelta = V3(0.0f, 0.0f, MoveDelta.z);    
-    for(u32 Iterations = 0; Iterations < 4; Iterations++)
+    RigidBody->MoveDelta = AK_V3(0.0f, 0.0f, MoveDelta.z);    
+    for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
     {
-        f32 DeltaLength = Magnitude(RigidBody->MoveDelta);
+        ak_f32 DeltaLength = AK_Magnitude(RigidBody->MoveDelta);
         if(DeltaLength > 0)
         {
-            v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
+            ak_v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
             broad_phase_pair_list Pairs = Simulation->FilterPairs(Simulation->GetAllPairs(RigidBody), 
-                                                                  [](broad_phase_pair* Pair) -> b32
+                                                                  [](broad_phase_pair* Pair) -> ak_bool
                                                                   {
                                                                       if(GetUserData(Pair->SimEntityB, entity)->Type == ENTITY_TYPE_RIGID_BODY)
                                                                           return false;
@@ -206,15 +201,15 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
             continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
             if(ContactTOI.HitEntity)
             {
-                v3f Normal = -ContactTOI.Contact.Normal;
-                f32 tMin = ContactTOI.t;
+                ak_v3f Normal = -ContactTOI.Contact.Normal;
+                ak_f32 tMin = ContactTOI.t;
                 
                 RigidBody->Transform.Translation += Normal*(ContactTOI.Contact.Penetration+0.001f);
                 RigidBody->Transform.Translation += tMin*RigidBody->MoveDelta;                                
                 
                 RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;                
-                RigidBody->MoveDelta -= Dot(RigidBody->MoveDelta, Normal)*Normal;
-                RigidBody->Velocity -= Dot(RigidBody->Velocity, Normal)*Normal;
+                RigidBody->MoveDelta -= AK_Dot(RigidBody->MoveDelta, Normal)*Normal;
+                RigidBody->Velocity -= AK_Dot(RigidBody->Velocity, Normal)*Normal;
             }
             else
             {
@@ -231,17 +226,17 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
 }
 
 extern "C"
-EXPORT GAME_FIXED_TICK(FixedTick)
+AK_EXPORT GAME_FIXED_TICK(FixedTick)
 {   
-    platform_time Start = WallClock();    
-    SetDefaultArena(Game->TempStorage);
+    ak_high_res_clock Start = AK_WallClock();    
+    AK_SetGlobalArena(Game->TempStorage);
     
-    f32 dt = Game->dtFixed;
+    ak_f32 dt = Game->dtFixed;
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, Game->CurrentWorldIndex);    
-        FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
+        AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {
             entity* Entity = GetUserData(RigidBody, entity);
             RigidBody->Transform = *GetEntityTransform(Game, Entity->ID);
@@ -259,7 +254,7 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                     {
                         case PLAYER_STATE_NONE:
                         {
-                            RigidBody->LinearDamping = V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
+                            RigidBody->LinearDamping = AK_V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
                         } break;
                         
                         case PLAYER_STATE_JUMPING:
@@ -276,7 +271,7 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                     pushing_object* PushingObject = GetUserData(Entity, pushing_object);
                     if(PushingObject->PlayerID.IsValid())
                     {                                                                           
-                        RigidBody->LinearDamping = V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
+                        RigidBody->LinearDamping = AK_V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
                         if(Entity->LinkID.IsValid())
                         {
                             rigid_body* OtherRigidBody = GetRigidBody(Game, Entity->LinkID);
@@ -287,18 +282,18 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                 
                 case ENTITY_TYPE_RIGID_BODY:
                 {
-                    RigidBody->LinearDamping = V3(4.0f, 4.0f, 0.0f);
-                    RigidBody->AngularDamping = V3(1.0f, 1.0f, 1.0f);
+                    RigidBody->LinearDamping = AK_V3(4.0f, 4.0f, 0.0f);
+                    RigidBody->AngularDamping = AK_V3(1.0f, 1.0f, 1.0f);
                 } break;            
             }
         }
     }
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);    
         broad_phase_pair_list PairList = Simulation->GetAllPairs();
-        for(u32 PairIndex = 0; PairIndex < PairList.Count; PairIndex++)
+        for(ak_u32 PairIndex = 0; PairIndex < PairList.Count; PairIndex++)
         {
             broad_phase_pair* Pair = PairList.Ptr + PairIndex;
             
@@ -325,17 +320,17 @@ EXPORT GAME_FIXED_TICK(FixedTick)
         }        
     }
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);    
         Simulation->Integrate(dt);    
         Simulation->SolveConstraints(30, dt);
     }    
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);    
-        FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
+        AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {
             entity* Entity = GetUserData(RigidBody, entity);
             switch(Entity->Type)
@@ -351,7 +346,7 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                 
                 case ENTITY_TYPE_PUSHABLE:
                 {           
-                    v3f StartPosition = RigidBody->Transform.Translation;                                                            
+                    ak_v3f StartPosition = RigidBody->Transform.Translation;                                                            
                     HandleSlidingCollisions(Simulation, RigidBody);                                        
                     
                     pushing_object* PushingObject = GetUserData(Entity, pushing_object);
@@ -371,7 +366,7 @@ EXPORT GAME_FIXED_TICK(FixedTick)
                     broad_phase_pair_list StaticOnlyPairs = Simulation->GetSimEntityOnlyPairs(RigidBody);
                     continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, StaticOnlyPairs);
                     
-                    f32 t = 1.0f;
+                    ak_f32 t = 1.0f;
                     if(ContactTOI.HitEntity)
                     {                    
                         t = ContactTOI.t;                    
@@ -388,10 +383,10 @@ EXPORT GAME_FIXED_TICK(FixedTick)
     }
     
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);            
-        for(u32 CollisionEventIndex = 0; CollisionEventIndex < Simulation->CollisionEvents.Count; CollisionEventIndex++)
+        for(ak_u32 CollisionEventIndex = 0; CollisionEventIndex < Simulation->CollisionEvents.Count; CollisionEventIndex++)
         {
             collision_event* Event = &Simulation->CollisionEvents.Ptr[CollisionEventIndex];
             
@@ -405,28 +400,28 @@ EXPORT GAME_FIXED_TICK(FixedTick)
     }
     
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);            
-        FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
+        AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {        
-            sqt* SQT = GetEntityTransform(Game, GetUserData(RigidBody, entity)->ID);        
+            ak_sqtf* SQT = GetEntityTransform(Game, GetUserData(RigidBody, entity)->ID);        
             *SQT = RigidBody->Transform;        
         }                
     }
 }
 
 extern "C"
-EXPORT GAME_TICK(Tick)
+AK_EXPORT GAME_TICK(Tick)
 {   
     SET_DEVELOPER_CONTEXT();
     
-    SetDefaultArena(Game->TempStorage);
-    f32 dt = Game->dt;
+    AK_SetGlobalArena(Game->TempStorage);
+    ak_f32 dt = Game->dt;
         
     input* Input = Game->Input;
     
-    v2f MoveDirection = {};    
+    ak_v2f MoveDirection = {};    
     if(IsDown(Input->MoveForward))
         MoveDirection.y = 1.0f;
     
@@ -439,17 +434,17 @@ EXPORT GAME_TICK(Tick)
     if(IsDown(Input->MoveLeft))
         MoveDirection.x = -1.0f;
     
-    if(MoveDirection != 0)
-        MoveDirection = Normalize(MoveDirection);
+    if(MoveDirection != 0.0f)
+        MoveDirection = AK_Normalize(MoveDirection);
     
     if(IsPressed(Input->SwitchWorld))
         Game->CurrentWorldIndex = !Game->CurrentWorldIndex;
     
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);    
-        FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
+        AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {   
             RigidBody->MoveDelta = {};
             RigidBody->Acceleration = {};
@@ -459,10 +454,10 @@ EXPORT GAME_TICK(Tick)
         }
     }
     
-    for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = GetSimulation(Game, WorldIndex);    
-        FOR_EACH(RigidBody, &Simulation->RigidBodyStorage)
+        AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {               
             entity* Entity = GetUserData(RigidBody, entity);            
             if(WorldIndex == Game->CurrentWorldIndex)
@@ -477,38 +472,38 @@ EXPORT GAME_TICK(Tick)
                         {
                             case PLAYER_STATE_NONE:
                             {            
-                                v3f Position = GetEntityPosition(Game, Entity->ID);                               
-                                for(u32 JumpingQuadIndex = 0; JumpingQuadIndex < ARRAYCOUNT(Game->JumpingQuads); JumpingQuadIndex++)
+                                ak_v3f Position = GetEntityPosition(Game, Entity->ID);                               
+                                for(ak_u32 JumpingQuadIndex = 0; JumpingQuadIndex < AK_Count(Game->JumpingQuads); JumpingQuadIndex++)
                                 {
                                     jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
-                                    v2f HalfDim = JumpingQuad->Dimensions*0.5f;
+                                    ak_v2f HalfDim = JumpingQuad->Dimensions*0.5f;
                                     
-                                    v2f Min = JumpingQuad->CenterP.xy - HalfDim;
-                                    v2f Max = JumpingQuad->CenterP.xy + HalfDim;
+                                    ak_v2f Min = JumpingQuad->CenterP.xy - HalfDim;
+                                    ak_v2f Max = JumpingQuad->CenterP.xy + HalfDim;
                                     
-                                    c3 QuadColor = Red3();
+                                    ak_color3f QuadColor = AK_Red3();
                                     if(Position.xy >= Min && Position.xy <= Max)
                                     {
-                                        if(Abs(Position.z - JumpingQuad->CenterP.z) < 1e-2f)
+                                        if(AK_Abs(Position.z - JumpingQuad->CenterP.z) < 1e-2f)
                                         {
                                             if(IsPressed(Input->Action))
                                             {
                                                 jumping_quad* TargetQuad = JumpingQuad->OtherQuad;
                                                 
-                                                v2f XDirection = TargetQuad->CenterP.xy-JumpingQuad->CenterP.xy;
-                                                f32 Displacement = Magnitude(XDirection);
+                                                ak_v2f XDirection = TargetQuad->CenterP.xy-JumpingQuad->CenterP.xy;
+                                                ak_f32 Displacement = AK_Magnitude(XDirection);
                                                 XDirection /= Displacement;                    
                                                 
-                                                f32 InitialVelocity = Sqrt(Displacement*Global_Gravity);
+                                                ak_f32 InitialVelocity = AK_Sqrt(Displacement*Global_Gravity);
                                                 
-                                                RigidBody->Velocity.xy = (InitialVelocity*SQRT2_2*XDirection);
-                                                RigidBody->Velocity.z = InitialVelocity*SQRT2_2;
+                                                RigidBody->Velocity.xy = (InitialVelocity*AK_SQRT2_2*XDirection);
+                                                RigidBody->Velocity.z = InitialVelocity*AK_SQRT2_2;
                                                 
                                                 Player->State = PLAYER_STATE_JUMPING;                                    
                                                 
                                                 break;                                                
                                             }                
-                                            QuadColor = Yellow3();
+                                            QuadColor = AK_Yellow3();
                                         }
                                     }       
                                 }            
@@ -533,7 +528,7 @@ EXPORT GAME_TICK(Tick)
                         {
                             entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
                             player* Player = GetUserData(PlayerEntity, player);
-                            ASSERT(Player->State == PLAYER_STATE_PUSHING);
+                            AK_Assert(Player->State == PLAYER_STATE_PUSHING, "Player state is not pushing but has a pushing entity associated with. This is a programming error");
                             
                             if(CanBePushed(MoveDirection, PushingObject->Direction))
                             {
@@ -584,11 +579,14 @@ EXPORT GAME_TICK(Tick)
 }
 
 extern "C"
-EXPORT GAME_RENDER(Render)
+AK_EXPORT GAME_RENDER(Render)
 {
-    SetDefaultArena(Game->TempStorage);
+    AK_SetGlobalArena(Game->TempStorage);
     UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);        
     view_settings ViewSettings = GetViewSettings(&GraphicsState->Camera);
     PushWorldShadingCommands(Graphics, Game->RenderBuffer, &ViewSettings, Game->Assets, GraphicsState->GraphicsObjects);
-    PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Game->RenderBuffer->Resolution);
+    PushCopyToOutput(Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);
 }
+
+#define AK_COMMON_IMPLEMENTATION
+#include <ak_common.h>

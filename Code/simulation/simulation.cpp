@@ -1,10 +1,11 @@
 #include "collision_volume.cpp"
 #include "collision_tables.cpp"
+#include "broad_phase.cpp"
 #include "collision_detection.cpp"
 
-void simulation::AddCollisionEvent(sim_entity* SimEntityA, sim_entity* SimEntityB, v3f Normal)
+void simulation::AddCollisionEvent(sim_entity* SimEntityA, sim_entity* SimEntityB, ak_v3f Normal)
 {
-    ASSERT(CollisionEvents.Count < MAX_COLLISION_EVENT_COUNT);
+    AK_Assert(CollisionEvents.Count < MAX_COLLISION_EVENT_COUNT, "Index out of bounds");
     CollisionEvents.Ptr[CollisionEvents.Count++] = {SimEntityA, SimEntityB, Normal};
 }
 
@@ -37,12 +38,12 @@ void simulation::DeleteSimEntity(sim_entity_id ID)
 {
     sim_entity* SimEntity = GetSimEntity(ID);
     
-    collision_volume* Volume = SimEntity->CollisionVolumes;
+    collision_volume* Volume = CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
     while(Volume)
     {
         collision_volume* VolumeToFree = Volume;
-        Volume = Volume->Next;
-        CollisionVolumeStorage.Free(VolumeToFree);
+        Volume = CollisionVolumeStorage.Get(Volume->NextID);        
+        CollisionVolumeStorage.Free(VolumeToFree->ID);
     }
     
     switch(ID.Type)
@@ -80,18 +81,22 @@ sim_entity* simulation::GetSimEntity(sim_entity_id ID)
 template <typename type> 
 void simulation::AddCollisionVolume(sim_entity* SimEntity, type* Collider)
 {
-    collision_volume* Volume = CollisionVolumeStorage.Get(CollisionVolumeStorage.Allocate());
+    ak_u64 ID = CollisionVolumeStorage.Allocate();
+    collision_volume* Volume = CollisionVolumeStorage.Get(ID);
     AttachToCollisionVolume(Volume, Collider);
     
-    Volume->Next = SimEntity->CollisionVolumes;
-    SimEntity->CollisionVolumes = Volume;
+    Volume->ID = ID;
+    Volume->NextID = SimEntity->CollisionVolumeID;
+    SimEntity->CollisionVolumeID = ID;    
 }
 
-broad_phase_pair_list simulation::AllocatePairList(u32 Capacity)
+broad_phase_pair_list simulation::AllocatePairList(ak_u32 Capacity)
 {
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    
     broad_phase_pair_list Result = {};
     Result.Capacity = Capacity;
-    Result.Ptr = PushArray(Result.Capacity, broad_phase_pair, Clear, 0);
+    Result.Ptr = GlobalArena->PushArray<broad_phase_pair>(Result.Capacity);
     return Result;
 }
 
@@ -100,52 +105,34 @@ broad_phase_pair_list simulation::GetAllPairs()
 #define PAIR_CHECK_COUNT 1024    
     struct collision_pair_check
     {
-        u64 ID;
-        b32 Collided;
+        ak_u64 ID;
+        ak_bool Collided;
     } CollisionPairChecks[PAIR_CHECK_COUNT] = {};
     
     broad_phase_pair_list Result = AllocatePairList(PAIR_CHECK_COUNT);
     
-    FOR_EACH(RigidBody, &RigidBodyStorage)
+    AK_ForEach(RigidBody, &RigidBodyStorage)
     {
-        FOR_EACH(TestRigidBody, &RigidBodyStorage)
+        AK_ForEach(TestRigidBody, &RigidBodyStorage)
         {
             if(RigidBody != TestRigidBody)
             {
-                u32 AIndex = RigidBodyStorage.GetIndex(RigidBody);
-                u32 BIndex = RigidBodyStorage.GetIndex(TestRigidBody);            
+                ak_u32 AIndex = (ak_u32)(RigidBody->ID.ID & 0xFFFFFFFF);
+                ak_u32 BIndex = (ak_u32)(TestRigidBody->ID.ID & 0xFFFFFFFF);
                 
-                if(BIndex < AIndex)
-                    SWAP(AIndex, BIndex);
-                
-                u64 ID = BijectiveMap(AIndex, BIndex);
-                u64 Index = ID % PAIR_CHECK_COUNT;
-                
-                collision_pair_check* Check = CollisionPairChecks + Index++;
-                
-                b32 AlreadyCollided = false;
-                while(Check->Collided)
+                ak_pair<ak_u32> Pair = {AIndex, BIndex};
+                if(!CollisionMap.Find(Pair))
                 {
-                    if(Check->ID == ID)
-                    {
-                        AlreadyCollided = true;
-                        break;
-                    }                        
-                    Check = CollisionPairChecks + Index++;
-                    ASSERT(Index < PAIR_CHECK_COUNT);
-                }
-                
-                if(!AlreadyCollided)
-                {
-                    Check->Collided = true;
-                    Check->ID = ID;        
-                    Result.AddAllVolumes(RigidBody, TestRigidBody);                                
-                }
+                    CollisionMap.Insert(Pair, true);
+                    Result.AddAllVolumes(this, RigidBody, TestRigidBody);
+                }                
             }
         }
         
-        FOR_EACH(SimEntity, &SimEntityStorage) { Result.AddAllVolumes(RigidBody, SimEntity); }
+        AK_ForEach(SimEntity, &SimEntityStorage) { Result.AddAllVolumes(this, RigidBody, SimEntity); }
     }
+    
+    CollisionMap.Reset();
     
     return Result;
 }
@@ -153,36 +140,36 @@ broad_phase_pair_list simulation::GetAllPairs()
 broad_phase_pair_list simulation::GetAllPairs(rigid_body* RigidBody)
 {
     broad_phase_pair_list Result = AllocatePairList(PAIR_CHECK_COUNT);    
-    FOR_EACH(SimEntity, &SimEntityStorage) { Result.AddAllVolumes(RigidBody, SimEntity); }
-    FOR_EACH(TestRigidBody, &RigidBodyStorage) { if(RigidBody != TestRigidBody) Result.AddAllVolumes(RigidBody, TestRigidBody); }
+    AK_ForEach(SimEntity, &SimEntityStorage) { Result.AddAllVolumes(this, RigidBody, SimEntity); }
+    AK_ForEach(TestRigidBody, &RigidBodyStorage) { if(RigidBody != TestRigidBody) Result.AddAllVolumes(this, RigidBody, TestRigidBody); }
     return Result;
 }
 
 broad_phase_pair_list simulation::GetSimEntityOnlyPairs(rigid_body* RigidBody)
 {
     broad_phase_pair_list Result = AllocatePairList(PAIR_CHECK_COUNT);    
-    FOR_EACH(SimEntity, &SimEntityStorage) { Result.AddAllVolumes(RigidBody, SimEntity); }
+    AK_ForEach(SimEntity, &SimEntityStorage) { Result.AddAllVolumes(this, RigidBody, SimEntity); }
     return Result;
 }
 
 broad_phase_pair_list simulation::FilterPairs(broad_phase_pair_list Pairs, broad_phase_pair_filter_func* FilterFunc)
 {
     broad_phase_pair_list Result = AllocatePairList(Pairs.Count);
-    for(u32 PairIndex = 0; PairIndex < Pairs.Count; PairIndex++)
+    for(ak_u32 PairIndex = 0; PairIndex < Pairs.Count; PairIndex++)
     {
         broad_phase_pair* Pair = Pairs.Ptr + PairIndex;
         if(FilterFunc(Pair))
-            Result.AddPair(Pair->SimEntityA, Pair->SimEntityB, Pair->VolumeA, Pair->VolumeB);
+            Result.AddPair(Pair->SimEntityA, Pair->SimEntityB, Pair->AVolumeID, Pair->BVolumeID);
     }    
     return Result;
 }
 
-void simulation::Integrate(f32 dt)
+void simulation::Integrate(ak_f32 dt)
 {
-    FOR_EACH(RigidBody, &RigidBodyStorage)
+    AK_ForEach(RigidBody, &RigidBodyStorage)
     {
         RigidBody->WorldInvInertiaTensor = RigidBody->GetWorldInvInertiaTensor();
-        RigidBody->WorldCenterOfMass = TransformV3(RigidBody->LocalCenterOfMass, RigidBody->Transform);
+        RigidBody->WorldCenterOfMass = AK_Transform(RigidBody->LocalCenterOfMass, RigidBody->Transform);
         
         RigidBody->Acceleration = (RigidBody->Force * RigidBody->InvMass);
         RigidBody->AngularAcceleration = (RigidBody->Torque*RigidBody->WorldInvInertiaTensor);
@@ -200,7 +187,7 @@ void simulation::Integrate(f32 dt)
 
 void simulation::AddContactConstraints(rigid_body* RigidBodyA, rigid_body* RigidBodyB, contact_list Contacts)
 {
-    ASSERT(RigidBodyA || RigidBodyB);
+    AK_Assert(RigidBodyA || RigidBodyB, "Must have a valid rigid body to add contact constraints");
     if(!RigidBodyA)
     {
         RigidBodyA = RigidBodyB;
@@ -210,7 +197,7 @@ void simulation::AddContactConstraints(rigid_body* RigidBodyA, rigid_body* Rigid
     
     manifold* Manifold = NULL;
     
-    FOR_EACH(ManifoldEntry, &ManifoldStorage)
+    AK_ForEach(ManifoldEntry, &ManifoldStorage)
     {
         if((ManifoldEntry->RigidBodyA == RigidBodyA) && (ManifoldEntry->RigidBodyB == RigidBodyB))
         {
@@ -226,19 +213,19 @@ void simulation::AddContactConstraints(rigid_body* RigidBodyA, rigid_body* Rigid
         Manifold->RigidBodyB = RigidBodyB;
     }
     
-    for(u32 ContactIndex = 0; ContactIndex < Contacts.Count; ContactIndex++)
+    for(ak_u32 ContactIndex = 0; ContactIndex < Contacts.Count; ContactIndex++)
     {
         contact* Contact = Contacts.Ptr + ContactIndex;
         
-        u64 ContactID = ContactStorage.Allocate();        
+        ak_u64 ContactID = ContactStorage.Allocate();        
         contact_constraint* Constraint = ContactStorage.Get(ContactID);        
         
         Constraint->WorldPosition = Contact->Position;
         Constraint->Normal = Contact->Normal;
         Constraint->Penetration = Contact->Penetration;
         
-        u32 FreeContactIndex = Manifold->GetFreeContactIndex();
-        ASSERT(FreeContactIndex != (u32)-1);        
+        ak_u32 FreeContactIndex = Manifold->GetFreeContactIndex();
+        AK_Assert(FreeContactIndex != (ak_u32)-1, "No free contacts");        
         Manifold->Contacts[FreeContactIndex] = ContactID;        
     }
 }
@@ -253,7 +240,7 @@ void simulation::AddContactConstraint(rigid_body* RigidBodyA, rigid_body* RigidB
 
 void simulation::AddConstraint(rigid_body* RigidBodyA, rigid_body* RigidBodyB, constraint_callback* Callback)
 {
-    ASSERT(Constraints.Count < MAX_CONSTRAINT_COUNT);
+    AK_Assert(Constraints.Count < MAX_CONSTRAINT_COUNT, "Index out of bounds");
     constraint* Constraint = Constraints.Ptr + Constraints.Count++;
     Constraint->RigidBodyA = RigidBodyA;
     Constraint->RigidBodyB = RigidBodyB;
@@ -262,46 +249,49 @@ void simulation::AddConstraint(rigid_body* RigidBodyA, rigid_body* RigidBodyB, c
 
 contact_list simulation::ComputeContacts(broad_phase_pair* Pair)
 {
-    contact_function* ContactFunction = ContactFunctions[Pair->VolumeA->Type][Pair->VolumeB->Type];
-    contact_list ContactList = ContactFunction(Pair->SimEntityA, Pair->SimEntityB, Pair->VolumeA, Pair->VolumeB);            
+    collision_volume* VolumeA = CollisionVolumeStorage.Get(Pair->AVolumeID);
+    collision_volume* VolumeB = CollisionVolumeStorage.Get(Pair->BVolumeID);
+    
+    contact_function* ContactFunction = ContactFunctions[VolumeA->Type][VolumeB->Type];
+    contact_list ContactList = ContactFunction(Pair->SimEntityA, Pair->SimEntityB, VolumeA, VolumeB);            
     if(ContactList.Count > 0)    
         AddCollisionEvent(Pair->SimEntityA, Pair->SimEntityB, ContactList.GetDeepestContact()->Normal);            
     
     return ContactList;
 }
 
-inline f32 
-Baumgarte(f32 D, f32 dt)
+inline ak_f32 
+Baumgarte(ak_f32 D, ak_f32 dt)
 {
-    f32 Result = BAUMGARTE_CONSTANT * (1.0f/dt) * MaximumF32(0.0f, D-PENETRATION_SLOP);
+    ak_f32 Result = BAUMGARTE_CONSTANT * (1.0f/dt) * AK_Max(0.0f, D-PENETRATION_SLOP);
     return Result;
 }
 
-inline f32 
+inline ak_f32 
 MixRestitution(rigid_body* A, rigid_body* B)
 {
-    f32 Result = A->Restitution;
-    if(B) Result = MaximumF32(Result, B->Restitution);
+    ak_f32 Result = A->Restitution;
+    if(B) Result = AK_Max(Result, B->Restitution);
     return Result;
 }
 
-void simulation::SolveConstraints(u32 MaxIterations, f32 dt)
+void simulation::SolveConstraints(ak_u32 MaxIterations, ak_f32 dt)
 {
-    FOR_EACH(Manifold, &ManifoldStorage)
+    AK_ForEach(Manifold, &ManifoldStorage)
     {
         rigid_body* RigidBodyA = Manifold->RigidBodyA;        
         rigid_body* RigidBodyB = Manifold->RigidBodyB;
         
-        v3f vA = RigidBodyA->Velocity;
-        v3f wA = RigidBodyA->AngularVelocity;
-        v3f vB = RigidBodyB ? RigidBodyB->Velocity : V3();
-        v3f wB = RigidBodyB ? RigidBodyB->AngularVelocity : V3();
+        ak_v3f vA = RigidBodyA->Velocity;
+        ak_v3f wA = RigidBodyA->AngularVelocity;
+        ak_v3f vB = RigidBodyB ? RigidBodyB->Velocity : AK_V3<ak_f32>();
+        ak_v3f wB = RigidBodyB ? RigidBodyB->AngularVelocity : AK_V3<ak_f32>();
         
-        f32 Restitution = MixRestitution(RigidBodyA, RigidBodyB);
+        ak_f32 Restitution = MixRestitution(RigidBodyA, RigidBodyB);
         
-        for(u32 ContactIndex = 0; ContactIndex < 4; ContactIndex++)        
+        for(ak_u32 ContactIndex = 0; ContactIndex < 4; ContactIndex++)        
         {   
-            u64 ContactID = Manifold->Contacts[ContactIndex];
+            ak_u64 ContactID = Manifold->Contacts[ContactIndex];
             if(ContactID == 0)
                 continue;
             
@@ -311,17 +301,17 @@ void simulation::SolveConstraints(u32 MaxIterations, f32 dt)
                 Constraint->LocalPositionA = Constraint->WorldPosition - RigidBodyA->WorldCenterOfMass;
                 Constraint->LocalPositionB = Constraint->WorldPosition - RigidBodyB->WorldCenterOfMass;
                 
-                v3f ARotAxis = Cross(Constraint->LocalPositionA, Constraint->Normal);
-                v3f BRotAxis = Cross(Constraint->LocalPositionB, Constraint->Normal);
+                ak_v3f ARotAxis = AK_Cross(Constraint->LocalPositionA, Constraint->Normal);
+                ak_v3f BRotAxis = AK_Cross(Constraint->LocalPositionB, Constraint->Normal);
                 
                 Constraint->NormalMass = RigidBodyA->InvMass + RigidBodyB->InvMass;
-                Constraint->NormalMass += (Dot(ARotAxis, ARotAxis*RigidBodyA->WorldInvInertiaTensor) +
-                                           Dot(BRotAxis, BRotAxis*RigidBodyB->WorldInvInertiaTensor));
-                Constraint->NormalMass = SafeInverse(Constraint->NormalMass);
+                Constraint->NormalMass += (AK_Dot(ARotAxis, ARotAxis*RigidBodyA->WorldInvInertiaTensor) +
+                                           AK_Dot(BRotAxis, BRotAxis*RigidBodyB->WorldInvInertiaTensor));
+                Constraint->NormalMass = AK_SafeInverse(Constraint->NormalMass);
                 
                 Constraint->Bias = Baumgarte(Constraint->Penetration, dt);
                 
-                f32 RelVelocityProjected = Dot(vB + Cross(wB, Constraint->LocalPositionB) - vA - Cross(wA, Constraint->LocalPositionA), Constraint->Normal);                                               
+                ak_f32 RelVelocityProjected = AK_Dot(vB + AK_Cross(wB, Constraint->LocalPositionB) - vA - AK_Cross(wA, Constraint->LocalPositionA), Constraint->Normal);                                               
                 if(RelVelocityProjected < -1)
                     Constraint->Bias += -(Restitution)*RelVelocityProjected;
                 
@@ -329,74 +319,74 @@ void simulation::SolveConstraints(u32 MaxIterations, f32 dt)
             else
             {
                 Constraint->LocalPositionA = Constraint->WorldPosition - RigidBodyA->WorldCenterOfMass;                
-                v3f ARotAxis = Cross(Constraint->LocalPositionA, Constraint->Normal);
+                ak_v3f ARotAxis = AK_Cross(Constraint->LocalPositionA, Constraint->Normal);
                 
                 Constraint->NormalMass = RigidBodyA->InvMass;
-                Constraint->NormalMass += (Dot(ARotAxis, ARotAxis*RigidBodyA->WorldInvInertiaTensor));
-                Constraint->NormalMass = SafeInverse(Constraint->NormalMass);
+                Constraint->NormalMass += (AK_Dot(ARotAxis, ARotAxis*RigidBodyA->WorldInvInertiaTensor));
+                Constraint->NormalMass = AK_SafeInverse(Constraint->NormalMass);
                 
                 Constraint->Bias = Baumgarte(Constraint->Penetration, dt);
                 
-                f32 RelVelocityProjected = Dot(-vA - Cross(wA, Constraint->LocalPositionA), Constraint->Normal);
+                ak_f32 RelVelocityProjected = AK_Dot(-vA - AK_Cross(wA, Constraint->LocalPositionA), Constraint->Normal);
                 if(RelVelocityProjected < -1)
                     Constraint->Bias += -(Restitution)*RelVelocityProjected;
             }
         }        
     }
     
-    for(u32 Iteration = 0; Iteration < MaxIterations; Iteration++)
+    for(ak_u32 Iteration = 0; Iteration < MaxIterations; Iteration++)
     {
-        FOR_EACH(Manifold, &ManifoldStorage)
+        AK_ForEach(Manifold, &ManifoldStorage)
         {
             rigid_body* RigidBodyA = Manifold->RigidBodyA;        
             rigid_body* RigidBodyB = Manifold->RigidBodyB;
             
-            v3f vA = RigidBodyA->Velocity;
-            v3f wA = RigidBodyA->AngularVelocity;
-            v3f vB = RigidBodyB ? RigidBodyB->Velocity : V3();
-            v3f wB = RigidBodyB ? RigidBodyB->AngularVelocity : V3();
+            ak_v3f vA = RigidBodyA->Velocity;
+            ak_v3f wA = RigidBodyA->AngularVelocity;
+            ak_v3f vB = RigidBodyB ? RigidBodyB->Velocity : AK_V3<ak_f32>();
+            ak_v3f wB = RigidBodyB ? RigidBodyB->AngularVelocity : AK_V3<ak_f32>();
             
-            for(u32 ContactIndex = 0; ContactIndex < 4; ContactIndex++)        
+            for(ak_u32 ContactIndex = 0; ContactIndex < 4; ContactIndex++)        
             {   
-                u64 ContactID = Manifold->Contacts[ContactIndex];
+                ak_u64 ContactID = Manifold->Contacts[ContactIndex];
                 if(ContactID == 0)
                     continue;
                 
                 contact_constraint* Constraint = ContactStorage.Get(ContactID);                                
                 if(RigidBodyB)
                 {
-                    v3f RelVelocity = vB + Cross(wB, Constraint->LocalPositionB) - vA - Cross(wA, Constraint->LocalPositionA);
-                    f32 RelVelocityProj = Dot(RelVelocity, Constraint->Normal);
+                    ak_v3f RelVelocity = vB + AK_Cross(wB, Constraint->LocalPositionB) - vA - AK_Cross(wA, Constraint->LocalPositionA);
+                    ak_f32 RelVelocityProj = AK_Dot(RelVelocity, Constraint->Normal);
                     
-                    f32 Lambda = Constraint->NormalMass * (-RelVelocityProj + Constraint->Bias);
+                    ak_f32 Lambda = Constraint->NormalMass * (-RelVelocityProj + Constraint->Bias);
                     
-                    f32 TempLambda = Constraint->NormalLambda;
-                    Constraint->NormalLambda = MaximumF32(TempLambda+Lambda, 0.0f);
+                    ak_f32 TempLambda = Constraint->NormalLambda;
+                    Constraint->NormalLambda = AK_Max(TempLambda+Lambda, 0.0f);
                     Lambda = Constraint->NormalLambda - TempLambda;
                     
-                    v3f Impulse = Constraint->Normal*Lambda;
+                    ak_v3f Impulse = Constraint->Normal*Lambda;
                     
                     vA -= Impulse*RigidBodyA->InvMass;
-                    wA -= Cross(Constraint->LocalPositionA, Impulse)*RigidBodyA->WorldInvInertiaTensor;
+                    wA -= AK_Cross(Constraint->LocalPositionA, Impulse)*RigidBodyA->WorldInvInertiaTensor;
                     
                     vB += Impulse*RigidBodyB->InvMass;
-                    wB += Cross(Constraint->LocalPositionB, Impulse)*RigidBodyB->WorldInvInertiaTensor;                    
+                    wB += AK_Cross(Constraint->LocalPositionB, Impulse)*RigidBodyB->WorldInvInertiaTensor;                    
                 }
                 else
                 {
-                    v3f RelVelocity = -vA - Cross(wA, Constraint->LocalPositionA);
-                    f32 RelVelocityProj = Dot(RelVelocity, Constraint->Normal);
+                    ak_v3f RelVelocity = -vA - AK_Cross(wA, Constraint->LocalPositionA);
+                    ak_f32 RelVelocityProj = AK_Dot(RelVelocity, Constraint->Normal);
                     
-                    f32 Lambda = Constraint->NormalMass * (-RelVelocityProj + Constraint->Bias);
+                    ak_f32 Lambda = Constraint->NormalMass * (-RelVelocityProj + Constraint->Bias);
                     
-                    f32 TempLambda = Constraint->NormalLambda;
-                    Constraint->NormalLambda = MaximumF32(TempLambda+Lambda, 0.0f);
+                    ak_f32 TempLambda = Constraint->NormalLambda;
+                    Constraint->NormalLambda = AK_Max(TempLambda+Lambda, 0.0f);
                     Lambda = Constraint->NormalLambda - TempLambda;
                     
-                    v3f Impulse = Constraint->Normal*Lambda;
+                    ak_v3f Impulse = Constraint->Normal*Lambda;
                     
                     vA -= Impulse*RigidBodyA->InvMass;
-                    wA -= Cross(Constraint->LocalPositionA, Impulse)*RigidBodyA->WorldInvInertiaTensor;
+                    wA -= AK_Cross(Constraint->LocalPositionA, Impulse)*RigidBodyA->WorldInvInertiaTensor;
                 }
                 
             }
@@ -412,19 +402,19 @@ void simulation::SolveConstraints(u32 MaxIterations, f32 dt)
         }
     }
     
-    for(u32 Iteration = 0; Iteration < MaxIterations; Iteration++)
+    for(ak_u32 Iteration = 0; Iteration < MaxIterations; Iteration++)
     {
-        for(u32 ConstraintIndex = 0; ConstraintIndex < Constraints.Count; ConstraintIndex++)
+        for(ak_u32 ConstraintIndex = 0; ConstraintIndex < Constraints.Count; ConstraintIndex++)
         {
             constraint* Constraint = Constraints.Ptr + ConstraintIndex;            
             Constraint->Callback(Constraint->RigidBodyA, Constraint->RigidBodyB);
         }
     }
     
-    FOR_EACH(RigidBody, &RigidBodyStorage)
+    AK_ForEach(RigidBody, &RigidBodyStorage)
     {
-        quaternion Delta = RotQuat(RigidBody->AngularVelocity*dt, 0.0f)*RigidBody->Transform.Orientation;
-        RigidBody->Transform.Orientation = Normalize(RigidBody->Transform.Orientation + (Delta*0.5f));
+        ak_quatf Delta = AK_RotQuat(RigidBody->AngularVelocity*dt, 0.0f)*RigidBody->Transform.Orientation;
+        RigidBody->Transform.Orientation = AK_Normalize(RigidBody->Transform.Orientation + (Delta*0.5f));
         RigidBody->MoveDelta = RigidBody->Velocity*dt;
     }
     
@@ -440,18 +430,20 @@ continuous_contact simulation::ComputeTOI(rigid_body* RigidBody, broad_phase_pai
     if((t != INFINITY) && (t < TOIResult.t)) \
     { \
         TOIResult.HitEntity = Pair->SimEntityB; \
-        TOIResult.t = MaximumF32(0.0f, t-1e-3f); \
-        TOIResult.VolumeA = Pair->VolumeA; \
-        TOIResult.VolumeB = Pair->VolumeB; \
+        TOIResult.t = AK_Max(0.0f, t-1e-3f); \
+        TOIResult.VolumeA = VolumeA; \
+        TOIResult.VolumeB = VolumeB; \
     }
     
     toi_result TOIResult = InvalidTOIResult();
-    for(u32 PairIndex = 0; PairIndex < Pairs.Count; PairIndex++)
+    for(ak_u32 PairIndex = 0; PairIndex < Pairs.Count; PairIndex++)
     {
         broad_phase_pair* Pair = Pairs.Ptr + PairIndex;
+        collision_volume* VolumeA = CollisionVolumeStorage.Get(Pair->AVolumeID);
+        collision_volume* VolumeB = CollisionVolumeStorage.Get(Pair->BVolumeID);
         
-        ccd_function* CCDFunction = CCDFunctions[Pair->VolumeA->Type][Pair->VolumeB->Type];        
-        f32 t = CCDFunction(Pair->SimEntityA, Pair->SimEntityB, Pair->VolumeA, Pair->VolumeB);
+        ccd_function* CCDFunction = CCDFunctions[VolumeA->Type][VolumeB->Type];        
+        ak_f32 t = CCDFunction(Pair->SimEntityA, Pair->SimEntityB, VolumeA, VolumeB);
         UPDATE_HIT();
     }
     
@@ -472,45 +464,46 @@ continuous_contact simulation::ComputeTOI(rigid_body* RigidBody, broad_phase_pai
 
 CONSTRAINT_CALLBACK(LockConstraint)
 {
-    ASSERT(!RigidBodyB);
+    AK_Assert(!RigidBodyB, "Lock constraint does not use the second rigid body");
     
-    v4f PLock[3] = 
+    ak_v4f PLock[3] = 
     {
-        V4(0.0f, 1.0f, 0.0f, 0.0f),
-        V4(0.0f, 0.0f, 1.0f, 0.0f),
-        V4(0.0f, 0.0f, 0.0f, 1.0f)
+        AK_V4(0.0f, 1.0f, 0.0f, 0.0f),
+        AK_V4(0.0f, 0.0f, 1.0f, 0.0f),
+        AK_V4(0.0f, 0.0f, 0.0f, 1.0f)
     };    
     
-    quaternion Orient = RigidBodyA->Transform.Orientation;                
+    ak_quatf Orient = RigidBodyA->Transform.Orientation;                
     
-    v4f Eqt[3];        
-    Eqt[0] = V4(-Orient.v.x,  Orient.s,   -Orient.v.z,  Orient.v.y);
-    Eqt[1] = V4(-Orient.v.y,  Orient.v.z,  Orient.s,   -Orient.v.x);
-    Eqt[2] = V4(-Orient.v.z, -Orient.v.y,  Orient.v.x,  Orient.s);
+    ak_v4f Eqt[3];        
+    Eqt[0] = AK_V4(-Orient.v.x,  Orient.s,   -Orient.v.z,  Orient.v.y);
+    Eqt[1] = AK_V4(-Orient.v.y,  Orient.v.z,  Orient.s,   -Orient.v.x);
+    Eqt[2] = AK_V4(-Orient.v.z, -Orient.v.y,  Orient.v.x,  Orient.s);
     
-    v3f Jacobian[3] = 
+    ak_v3f Jacobian[3] = 
     {
-        -0.5f*V3(Dot(PLock[0], Eqt[0]), Dot(PLock[1], Eqt[0]), Dot(PLock[2], Eqt[0])),
-        -0.5f*V3(Dot(PLock[0], Eqt[1]), Dot(PLock[1], Eqt[1]), Dot(PLock[2], Eqt[1])),
-        -0.5f*V3(Dot(PLock[0], Eqt[2]), Dot(PLock[1], Eqt[2]), Dot(PLock[2], Eqt[2]))
+        -0.5f*AK_V3(AK_Dot(PLock[0], Eqt[0]), AK_Dot(PLock[1], Eqt[0]), AK_Dot(PLock[2], Eqt[0])),
+        -0.5f*AK_V3(AK_Dot(PLock[0], Eqt[1]), AK_Dot(PLock[1], Eqt[1]), AK_Dot(PLock[2], Eqt[1])),
+        -0.5f*AK_V3(AK_Dot(PLock[0], Eqt[2]), AK_Dot(PLock[1], Eqt[2]), AK_Dot(PLock[2], Eqt[2]))
     };
     
-    v3f DeltaVel = V3(Dot(Jacobian[0], RigidBodyA->AngularVelocity), 
-                      Dot(Jacobian[1], RigidBodyA->AngularVelocity),
-                      Dot(Jacobian[2], RigidBodyA->AngularVelocity));
+    ak_v3f DeltaVel = AK_V3(AK_Dot(Jacobian[0], RigidBodyA->AngularVelocity), 
+                            AK_Dot(Jacobian[1], RigidBodyA->AngularVelocity),
+                            AK_Dot(Jacobian[2], RigidBodyA->AngularVelocity));
     
     RigidBodyA->AngularVelocity = DeltaVel;                
     
 }
 
-simulation CreateSimulation(arena* Arena)
+simulation CreateSimulation()
 {
     simulation Simulation = {};
-    Simulation.CollisionVolumeStorage = CreatePool<collision_volume>(Arena, MAX_COLLISION_VOLUME_COUNT);    
-    Simulation.SimEntityStorage = CreatePool<sim_entity>(Arena, MAX_SIM_ENTITY_COUNT);    
-    Simulation.RigidBodyStorage = CreatePool<rigid_body>(Arena, MAX_RIGID_BODY_COUNT);    
-    Simulation.ContactStorage = CreatePool<contact_constraint>(Arena, MAX_CONTACT_COUNT);
-    Simulation.ManifoldStorage = CreatePool<manifold>(Arena, MAX_MANIFOLD_COUNT);    
+    Simulation.CollisionVolumeStorage = AK_CreatePool<collision_volume>();    
+    Simulation.SimEntityStorage = AK_CreatePool<sim_entity>();    
+    Simulation.RigidBodyStorage = AK_CreatePool<rigid_body>();    
+    Simulation.ContactStorage = AK_CreatePool<contact_constraint>();
+    Simulation.ManifoldStorage = AK_CreatePool<manifold>();    
+    Simulation.CollisionMap = AK_CreateHashMap<ak_pair<ak_u32>, ak_bool>(8191);
     
     return Simulation;
 }

@@ -9,17 +9,16 @@ enum sim_entity_type
 
 struct sim_entity_id
 {
+    ak_u64 ID;
     sim_entity_type Type;
-    u64 ID;    
 };
 
 struct rigid_body;
-
 struct sim_entity
 {
-    sim_entity_id ID;
-    sqt Transform;
-    collision_volume* CollisionVolumes;
+    sim_entity_id ID;    
+    ak_sqtf Transform;
+    ak_u64 CollisionVolumeID;    
     void* UserData;
     
     inline rigid_body* ToRigidBody()
@@ -29,47 +28,47 @@ struct sim_entity
         return NULL;
     }
     
-    v3f GetMoveDelta();    
+    ak_v3f GetMoveDelta();    
 };
 
 struct rigid_body : public sim_entity
 {
-    v3f Velocity;
-    v3f Acceleration;    
-    v3f MoveDelta;    
-    v3f LinearDamping;
-    v3f AngularDamping;
-    v3f Force;
-    v3f Torque;
-    v3f AngularVelocity;
-    v3f AngularAcceleration;
-    v3f LocalCenterOfMass;
-    v3f WorldCenterOfMass;
-    m3 LocalInvInertiaTensor;
-    m3 WorldInvInertiaTensor;
-    f32 Restitution;
-    f32 InvMass;
+    ak_v3f Velocity;
+    ak_v3f Acceleration;    
+    ak_v3f MoveDelta;    
+    ak_v3f LinearDamping;
+    ak_v3f AngularDamping;
+    ak_v3f Force;
+    ak_v3f Torque;
+    ak_v3f AngularVelocity;
+    ak_v3f AngularAcceleration;
+    ak_v3f LocalCenterOfMass;
+    ak_v3f WorldCenterOfMass;
+    ak_m3f LocalInvInertiaTensor;
+    ak_m3f WorldInvInertiaTensor;
+    ak_f32 Restitution;
+    ak_f32 InvMass;
     
-    inline void ApplyForce(v3f Direction, f32 Strength) { Force += (Direction*Strength); }    
-    inline void ApplyForce(v2f Direction, f32 Strength) { Force.xy += (Direction*Strength); }    
-    inline void ApplyConstantAcceleration(v3f Direction, f32 AccelerationStrength) { ApplyForce(Direction, AccelerationStrength*(1.0f/InvMass)); }
-    inline void ApplyConstantAcceleration(v2f Direction, f32 AccelerationStrength) { ApplyForce(Direction, AccelerationStrength*(1.0f/InvMass)); }
-    inline void ApplyGravity(f32 GravityStrength) { ApplyConstantAcceleration(-Global_WorldZAxis, GravityStrength); }
+    inline void ApplyForce(ak_v3f Direction, ak_f32 Strength) { Force += (Direction*Strength); }    
+    inline void ApplyForce(ak_v2f Direction, ak_f32 Strength) { Force.xy += (Direction*Strength); }    
+    inline void ApplyConstantAcceleration(ak_v3f Direction, ak_f32 AccelerationStrength) { ApplyForce(Direction, AccelerationStrength*(1.0f/InvMass)); }
+    inline void ApplyConstantAcceleration(ak_v2f Direction, ak_f32 AccelerationStrength) { ApplyForce(Direction, AccelerationStrength*(1.0f/InvMass)); }
+    inline void ApplyGravity(ak_f32 GravityStrength) { ApplyConstantAcceleration(-AK_ZAxis(), GravityStrength); }
     inline void ClearForce() { Force = {}; }
     inline void ClearTorque() { Torque = {}; }    
-    inline void ApplyLinearDamp(f32 dt)  { Velocity        *= (1.0f / (1.0f + dt*LinearDamping)); }
-    inline void ApplyAngularDamp(f32 dt) { AngularVelocity *= (1.0f / (1.0f + dt*AngularDamping)); }
-    inline m3 GetWorldInvInertiaTensor() 
+    inline void ApplyLinearDamp(ak_f32 dt)  { Velocity        *= (1.0f / (1.0f + dt*LinearDamping)); }
+    inline void ApplyAngularDamp(ak_f32 dt) { AngularVelocity *= (1.0f / (1.0f + dt*AngularDamping)); }
+    inline ak_m3f GetWorldInvInertiaTensor() 
     { 
-        m3 OrientationMatrix = ToMatrix3(Transform.Orientation);    
-        return Transpose(OrientationMatrix)*LocalInvInertiaTensor*OrientationMatrix;            
+        ak_m3f OrientationMatrix = AK_QuatToMatrix(Transform.Orientation);    
+        return AK_Transpose(OrientationMatrix)*LocalInvInertiaTensor*OrientationMatrix;            
     }
 };
 
-inline v3f sim_entity::GetMoveDelta()
+inline ak_v3f sim_entity::GetMoveDelta()
 {
     rigid_body* RigidBody = ToRigidBody();
-    v3f Result = RigidBody ? RigidBody->MoveDelta : V3();
+    ak_v3f Result = RigidBody ? RigidBody->MoveDelta : AK_V3<ak_f32>();
     return Result;
 }
 

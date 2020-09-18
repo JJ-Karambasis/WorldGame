@@ -1,22 +1,22 @@
 inline sphere 
-CreateSphere(v3f CenterP, f32 Radius) 
+CreateSphere(ak_v3f CenterP, ak_f32 Radius) 
 {
     sphere Sphere = {CenterP, Radius};
     return Sphere;
 }
 
 inline capsule 
-CreateCapsule(v3f P0, v3f P1, f32 Radius)
+CreateCapsule(ak_v3f P0, ak_v3f P1, ak_f32 Radius)
 {
     capsule Capsule = {P0, P1, Radius};
     return Capsule;
 }
 
 inline capsule 
-CreateCapsule(v3f Bottom, f32 Height, f32 Radius)
+CreateCapsule(ak_v3f Bottom, ak_f32 Height, ak_f32 Radius)
 {
-    v3f P0 = Bottom + Global_WorldZAxis*Radius;
-    return CreateCapsule(P0, P0+Global_WorldZAxis*Height, Radius);
+    ak_v3f P0 = Bottom + AK_ZAxis()*Radius;
+    return CreateCapsule(P0, P0+AK_ZAxis()*Height, Radius);
 }
 
 void AttachToCollisionVolume(collision_volume* CollisionVolume, convex_hull* ConvexHull)
@@ -37,46 +37,46 @@ void AttachToCollisionVolume(collision_volume* CollisionVolume, capsule* Capsule
     CollisionVolume->Capsule = *Capsule;
 }
 
-capsule TransformCapsule(capsule* Capsule, sqt Transform)
+capsule TransformCapsule(capsule* Capsule, ak_sqtf Transform)
 {
     capsule Result;
     
-    v3f ZScale = V3(1.0f, 1.0f, Transform.Scale.z);
-    Result.P0 = TransformV3(Capsule->P0, Transform.Translation, Transform.Orientation, ZScale);
-    Result.P1 = TransformV3(Capsule->P1, Transform.Translation, Transform.Orientation, ZScale);
+    ak_v3f ZScale = AK_V3(1.0f, 1.0f, Transform.Scale.z);
+    Result.P0 = AK_Transform(Capsule->P0, Transform.Translation, Transform.Orientation, ZScale);
+    Result.P1 = AK_Transform(Capsule->P1, Transform.Translation, Transform.Orientation, ZScale);
     
-    u32 Component = Transform.Scale.xy.LargestComponent();
+    ak_u32 Component = Transform.Scale.xy.LargestComp();
     Result.Radius = Capsule->Radius*Transform.Scale[Component];
     return Result;
 }
 
-sphere TransformSphere(sphere* Sphere, sqt Transform)
+sphere TransformSphere(sphere* Sphere, ak_sqtf Transform)
 {
     sphere Result = {};
     
-    u32 Component = Transform.Scale.LargestComponent();    
+    ak_u32 Component = Transform.Scale.LargestComp();    
     Result.Radius = Sphere->Radius*Transform.Scale[Component];        
-    Result.CenterP = TransformV3(Sphere->CenterP, Transform);
+    Result.CenterP = AK_Transform(Sphere->CenterP, Transform);
     return Result;
 }
 
 inline void 
-TranslateCapsule(capsule* Capsule, v3f Delta)
+TranslateCapsule(capsule* Capsule, ak_v3f Delta)
 {
     Capsule->P0 += Delta;
     Capsule->P1 += Delta;
 }
 
 inline void
-TranslateSphere(sphere* Sphere, v3f Delta)
+TranslateSphere(sphere* Sphere, ak_v3f Delta)
 {
     Sphere->CenterP += Delta;
 }
 
-m3 GetSphereInvInertiaTensor(f32 Radius, f32 Mass)
+ak_m3f GetSphereInvInertiaTensor(ak_f32 Radius, ak_f32 Mass)
 {
-    f32 I = 0.4f * Mass * Square(Radius);
-    m3 Result = 
+    ak_f32 I = 0.4f * Mass * AK_Square(Radius);
+    ak_m3f Result = 
     {
         1/I, 0,   0, 
         0,   1/I, 0, 
@@ -85,17 +85,17 @@ m3 GetSphereInvInertiaTensor(f32 Radius, f32 Mass)
     return Result;
 }
 
-m3 GetCylinderInvInertiaTensor(f32 Radius, f32 Height, f32 Mass)
+ak_m3f GetCylinderInvInertiaTensor(ak_f32 Radius, ak_f32 Height, ak_f32 Mass)
 {
-    f32 SqrRadius = Square(Radius);
+    ak_f32 SqrRadius = AK_Square(Radius);
     
-    f32 Iz = 0.5f*Mass*SqrRadius;
-    f32 Ix = 0.833333f*Mass*(3*SqrRadius + Square(Height));
+    ak_f32 Iz = 0.5f*Mass*SqrRadius;
+    ak_f32 Ix = 0.833333f*Mass*(3*SqrRadius + AK_Square(Height));
     
-    Iz = SafeInverse(Iz);
-    Ix = SafeInverse(Ix);
+    Iz = AK_SafeInverse(Iz);
+    Ix = AK_SafeInverse(Ix);
     
-    m3 Result = 
+    ak_m3f Result = 
     {
         Ix, 0,  0, 
         0,  Ix, 0, 
@@ -105,15 +105,15 @@ m3 GetCylinderInvInertiaTensor(f32 Radius, f32 Height, f32 Mass)
     return Result;
 }
 
-m3 GetBoxInvInertiaTensor(v3f Dim, f32 Mass)
+ak_m3f GetBoxInvInertiaTensor(ak_v3f Dim, ak_f32 Mass)
 {
-    f32 MassC = Mass*0.833333f;
+    ak_f32 MassC = Mass*0.833333f;
     
-    f32 Ix = MassC * (Square(Dim.x)+Square(Dim.y));
-    f32 Iy = MassC * (Square(Dim.y)+Square(Dim.z));
-    f32 Iz = MassC * (Square(Dim.x)+Square(Dim.z));
+    ak_f32 Ix = MassC * (AK_Square(Dim.x)+AK_Square(Dim.y));
+    ak_f32 Iy = MassC * (AK_Square(Dim.y)+AK_Square(Dim.z));
+    ak_f32 Iz = MassC * (AK_Square(Dim.x)+AK_Square(Dim.z));
     
-    m3 Result = 
+    ak_m3f Result = 
     {
         1.0f/Ix, 0,       0, 
         0,       1.0f/Iy, 0,

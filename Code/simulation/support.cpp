@@ -1,24 +1,24 @@
-u32 ConvexHullSupport(convex_hull* ConvexHull, v3f Direction)
+ak_u32 ConvexHullSupport(convex_hull* ConvexHull, ak_v3f Direction)
 {               
-    u32 BestVertexIndex = 0;
+    ak_u32 BestVertexIndex = 0;
     half_vertex* BestVertex = ConvexHull->Vertices + BestVertexIndex;
-    f32 BestDot = Dot(BestVertex->V, Direction);
+    ak_f32 BestDot = AK_Dot(BestVertex->V, Direction);
     
     for(;;)
     {
-        i32 E = BestVertex->Edge;
-        i32 StartEdge = E;
-        f32 OldBestDot = BestDot;
+        ak_i32 E = BestVertex->Edge;
+        ak_i32 StartEdge = E;
+        ak_f32 OldBestDot = BestDot;
         
         do
         {
-            ASSERT(E != -1);
+            AK_Assert(E != -1, "Invalid half edge");
             half_edge* Edge = ConvexHull->Edges + E;
             
-            i32 VertexIndex = Edge->Vertex;
+            ak_i32 VertexIndex = Edge->Vertex;
             half_vertex* Vertex = ConvexHull->Vertices + VertexIndex;
             
-            f32 TempDot = Dot(Direction, Vertex->V);
+            ak_f32 TempDot = AK_Dot(Direction, Vertex->V);
             if(TempDot > BestDot)
             {
                 BestVertexIndex = VertexIndex;
@@ -39,18 +39,18 @@ u32 ConvexHullSupport(convex_hull* ConvexHull, v3f Direction)
     return BestVertexIndex;
 }
 
-v3f ConvexHullSupportPoint(convex_hull* ConvexHull, sqt Transform, v3f D)
+ak_v3f ConvexHullSupportPoint(convex_hull* ConvexHull, ak_sqtf Transform, ak_v3f D)
 {
-    quaternion InverseOrientation = Conjugate(Transform.Orientation);
-    D = Rotate(D, InverseOrientation);        
-    u32 VertexID = ConvexHullSupport(ConvexHull, D);        
-    v3f Result = TransformV3(ConvexHull->Vertices[VertexID].V, Transform);
+    ak_quatf InverseOrientation = AK_Conjugate(Transform.Orientation);
+    D = AK_Rotate(D, InverseOrientation);        
+    ak_u32 VertexID = ConvexHullSupport(ConvexHull, D);        
+    ak_v3f Result = AK_Transform(ConvexHull->Vertices[VertexID].V, Transform);
     return Result;
 }
 
-u32 LineSegmentSupport(v3f* LineSegment, v3f Direction)
+ak_u32 LineSegmentSupport(ak_v3f* LineSegment, ak_v3f Direction)
 {
-    if(Dot(Direction, LineSegment[0]) < Dot(Direction, LineSegment[1]))
+    if(AK_Dot(Direction, LineSegment[0]) < AK_Dot(Direction, LineSegment[1]))
         return 1;
     return 0;
 }
@@ -58,11 +58,11 @@ u32 LineSegmentSupport(v3f* LineSegment, v3f Direction)
 struct convex_hull_support
 {
     convex_hull* Hull;
-    sqt Transform;
+    ak_sqtf Transform;
     
-    v3f Support(v3f D)
+    ak_v3f Support(ak_v3f D)
     {
-        v3f Result = ConvexHullSupportPoint(Hull, Transform, D);        
+        ak_v3f Result = ConvexHullSupportPoint(Hull, Transform, D);        
         return Result;        
     }
 };
@@ -70,13 +70,13 @@ struct convex_hull_support
 struct moving_convex_hull_support
 {
     convex_hull* Hull;
-    sqt Transform;
-    v3f Delta;
+    ak_sqtf Transform;
+    ak_v3f Delta;
     
-    v3f Support(v3f D)
+    ak_v3f Support(ak_v3f D)
     {        
-        v3f Result = ConvexHullSupportPoint(Hull, Transform, D);        
-        if(Dot(D, Delta) > 0) Result += Delta;
+        ak_v3f Result = ConvexHullSupportPoint(Hull, Transform, D);        
+        if(AK_Dot(D, Delta) > 0) Result += Delta;
         return Result;
     }
 };
@@ -84,15 +84,15 @@ struct moving_convex_hull_support
 struct margin_convex_hull_support
 {
     convex_hull* Hull;
-    sqt Transform;
-    f32 Margin;
+    ak_sqtf Transform;
+    ak_f32 Margin;
     
-    v3f Support(v3f D)
+    ak_v3f Support(ak_v3f D)
     {
-        if(SquareMagnitude(D) < Square(FLT_EPSILON))
-            D = V3(-1, -1, -1);
-        D = Normalize(D);
-        v3f Result = ConvexHullSupportPoint(Hull, Transform, D);
+        if(AK_SqrMagnitude(D) < AK_Square(FLT_EPSILON))
+            D = AK_V3f(-1, -1, -1);
+        D = AK_Normalize(D);
+        ak_v3f Result = ConvexHullSupportPoint(Hull, Transform, D);
         Result += (Margin*D);
         return Result;
     }
@@ -104,15 +104,15 @@ struct line_segment_support
     {
         struct
         {
-            v3f P0;
-            v3f P1;
+            ak_v3f P0;
+            ak_v3f P1;
         };
-        v3f P[2];
+        ak_v3f P[2];
     };
     
-    v3f Support(v3f D)
+    ak_v3f Support(ak_v3f D)
     {
-        v3f Result = P[LineSegmentSupport(P, D)];
+        ak_v3f Result = P[LineSegmentSupport(P, D)];
         return Result;
     }
 };
@@ -123,26 +123,26 @@ struct moving_line_segment_support
     {
         struct
         {
-            v3f P0; 
-            v3f P1;
+            ak_v3f P0; 
+            ak_v3f P1;
         };
-        v3f P[2];
+        ak_v3f P[2];
     };
-    v3f Delta;
+    ak_v3f Delta;
     
-    v3f Support(v3f D)
+    ak_v3f Support(ak_v3f D)
     {
-        v3f Result = P[LineSegmentSupport(P, D)];
-        if(Dot(D, Delta) > 0) Result += Delta;
+        ak_v3f Result = P[LineSegmentSupport(P, D)];
+        if(AK_Dot(D, Delta) > 0) Result += Delta;
         return Result;
     }
 };
 
 struct point_support
 {
-    v3f P;
+    ak_v3f P;
     
-    v3f Support(v3f D)
+    ak_v3f Support(ak_v3f D)
     {
         return P;
     }
@@ -150,13 +150,13 @@ struct point_support
 
 struct moving_point_support
 {
-    v3f P;
-    v3f Delta;
+    ak_v3f P;
+    ak_v3f Delta;
     
-    v3f Support(v3f D)
+    ak_v3f Support(ak_v3f D)
     {
-        v3f Result = P;
-        if(Dot(D, Delta) > 0) Result += Delta;
+        ak_v3f Result = P;
+        if(AK_Dot(D, Delta) > 0) Result += Delta;
         return Result;
     }
 };

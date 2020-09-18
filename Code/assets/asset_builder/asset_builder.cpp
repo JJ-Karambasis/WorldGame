@@ -11,20 +11,20 @@ enum command_argument_type
 
 struct file_raii
 {
-    platform_file_handle File;    
+    ak_file_handle* File;    
     
-    inline file_raii(char* Path, platform_file_attributes Attributes)
+    inline file_raii(ak_char* Path, ak_file_attributes Attributes)
     {
-        File = FileOpen(Path, Attributes);        
+        File = AK_OpenFile(Path, Attributes);        
     }
     
     inline ~file_raii()
     {
-        FileClose(&File);        
+        AK_CloseFile(File);        
     }
 };
 
-inline b32 IsNextArgument(char* Parameter)
+inline ak_bool IsNextArgument(ak_char* Parameter)
 {
     if(Parameter[0] == '-')
         return true;
@@ -34,34 +34,31 @@ inline b32 IsNextArgument(char* Parameter)
 
 struct command_line
 {
-    b32 IsHelpPresent;
-    dynamic_array<string> Arguments[COMMAND_ARGUMENT_COUNT];
+    ak_bool IsHelpPresent;
+    ak_array<ak_string> Arguments[COMMAND_ARGUMENT_COUNT];
     
-    void HandleArgument(command_argument_type Type, char** Args, i32 ArgIndex, i32 ArgCount)
+    void HandleArgument(command_argument_type Type, ak_char** Args, ak_i32 ArgIndex, ak_i32 ArgCount)
     {
-        for(i32 ParameterIndex = ArgIndex+1; ParameterIndex < ArgCount; ParameterIndex++)
+        for(ak_i32 ParameterIndex = ArgIndex+1; ParameterIndex < ArgCount; ParameterIndex++)
         {
-            char* Parameter = Args[ParameterIndex];
+            ak_char* Parameter = Args[ParameterIndex];
             if(IsNextArgument(Parameter))
                 break;
             
-            if(!Arguments[Type].IsInitialized())
-                Arguments[Type] = CreateDynamicArray<string>();
-            
-            Arguments[Type].Add(LiteralString(Parameter));
+            Arguments[Type].Add(AK_CreateString(Parameter));
         }
     }
     
-    void Parse(char** Args, i32 ArgCount)
+    void Parse(ak_char** Args, ak_i32 ArgCount)
     {
-        for(i32 ArgIndex = 0; ArgIndex < ArgCount; ArgIndex++)
+        for(ak_i32 ArgIndex = 0; ArgIndex < ArgCount; ArgIndex++)
         {
-            char* Argument = Args[ArgIndex];
-            if(StringEquals(Argument, "-?"))
+            ak_char* Argument = Args[ArgIndex];
+            if(AK_StringEquals(Argument, "-?"))
                 IsHelpPresent = true;
-            else if(StringEquals(Argument, "-c"))
+            else if(AK_StringEquals(Argument, "-c"))
                 HandleArgument(COMMAND_ARGUMENT_TYPE_CREATE, Args, ArgIndex, ArgCount);
-            else if(StringEquals(Argument, "-d"))
+            else if(AK_StringEquals(Argument, "-d"))
                 HandleArgument(COMMAND_ARGUMENT_TYPE_DELETE, Args, ArgIndex, ArgCount);            
         }
     }
@@ -81,14 +78,14 @@ struct command_line
     }
 };
 
-void ParseFile(asset_builder* AssetBuilder, string File, string Ext)
+void ParseFile(asset_builder* AssetBuilder, ak_string File, ak_string Ext)
 {
     ConsoleLog("-------------------------");
     ConsoleLog("Started Parsing File %s", File.Data);
     
-    if(StringEquals(Ext, "fbx"))            
+    if(AK_StringEquals(Ext, "fbx"))            
         ParseFBX(AssetBuilder, File);        
-    else if(StringEquals(Ext, "png"))
+    else if(AK_StringEquals(Ext, "png"))
         ParsePNG(AssetBuilder, File);
     else
         ConsoleError("Unknown file extension %s", Ext.Data);
@@ -96,23 +93,27 @@ void ParseFile(asset_builder* AssetBuilder, string File, string Ext)
     ConsoleLog("Ended Parsing File %s", File.Data);                
 }
 
-void CreateAssets(asset_builder* AssetBuilder, dynamic_array<string>& CreateParameters)
+void CreateAssets(asset_builder* AssetBuilder, ak_array<ak_string>& CreateParameters)
 {
     ConsoleLog("Creating assets");
     ConsoleNewLine();
-    for(u32 FileIndex = 0; FileIndex < CreateParameters.Size; FileIndex++)
+    
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    for(ak_u32 FileIndex = 0; FileIndex < CreateParameters.Size; FileIndex++)
     {
-        string FileOrDirectory = CreateParameters[FileIndex];
+        ak_string FileOrDirectory = CreateParameters[FileIndex];
         
-        string Ext = GetFileExtension(FileOrDirectory);
-        if(IsInvalidString(Ext))
-        {   
-            directory_result Results = GetAllFilesInDirectory(FileOrDirectory);
-            FOR_EACH(File, &Results)
+        ak_string Ext = AK_GetFileExtension(FileOrDirectory);
+        if(AK_StringIsNullOrEmpty(Ext))
+        {               
+            ak_temp_arena TempArena = GlobalArena->BeginTemp();
+            ak_array<ak_string> Results = AK_GetAllFilesInDirectory(FileOrDirectory, GlobalArena);
+            AK_ForEach(File, &Results)
             {
-                Ext = GetFileExtension(*File);
+                Ext = AK_GetFileExtension(*File);
                 ParseFile(AssetBuilder, *File, Ext);
             }            
+            GlobalArena->EndTemp(&TempArena);
         }
         else
         {
@@ -127,7 +128,7 @@ void CreateAssets(asset_builder* AssetBuilder, dynamic_array<string>& CreatePara
     ConsoleNewLine();
 }
 
-void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeleteParameters)
+void DeleteAssets(asset_builder* AssetBuilder, ak_array<ak_string>& DeleteParameters)
 {
     if(DeleteParameters.Size > 0)
     {
@@ -140,20 +141,23 @@ void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeletePara
             return;
         }
         
-        for(u32 FileIndex = 0; FileIndex < DeleteParameters.Size; FileIndex += 2)
-        {        
-            string Type = ToLower(DeleteParameters[FileIndex]);
-            string Name = DeleteParameters[FileIndex+1];
+        ak_arena* GlobalArena = AK_GetGlobalArena();
+        
+        for(ak_u32 FileIndex = 0; FileIndex < DeleteParameters.Size; FileIndex += 2)
+        {            
+            ak_temp_arena TempArena = GlobalArena->BeginTemp();
+            ak_string Type = AK_ToLower(DeleteParameters[FileIndex], GlobalArena);
+            ak_string Name = DeleteParameters[FileIndex+1];
             
-            if(StringEquals(Type, "mesh"))
+            if(AK_StringEquals(Type, "mesh"))
             {
                 ConsoleLog("Deleting mesh %s", Name.Data);
                 
-                mesh_pair Pair;
-                if(AssetBuilder->MeshTable.Find(Name.Data, &Pair))
+                mesh_pair* Pair = AssetBuilder->MeshTable.Find(Name.Data);
+                if(Pair)
                 {                
-                    list_entry<mesh_info>* OldMeshInfo = (list_entry<mesh_info>*)Pair.MeshInfo;
-                    list_entry<mesh>* OldMesh = (list_entry<mesh>*)Pair.Mesh;
+                    ak_link_entry<mesh_info>* OldMeshInfo = (ak_link_entry<mesh_info>*)Pair->MeshInfo;
+                    ak_link_entry<mesh>* OldMesh = (ak_link_entry<mesh>*)Pair->Mesh;
                     
                     AssetBuilder->MeshInfos.Remove(OldMeshInfo);
                     AssetBuilder->Meshes.Remove(OldMesh);                    
@@ -163,15 +167,15 @@ void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeletePara
                     ConsoleError("Could not find mesh to delete");
                 }            
             }
-            else if(StringEquals(Type, "texture"))
+            else if(AK_StringEquals(Type, "texture"))
             {
                 ConsoleLog("Deleting texture %s", Name.Data);
                 
-                texture_pair Pair;
-                if(AssetBuilder->TextureTable.Find(Name.Data, &Pair))
+                texture_pair* Pair = AssetBuilder->TextureTable.Find(Name.Data);
+                if(Pair)
                 {
-                    list_entry<texture_info>* OldTextureInfo = (list_entry<texture_info>*)Pair.TextureInfo;
-                    list_entry<texture>* OldTexture = (list_entry<texture>*)Pair.Texture;
+                    ak_link_entry<texture_info>* OldTextureInfo = (ak_link_entry<texture_info>*)Pair->TextureInfo;
+                    ak_link_entry<texture>* OldTexture = (ak_link_entry<texture>*)Pair->Texture;
                     
                     AssetBuilder->TextureInfos.Remove(OldTextureInfo);
                     AssetBuilder->Textures.Remove(OldTexture);                    
@@ -187,6 +191,7 @@ void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeletePara
             }        
             
             ConsoleNewLine();
+            GlobalArena->EndTemp(&TempArena);
         }
         
         ConsoleLog("Finished deleting assets");
@@ -194,27 +199,27 @@ void DeleteAssets(asset_builder* AssetBuilder, dynamic_array<string>& DeletePara
     }
 }
 
-void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, platform_file_handle* File)
+void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, ak_file_handle* FileHandle)
 {
-    FileRead(File, &MeshInfo->Header, sizeof(mesh_info_header));    
-    MeshInfo->Name = PushArray(&AssetBuilder->AssetArena, MeshInfo->Header.NameLength+1, char, Clear, 0);
-    MeshInfo->ConvexHulls = PushArray(&AssetBuilder->AssetArena, MeshInfo->Header.ConvexHullCount, convex_hull, Clear, 0);
+    AK_ReadFile(FileHandle, &MeshInfo->Header, sizeof(mesh_info_header));    
+    MeshInfo->Name = AssetBuilder->AssetArena->PushArray<ak_char>(MeshInfo->Header.NameLength+1);
+    MeshInfo->ConvexHulls = AssetBuilder->AssetArena->PushArray<convex_hull>(MeshInfo->Header.ConvexHullCount);
     
-    FileRead(File, MeshInfo->Name, sizeof(char)*MeshInfo->Header.NameLength);    
+    AK_ReadFile(FileHandle, MeshInfo->Name, sizeof(char)*MeshInfo->Header.NameLength);    
     MeshInfo->Name[MeshInfo->Header.NameLength] = 0;
     
-    for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
+    for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
     {
         convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;
-        FileRead(File, &ConvexHull->Header, sizeof(ConvexHull->Header));
+        AK_ReadFile(FileHandle, &ConvexHull->Header, sizeof(ConvexHull->Header));
         
-        u32 ConvexHullDataSize = 0;
+        ak_u32 ConvexHullDataSize = 0;
         ConvexHullDataSize += (ConvexHull->Header.VertexCount*sizeof(half_vertex));                
         ConvexHullDataSize += (ConvexHull->Header.EdgeCount*sizeof(half_edge));
         ConvexHullDataSize += (ConvexHull->Header.FaceCount*sizeof(half_face));
         
-        void* ConvexHullData = PushSize(&AssetBuilder->AssetArena, ConvexHullDataSize, Clear, 0);
-        FileRead(File, ConvexHullData, ConvexHullDataSize);
+        void* ConvexHullData = AssetBuilder->AssetArena->Push(ConvexHullDataSize);
+        AK_ReadFile(FileHandle, ConvexHullData, ConvexHullDataSize);
         
         ConvexHull->Vertices = (half_vertex*)ConvexHullData;
         ConvexHull->Edges = (half_edge*)(ConvexHull->Vertices + ConvexHull->Header.VertexCount);
@@ -222,80 +227,80 @@ void ReadMeshInfo(asset_builder* AssetBuilder, mesh_info* MeshInfo, platform_fil
     }    
 }
 
-void ReadMeshInfos(asset_builder* AssetBuilder, list_entry<mesh_info>* MeshInfos, u32 MeshCount, platform_file_handle* File)
+void ReadMeshInfos(asset_builder* AssetBuilder, ak_link_entry<mesh_info>* MeshInfos, ak_u32 MeshCount, ak_file_handle* FileHandle)
 {
-    for(u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
+    for(ak_u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
     {
-        ReadMeshInfo(AssetBuilder, &MeshInfos[MeshIndex].Entry, File);        
-        AssetBuilder->MeshInfos.Add(&MeshInfos[MeshIndex]);        
+        ReadMeshInfo(AssetBuilder, &MeshInfos[MeshIndex].Entry, FileHandle);        
+        AssetBuilder->MeshInfos.Push(&MeshInfos[MeshIndex]);        
     }
 }
 
-void ReadTextureInfo(asset_builder* AssetBuilder, texture_info* TextureInfo, platform_file_handle* File)
+void ReadTextureInfo(asset_builder* AssetBuilder, texture_info* TextureInfo, ak_file_handle* FileHandle)
 {
-    FileRead(File, &TextureInfo->Header, sizeof(texture_info_header));    
-    TextureInfo->Name = PushArray(&AssetBuilder->AssetArena, TextureInfo->Header.NameLength+1, char, Clear, 0);
-    FileRead(File, TextureInfo->Name, sizeof(char)*TextureInfo->Header.NameLength);    
+    AK_ReadFile(FileHandle, &TextureInfo->Header, sizeof(texture_info_header));    
+    TextureInfo->Name = AssetBuilder->AssetArena->PushArray<char>(TextureInfo->Header.NameLength+1);
+    AK_ReadFile(FileHandle, TextureInfo->Name, sizeof(char)*TextureInfo->Header.NameLength);    
     TextureInfo->Name[TextureInfo->Header.NameLength] = 0;            
 }
 
-void ReadTextureInfos(asset_builder* AssetBuilder, list_entry<texture_info>* TextureInfos, u32 TextureCount, platform_file_handle* File)
+void ReadTextureInfos(asset_builder* AssetBuilder, ak_link_entry<texture_info>* TextureInfos, ak_u32 TextureCount, ak_file_handle* FileHandle)
 {
-    for(u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
+    for(ak_u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
     {
-        ReadTextureInfo(AssetBuilder, &TextureInfos[TextureIndex].Entry, File);
-        AssetBuilder->TextureInfos.Add(&TextureInfos[TextureIndex]);        
+        ReadTextureInfo(AssetBuilder, &TextureInfos[TextureIndex].Entry, FileHandle);
+        AssetBuilder->TextureInfos.Push(&TextureInfos[TextureIndex]);        
     }
 }
 
-void ReadMesh(asset_builder* AssetBuilder, mesh* Mesh, mesh_info* MeshInfo, platform_file_handle* File)
+void ReadMesh(asset_builder* AssetBuilder, mesh* Mesh, mesh_info* MeshInfo, ak_file_handle* FileHandle)
 {
-    u32 MeshSize = GetMeshDataSize(MeshInfo);
-    void* Data = PushSize(&AssetBuilder->AssetArena, MeshSize, Clear, 0);
+    ak_u32 MeshSize = GetMeshDataSize(MeshInfo);
+    void* Data = AssetBuilder->AssetArena->Push(MeshSize);
     Mesh->Vertices = Data;
-    Mesh->Indices = ((u8*)Mesh->Vertices + GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount);   
-    FileRead(File, Data, MeshSize);    
+    Mesh->Indices = ((ak_u8*)Mesh->Vertices + GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount);   
+    AK_ReadFile(FileHandle, Data, MeshSize);    
 }
 
-void ReadMeshes(asset_builder* AssetBuilder, list_entry<mesh>* Meshes, list_entry<mesh_info>* MeshInfos, u32 MeshCount, platform_file_handle* File)
+void ReadMeshes(asset_builder* AssetBuilder, ak_link_entry<mesh>* Meshes, ak_link_entry<mesh_info>* MeshInfos, ak_u32 MeshCount, ak_file_handle* FileHandle)
 {
-    for(u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
+    for(ak_u32 MeshIndex = 0; MeshIndex < MeshCount; MeshIndex++)
     {
-        ReadMesh(AssetBuilder, &Meshes[MeshIndex].Entry, &MeshInfos[MeshIndex].Entry, File);
-        AssetBuilder->Meshes.Add(&Meshes[MeshIndex]);        
+        ReadMesh(AssetBuilder, &Meshes[MeshIndex].Entry, &MeshInfos[MeshIndex].Entry, FileHandle);
+        AssetBuilder->Meshes.Push(&Meshes[MeshIndex]);        
     }
 }
 
-void ReadTexture(asset_builder* AssetBuilder, texture* Texture, texture_info* TextureInfo, platform_file_handle* File)
+void ReadTexture(asset_builder* AssetBuilder, texture* Texture, texture_info* TextureInfo, ak_file_handle* FileHandle)
 {
-    u32 TextureSize = GetTextureDataSize(TextureInfo);
-    void* Data = PushSize(&AssetBuilder->AssetArena, TextureSize, Clear, 0);
+    ak_u32 TextureSize = GetTextureDataSize(TextureInfo);
+    void* Data = AssetBuilder->AssetArena->Push(TextureSize);
     Texture->Texels = Data;    
-    FileRead(File, Data, TextureSize);    
+    AK_ReadFile(FileHandle, Data, TextureSize);    
 }
 
-void ReadTextures(asset_builder* AssetBuilder, list_entry<texture>* Textures, list_entry<texture_info>* TextureInfos, u32 TextureCount, platform_file_handle* File)
+void ReadTextures(asset_builder* AssetBuilder, ak_link_entry<texture>* Textures, ak_link_entry<texture_info>* TextureInfos, ak_u32 TextureCount, ak_file_handle* FileHandle)
 {
-    for(u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
+    for(ak_u32 TextureIndex = 0; TextureIndex < TextureCount; TextureIndex++)
     {
-        ReadTexture(AssetBuilder, &Textures[TextureIndex].Entry, &TextureInfos[TextureIndex].Entry, File);
-        AssetBuilder->Textures.Add(&Textures[TextureIndex]);        
+        ReadTexture(AssetBuilder, &Textures[TextureIndex].Entry, &TextureInfos[TextureIndex].Entry, FileHandle);
+        AssetBuilder->Textures.Push(&Textures[TextureIndex]);        
     }
 }
 
-void ReadAssets(asset_builder* AssetBuilder, string AssetPath)
+void ReadAssets(asset_builder* AssetBuilder, ak_string AssetPath)
 {
     ConsoleLog("Reading current asset file");
     
-    file_raii FileRAII(AssetPath.Data, PLATFORM_FILE_ATTRIBUTES_READ);    
-    if(!FileRAII.File.IsValid())
+    file_raii FileRAII(AssetPath.Data, AK_FILE_ATTRIBUTES_READ);    
+    if(!FileRAII.File)
     {
         ConsoleError("Could not open asset file for reading. Application will create a new one instead.");
         return;
     }
     
     asset_header Header = {};
-    FileRead(&FileRAII.File, &Header, sizeof(Header));
+    AK_ReadFile(FileRAII.File, &Header, sizeof(Header));
     
     if(!ValidateSignature(Header))
     {
@@ -310,25 +315,25 @@ void ReadAssets(asset_builder* AssetBuilder, string AssetPath)
         return;
     }
     
-    list_entry<mesh_info>* MeshInfos = PushArray(&AssetBuilder->AssetArena, Header.MeshCount, list_entry<mesh_info>, Clear, 0);
-    list_entry<texture_info>* TextureInfos = PushArray(&AssetBuilder->AssetArena, Header.TextureCount, list_entry<texture_info>, Clear, 0);
+    ak_link_entry<mesh_info>* MeshInfos = AssetBuilder->AssetArena->PushArray<ak_link_entry<mesh_info>>(Header.MeshCount);
+    ak_link_entry<texture_info>* TextureInfos = AssetBuilder->AssetArena->PushArray<ak_link_entry<texture_info>>(Header.TextureCount);
     
-    list_entry<mesh>* Meshes = PushArray(&AssetBuilder->AssetArena, Header.MeshCount, list_entry<mesh>, Clear, 0);
-    list_entry<texture>* Textures = PushArray(&AssetBuilder->AssetArena, Header.TextureCount, list_entry<texture>, Clear, 0);
+    ak_link_entry<mesh>* Meshes = AssetBuilder->AssetArena->PushArray<ak_link_entry<mesh>>(Header.MeshCount);
+    ak_link_entry<texture>* Textures = AssetBuilder->AssetArena->PushArray<ak_link_entry<texture>>(Header.TextureCount);
     
-    ReadMeshInfos(AssetBuilder, MeshInfos, Header.MeshCount, &FileRAII.File);
-    ReadTextureInfos(AssetBuilder, TextureInfos, Header.TextureCount, &FileRAII.File);
+    ReadMeshInfos(AssetBuilder, MeshInfos, Header.MeshCount, FileRAII.File);
+    ReadTextureInfos(AssetBuilder, TextureInfos, Header.TextureCount, FileRAII.File);
     
-    ReadMeshes(AssetBuilder, Meshes, MeshInfos, Header.MeshCount, &FileRAII.File);
-    ReadTextures(AssetBuilder, Textures, TextureInfos, Header.TextureCount, &FileRAII.File);
+    ReadMeshes(AssetBuilder, Meshes, MeshInfos, Header.MeshCount, FileRAII.File);
+    ReadTextures(AssetBuilder, Textures, TextureInfos, Header.TextureCount, FileRAII.File);
     
-    for(u32 MeshIndex = 0; MeshIndex < Header.MeshCount; MeshIndex++)
+    for(ak_u32 MeshIndex = 0; MeshIndex < Header.MeshCount; MeshIndex++)
     {
         mesh_pair Pair = {&MeshInfos[MeshIndex].Entry, &Meshes[MeshIndex].Entry};
         AssetBuilder->MeshTable.Insert(Pair.MeshInfo->Name, Pair);
     }
     
-    for(u32 TextureIndex = 0; TextureIndex < Header.TextureCount; TextureIndex++)
+    for(ak_u32 TextureIndex = 0; TextureIndex < Header.TextureCount; TextureIndex++)
     {
         texture_pair Pair = {&TextureInfos[TextureIndex].Entry, &Textures[TextureIndex].Entry};
         AssetBuilder->TextureTable.Insert(Pair.TextureInfo->Name, Pair);
@@ -337,9 +342,9 @@ void ReadAssets(asset_builder* AssetBuilder, string AssetPath)
     ConsoleLog("Current asset file read successfully");    
 }
 
-ptr CalculateConvexHullSize(convex_hull* ConvexHull)
+ak_u32 CalculateConvexHullSize(convex_hull* ConvexHull)
 {
-    ptr Result = 0;    
+    ak_u32 Result = 0;    
     Result += sizeof(ConvexHull->Header);    
     Result += (ConvexHull->Header.VertexCount*sizeof(half_vertex));
     Result += (ConvexHull->Header.EdgeCount*sizeof(half_edge));
@@ -348,175 +353,173 @@ ptr CalculateConvexHullSize(convex_hull* ConvexHull)
     return Result;
 }
 
-ptr CalculateConvexHullsSize(convex_hull* ConvexHulls, u32 ConvexHullCount)
+ak_u32 CalculateConvexHullsSize(convex_hull* ConvexHulls, ak_u32 ConvexHullCount)
 {
-    ptr Result = 0;
-    for(u32 ConvexHullIndex = 0; ConvexHullIndex < ConvexHullCount; ConvexHullIndex++)    
+    ak_u32 Result = 0;
+    for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < ConvexHullCount; ConvexHullIndex++)    
         Result += CalculateConvexHullSize(ConvexHulls + ConvexHullIndex);    
     return Result;
 }
 
-ptr CalculateMeshInfoSize(mesh_info* MeshInfo)
+ak_u32 CalculateMeshInfoSize(mesh_info* MeshInfo)
 {
-    ptr Result = 0;
+    ak_u32 Result = 0;
     Result += sizeof(mesh_info_header);
-    Result += sizeof(char)*MeshInfo->Header.NameLength;
+    Result += sizeof(ak_char)*MeshInfo->Header.NameLength;
     Result += CalculateConvexHullsSize(MeshInfo->ConvexHulls, MeshInfo->Header.ConvexHullCount);    
     return Result;
 }
 
-ptr CalculateTotalMeshInfoSize(list<mesh_info>* MeshInfos)
+ak_u32 CalculateTotalMeshInfoSize(ak_link_list<mesh_info>* MeshInfos)
 {
-    ptr Result = 0;
-    FOR_EACH(MeshInfo, MeshInfos)
+    ak_u32 Result = 0;
+    AK_ForEach(MeshInfo, MeshInfos)
         Result += CalculateMeshInfoSize(MeshInfo);
     return Result;
 }
 
 
-ptr CalculateTextureInfoSize(texture_info* TextureInfo)
+ak_u32 CalculateTextureInfoSize(texture_info* TextureInfo)
 {
-    ptr Result = 0;
+    ak_u32 Result = 0;
     Result += sizeof(texture_info_header);
-    Result += sizeof(char)*TextureInfo->Header.NameLength;
+    Result += sizeof(ak_char)*TextureInfo->Header.NameLength;
     return Result;
 }
 
-ptr CalculateTotalTextureInfoSize(list<texture_info>* TextureInfos)
+ak_u32 CalculateTotalTextureInfoSize(ak_link_list<texture_info>* TextureInfos)
 {
-    ptr Result = 0;
-    FOR_EACH(TextureInfo, TextureInfos)
+    ak_u32 Result = 0;
+    AK_ForEach(TextureInfo, TextureInfos)
         Result += CalculateTextureInfoSize(TextureInfo);
     return Result;
 }
 
-ptr CalculateOffsetToData(asset_builder* AssetBuilder)
+ak_u32 CalculateOffsetToData(asset_builder* AssetBuilder)
 {
-    ptr Result = 0;
+    ak_u32 Result = 0;
     Result += sizeof(asset_header);
     Result += CalculateTotalMeshInfoSize(&AssetBuilder->MeshInfos);
     Result += CalculateTotalTextureInfoSize(&AssetBuilder->TextureInfos);
     return Result;
 }
 
-void WriteConvexHull(platform_file_handle* AssetFile, convex_hull* ConvexHull)
-{
-    FileWrite(AssetFile, &ConvexHull->Header, sizeof(ConvexHull->Header));
-    FileWrite(AssetFile, ConvexHull->Vertices, sizeof(half_vertex)*ConvexHull->Header.VertexCount);
-    FileWrite(AssetFile, ConvexHull->Edges, sizeof(half_edge)*ConvexHull->Header.EdgeCount);
-    FileWrite(AssetFile, ConvexHull->Faces, sizeof(half_face)*ConvexHull->Header.FaceCount);    
+void WriteConvexHull(ak_file_handle* FileHandle, convex_hull* ConvexHull)
+{        
+    AK_WriteFile(FileHandle, &ConvexHull->Header, sizeof(ConvexHull->Header));
+    AK_WriteFile(FileHandle, ConvexHull->Vertices, sizeof(half_vertex)*ConvexHull->Header.VertexCount);
+    AK_WriteFile(FileHandle, ConvexHull->Edges, sizeof(half_edge)*ConvexHull->Header.EdgeCount);
+    AK_WriteFile(FileHandle, ConvexHull->Faces, sizeof(half_face)*ConvexHull->Header.FaceCount);    
 }
 
-void WriteMeshInfo(platform_file_handle* AssetFile, mesh_info* MeshInfo)
+void WriteMeshInfo(ak_file_handle* FileHandle, mesh_info* MeshInfo)
 {
-    FileWrite(AssetFile, &MeshInfo->Header, sizeof(MeshInfo->Header));
-    FileWrite(AssetFile, MeshInfo->Name, sizeof(char)*MeshInfo->Header.NameLength);    
-    for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
-        WriteConvexHull(AssetFile, MeshInfo->ConvexHulls + ConvexHullIndex);    
+    AK_WriteFile(FileHandle, &MeshInfo->Header, sizeof(MeshInfo->Header));
+    AK_WriteFile(FileHandle, MeshInfo->Name, sizeof(ak_char)*MeshInfo->Header.NameLength);    
+    for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
+        WriteConvexHull(FileHandle, MeshInfo->ConvexHulls + ConvexHullIndex);    
 }
 
-void WriteMeshInfos(platform_file_handle* AssetFile, list<mesh_info>* MeshInfos)
+void WriteMeshInfos(ak_file_handle* FileHandle, ak_link_list<mesh_info>* MeshInfos)
 {
-    FOR_EACH(MeshInfo, MeshInfos)
-        WriteMeshInfo(AssetFile, MeshInfo);    
+    AK_ForEach(MeshInfo, MeshInfos)
+        WriteMeshInfo(FileHandle, MeshInfo);    
 }
 
-void WriteTextureInfo(platform_file_handle* AssetFile, texture_info* TextureInfo)
+void WriteTextureInfo(ak_file_handle* FileHandle, texture_info* TextureInfo)
 {
-    FileWrite(AssetFile, &TextureInfo->Header, sizeof(TextureInfo->Header));
-    FileWrite(AssetFile, TextureInfo->Name, sizeof(char)*TextureInfo->Header.NameLength);    
+    AK_WriteFile(FileHandle, &TextureInfo->Header, sizeof(TextureInfo->Header));
+    AK_WriteFile(FileHandle, TextureInfo->Name, sizeof(ak_char)*TextureInfo->Header.NameLength);    
 }
 
-void WriteTextureInfos(platform_file_handle* AssetFile, list<texture_info>* TextureInfos)
+void WriteTextureInfos(ak_file_handle* FileHandle, ak_link_list<texture_info>* TextureInfos)
 {
-    FOR_EACH(TextureInfo, TextureInfos)
-        WriteTextureInfo(AssetFile, TextureInfo);
+    AK_ForEach(TextureInfo, TextureInfos)
+        WriteTextureInfo(FileHandle, TextureInfo);
 }
 
-b32 ValidateOffset(platform_file_handle* File, u64 Offset)
+ak_bool ValidateOffset(ak_file_handle* FileHandle, ak_u64 Offset)
 {
-    u64 OffsetToTest = FileGetPointer(File);
+    ak_u64 OffsetToTest = AK_GetFilePointer(FileHandle);
     return OffsetToTest == Offset;
 }
 
-void WriteInfos(platform_file_handle* AssetFile, asset_builder* AssetBuilder)
+void WriteInfos(ak_file_handle* FileHandle, asset_builder* AssetBuilder)
 {
-    WriteMeshInfos(AssetFile, &AssetBuilder->MeshInfos);
-    WriteTextureInfos(AssetFile, &AssetBuilder->TextureInfos);
+    WriteMeshInfos(FileHandle, &AssetBuilder->MeshInfos);
+    WriteTextureInfos(FileHandle, &AssetBuilder->TextureInfos);
 }
 
-void WriteMesh(platform_file_handle* AssetFile, mesh* Mesh, mesh_info* MeshInfo)
+void WriteMesh(ak_file_handle* FileHandle, mesh* Mesh, mesh_info* MeshInfo)
 {
-    u32 MeshDataSize = GetMeshDataSize(MeshInfo);
-    
-    ASSERT(ValidateOffset(AssetFile, MeshInfo->Header.OffsetToData));
-    
-    FileWrite(AssetFile, Mesh->Vertices, MeshDataSize);    
+    ak_u32 MeshDataSize = GetMeshDataSize(MeshInfo);    
+    AK_Assert(ValidateOffset(FileHandle, MeshInfo->Header.OffsetToData), "Asset file offsets are not correct. This is a programming error.");    
+    AK_WriteFile(FileHandle, Mesh->Vertices, MeshDataSize);    
 }
 
-void WriteMeshData(platform_file_handle* AssetFile, list<mesh>* Meshes, list<mesh_info>* MeshInfos)
+void WriteMeshData(ak_file_handle* FileHandle, ak_link_list<mesh>* Meshes, ak_link_list<mesh_info>* MeshInfos)
 {
-    list_iterator<mesh> MeshIterator = BeginIter(Meshes);
-    list_iterator<mesh_info> MeshInfoIterator = BeginIter(MeshInfos);
+    ak_link_list_iter<mesh> MeshIterator = AK_BeginIter(Meshes);
+    ak_link_list_iter<mesh_info> MeshInfoIterator = AK_BeginIter(MeshInfos);
     
-    mesh* Mesh = GetFirst(&MeshIterator);
-    mesh_info* MeshInfo = GetFirst(&MeshInfoIterator);
+    mesh* Mesh = MeshIterator.First();
+    mesh_info* MeshInfo = MeshInfoIterator.First();    
     
     while(Mesh && MeshInfo)
-    {
-        WriteMesh(AssetFile, Mesh, MeshInfo);        
-        Mesh = GetNext(&MeshIterator);
-        MeshInfo = GetNext(&MeshInfoIterator);
+    {        
+        WriteMesh(FileHandle, Mesh, MeshInfo);        
+        Mesh = MeshIterator.Next();
+        MeshInfo = MeshInfoIterator.Next();              
     }    
 }
 
-void WriteTexture(platform_file_handle* AssetFile, texture* Texture, texture_info* TextureInfo)
+void WriteTexture(ak_file_handle* FileHandle, texture* Texture, texture_info* TextureInfo)
 {
-    u32 TextureDataSize = GetTextureDataSize(TextureInfo);    
-    ASSERT(ValidateOffset(AssetFile, TextureInfo->Header.OffsetToData));    
-    FileWrite(AssetFile, Texture->Texels, TextureDataSize);    
+    ak_u32 TextureDataSize = GetTextureDataSize(TextureInfo);    
+    AK_Assert(ValidateOffset(FileHandle, TextureInfo->Header.OffsetToData), "Asset file offsets are not correct. This is a programming error.");    
+    AK_WriteFile(FileHandle, Texture->Texels, TextureDataSize);    
 }
 
-void WriteTextureData(platform_file_handle* AssetFile, list<texture>* Textures, list<texture_info>* TextureInfos)
+void WriteTextureData(ak_file_handle* FileHandle, ak_link_list<texture>* Textures, ak_link_list<texture_info>* TextureInfos)
 {
-    list_iterator<texture> TextureIterator = BeginIter(Textures);
-    list_iterator<texture_info> TextureInfoIterator = BeginIter(TextureInfos);
+    ak_link_list_iter<texture> TextureIterator = AK_BeginIter(Textures);
+    ak_link_list_iter<texture_info> TextureInfoIterator = AK_BeginIter(TextureInfos);
     
-    texture* Texture = GetFirst(&TextureIterator);
-    texture_info* TextureInfo = GetFirst(&TextureInfoIterator);
+    texture* Texture = TextureIterator.First();
+    texture_info* TextureInfo = TextureInfoIterator.First();    
     
     while(Texture && TextureInfo)
-    {
-        WriteTexture(AssetFile, Texture, TextureInfo);
-        Texture = GetNext(&TextureIterator);
-        TextureInfo = GetNext(&TextureInfoIterator);
+    {        
+        WriteTexture(FileHandle, Texture, TextureInfo);
+        Texture = TextureIterator.Next();
+        TextureInfo = TextureInfoIterator.Next();
     }
 }
 
-void WriteData(platform_file_handle* AssetFile, asset_builder* AssetBuilder)
+void WriteData(ak_file_handle* FileHandle, asset_builder* AssetBuilder)
 {
-    WriteMeshData(AssetFile, &AssetBuilder->Meshes, &AssetBuilder->MeshInfos);
-    WriteTextureData(AssetFile, &AssetBuilder->Textures, &AssetBuilder->TextureInfos);
+    WriteMeshData(FileHandle, &AssetBuilder->Meshes, &AssetBuilder->MeshInfos);
+    WriteTextureData(FileHandle, &AssetBuilder->Textures, &AssetBuilder->TextureInfos);
 }
 
-void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHeaderPath)
-{
-    temp_arena TempArena = BeginTemporaryMemory();
-    
-    u64 OffsetToData = CalculateOffsetToData(AssetBuilder);        
-    FOR_EACH(MeshInfo, &AssetBuilder->MeshInfos)
+void WriteAssets(asset_builder* AssetBuilder, ak_string AssetPath, ak_string AssetHeaderPath)
+{    
+    ak_u64 OffsetToData = CalculateOffsetToData(AssetBuilder);        
+    AK_ForEach(MeshInfo, &AssetBuilder->MeshInfos)
     {        
         MeshInfo->Header.OffsetToData = OffsetToData;        
         OffsetToData += GetMeshDataSize(MeshInfo);
     }
     
-    FOR_EACH(TextureInfo, &AssetBuilder->TextureInfos)
+    AK_ForEach(TextureInfo, &AssetBuilder->TextureInfos)
     {
         TextureInfo->Header.OffsetToData = OffsetToData;
         OffsetToData += GetTextureDataSize(TextureInfo);
     }
     
-    string_stream HeaderBuilder = CreateStringStream(MEGABYTE(1));
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    
+    ak_string_builder HeaderBuilder = {};
     
     HeaderBuilder.WriteLine("#ifndef ASSET_HEADER_H");
     HeaderBuilder.WriteLine("#define ASSET_HEADER_H");
@@ -536,9 +539,11 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     {
         HeaderBuilder.WriteLine("enum mesh_asset_id");
         HeaderBuilder.WriteLine("{");        
-        FOR_EACH(MeshInfo, &AssetBuilder->MeshInfos)
-        {
-            HeaderBuilder.WriteLine("\tMESH_ASSET_ID_%s,", ToUpper(MeshInfo->Name));
+        AK_ForEach(MeshInfo, &AssetBuilder->MeshInfos)
+        {            
+            ak_temp_arena TempArena = GlobalArena->BeginTemp();
+            HeaderBuilder.WriteLine("\tMESH_ASSET_ID_%s,", AK_ToUpper(MeshInfo->Name, GlobalArena));
+            GlobalArena->EndTemp(&TempArena);
         }        
         HeaderBuilder.WriteLine("\tMESH_ASSET_COUNT");        
         HeaderBuilder.WriteLine("};");
@@ -549,9 +554,11 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     {
         HeaderBuilder.WriteLine("enum texture_asset_id");
         HeaderBuilder.WriteLine("{");
-        FOR_EACH(TextureInfo, &AssetBuilder->TextureInfos)
+        AK_ForEach(TextureInfo, &AssetBuilder->TextureInfos)
         {
-            HeaderBuilder.WriteLine("\tTEXTURE_ASSET_ID_%s,", ToUpper(TextureInfo->Name));            
+            ak_temp_arena TempArena = GlobalArena->BeginTemp();
+            HeaderBuilder.WriteLine("\tTEXTURE_ASSET_ID_%s,", AK_ToUpper(TextureInfo->Name, GlobalArena));            
+            GlobalArena->EndTemp(&TempArena);
         }
         HeaderBuilder.WriteLine("\tTEXTURE_ASSET_COUNT");
         HeaderBuilder.WriteLine("};");
@@ -562,16 +569,16 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     HeaderBuilder.WriteLine("#endif");
     
     ConsoleLog("Started opening asset files %s and %s", AssetHeaderPath.Data, AssetPath.Data);
-        
-    file_raii AssetFileRAII(AssetPath.Data, PLATFORM_FILE_ATTRIBUTES_WRITE);
-    file_raii AssetHeaderFileRAII(AssetHeaderPath.Data, PLATFORM_FILE_ATTRIBUTES_WRITE);
-    if(!AssetHeaderFileRAII.File.IsValid())
+    
+    file_raii AssetFileRAII(AssetPath.Data, AK_FILE_ATTRIBUTES_WRITE);
+    file_raii AssetHeaderFileRAII(AssetHeaderPath.Data, AK_FILE_ATTRIBUTES_WRITE);
+    if(!AssetHeaderFileRAII.File)
     {
         ConsoleError("Could not open the asset header file %s for writing.", AssetHeaderPath.Data);
         return;
     }
     
-    if(!AssetFileRAII.File.IsValid())
+    if(!AssetFileRAII.File)
     {
         ConsoleError("Could not open the asset file %s for writing.", AssetPath.Data);
         return;
@@ -581,9 +588,13 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     ConsoleNewLine();
     
     ConsoleLog("Writing asset header file at %s", AssetHeaderPath.Data);    
+        
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    string AssetHeaderFileString = HeaderBuilder.GetString();
-    FileWrite(&AssetHeaderFileRAII.File, AssetHeaderFileString.Data, (u32)AssetHeaderFileString.Length);
+    ak_string AssetHeaderFileString = HeaderBuilder.PushString(GlobalArena);
+    AK_WriteFile(AssetHeaderFileRAII.File, AssetHeaderFileString.Data, AssetHeaderFileString.Length);
+    
+    GlobalArena->EndTemp(&TempArena);
     
     ConsoleLog("Finished writing asset header file.");
     ConsoleNewLine();
@@ -593,30 +604,25 @@ void WriteAssets(asset_builder* AssetBuilder, string AssetPath, string AssetHead
     
     
     asset_header Header = {};    
-    ArrayCopy(Header.Signature, ASSET_SIGNATURE, char, ARRAYCOUNT(Header.Signature));
+    AK_CopyArray(Header.Signature, ASSET_SIGNATURE, AK_Count(Header.Signature));    
     Header.MajorVersion = ASSET_MAJOR_VERSION;
     Header.MinorVersion = ASSET_MINOR_VERSION;
-    ASSERT(AssetBuilder->MeshInfos.Count == AssetBuilder->Meshes.Count);
-    Header.MeshCount = AssetBuilder->MeshInfos.Count;
-    Header.TextureCount = AssetBuilder->TextureInfos.Count;
+    AK_Assert(AssetBuilder->MeshInfos.Size == AssetBuilder->Meshes.Size, "Mesh and mesh info count do not match. This is a programming error.");
+    Header.MeshCount = AssetBuilder->MeshInfos.Size;
+    Header.TextureCount = AssetBuilder->TextureInfos.Size;
     
-    FileWrite(&AssetFileRAII.File, &Header, sizeof(Header));    
-    WriteInfos(&AssetFileRAII.File, AssetBuilder);
-    WriteData(&AssetFileRAII.File, AssetBuilder);
-        
+    AK_WriteFile(AssetFileRAII.File, &Header, sizeof(Header));    
+    WriteInfos(AssetFileRAII.File, AssetBuilder);
+    WriteData(AssetFileRAII.File, AssetBuilder);
+    
     ConsoleLog("Finished writing asset file");
     ConsoleNewLine();
     
-    DeleteStringStream(&HeaderBuilder);
-    
-    EndTemporaryMemory(&TempArena);
+    HeaderBuilder.ReleaseMemory();    
 }
 
-int main(i32 ArgCount, char** Args)
-{ 
-    arena TemporaryArena = CreateArena(MEGABYTE(32));
-    SetDefaultArena(&TemporaryArena);
-    
+int main(ak_i32 ArgCount, ak_char** Args)
+{     
     command_line CommandLine = {};
     if(ArgCount < 2)
     {
@@ -625,6 +631,8 @@ int main(i32 ArgCount, char** Args)
         CommandLine.DisplayHelp();
         return 0;
     }
+    
+    AK_SetGlobalArena(AK_CreateArena(AK_Megabyte(4)));
     
     CommandLine.Parse(Args, ArgCount);
     if(CommandLine.IsHelpPresent)
@@ -640,41 +648,45 @@ int main(i32 ArgCount, char** Args)
             ConsoleNewLine();
             CommandLine.DisplayHelp();
             return 0;
-        }
-        
-        string ProgramPath = GetProgramPath(&TemporaryArena);
-        string AssetPath = Concat(ProgramPath, "WorldGame.assets");    
-        string AssetHeaderPath = Concat(ProgramPath-1, FormatString("%c..%ccode%cassets%casset_header.h", 
-                                                                    OS_PATH_DELIMITER, OS_PATH_DELIMITER, OS_PATH_DELIMITER, OS_PATH_DELIMITER));
+        }                
         
         asset_builder AssetBuilder = {};
-        AssetBuilder.AssetArena = CreateArena(MEGABYTE(128));        
-                
-        AssetBuilder.MeshTable = CreateHashMap<char*, mesh_pair>(8191, StringEquals, &AssetBuilder.AssetArena);
-        AssetBuilder.TextureTable = CreateHashMap<char*, texture_pair>(8191, StringEquals, &AssetBuilder.AssetArena);
+        AssetBuilder.AssetArena = AK_CreateArena(AK_Megabyte(128));        
         
-        if(FileExists(AssetPath))
+        ak_string ProgramPath = AK_GetExecutablePath(AssetBuilder.AssetArena);
+        ak_string AssetPath = AK_StringConcat(ProgramPath, "WorldGame.assets", AssetBuilder.AssetArena);    
+        ak_string AssetHeaderPath = AK_StringConcat(AK_OffsetLength(ProgramPath, -1), 
+                                                    AK_FormatString(AssetBuilder.AssetArena, "%c..%ccode%cassets%casset_header.h", 
+                                                                    AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER), 
+                                                    AssetBuilder.AssetArena);
+        
+        AssetBuilder.MeshTable = AK_CreateHashMap<ak_char*, mesh_pair>(8191);
+        AssetBuilder.TextureTable = AK_CreateHashMap<ak_char*, texture_pair>(8191);
+        
+        if(AK_FileExists(AssetPath))
             ReadAssets(&AssetBuilder, AssetPath);
         
         DeleteAssets(&AssetBuilder, CommandLine.Arguments[COMMAND_ARGUMENT_TYPE_DELETE]);
         CreateAssets(&AssetBuilder, CommandLine.Arguments[COMMAND_ARGUMENT_TYPE_CREATE]);
         
-        if(FileExists(AssetPath))
+        if(AK_FileExists(AssetPath))
         {
-            string BackupAssetPath = Concat(ProgramPath, "WorldGame_Backup.assets");
-            if(FileExists(BackupAssetPath))
-                FileRemove(BackupAssetPath);                                                
-            FileRename(AssetPath, BackupAssetPath);            
+            ak_string BackupAssetPath = AK_StringConcat(ProgramPath, "WorldGame_Backup.assets", AssetBuilder.AssetArena);
+            if(AK_FileExists(BackupAssetPath))
+                AK_FileRemove(BackupAssetPath);                                                
+            AK_FileRename(AssetPath, BackupAssetPath);            
         }
         
-        if(FileExists(AssetHeaderPath))
+        if(AK_FileExists(AssetHeaderPath))
         {
-            string BackupHeaderPath = Concat(ProgramPath-1, FormatString("%c..%ccode%cassets%casset_header_Backup.h", 
-                                                                         OS_PATH_DELIMITER, OS_PATH_DELIMITER, OS_PATH_DELIMITER, OS_PATH_DELIMITER));
-            if(FileExists(BackupHeaderPath))
-                FileRemove(BackupHeaderPath);
+            ak_string BackupHeaderPath = AK_StringConcat(AK_OffsetLength(ProgramPath, -1), 
+                                                         AK_FormatString(AssetBuilder.AssetArena, "%c..%ccode%cassets%casset_header_Backup.h", 
+                                                                         AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER), 
+                                                         AssetBuilder.AssetArena);
+            if(AK_FileExists(BackupHeaderPath))
+                AK_FileRemove(BackupHeaderPath);
             
-            FileRename(AssetHeaderPath, BackupHeaderPath);            
+            AK_FileRename(AssetHeaderPath, BackupHeaderPath);            
         }
         
         WriteAssets(&AssetBuilder, AssetPath, AssetHeaderPath);

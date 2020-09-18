@@ -54,9 +54,9 @@ struct win32_graphics_code
 };
 
 struct win32_audio_output : public audio_output
-{
+{    
     IDirectSoundBuffer* SoundBuffer;
-    u32 RunningSampleIndex;
+    ak_u32 RunningSampleIndex;
     samples Samples;    
 };
 

@@ -15,9 +15,9 @@
 
 global struct dev_context* __Internal_Dev_Context__;
 #define SET_DEVELOPER_CONTEXT() __Internal_Dev_Context__ = (dev_context*)DevContext
-#define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxGJKIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxGJKIterations, Iterations))
+#define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxGJKIterations = AK_Max(__Internal_Dev_Context__->GameInformation.MaxGJKIterations, Iterations))
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
-#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = MaximumU64(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
+#define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = AK_Max(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
 #define NOT_IN_DEVELOPMENT_MODE() !IsInDevelopmentMode((dev_context*)DevContext)
 #define DEBUG_DRAW_POINT(position, color) DebugDrawPoint(__Internal_Dev_Context__, position, color)
 #define DEBUG_DRAW_EDGE(position0, position1, color) DebugDrawEdge(__Internal_Dev_Context__, position0, position1, color)
@@ -63,67 +63,68 @@ struct dev_input
             button MMB;            
         };
     };
-    v2i MouseDelta;
-    v2i MouseCoordinates;
-    f32 Scroll;
+    
+    ak_v2i MouseDelta;
+    ak_v2i MouseCoordinates;
+    ak_f32 Scroll;
 };
 
 struct game_information
 {
-    u64 MaxTimeIterations;
-    u64 MaxGJKIterations;
+    ak_u64 MaxTimeIterations;
+    ak_u64 MaxGJKIterations;
 };
 
 struct dev_mesh
-{
-    i64 MeshID;
-    u32 IndexCount;
-    u32 VertexCount;
-    u16 IndexOffSet;
+{    
+    ak_i64 MeshID;
+    ak_u32 IndexCount;
+    ak_u32 VertexCount;
+    ak_u16 IndexOffSet;
     void* Vertices;
-    void* Indices;
+    void* Indices;    
 };
 
 struct dev_capsule_mesh
 {    
-    i64 MeshID;
-    u32 CapIndexCount;
-    u32 CapVertexCount;
-    u32 BodyIndexCount;    
+    ak_i64 MeshID;
+    ak_u32 CapIndexCount;
+    ak_u32 CapVertexCount;
+    ak_u32 BodyIndexCount;    
 };
 
 struct debug_point
 {
-    v3f P;
-    c3 Color;
+    ak_v3f P;
+    ak_color3f Color;
 };
 
 struct debug_edge
 {
-    v3f P0;
-    v3f P1;
-    c3 Color;
+    ak_v3f P0;
+    ak_v3f P1;
+    ak_color3f Color;
 };
 
 struct debug_quad
 {
-    v3f CenterP;
-    v3f Normal;
-    v2f Dim;
-    c3 Color;
+    ak_v3f CenterP;
+    ak_v3f Normal;
+    ak_v2f Dim;
+    ak_color3f Color;
 };
 
 struct gizmo
 {
     dev_mesh* Mesh;
-    sqt Transform;
-    v3f IntersectionPlane;
+    ak_sqtf Transform;
+    ak_v3f IntersectionPlane;
     gizmo_movement_direction MovementDirection;
 };
 
 struct gizmo_hit
 {
-    v3f HitMousePosition;
+    ak_v3f HitMousePosition;
     gizmo* Gizmo;
 };
 
@@ -155,7 +156,7 @@ enum view_mode_type
 
 struct mesh_convex_hull_gdi
 {
-    u32 Count;
+    ak_u32 Count;
     graphics_mesh_id* Meshes;
 };
 
@@ -169,10 +170,10 @@ enum frame_playback_state
 
 struct frame_playback
 {
-    u32 MaxRecordingPathLength;
-    char* RecordingPath;
+    ak_u32 MaxRecordingPathLength;
+    ak_char* RecordingPath;
     frame_playback_state PlaybackState;    
-    u32 CurrentFrameIndex;    
+    ak_u32 CurrentFrameIndex;    
     frame_recording Recording;    
 };
 
@@ -182,17 +183,19 @@ struct dev_context
     struct game* Game;
     graphics* Graphics;
     
-    arena DevStorage;
-    b32 InDevelopmentMode;    
-    b32 UseDevCamera;        
-    b32 DrawOtherWorld;
-    b32 DrawColliders;
+    ak_arena* DevStorage;
+    ak_bool InDevelopmentMode;    
+    ak_bool UseDevCamera;        
+    ak_bool DrawOtherWorld;
+    ak_bool DrawColliders;
     view_mode_type ViewModeType;    
-    b32 DrawGrid;
-    b32 EditMode;
-    b32 IsGizmoHit;
     
-    f32 tInterpolated;
+    ak_bool DrawGrid;
+    ak_bool EditMode;
+    ak_bool IsGizmoHit;
+        
+    
+    ak_f32 tInterpolated;
     graphics_render_buffer* RenderBuffer;
     
     frame_playback FramePlayback;
@@ -202,8 +205,8 @@ struct dev_context
     dev_input Input;    
     camera Cameras[2];
     
-    u32 ImGuiMeshCount;
-    i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
+    ak_u32 ImGuiMeshCount;
+    ak_i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
     dev_capsule_mesh LineCapsuleMesh;
     
@@ -217,85 +220,69 @@ struct dev_context
     dev_mesh TriangleArrowMesh;
     dev_mesh TriangleCircleMesh;
     
-    dynamic_array<debug_primitive> DebugPrimitives;
+    ak_array<debug_primitive> DebugPrimitives;
     
     mesh_convex_hull_gdi MeshConvexHulls[MESH_ASSET_COUNT];
     
-    arena LogStorage;
-    dynamic_array<string> Logs;
+    ak_arena* LogStorage;
+    ak_array<ak_string> Logs;
     
     void** PlatformData;
-    b32 Initialized;
+    ak_bool Initialized;
     struct entity* SelectedObject;
-    v3f InspectRay;
-    char DebugMessage[100];
+    ak_v3f InspectRay;
+    ak_char DebugMessage[100];
     
-    v3f* EntityRotations[2];
+    ak_array<ak_v3f> EntityRotations[2];
     gizmo Gizmo[6];
     gizmo_hit GizmoHit;
-    gizmo_movement_type TransformationMode;
+    gizmo_movement_type TransformationMode;    
 };
 
 void Platform_InitImGui(void* PlatformData);
-void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* DevContext);
-string Platform_OpenFileDialog(char* Extension);
-string Platform_FindNewFrameRecordingPath();
+void Platform_DevUpdate(void* PlatformData, ak_v2i RenderDim, ak_f32 dt, dev_context* DevContext);
+ak_string Platform_FindNewFrameRecordingPath();
 
-inline b32 IsInDevelopmentMode(dev_context* Context)
+inline ak_bool IsInDevelopmentMode(dev_context* Context)
 {
     if(Context)
         return Context->InDevelopmentMode;    
     return false;
 }
 
-inline void CheckPrimitivesAreAllocated(dev_context* DevContext)
-{
-    if(!DevContext->DebugPrimitives.IsInitialized())
-        DevContext->DebugPrimitives = CreateDynamicArray<debug_primitive>(2048);
-}
-
-inline void DebugDrawPoint(dev_context* DevContext, v3f P, c3 Color)
-{
-    CheckPrimitivesAreAllocated(DevContext);
-    
+inline void DebugDrawPoint(dev_context* DevContext, ak_v3f P, ak_color3f Color)
+{    
     debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_POINT};
     Primitive.Point = {P, Color};    
     DevContext->DebugPrimitives.Add(Primitive);
 }
 
-inline void DebugDrawEdge(dev_context* DevContext, v3f P0, v3f P1, c3 Color)
-{
-    CheckPrimitivesAreAllocated(DevContext);
-    
+inline void DebugDrawEdge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Color)
+{   
     debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_EDGE};
     Primitive.Edge = {P0, P1, Color};
     DevContext->DebugPrimitives.Add(Primitive);    
 }
 
-inline void DebugDrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c3 Color)
-{
-    CheckPrimitivesAreAllocated(DevContext);
-    
+inline void DebugDrawQuad(dev_context* DevContext, ak_v3f CenterP, ak_v3f Normal, ak_v2f Dim, ak_color3f Color)
+{    
     debug_primitive Primitive = {DEBUG_PRIMITIVE_TYPE_QUAD};
     Primitive.Quad = {CenterP, Normal, Dim, Color};
     DevContext->DebugPrimitives.Add(Primitive);    
 }
 
-inline void DebugLog(dev_context* DevContext, char* Format, ...)
-{
-    if(!DevContext->Logs.IsInitialized())
-        DevContext->Logs = CreateDynamicArray<string>(16);    
-    
+inline void DebugLog(dev_context* DevContext, ak_char* Format, ...)
+{    
     va_list Args;
     va_start(Args, Format);
-    DevContext->Logs.Add(FormatString(Format, Args, &DevContext->LogStorage));    
+    DevContext->Logs.Add(AK_FormatString(DevContext->LogStorage, Format, Args));    
     va_end(Args);    
 }
 
-inline u32 
+inline ak_u32 
 ConvexHullIndexCount(convex_hull* Hull)
 {
-    u32 Result = Hull->Header.FaceCount*3*2;
+    ak_u32 Result = Hull->Header.FaceCount*3*2;
     return Result;
 }
 

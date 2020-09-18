@@ -1,5 +1,11 @@
 #ifndef ASSET_BUILDER_H
 #define ASSET_BUILDER_H
+
+#if DEVELOPER_BUILD
+#define AK_DEVELOPER_BUILD
+#endif
+
+#define AK_COMMON_IMPLEMENTATION
 #include <ak_common.h>
 #include "../asset_types.h"
 
@@ -17,16 +23,16 @@ struct texture_pair
 
 struct asset_builder
 {
-    arena AssetArena;
+    ak_arena* AssetArena;
     
-    hash_map<char*, mesh_pair> MeshTable;
-    hash_map<char*, texture_pair> TextureTable;
+    ak_hash_map<char*, mesh_pair> MeshTable;
+    ak_hash_map<char*, texture_pair> TextureTable;
     
-    list<mesh_info> MeshInfos;
-    list<mesh> Meshes;             
+    ak_link_list<mesh_info> MeshInfos;
+    ak_link_list<mesh> Meshes;             
     
-    list<texture_info> TextureInfos;
-    list<texture> Textures;
+    ak_link_list<texture_info> TextureInfos;
+    ak_link_list<texture> Textures;
 };
 
 inline void 
@@ -56,10 +62,10 @@ ConsoleError(char* Format, ...)
     va_end(Args);
 }
 
-inline b32 
+inline ak_bool 
 ConsoleTrueFalse(char* Message)
 {        
-    b32 Result = false;
+    ak_bool Result = false;
     for(;;)
     {
         ConsoleLog("%s (0 no, 1 yes): ", Message);

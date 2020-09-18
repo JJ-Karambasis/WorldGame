@@ -2,73 +2,73 @@
 #include "gjk.cpp"
 #include "epa.cpp"
 
+
 struct ray
 {
-    v3f Origin;
-    v3f Direction;
+    ak_v3f Origin;
+    ak_v3f Direction;
 };
 
-
-f32 RaySphereIntersection(v3f Origin, v3f Direction, sphere* Sphere)
+ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, sphere* Sphere)
 {
-    v3f CO = Origin-Sphere->CenterP;
-    f32 A = Dot(CO, Direction);
-    f32 B = SquareMagnitude(CO) - Square(Sphere->Radius);
+    ak_v3f CO = Origin-Sphere->CenterP;
+    ak_f32 A = AK_Dot(CO, Direction);
+    ak_f32 B = AK_SqrMagnitude(CO) - AK_Square(Sphere->Radius);
     
     if(A > 0 && B > 0) return INFINITY;
-    f32 Discr = Square(A) - B;
+    ak_f32 Discr = AK_Square(A) - B;
     if(Discr < 0) return INFINITY;
     
-    f32 Result = -A - Sqrt(Discr);
+    ak_f32 Result = -A - AK_Sqrt(Discr);
     if(Result < 0) Result = 0;
     return Result;
 }
 
-f32 RayCapsuleIntersection(v3f Origin, v3f Direction, capsule* Capsule)
+ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, capsule* Capsule)
 {
-    v3f AB = Capsule->P1-Capsule->P0;
-    v3f AO = Origin - Capsule->P0;
+    ak_v3f AB = Capsule->P1-Capsule->P0;
+    ak_v3f AO = Origin - Capsule->P0;
     
-    f32 RayCapsuleProjection = Dot(AB, Direction);
-    f32 LineSegmentCapsuleProjection = Dot(AB, AO);
-    f32 ABSqr = SquareMagnitude(AB);
+    ak_f32 RayCapsuleProjection = AK_Dot(AB, Direction);
+    ak_f32 LineSegmentCapsuleProjection = AK_Dot(AB, AO);
+    ak_f32 ABSqr = AK_SqrMagnitude(AB);
     
-    f32 m = RayCapsuleProjection / ABSqr;
-    f32 n = LineSegmentCapsuleProjection / ABSqr;
+    ak_f32 m = RayCapsuleProjection / ABSqr;
+    ak_f32 n = LineSegmentCapsuleProjection / ABSqr;
     
-    v3f Q = Direction - (AB*m);
-    v3f R = AO - (AB*n);
+    ak_v3f Q = Direction - (AB*m);
+    ak_v3f R = AO - (AB*n);
     
-    f32 a = SquareMagnitude(Q);
-    f32 b = 2.0f * Dot(Q, R);
-    f32 c = SquareMagnitude(R) - Square(Capsule->Radius);
+    ak_f32 a = AK_SqrMagnitude(Q);
+    ak_f32 b = 2.0f * AK_Dot(Q, R);
+    ak_f32 c = AK_SqrMagnitude(R) - AK_Square(Capsule->Radius);
     
-    if(IsFuzzyZero(a))
+    if(AK_EqualZeroEps(a))
     {
         sphere SphereA = CreateSphere(Capsule->P0, Capsule->Radius);
         sphere SphereB = CreateSphere(Capsule->P1, Capsule->Radius);
         
-        f32 tA = RaySphereIntersection(Origin, Direction, &SphereA);
-        f32 tB = RaySphereIntersection(Origin, Direction, &SphereB);
+        ak_f32 tA = RaySphereIntersection(Origin, Direction, &SphereA);
+        ak_f32 tB = RaySphereIntersection(Origin, Direction, &SphereB);
         
         if(tA == INFINITY || tB == INFINITY)
             return INFINITY;
         
-        f32 Result = MinimumF32(tA, tB);
+        ak_f32 Result = AK_Min(tA, tB);
         return Result;
     }
     
-    quadratic_equation_result QEqu = SolveQuadraticEquation(a, b, c);
+    ak_quadratic_equation_result QEqu = AK_SolveQuadraticEquation(a, b, c);
     if(QEqu.RootCount < 2)
         return INFINITY;
     
     if(QEqu.Roots[0] < 0 && QEqu.Roots[1] < 0)
         return INFINITY;
     
-    f32 tMin = MinimumF32(MaximumF32(QEqu.Roots[0], 0.0f), 
-                          MaximumF32(QEqu.Roots[1], 0.0f));
+    ak_f32 tMin = AK_Min(AK_Min(QEqu.Roots[0], 0.0f), 
+                         AK_Min(QEqu.Roots[1], 0.0f));
     
-    f32 t0 = tMin*m + n;
+    ak_f32 t0 = tMin*m + n;
     if(t0 < 0)
     {
         sphere Sphere = CreateSphere(Capsule->P0, Capsule->Radius);
@@ -86,33 +86,33 @@ f32 RayCapsuleIntersection(v3f Origin, v3f Direction, capsule* Capsule)
 }
 
 
-b32 RayTriangleIntersection(v3f RayOrigin, v3f RayDirection, v3f P0, v3f P1, v3f P2, f32* t, f32* u, f32* v)
+ak_bool RayTriangleIntersection(ak_v3f RayOrigin, ak_v3f RayDirection, ak_v3f P0, ak_v3f P1, ak_v3f P2, ak_f32* t, ak_f32* u, ak_f32* v)
 {    
-    v3f Edge1 = P1 - P0;
-    v3f Edge2 = P2 - P0;
+    ak_v3f Edge1 = P1 - P0;
+    ak_v3f Edge2 = P2 - P0;
     
-    v3f PVec = Cross(RayDirection, Edge2);
+    ak_v3f PVec = AK_Cross(RayDirection, Edge2);
     
-    f32 Det = Dot(Edge1, PVec);
+    ak_f32 Det = AK_Dot(Edge1, PVec);
     
-    if(Det == 0)
+    if(AK_EqualZeroEps(Det))
         return false;
     
-    v3f TVec = RayOrigin - P0;
+    ak_v3f TVec = RayOrigin - P0;
     
-    *u = Dot(TVec, PVec);
+    *u = AK_Dot(TVec, PVec);
     if(*u < 0.0f || *u > Det)
         return false;
     
-    v3f QVec = Cross(TVec, Edge1);
+    ak_v3f QVec = AK_Cross(TVec, Edge1);
     
-    *v = Dot(RayDirection, QVec);
+    *v = AK_Dot(RayDirection, QVec);
     if(*v < 0.0f || *u + *v > Det)
         return false;
     
-    *t = Dot(Edge2, QVec);
+    *t = AK_Dot(Edge2, QVec);
     
-    f32 InvDet = 1.0f / Det;
+    ak_f32 InvDet = 1.0f / Det;
     *t *= InvDet;
     *u *= InvDet;
     *v *= InvDet;
@@ -120,86 +120,84 @@ b32 RayTriangleIntersection(v3f RayOrigin, v3f RayDirection, v3f P0, v3f P1, v3f
     return true;
 }
 
-b32 RayTriangleIntersectionNoCull(v3f RayOrigin, v3f RayDirection, v3f P0, v3f P1, v3f P2, f32* t, f32* u, f32* v)
+ak_bool RayTriangleIntersectionNoCull(ak_v3f RayOrigin, ak_v3f RayDirection, ak_v3f P0, ak_v3f P1, ak_v3f P2, ak_f32* t, ak_f32* u, ak_f32* v)
 {    
-    v3f Edge1 = P1 - P0;
-    v3f Edge2 = P2 - P0;
+    ak_v3f Edge1 = P1 - P0;
+    ak_v3f Edge2 = P2 - P0;
     
-    v3f PVec = Cross(RayDirection, Edge2);
+    ak_v3f PVec = AK_Cross(RayDirection, Edge2);
     
-    f32 Det = Dot(Edge1, PVec);
+    ak_f32 Det = AK_Dot(Edge1, PVec);
     
-    if(Det == 0)
-    {
-        return false;
-    }
+    if(AK_EqualZeroEps(Det))    
+        return false;    
+    
+    ak_f32 InverseDeterminant = 1.0f / Det;
+    
+    ak_v3f TVec = RayOrigin - P0;
 
-    f32 InverseDeterminant = 1.0f / Det;
-
-    v3f TVec = RayOrigin - P0;
-
-    *u = Dot(TVec, PVec) * InverseDeterminant;
+    *u = AK_Dot(TVec, PVec) * InverseDeterminant;
     if(*u < 0 || *u > 1)
     {
         return false;
     }
 
-    v3f QVec = Cross(TVec, Edge1);
+    ak_v3f QVec = AK_Cross(TVec, Edge1);
 
-    *v = Dot(RayDirection, QVec) * InverseDeterminant;
+    *v = AK_Dot(RayDirection, QVec) * InverseDeterminant;
     if(*v < 0 || *u + *v > 1)
     {
         return false;
     }
 
-    *t = Dot(Edge2, QVec) * InverseDeterminant;
+    *t = AK_Dot(Edge2, QVec) * InverseDeterminant;
     
     return true;
 }
 
-ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, sqt MeshTransform, b32 IsDevMesh = false, b32 TestCull = true)
+ray_mesh_intersection_result RayMeshIntersection(ak_v3f RayOrigin, ak_v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, ak_sqtf MeshTransform, ak_bool IsDevMesh = false, ak_bool TestCull = true)
 {
     ray_mesh_intersection_result Result = {};    
     
-    u32 VertexStride = GetVertexStride(MeshInfo);
-    u32 IndexStride = GetIndexStride(MeshInfo);        
-    u32 IndexSize = IndexStride*MeshInfo->Header.IndexCount;
+    ak_u32 VertexStride = GetVertexStride(MeshInfo);
+    ak_u32 IndexStride = GetIndexStride(MeshInfo);        
+    ak_u32 IndexSize = IndexStride*MeshInfo->Header.IndexCount;
     
-    u32 i = 0;
+    ak_u32 i = 0;
     while(i*IndexStride < IndexSize)
     {
-        u32 Index1 = 0;
-        u32 Index2 = 0;
-        u32 Index3 = 0;
-        v3f Vertex1 = V3(0,0,0);
-        v3f Vertex2 = V3(0,0,0);
-        v3f Vertex3 = V3(0,0,0);
+        ak_u32 Index1 = 0;
+        ak_u32 Index2 = 0;
+        ak_u32 Index3 = 0;
+        ak_v3f Vertex1 = AK_V3f(0,0,0);
+        ak_v3f Vertex2 = AK_V3f(0,0,0);
+        ak_v3f Vertex3 = AK_V3f(0,0,0);
         
         if(MeshInfo->Header.IsIndexFormat32)
         {
-            Index1 = *(u32*)((u8*)Mesh->Indices + i*IndexStride);
+            Index1 = *(ak_u32*)((ak_u8*)Mesh->Indices + i*IndexStride);
             i++;
-            Index2 = *(u32*)((u8*)Mesh->Indices + i*IndexStride);
+            Index2 = *(ak_u32*)((ak_u8*)Mesh->Indices + i*IndexStride);
             i++;
-            Index3 = *(u32*)((u8*)Mesh->Indices + i*IndexStride);
+            Index3 = *(ak_u32*)((ak_u8*)Mesh->Indices + i*IndexStride);
             i++;            
         }
         else
         {            
-            Index1 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
+            Index1 = *(ak_u16*)((ak_u8*)Mesh->Indices + i*IndexStride);
             i++;
-            Index2 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
+            Index2 = *(ak_u16*)((ak_u8*)Mesh->Indices + i*IndexStride);
             i++;
-            Index3 = *(u16*)((u8*)Mesh->Indices + i*IndexStride);
+            Index3 = *(ak_u16*)((ak_u8*)Mesh->Indices + i*IndexStride);
             i++;
         }        
         
         if(IsDevMesh)
         {
-            VertexStride = sizeof(vertex_p3);
-            vertex_p3 TVertex1 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-            vertex_p3 TVertex2 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-            vertex_p3 TVertex3 = *(vertex_p3*)((u8*)Mesh->Vertices + (Index3*VertexStride));
+            VertexStride = sizeof(ak_vertex_p3);
+            ak_vertex_p3 TVertex1 = *(ak_vertex_p3*)((ak_u8*)Mesh->Vertices + (Index1*VertexStride));
+            ak_vertex_p3 TVertex2 = *(ak_vertex_p3*)((ak_u8*)Mesh->Vertices + (Index2*VertexStride));
+            ak_vertex_p3 TVertex3 = *(ak_vertex_p3*)((ak_u8*)Mesh->Vertices + (Index3*VertexStride));
             
             Vertex1 = TVertex1.P;
             Vertex2 = TVertex2.P;
@@ -207,9 +205,9 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
         }
         else if(MeshInfo->Header.IsSkeletalMesh)
         {
-            vertex_p3_n3_uv_weights TVertex1 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-            vertex_p3_n3_uv_weights TVertex2 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-            vertex_p3_n3_uv_weights TVertex3 = *(vertex_p3_n3_uv_weights*)((u8*)Mesh->Vertices + (Index3*VertexStride));
+            ak_vertex_p3_n3_uv_w TVertex1 = *(ak_vertex_p3_n3_uv_w*)((ak_u8*)Mesh->Vertices + (Index1*VertexStride));
+            ak_vertex_p3_n3_uv_w TVertex2 = *(ak_vertex_p3_n3_uv_w*)((ak_u8*)Mesh->Vertices + (Index2*VertexStride));
+            ak_vertex_p3_n3_uv_w TVertex3 = *(ak_vertex_p3_n3_uv_w*)((ak_u8*)Mesh->Vertices + (Index3*VertexStride));
             
             Vertex1 = TVertex1.P;
             Vertex2 = TVertex2.P;
@@ -217,21 +215,21 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
         }
         else
         {            
-            vertex_p3_n3_uv TVertex1 = *(vertex_p3_n3_uv*)((u8*)Mesh->Vertices + (Index1*VertexStride));
-            vertex_p3_n3_uv TVertex2 = *(vertex_p3_n3_uv*)((u8*)Mesh->Vertices + (Index2*VertexStride));
-            vertex_p3_n3_uv TVertex3 = *(vertex_p3_n3_uv*)((u8*)Mesh->Vertices + (Index3*VertexStride));
+            ak_vertex_p3_n3_uv TVertex1 = *(ak_vertex_p3_n3_uv*)((ak_u8*)Mesh->Vertices + (Index1*VertexStride));
+            ak_vertex_p3_n3_uv TVertex2 = *(ak_vertex_p3_n3_uv*)((ak_u8*)Mesh->Vertices + (Index2*VertexStride));
+            ak_vertex_p3_n3_uv TVertex3 = *(ak_vertex_p3_n3_uv*)((ak_u8*)Mesh->Vertices + (Index3*VertexStride));
             
             Vertex1 = TVertex1.P;
             Vertex2 = TVertex2.P;
             Vertex3 = TVertex3.P;
         }
         
-        Vertex1 = TransformV3(Vertex1, MeshTransform);
-        Vertex2 = TransformV3(Vertex2, MeshTransform);
-        Vertex3 = TransformV3(Vertex3, MeshTransform);
+        Vertex1 = AK_Transform(Vertex1, MeshTransform);
+        Vertex2 = AK_Transform(Vertex2, MeshTransform);
+        Vertex3 = AK_Transform(Vertex3, MeshTransform);
         
-        f32 t, u, v;
-        b32 IntersectionFound = false;
+        ak_f32 t, u, v;
+        ak_bool IntersectionFound = false;
         if(TestCull)
         {
             IntersectionFound = RayTriangleIntersection(RayOrigin, RayDirection, Vertex1, Vertex2, Vertex3, &t, &u, &v);
@@ -256,37 +254,38 @@ ray_mesh_intersection_result RayMeshIntersection(v3f RayOrigin, v3f RayDirection
     return Result;
 }
 
-ray_mesh_intersection_result RayPlaneIntersection(v3f PlaneNormal, v3f PlanePoint, ray RayCast)
+
+ray_mesh_intersection_result RayPlaneIntersection(ak_v3f PlaneNormal, ak_v3f PlanePoint, ray RayCast)
 {
     ray_mesh_intersection_result Result = {};
-    f32 denom = Dot(PlaneNormal, RayCast.Direction);
-    if(denom == 0)
+    ak_f32 denom = AK_Dot(PlaneNormal, RayCast.Direction);
+    if(AK_EqualZeroEps(denom))
     {
         return Result;
     }
-
-    f32 t = Dot(PlanePoint - RayCast.Origin, PlaneNormal) / denom;
+    
+    ak_f32 t = AK_Dot(PlanePoint - RayCast.Origin, PlaneNormal) / denom;
     if(t <= 0)
     {
         return Result;
     }
-
+    
     Result.FoundCollision = true;
     Result.t = t;
-
+    
     return Result;
 }
 
-f32 LineSegmentSphereIntersection(v3f* LineSegment, sphere* Sphere)
+ak_f32 LineSegmentSphereIntersection(ak_v3f* LineSegment, sphere* Sphere)
 {
-    v3f D = LineSegment[1]-LineSegment[0];
-    f32 SegmentLength = Magnitude(D);
-    if(IsFuzzyZero(SegmentLength))
+    ak_v3f D = LineSegment[1]-LineSegment[0];
+    ak_f32 SegmentLength = AK_Magnitude(D);
+    if(AK_EqualZeroEps(SegmentLength))
         return INFINITY;
     
     D /= SegmentLength;
     
-    f32 Result = RaySphereIntersection(LineSegment[0], D, Sphere);
+    ak_f32 Result = RaySphereIntersection(LineSegment[0], D, Sphere);
     if(Result != INFINITY)
     {
         if(Result > SegmentLength)
@@ -297,16 +296,16 @@ f32 LineSegmentSphereIntersection(v3f* LineSegment, sphere* Sphere)
     return Result;
 }
 
-f32 LineSegmentCapsuleIntersection(v3f* LineSegment, capsule* Capsule)
+ak_f32 LineSegmentCapsuleIntersection(ak_v3f* LineSegment, capsule* Capsule)
 {
-    v3f D = LineSegment[1]-LineSegment[0];
-    f32 SegmentLength = Magnitude(D);
-    if(IsFuzzyZero(SegmentLength))
+    ak_v3f D = LineSegment[1]-LineSegment[0];
+    ak_f32 SegmentLength = AK_Magnitude(D);
+    if(AK_EqualZeroEps(SegmentLength))
         return INFINITY;
     
     D /= SegmentLength;
     
-    f32 Result = RayCapsuleIntersection(LineSegment[0], D, Capsule);
+    ak_f32 Result = RayCapsuleIntersection(LineSegment[0], D, Capsule);
     if(Result != INFINITY)
     {
         if(Result > SegmentLength)
@@ -317,61 +316,61 @@ f32 LineSegmentCapsuleIntersection(v3f* LineSegment, capsule* Capsule)
     return Result;
 }
 
-f32 LineSegmentsClosestPoints(v3f* Result, v3f* A, v3f* B)
+ak_f32 LineSegmentsClosestPoints(ak_v3f* Result, ak_v3f* A, ak_v3f* B)
 {
-    v3f D1 = A[1]-A[0];
-    v3f D2 = B[1]-B[0];
-    v3f R = A[0]-B[0];
+    ak_v3f D1 = A[1]-A[0];
+    ak_v3f D2 = B[1]-B[0];
+    ak_v3f R = A[0]-B[0];
     
-    float a = SquareMagnitude(D1);
-    float e = SquareMagnitude(D2);
-    float f = Dot(D2, R);
+    ak_f32 a = AK_SqrMagnitude(D1);
+    ak_f32 e = AK_SqrMagnitude(D2);
+    ak_f32 f = AK_Dot(D2, R);
     
-    if(IsFuzzyZero(a) && IsFuzzyZero(e))
+    if(AK_EqualZeroEps(a) && AK_EqualZeroEps(e))
     {
         Result[0] = A[0];
         Result[1] = B[0];
-        float SqrDist = SquareMagnitude(Result[0] - Result[1]);
+        ak_f32 SqrDist = AK_SqrMagnitude(Result[0] - Result[1]);
         return SqrDist;
     }
     
-    float t;
-    float s;
+    ak_f32 t;
+    ak_f32 s;
     
-    if(IsFuzzyZero(a))
+    if(AK_EqualZeroEps(a))
     {
         s = 0.0f;
-        t = SaturateF32(f/e);        
+        t = AK_Saturate(f/e);        
     }
     else
     {
-        float c = Dot(D1, R);
-        if(IsFuzzyZero(e))
+        ak_f32 c = AK_Dot(D1, R);
+        if(AK_EqualZeroEps(e))
         {
             t = 0.0f;
-            s = SaturateF32(-c/a);
+            s = AK_Saturate(-c/a);
         }
         else
         {
-            float b = Dot(D1, D2);
-            float Denom = (a*e)-Square(b);
+            ak_f32 b = AK_Dot(D1, D2);
+            ak_f32 Denom = (a*e)-AK_Square(b);
             
             if(Denom != 0.0f)            
-                s = SaturateF32((b*f - c*e) / Denom);            
+                s = AK_Saturate((b*f - c*e) / Denom);            
             else            
                 s = 0.0f;    
             
-            float tnom = b*s + f;
+            ak_f32 tnom = b*s + f;
             
             if(tnom < 0.0f)
             {
                 t = 0.0f;
-                s = SaturateF32(-c / a);
+                s = AK_Saturate(-c / a);
             }
             else if(tnom > e)
             {
                 t = 1.0f;
-                s = SaturateF32((b - c) / a);
+                s = AK_Saturate((b - c) / a);
             }
             else
             {
@@ -383,15 +382,15 @@ f32 LineSegmentsClosestPoints(v3f* Result, v3f* A, v3f* B)
     Result[0] = A[0] + D1*s;
     Result[1] = B[0] + D2*t;
     
-    float SqrDist = SquareMagnitude(Result[0] - Result[1]);
+    ak_f32 SqrDist = AK_SqrMagnitude(Result[0] - Result[1]);
     return SqrDist;
 }
 
-v3f PointLineSegmentClosestPoint(v3f P, v3f* LineSegment)
+ak_v3f PointLineSegmentClosestPoint(ak_v3f P, ak_v3f* LineSegment)
 {
-    v3f AB = LineSegment[1]-LineSegment[0];    
-    f32 t = SaturateF32(Dot(P - LineSegment[0], AB) / SquareMagnitude(AB));
-    v3f Result = LineSegment[0] + t*AB;        
+    ak_v3f AB = LineSegment[1]-LineSegment[0];    
+    ak_f32 t = AK_Saturate(AK_Dot(P - LineSegment[0], AB) / AK_SqrMagnitude(AB));
+    ak_v3f Result = LineSegment[0] + t*AB;        
     return Result;
 }
 
@@ -399,28 +398,30 @@ contact_list GetSphereCapsuleContacts(sphere* Sphere, capsule* Capsule)
 {
     contact_list Result = {};
     
-    v3f P0 = Sphere->CenterP;
-    v3f P1 = PointLineSegmentClosestPoint(P0, Capsule->P);
+    ak_v3f P0 = Sphere->CenterP;
+    ak_v3f P1 = PointLineSegmentClosestPoint(P0, Capsule->P);
     
-    v3f Normal = P1-P0;
-    f32 NormalLength = SquareMagnitude(Normal);  
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_SqrMagnitude(Normal);  
     
     //TODO(JJ): This assertion is a degenerate case. We probably should support it at some point. Happens when the sphere center point 
     //is on the capsule line thus a contact normal cannot be computed. Can probably just use an arbitrary normal
-    ASSERT(!IsFuzzyZero(NormalLength)); 
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Not Implemented"); 
     
-    f32 Radius = Sphere->Radius+Capsule->Radius;    
-    f32 Diff = NormalLength-Square(Radius);
-    if(Diff < 0 || IsFuzzyZero(Diff))
+    ak_f32 Radius = Sphere->Radius+Capsule->Radius;    
+    ak_f32 Diff = NormalLength-AK_Square(Radius);
+    if(Diff < 0 || AK_EqualZeroEps(Diff))
     {
-        NormalLength = Sqrt(NormalLength);
+        NormalLength = AK_Sqrt(NormalLength);
         Normal /= NormalLength;
         
-        Result.Count = 1;
-        Result.Ptr = PushArray(Result.Count, contact, Clear, 0);
+        ak_arena* GlobalArena = AK_GetGlobalArena();
         
-        v3f PointOnSphere  = P0 + Normal*Sphere->Radius;
-        v3f PointOnCapsule = P1 - Normal*Capsule->Radius;
+        Result.Count = 1;
+        Result.Ptr = GlobalArena->PushArray<contact>(Result.Count);
+        
+        ak_v3f PointOnSphere  = P0 + Normal*Sphere->Radius;
+        ak_v3f PointOnCapsule = P1 - Normal*Capsule->Radius;
         
         Result.Ptr[0].Normal = Normal;        
         Result.Ptr[0].Position = PointOnSphere + ((PointOnCapsule-PointOnSphere)*0.5f);
@@ -430,7 +431,7 @@ contact_list GetSphereCapsuleContacts(sphere* Sphere, capsule* Capsule)
     return Result;    
 }
 
-contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, sqt ConvexHullTransform)
+contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
 {
     contact_list Result = {};
     
@@ -438,20 +439,23 @@ contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, sqt 
     convex_hull_support ConvexHullGJK = {ConvexHull, ConvexHullTransform};        
     gjk_distance Distance = GJKDistance(&PointGJK, &ConvexHullGJK);
     
-    if(Distance.SquareDistance <= Square(Sphere->Radius))
+    if(Distance.SquareDistance <= AK_Square(Sphere->Radius))
     {
-        v3f P0, P1;
+        ak_v3f P0, P1;
         Distance.GetClosestPoints(&P0, &P1);
         
-        v3f Normal = P1-P0;
-        f32 NormalLength = SquareMagnitude(Normal);
-        ASSERT(!IsFuzzyZero(NormalLength));
+        ak_v3f Normal = P1-P0;
+        ak_f32 NormalLength = AK_SqrMagnitude(Normal);
+        AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined from gjk");
         
-        NormalLength = Sqrt(NormalLength);
+        NormalLength = AK_Sqrt(NormalLength);
         Normal /= NormalLength;
         
+        
+        ak_arena* GlobalArena = AK_GetGlobalArena();
+        
         Result.Count = 1;
-        Result.Ptr = PushArray(Result.Count, contact, Clear, 0);
+        Result.Ptr = GlobalArena->PushArray<contact>(Result.Count);
         
         Result.Ptr[0].Normal = Normal;
         Result.Ptr[0].Position = P1;
@@ -461,24 +465,24 @@ contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, sqt 
     return Result;
 }
 
-contact GetQuadraticDeepestContact(v3f P0, v3f P1, f32 RadiusA, f32 RadiusB)
+contact GetQuadraticDeepestContact(ak_v3f P0, ak_v3f P1, ak_f32 RadiusA, ak_f32 RadiusB)
 {
-    f32 Radius = RadiusA+RadiusB;
+    ak_f32 Radius = RadiusA+RadiusB;
     
-    v3f Normal = P1-P0;
-    f32 NormalLength = Magnitude(Normal);
-    ASSERT(!IsFuzzyZero(NormalLength));
-    f32 Penetration = Radius-NormalLength;
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_Magnitude(Normal);
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined");
+    ak_f32 Penetration = Radius-NormalLength;
     
     Normal /= NormalLength;
     
-    v3f PointOnA = P0 + Normal*RadiusA;
-    v3f PointOnB = P1 - Normal*RadiusB;
+    ak_v3f PointOnA = P0 + Normal*RadiusA;
+    ak_v3f PointOnB = P1 - Normal*RadiusB;
     
     contact Result;
     Result.Normal = Normal;
     Result.Position = PointOnA + ((PointOnB-PointOnA)*0.5f);
-    Result.Penetration = MaximumF32(Radius-NormalLength, 0.0f);
+    Result.Penetration = AK_Max(Radius-NormalLength, 0.0f);
     return Result;
 }
 
@@ -490,71 +494,70 @@ contact GetSphereSphereDeepestContact(sphere* SphereA, sphere* SphereB)
 
 contact GetSphereCapsuleDeepestContact(sphere* SphereA, capsule* CapsuleB)
 {
-    v3f P0 = SphereA->CenterP;
-    v3f P1 = PointLineSegmentClosestPoint(P0, CapsuleB->P);
+    ak_v3f P0 = SphereA->CenterP;
+    ak_v3f P1 = PointLineSegmentClosestPoint(P0, CapsuleB->P);
     contact Result = GetQuadraticDeepestContact(P0, P1, SphereA->Radius, CapsuleB->Radius);
     return Result;
 }
 
-contact GetSphereHullDeepestContact(sphere* Sphere, convex_hull* ConvexHull, sqt ConvexHullTransform)
+contact GetSphereHullDeepestContact(sphere* Sphere, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
 {
     point_support PointGJK = {Sphere->CenterP};
     convex_hull_support ConvexHullGJK = {ConvexHull, ConvexHullTransform};
     
     gjk_distance Distance = GJKDistance(&PointGJK, &ConvexHullGJK);
     
-    v3f P0, P1;
+    ak_v3f P0, P1;
     Distance.GetClosestPoints(&P0, &P1);
     
-    v3f Normal = P1-P0;
-    f32 NormalLength = Magnitude(Normal);
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_Magnitude(Normal);
     
-    ASSERT(!IsFuzzyZero(NormalLength));
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined for GJK");
     
     Normal /= NormalLength;
     
     contact Result;
     Result.Normal = Normal;
     Result.Position = P1;
-    Result.Penetration = MaximumF32(Sphere->Radius-NormalLength, 0.0f);
+    Result.Penetration = AK_Max(Sphere->Radius-NormalLength, 0.0f);
     
     return Result;
 }
 
 contact GetCapsuleCapsuleDeepestContact(capsule* CapsuleA, capsule* CapsuleB)
 {
-    v3f P[2];
+    ak_v3f P[2];
     LineSegmentsClosestPoints(P, CapsuleA->P, CapsuleB->P);
     contact Result = GetQuadraticDeepestContact(P[0], P[1], CapsuleA->Radius, CapsuleB->Radius);
     return Result;
 }
 
-contact GetCapsuleHullDeepestContact(capsule* Capsule, convex_hull* ConvexHull, sqt ConvexHullTransform)
+contact GetCapsuleHullDeepestContact(capsule* Capsule, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
 {
     line_segment_support AGJK = {Capsule->P0, Capsule->P1};
     convex_hull_support  BGJK = {ConvexHull, ConvexHullTransform};
     
     gjk_distance Distance = GJKDistance(&AGJK, &BGJK);
-    
-    
-    v3f P0, P1;
+        
+    ak_v3f P0, P1;
     Distance.GetClosestPoints(&P0, &P1);
     
-    v3f Normal = P1-P0;
-    f32 NormalLength = Magnitude(Normal);
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_Magnitude(Normal);
     
-    ASSERT(!IsFuzzyZero(NormalLength));
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined for GJK");
     
     Normal /= NormalLength;
     
     contact Result;
     Result.Normal = Normal;
     Result.Position = P1;
-    Result.Penetration = MaximumF32(Capsule->Radius-NormalLength, 0.0f);    
+    Result.Penetration = AK_Max(Capsule->Radius-NormalLength, 0.0f);    
     return Result;
 }
 
-b32 EPATest(contact* Contact, convex_hull* ConvexHullA, sqt ConvexHullTransformA, convex_hull* ConvexHullB, sqt ConvexHullTransformB)
+ak_bool EPATest(contact* Contact, convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB)
 {
     margin_convex_hull_support AEPA = {ConvexHullA, ConvexHullTransformA, 0.005f};
     margin_convex_hull_support BEPA = {ConvexHullB, ConvexHullTransformB, 0.005f};
@@ -563,22 +566,22 @@ b32 EPATest(contact* Contact, convex_hull* ConvexHullA, sqt ConvexHullTransformA
         return false;    
     
     Contact->Normal = EPAResult.Normal;        
-    Contact->Penetration = MaximumF32((AEPA.Margin + BEPA.Margin) - EPAResult.Penetration, 0.0f);
-    v3f PointOnA = EPAResult.Witness[0] + Contact->Normal*AEPA.Margin;
-    v3f PointOnB = EPAResult.Witness[1] - Contact->Normal*BEPA.Margin;    
+    Contact->Penetration = AK_Max((AEPA.Margin + BEPA.Margin) - EPAResult.Penetration, 0.0f);
+    ak_v3f PointOnA = EPAResult.Witness[0] + Contact->Normal*AEPA.Margin;
+    ak_v3f PointOnB = EPAResult.Witness[1] - Contact->Normal*BEPA.Margin;    
     Contact->Position = PointOnA + ((PointOnB-PointOnA)*0.5f);        
     return true;
 }
 
-contact GetHullHullDeepestContact(convex_hull* ConvexHullA, sqt ConvexHullTransformA, convex_hull* ConvexHullB, sqt ConvexHullTransformB)
+contact GetHullHullDeepestContact(convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB)
 {
     convex_hull_support AGJK = {ConvexHullA, ConvexHullTransformA};
     convex_hull_support BGJK = {ConvexHullB, ConvexHullTransformB};
     
-    b32 Intersecting = GJKIntersected(&AGJK, &BGJK);
+    ak_bool Intersecting = GJKIntersected(&AGJK, &BGJK);
     gjk_distance DistanceResult = GJKDistance(&AGJK, &BGJK);                                                                                                               
-    f32 SqrLength = SquareMagnitude(DistanceResult.V);                                                
-    b32 ShouldDoEPA = SqrLength < GJK_RELATIVE_ERROR;
+    ak_f32 SqrLength = AK_SqrMagnitude(DistanceResult.V);                                                
+    ak_bool ShouldDoEPA = SqrLength < GJK_RELATIVE_ERROR;
     
     contact Contact;
     if(Intersecting || ShouldDoEPA)
@@ -587,51 +590,51 @@ contact GetHullHullDeepestContact(convex_hull* ConvexHullA, sqt ConvexHullTransf
             return Contact;                            
     }    
     
-    v3f Witness0, Witness1;
+    ak_v3f Witness0, Witness1;
     DistanceResult.GetClosestPoints(&Witness0, &Witness1);                            
-    Contact.Normal = Normalize(Witness1-Witness0);
+    Contact.Normal = AK_Normalize(Witness1-Witness0);
     Contact.Penetration = 0;
     Contact.Position = Witness0 + ((Witness1-Witness0)*0.5f);
     return Contact;    
 }
 
 #define BISECTION_EPSILON 1e-6f
-inline f32 
-GetBisectionMid(v3f DeltaA, v3f DeltaB, f32 tStart, f32 tEnd)
+inline ak_f32 
+GetBisectionMid(ak_v3f DeltaA, ak_v3f DeltaB, ak_f32 tStart, ak_f32 tEnd)
 {
-    v3f Delta = DeltaA-DeltaB;    
-    if(AreNearlyEqualV3(Delta*tStart, Delta*tEnd, BISECTION_EPSILON))
+    ak_v3f Delta = DeltaA-DeltaB;    
+    if(AK_EqualApprox(Delta*tStart, Delta*tEnd, BISECTION_EPSILON))
         return tStart;
     
     return (tStart+tEnd)*0.5f;    
 }
 
-f32 HullHullTOI(convex_hull* HullA, sqt TransformA, v3f DeltaA, 
-                convex_hull* HullB, sqt TransformB, v3f DeltaB)
+ak_f32 HullHullTOI(convex_hull* HullA, ak_sqtf TransformA, ak_v3f DeltaA, 
+                   convex_hull* HullB, ak_sqtf TransformB, ak_v3f DeltaB)
 {    
     moving_convex_hull_support A = {HullA, TransformA, DeltaA};
     moving_convex_hull_support B = {HullB, TransformB, DeltaB};
     
     if(GJKIntersected(&A, &B))    
     {
-        f32 tStart = 0.0f;
-        f32 tEnd = 1.0f;
+        ak_f32 tStart = 0.0f;
+        ak_f32 tEnd = 1.0f;
         for(;;)
         {        
-            f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
+            ak_f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
             if(tMid == tStart)
                 return tStart;
             
-            moving_convex_hull_support StartA = {HullA, CreateSQT(TransformA.Translation+(DeltaA*tStart), TransformA.Scale, TransformA.Orientation), DeltaA*tMid};
-            moving_convex_hull_support StartB = {HullB, CreateSQT(TransformB.Translation+(DeltaB*tStart), TransformB.Scale, TransformB.Orientation), DeltaB*tMid};
+            moving_convex_hull_support StartA = {HullA, AK_SQT(TransformA.Translation+(DeltaA*tStart), TransformA.Orientation, TransformA.Scale), DeltaA*tMid};
+            moving_convex_hull_support StartB = {HullB, AK_SQT(TransformB.Translation+(DeltaB*tStart), TransformB.Orientation, TransformB.Scale), DeltaB*tMid};
             if(GJKIntersected(&StartA, &StartB))
             {
                 tEnd = tMid;
                 continue;
             }
             
-            moving_convex_hull_support EndA = {HullA, CreateSQT(TransformA.Translation+(DeltaA*tMid), TransformA.Scale, TransformA.Orientation), DeltaA*tEnd};
-            moving_convex_hull_support EndB = {HullB, CreateSQT(TransformB.Translation+(DeltaB*tMid), TransformB.Scale, TransformB.Orientation), DeltaB*tEnd};
+            moving_convex_hull_support EndA = {HullA, AK_SQT(TransformA.Translation+(DeltaA*tMid), TransformA.Orientation, TransformA.Scale), DeltaA*tEnd};
+            moving_convex_hull_support EndB = {HullB, AK_SQT(TransformB.Translation+(DeltaB*tMid), TransformB.Orientation, TransformB.Scale), DeltaB*tEnd};
             if(GJKIntersected(&EndA, &EndB))
             {
                 tStart = tMid;
@@ -646,23 +649,23 @@ f32 HullHullTOI(convex_hull* HullA, sqt TransformA, v3f DeltaA,
 }
 
 
-f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, sqt Transform, v3f DeltaB)
+ak_f32 CapsuleHullTOI(capsule* Capsule, ak_v3f DeltaA, convex_hull* Hull, ak_sqtf Transform, ak_v3f DeltaB)
 {    
     moving_line_segment_support A = {Capsule->P0, Capsule->P1, DeltaA};
     moving_convex_hull_support  B = {Hull, Transform, DeltaB};
     
     if(GJKQuadraticIntersected(&A, &B, Capsule->Radius))
     {
-        f32 tStart = 0.0f;
-        f32 tEnd = 1.0f;
+        ak_f32 tStart = 0.0f;
+        ak_f32 tEnd = 1.0f;
         for(;;)
         {
-            f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
+            ak_f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
             if(tMid == tStart)
                 return tStart;
             
             moving_line_segment_support StartA = {Capsule->P0+DeltaA*tStart, Capsule->P1+DeltaA*tStart, DeltaA*tMid};
-            moving_convex_hull_support StartB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tStart), Transform.Scale, Transform.Orientation), DeltaB*tMid};
+            moving_convex_hull_support StartB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tStart), Transform.Orientation, Transform.Scale), DeltaB*tMid};
             if(GJKQuadraticIntersected(&StartA, &StartB, Capsule->Radius))
             {
                 tEnd = tMid;
@@ -670,7 +673,7 @@ f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, sqt Transfor
             }
             
             moving_line_segment_support EndA = {Capsule->P0+DeltaA*tMid, Capsule->P1+DeltaA*tMid, DeltaA*tEnd};
-            moving_convex_hull_support EndB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tMid), Transform.Scale, Transform.Orientation), DeltaB*tEnd};
+            moving_convex_hull_support EndB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tMid), Transform.Orientation, Transform.Scale), DeltaB*tEnd};
             if(GJKQuadraticIntersected(&EndA, &EndB, Capsule->Radius))
             {
                 tStart = tMid;
@@ -684,24 +687,24 @@ f32 CapsuleHullTOI(capsule* Capsule, v3f DeltaA, convex_hull* Hull, sqt Transfor
     return INFINITY;    
 }
 
-f32 SphereHullTOI(sphere* Sphere, v3f DeltaA, convex_hull* Hull, sqt Transform, v3f DeltaB)
+ak_f32 SphereHullTOI(sphere* Sphere, ak_v3f DeltaA, convex_hull* Hull, ak_sqtf Transform, ak_v3f DeltaB)
 {    
     moving_point_support A = {Sphere->CenterP, DeltaA};
     moving_convex_hull_support B = {Hull, Transform, DeltaB};
     
     if(GJKQuadraticIntersected(&A, &B, Sphere->Radius))
     {
-        f32 tStart = 0.0f;
-        f32 tEnd = 1.0f;
+        ak_f32 tStart = 0.0f;
+        ak_f32 tEnd = 1.0f;
         
         for(;;)
         {
-            f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
+            ak_f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
             if(tMid == tStart)
                 return tStart;
             
             moving_point_support StartA = {Sphere->CenterP+DeltaA*tStart, DeltaA*tMid};
-            moving_convex_hull_support StartB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tStart), Transform.Scale, Transform.Orientation), DeltaB*tMid};
+            moving_convex_hull_support StartB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tStart), Transform.Orientation, Transform.Scale), DeltaB*tMid};
             if(GJKQuadraticIntersected(&StartA, &StartB, Sphere->Radius))
             {
                 tEnd = tMid;
@@ -709,7 +712,7 @@ f32 SphereHullTOI(sphere* Sphere, v3f DeltaA, convex_hull* Hull, sqt Transform, 
             }
             
             moving_point_support EndA = {Sphere->CenterP+DeltaA*tMid, DeltaA*tEnd};
-            moving_convex_hull_support EndB = {Hull, CreateSQT(Transform.Translation+(DeltaB*tMid), Transform.Scale, Transform.Orientation), DeltaB*tEnd};
+            moving_convex_hull_support EndB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tMid), Transform.Orientation, Transform.Scale), DeltaB*tEnd};
             if(GJKQuadraticIntersected(&EndA, &EndB, Sphere->Radius))
             {
                 tStart = tMid;
@@ -723,20 +726,20 @@ f32 SphereHullTOI(sphere* Sphere, v3f DeltaA, convex_hull* Hull, sqt Transform, 
     return INFINITY;
 }
 
-f32 CapsuleCapsuleTOI(capsule* CapsuleA, v3f DeltaA, capsule* CapsuleB, v3f DeltaB)
+ak_f32 CapsuleCapsuleTOI(capsule* CapsuleA, ak_v3f DeltaA, capsule* CapsuleB, ak_v3f DeltaB)
 {
     moving_line_segment_support A = {CapsuleA->P0, CapsuleA->P1, DeltaA};
     moving_line_segment_support B = {CapsuleB->P0, CapsuleB->P1, DeltaB};
     
-    f32 Radius = CapsuleA->Radius+CapsuleB->Radius;
+    ak_f32 Radius = CapsuleA->Radius+CapsuleB->Radius;
     if(GJKQuadraticIntersected(&A, &B, Radius))
     {
-        f32 tStart = 0.0f;
-        f32 tEnd = 1.0f;
+        ak_f32 tStart = 0.0f;
+        ak_f32 tEnd = 1.0f;
         
         for(;;)
         {
-            f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
+            ak_f32 tMid = GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
             if(tMid == tStart)
                 return tStart;
             
@@ -763,22 +766,22 @@ f32 CapsuleCapsuleTOI(capsule* CapsuleA, v3f DeltaA, capsule* CapsuleB, v3f Delt
     return INFINITY;
 }
 
-f32 SphereSphereTOI(sphere* SphereA, v3f DeltaA, sphere* SphereB, v3f DeltaB)
+ak_f32 SphereSphereTOI(sphere* SphereA, ak_v3f DeltaA, sphere* SphereB, ak_v3f DeltaB)
 {
     sphere LargeSphere = CreateSphere(SphereB->CenterP, SphereA->Radius+SphereB->Radius);
-    v3f Delta = DeltaA-DeltaB;
-    v3f LineSegment[2] = {SphereA->CenterP, SphereA->CenterP+Delta};
+    ak_v3f Delta = DeltaA-DeltaB;
+    ak_v3f LineSegment[2] = {SphereA->CenterP, SphereA->CenterP+Delta};
     
-    f32 Result = LineSegmentSphereIntersection(LineSegment, &LargeSphere);
+    ak_f32 Result = LineSegmentSphereIntersection(LineSegment, &LargeSphere);
     return Result;
 }
 
-f32 SphereCapsuleTOI(sphere* Sphere, v3f DeltaA, capsule* Capsule, v3f DeltaB)
+ak_f32 SphereCapsuleTOI(sphere* Sphere, ak_v3f DeltaA, capsule* Capsule, ak_v3f DeltaB)
 {
     capsule LargeCapsule = CreateCapsule(Capsule->P0, Capsule->P1, Sphere->Radius+Capsule->Radius);
-    v3f Delta = DeltaA-DeltaB;
-    v3f LineSegment[2] = {Sphere->CenterP, Sphere->CenterP+Delta};
+    ak_v3f Delta = DeltaA-DeltaB;
+    ak_v3f LineSegment[2] = {Sphere->CenterP, Sphere->CenterP+Delta};
     
-    f32 Result = LineSegmentCapsuleIntersection(LineSegment, &LargeCapsule);
+    ak_f32 Result = LineSegmentCapsuleIntersection(LineSegment, &LargeCapsule);
     return Result;
 }

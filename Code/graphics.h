@@ -1,6 +1,12 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
+#if DEVELOPER_BUILD
+#ifndef AK_DEVELOPER_BUILD
+#define AK_DEVELOPER_BUILD
+#endif
+#endif
+
 #include <ak_common.h>
 
 #define MAX_JOINT_COUNT 256
@@ -13,16 +19,16 @@
 #define INVALID_GRAPHICS_MESH_ID ((graphics_mesh_id)-1)
 #define INVALID_GRAPHICS_TEXTURE_ID ((graphics_texture_id)-1)
 
-typedef i64 graphics_texture_id;
-typedef i64 graphics_mesh_id;
+typedef ak_u64 graphics_texture_id;
+typedef ak_u64 graphics_mesh_id;
 
 struct view_settings
 {
-    v3f Position;
-    m3 Orientation;
-    f32 FieldOfView;
-    f32 ZNear;
-    f32 ZFar;
+    ak_v3f Position;
+    ak_m3f Orientation;
+    ak_f32 FieldOfView;
+    ak_f32 ZNear;
+    ak_f32 ZFar;
 };
 
 enum graphics_vertex_format
@@ -54,29 +60,29 @@ enum graphics_texture_format
 
 struct graphics_diffuse_material_slot
 {
-    b32 IsTexture;
+    ak_bool IsTexture;
     union
     {
         graphics_texture_id DiffuseID;
-        v3f Diffuse;
+        ak_v3f Diffuse;
     };
 };
 
 struct graphics_specular_material_slot
 {
-    b32 InUse;    
-    b32 IsTexture;
+    ak_bool InUse;    
+    ak_bool IsTexture;
     union
     {
         graphics_texture_id SpecularID;
-        f32 Specular;
+        ak_f32 Specular;
     };
-    i32 Shininess;
+    ak_i32 Shininess;
 };
 
 struct graphics_normal_material_slot
 {
-    b32 InUse;
+    ak_bool InUse;
     graphics_texture_id NormalID;
 };
 
@@ -101,8 +107,8 @@ ConvertToSRGBFormat(graphics_texture_format Format)
         {
             return GRAPHICS_TEXTURE_FORMAT_R8G8B8_SRGB_ALPHA8;
         }
-        
-        INVALID_DEFAULT_CASE;
+                        
+        AK_INVALID_DEFAULT_CASE;
     }
     
     return (graphics_texture_format)-1;
@@ -123,9 +129,9 @@ enum graphics_cull_mode
 
 struct graphics_draw_info
 {
-    u32 IndexCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
+    ak_u32 IndexCount;
+    ak_u32 IndexOffset;
+    ak_u32 VertexOffset;
 };
 
 struct graphics_sampler_info
@@ -136,25 +142,25 @@ struct graphics_sampler_info
 
 struct graphics_directional_light
 {    
-    v3f Position; 
-    v3f Direction;    
-    c3 Color;    
-    f32 Intensity;        
-    m4 ViewProjection;
+    ak_v3f Position; 
+    ak_v3f Direction;    
+    ak_color3f Color;    
+    ak_f32 Intensity;        
+    ak_m4f ViewProjection;
 };
 
 struct graphics_point_light
 {        
-    c3 Color;  
-    f32 Intensity;
-    v3f Position;
-    f32 Radius;
+    ak_color3f Color;  
+    ak_f32 Intensity;
+    ak_v3f Position;
+    ak_f32 Radius;
 };
 
 struct graphics_light_buffer
 {
-    u32 DirectionalLightCount;
-    u32 PointLightCount;
+    ak_u32 DirectionalLightCount;
+    ak_u32 PointLightCount;
     graphics_directional_light DirectionalLights[MAX_DIRECTIONAL_LIGHT_COUNT];    
     graphics_point_light PointLights[MAX_POINT_LIGHT_COUNT];
 };
@@ -168,35 +174,35 @@ enum graphics_blend
 
 struct graphics_render_buffer
 {
-    v2i Resolution;
+    ak_v2i Resolution;
 };
 
 #include "graphics_push_commands.h"
 
 struct graphics;
 
-#define ALLOCATE_TEXTURE(name) graphics_texture_id name(graphics* Graphics, void* Data, u32 Width, u32 Height, graphics_texture_format TextureFormat, graphics_sampler_info* SamplerInfo)
+#define ALLOCATE_TEXTURE(name) graphics_texture_id name(graphics* Graphics, void* Data, ak_u32 Width, ak_u32 Height, graphics_texture_format TextureFormat, graphics_sampler_info* SamplerInfo)
 typedef ALLOCATE_TEXTURE(allocate_texture);
 
-#define ALLOCATE_MESH(name) graphics_mesh_id name(graphics* Graphics, void* VertexData, ptr VertexDataSize, graphics_vertex_format VertexFormat, void* IndexData, ptr IndexDataSize, graphics_index_format IndexFormat)
+#define ALLOCATE_MESH(name) graphics_mesh_id name(graphics* Graphics, void* VertexData, ak_u32 VertexDataSize, graphics_vertex_format VertexFormat, void* IndexData, ak_u32 IndexDataSize, graphics_index_format IndexFormat)
 typedef ALLOCATE_MESH(allocate_mesh);
 
 #define ALLOCATE_DYNAMIC_MESH(name) graphics_mesh_id name(graphics* Graphics, graphics_vertex_format VertexFormat, graphics_index_format IndexFormat)
 typedef ALLOCATE_DYNAMIC_MESH(allocate_dynamic_mesh);
 
-#define ALLOCATE_RENDER_BUFFER(name) graphics_render_buffer* name(graphics* Graphics, v2i Resolution)
+#define ALLOCATE_RENDER_BUFFER(name) graphics_render_buffer* name(graphics* Graphics, ak_v2i Resolution)
 typedef ALLOCATE_RENDER_BUFFER(allocate_render_buffer);
 
 #define FREE_RENDER_BUFFER(name) void name(graphics* Graphics, graphics_render_buffer* RenderBuffer)
 typedef FREE_RENDER_BUFFER(free_render_buffer);
 
-#define STREAM_MESH_DATA(name) void name(graphics* Graphics, graphics_mesh_id MeshID, void* VertexData, ptr VertexSize, void* IndexData, ptr IndexSize)
+#define STREAM_MESH_DATA(name) void name(graphics* Graphics, graphics_mesh_id MeshID, void* VertexData, ak_u32 VertexSize, void* IndexData, ak_u32 IndexSize)
 typedef STREAM_MESH_DATA(stream_mesh_data);
 
-#define INIT_GRAPHICS(name) graphics* name(arena* TempStorage, void** PlatformData)
+#define INIT_GRAPHICS(name) graphics* name(ak_arena* TempStorage, void** PlatformData)
 typedef INIT_GRAPHICS(init_graphics);
 
-#define BIND_GRAPHICS_FUNCTIONS(name) b32 name(graphics* Graphics)
+#define BIND_GRAPHICS_FUNCTIONS(name) ak_bool name(graphics* Graphics)
 typedef BIND_GRAPHICS_FUNCTIONS(bind_graphics_functions);
 
 #define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, void* DevContext)
@@ -207,7 +213,7 @@ typedef INVALIDATE_SHADERS(invalidate_shaders);
 
 struct graphics
 {       
-    v2i RenderDim;
+    ak_v2i RenderDim;
     push_command_list CommandList;    
     void** PlatformData;                                        
     
@@ -243,62 +249,62 @@ INVALIDATE_SHADERS(Graphics_InvalidateShadersStub)
 {    
 }
 
-inline ptr 
+inline ak_u32 
 GetVertexStride(graphics_vertex_format Format)
 {
-    ptr Result = 0;
+    ak_u32 Result = 0;
     
     switch(Format)
     {
-        case GRAPHICS_VERTEX_FORMAT_P2_UV_C: { Result = sizeof(vertex_p2_uv_c); } break;        
-        case GRAPHICS_VERTEX_FORMAT_P3: { Result = sizeof(vertex_p3); } break;        
-        case GRAPHICS_VERTEX_FORMAT_P3_N3: { Result = sizeof(vertex_p3_n3); } break;        
-        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV: { Result = sizeof(vertex_p3_n3_uv); } break;
-        case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS: { Result = sizeof(vertex_p3_n3_weights); } break;
-        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS: { Result = sizeof(vertex_p3_n3_uv_weights); } break;                
-        INVALID_DEFAULT_CASE;
+        case GRAPHICS_VERTEX_FORMAT_P2_UV_C: { Result = sizeof(ak_vertex_p2_uv_c); } break;        
+        case GRAPHICS_VERTEX_FORMAT_P3: { Result = sizeof(ak_vertex_p3); } break;        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3: { Result = sizeof(ak_vertex_p3_n3); } break;        
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV: { Result = sizeof(ak_vertex_p3_n3_uv); } break;
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS: { Result = sizeof(ak_vertex_p3_n3_w); } break;
+        case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS: { Result = sizeof(ak_vertex_p3_n3_uv_w); } break;                
+        AK_INVALID_DEFAULT_CASE;
     }
     
     return Result;
 }
 
-inline ptr
-GetVertexBufferSize(graphics_vertex_format Format, u32 VertexCount)
+inline ak_u32
+GetVertexBufferSize(graphics_vertex_format Format, ak_u32 VertexCount)
 {
-    ptr Result = GetVertexStride(Format)*VertexCount;
+    ak_u32 Result = GetVertexStride(Format)*VertexCount;
     return Result;
 }
 
-inline ptr
+inline ak_u32
 GetIndexSize(graphics_index_format Format)
 {
-    ASSERT(Format != GRAPHICS_INDEX_FORMAT_UNKNOWN);    
-    ptr Result = (Format == GRAPHICS_INDEX_FORMAT_16_BIT) ? sizeof(u16) : sizeof(u32);
+    AK_Assert(Format != GRAPHICS_INDEX_FORMAT_UNKNOWN, "Unknown graphics index format");    
+    ak_u32 Result = (Format == GRAPHICS_INDEX_FORMAT_16_BIT) ? sizeof(ak_u16) : sizeof(ak_u32);
     return Result;
 }
 
-inline ptr
-GetIndexBufferSize(graphics_index_format Format, u32 IndexCount)
+inline ak_u32
+GetIndexBufferSize(graphics_index_format Format, ak_u32 IndexCount)
 {    
-    ptr Result = GetIndexSize(Format) * IndexCount;
+    ak_u32 Result = GetIndexSize(Format) * IndexCount;
     return Result;
 }
 
 inline graphics_directional_light
-CreateDirectionalLight(v3f Position, c3 Color, f32 Intensity, v3f Direction, 
-                       f32 MinX, f32 MaxX, f32 MinY, f32 MaxY, f32 MinZ, f32 MaxZ)
+CreateDirectionalLight(ak_v3f Position, ak_color3f Color, ak_f32 Intensity, ak_v3f Direction, 
+                       ak_f32 MinX, ak_f32 MaxX, ak_f32 MinY, ak_f32 MaxY, ak_f32 MinZ, ak_f32 MaxZ)
 {
     graphics_directional_light Result;
     Result.Position = Position;
     Result.Color = Color;
     Result.Intensity = Intensity;
     Result.Direction = Direction;    
-    Result.ViewProjection = LookAt(Position, Position+Direction)*OrthographicM4(MinX, MaxX, MinY, MaxY, MinZ, MaxZ);    
+    Result.ViewProjection = AK_LookAt(Position, Position+Direction)*AK_Orthographic(MinX, MaxX, MinY, MaxY, MinZ, MaxZ);    
     return Result;
 }
 
 inline graphics_point_light 
-CreatePointLight(c3 Color, f32 Intensity, v3f Position, f32 Radius)
+CreatePointLight(ak_color3f Color, ak_f32 Intensity, ak_v3f Position, ak_f32 Radius)
 {
     graphics_point_light Result;    
     Result.Color = Color;
@@ -309,7 +315,7 @@ CreatePointLight(c3 Color, f32 Intensity, v3f Position, f32 Radius)
 }
 
 inline graphics_diffuse_material_slot 
-CreateDiffuseMaterialSlot(c3 Diffuse)
+CreateDiffuseMaterialSlot(ak_color3f Diffuse)
 {
     graphics_diffuse_material_slot Result = {};
     Result.Diffuse = Diffuse;
@@ -332,13 +338,13 @@ inline graphics_material InvalidGraphicsMaterial()
     return Material;
 }
 
-b32 IsInvalidGraphicsMaterial(graphics_material Material)
+ak_bool IsInvalidGraphicsMaterial(graphics_material Material)
 {
-    b32 Result = Material.Diffuse.IsTexture == -1;
+    ak_bool Result = Material.Diffuse.IsTexture == -1;
     return Result;
 }
 
-inline b32 
+inline ak_bool 
 DiffuseSlotsEqual(graphics_diffuse_material_slot A, graphics_diffuse_material_slot B)
 {
     if(A.IsTexture == -1 || B.IsTexture == -1) return false;    
@@ -348,7 +354,7 @@ DiffuseSlotsEqual(graphics_diffuse_material_slot A, graphics_diffuse_material_sl
     else return A.Diffuse == B.Diffuse;    
 }
 
-inline b32
+inline ak_bool
 NormalSlotsEqual(graphics_normal_material_slot A, graphics_normal_material_slot B)
 {
     if(A.InUse != B.InUse) return false;    
@@ -356,7 +362,7 @@ NormalSlotsEqual(graphics_normal_material_slot A, graphics_normal_material_slot 
     else return true;    
 }
 
-inline b32
+inline ak_bool
 SpecularSlotsEqual(graphics_specular_material_slot A, graphics_specular_material_slot B)
 {
     if(A.InUse != B.InUse) return false;
@@ -372,19 +378,19 @@ SpecularSlotsEqual(graphics_specular_material_slot A, graphics_specular_material
     else return true;
 }
 
-inline b32 
+inline ak_bool 
 AreSameMaterials(graphics_material A, graphics_material B)
 {
-    b32 Result = (DiffuseSlotsEqual(A.Diffuse, B.Diffuse) && 
-                  NormalSlotsEqual(A.Normal, B.Normal) && 
-                  SpecularSlotsEqual(A.Specular, B.Specular));
+    ak_bool Result = (DiffuseSlotsEqual(A.Diffuse, B.Diffuse) && 
+                      NormalSlotsEqual(A.Normal, B.Normal) && 
+                      SpecularSlotsEqual(A.Specular, B.Specular));
     return Result;
 }
 
-inline b32
+inline ak_bool
 ShouldUpdateMaterial(graphics_material Current, graphics_material Prev)
 {
-    b32 Result = !IsInvalidGraphicsMaterial(Current) && !AreSameMaterials(Current, Prev);
+    ak_bool Result = !IsInvalidGraphicsMaterial(Current) && !AreSameMaterials(Current, Prev);
     return Result;
 }
 

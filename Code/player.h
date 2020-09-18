@@ -11,7 +11,7 @@ enum player_state
 struct pushing_object
 {
     entity_id PlayerID;
-    v2f Direction;
+    ak_v2f Direction;
 };
 
 struct player

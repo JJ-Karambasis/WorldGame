@@ -3,50 +3,59 @@
 
 graphics_mesh_id AllocateConvexHullMesh(graphics* Graphics, convex_hull* ConvexHull)
 {
-    v3f* Vertices = PushArray(ConvexHull->Header.VertexCount, v3f, Clear, 0);    
-    u32 IndexCount = ConvexHullIndexCount(ConvexHull);
-    u16* Indices = PushArray(IndexCount, u16, Clear, 0);
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    for(u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
+    ak_v3f* Vertices = GlobalArena->PushArray<ak_v3f>(ConvexHull->Header.VertexCount);
+    ak_u32 IndexCount = ConvexHullIndexCount(ConvexHull);
+    ak_u16* Indices = GlobalArena->PushArray<ak_u16>(IndexCount);
+    
+    for(ak_u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
         Vertices[VertexIndex] = ConvexHull->Vertices[VertexIndex].V;
     
-    u32 Index = 0;
-    for(u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
+    ak_u32 Index = 0;
+    for(ak_u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
     {
         half_face* Face = ConvexHull->Faces + FaceIndex;
         
-        i32 Edge = Face->Edge;
+        ak_i32 Edge = Face->Edge;
         do
         {
-            Indices[Index++] = (u16)ConvexHull->Edges[Edge].Vertex;
-            Indices[Index++] = (u16)ConvexHull->Edges[ConvexHull->Edges[Edge].EdgePair].Vertex;
+            Indices[Index++] = (ak_u16)ConvexHull->Edges[Edge].Vertex;
+            Indices[Index++] = (ak_u16)ConvexHull->Edges[ConvexHull->Edges[Edge].EdgePair].Vertex;
             Edge = ConvexHull->Edges[Edge].NextEdge;
         } while (Edge != Face->Edge);        
     }
     
-    ASSERT(Index == IndexCount);
-    graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Vertices, sizeof(v3f)*ConvexHull->Header.VertexCount, GRAPHICS_VERTEX_FORMAT_P3,
-                                                     Indices, IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
+    AK_Assert(Index == IndexCount, "Failed to build convex hull indexes properly. This is a programming error");
+    graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Vertices, sizeof(ak_v3f)*ConvexHull->Header.VertexCount, GRAPHICS_VERTEX_FORMAT_P3,
+                                                     Indices, IndexCount*sizeof(ak_u16), GRAPHICS_INDEX_FORMAT_16_BIT);
+    GlobalArena->EndTemp(&TempArena);
     return Result;
 }
 
-graphics_mesh_id AllocateMesh(graphics* Graphics, mesh_generation_result* Mesh)
+graphics_mesh_id AllocateMesh(graphics* Graphics, ak_mesh_result* Mesh)
 {
-    graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
-                                                     Mesh->Indices, Mesh->IndexCount*sizeof(u16), GRAPHICS_INDEX_FORMAT_16_BIT);
+    graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(ak_vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
+                                                     Mesh->Indices, Mesh->IndexCount*sizeof(ak_u16), GRAPHICS_INDEX_FORMAT_16_BIT);
     return Result;
 }
 
-void CreateDevLineSphereMesh(dev_context* DevContext, u16 CircleSampleCount)
+void CreateDevLineSphereMesh(dev_context* DevContext, ak_u16 CircleSampleCount)
 {
-    mesh_generation_result MeshGenerationResult = GenerateLineSphere(GetDefaultArena(), 1.0f, CircleSampleCount);        
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_mesh_result MeshGenerationResult = AK_GenerateLineSphere(GlobalArena, 1.0f, CircleSampleCount);        
     DevContext->LineSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->LineSphereMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);        
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
-void CreateDevTriangleCircleMesh(dev_context* DevContext, u16 CircleSampleCount, f32 Height)
+void CreateDevTriangleCircleMesh(dev_context* DevContext, ak_u16 CircleSampleCount, ak_f32 Height)
 {
-    mesh_generation_result MeshGenerationResult = GenerateTriangleCircle(&DevContext->DevStorage, 1.0f, Height, CircleSampleCount);        
+    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleCircle(DevContext->DevStorage, 1.0f, Height, CircleSampleCount);        
     DevContext->TriangleCircleMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleCircleMesh.Indices = MeshGenerationResult.Indices;
     DevContext->TriangleCircleMesh.VertexCount = MeshGenerationResult.VertexCount;
@@ -56,76 +65,109 @@ void CreateDevTriangleCircleMesh(dev_context* DevContext, u16 CircleSampleCount,
 
 void CreateDevLineBoxMesh(dev_context* DevContext)
 {
-    mesh_generation_result MeshGenerationResult = GenerateLineBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));    
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_mesh_result MeshGenerationResult = AK_GenerateLineBox(GlobalArena, AK_V3(1.0f, 1.0f, 1.0f));    
     DevContext->LineBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->LineBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
 void CreateDevTriangleBoxMesh(dev_context* DevContext)
 {
-    mesh_generation_result MeshGenerationResult = GenerateTriangleBox(GetDefaultArena(), V3(1.0f, 1.0f, 1.0f));       
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleBox(GlobalArena, AK_V3(1.0f, 1.0f, 1.0f));       
     DevContext->TriangleBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleBoxMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
 void CreateDevTriangleSphereMesh(dev_context* DevContext)
 {
-    mesh_generation_result MeshGenerationResult = GenerateIcosahedronSphere(GetDefaultArena(), 2, 1.0f);
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleSphere(GlobalArena, 1.0f, 2);
     DevContext->TriangleSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleSphereMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
-void CreateDevTriangleCylinderMesh(dev_context* DevContext, u16 CircleSampleCount)
+void CreateDevTriangleCylinderMesh(dev_context* DevContext, ak_u16 CircleSampleCount)
 {
-    mesh_generation_result MeshGenerationResult = GenerateTriangleCylinder(GetDefaultArena(), 1.0f, 1.0f, CircleSampleCount);
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleCylinder(GlobalArena, 1.0f, 1.0f, CircleSampleCount);
     DevContext->TriangleCylinderMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleCylinderMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
-void CreateDevTriangleConeMesh(dev_context* DevContext, u16 CircleSampleCount)
+void CreateDevTriangleConeMesh(dev_context* DevContext, ak_u16 CircleSampleCount)
 {
-    mesh_generation_result MeshGenerationResult = GenerateTriangleCone(GetDefaultArena(), 1.0f, 1.0f, CircleSampleCount);
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleCone(GlobalArena, 1.0f, 1.0f, CircleSampleCount);
     DevContext->TriangleConeMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleConeMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
-void CreateDevTriangleArrowMesh(dev_context* DevContext, u16 CircleSampleCount, f32 Radius, f32 Height, f32 ArrowRadius, f32 ArrowHeight)
+void CreateDevTriangleArrowMesh(dev_context* DevContext, ak_u16 CircleSampleCount, ak_f32 Radius, ak_f32 Height, ak_f32 ArrowRadius, ak_f32 ArrowHeight)
 {
-    mesh_generation_result BodyResult = GenerateTriangleCylinder(GetDefaultArena(), Radius, Height, CircleSampleCount);
-    mesh_generation_result ArrowResult = GenerateTriangleCone(GetDefaultArena(), ArrowRadius, ArrowHeight, CircleSampleCount, V3(0.0f, 0.0f, Height));
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(&DevContext->DevStorage, BodyResult.VertexCount+ArrowResult.VertexCount, 
-                                                                               BodyResult.IndexCount+ArrowResult.IndexCount);
+    ak_mesh_result BodyResult = AK_GenerateTriangleCylinder(GlobalArena, Radius, Height, CircleSampleCount);
+    ak_mesh_result ArrowResult = AK_GenerateTriangleCone(GlobalArena, ArrowRadius, ArrowHeight, CircleSampleCount, AK_V3(0.0f, 0.0f, Height));
     
-    ptr BodyResultVerticesSize = sizeof(vertex_p3)*BodyResult.VertexCount;
-    ptr BodyResultIndicesSize = sizeof(u16)*BodyResult.IndexCount;
-    CopyMemory(MeshGenerationResult.Vertices, BodyResult.Vertices, BodyResultVerticesSize);
-    CopyMemory(MeshGenerationResult.Indices, BodyResult.Indices, BodyResultIndicesSize);
-    CopyMemory((u8*)MeshGenerationResult.Vertices+BodyResultVerticesSize, ArrowResult.Vertices, sizeof(vertex_p3)*ArrowResult.VertexCount);
-    CopyMemory((u8*)MeshGenerationResult.Indices+BodyResultIndicesSize, ArrowResult.Indices, sizeof(u16)*ArrowResult.IndexCount);
+    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(DevContext->DevStorage, BodyResult.VertexCount+ArrowResult.VertexCount, 
+                                                                BodyResult.IndexCount+ArrowResult.IndexCount);    
     
-    OffsetIndices(MeshGenerationResult.Indices+BodyResult.IndexCount, SafeU16(ArrowResult.IndexCount), SafeU16(BodyResult.VertexCount));
+    ak_uaddr BodyResultVerticesSize = sizeof(ak_vertex_p3)*BodyResult.VertexCount;
+    ak_uaddr BodyResultIndicesSize = sizeof(ak_u16)*BodyResult.IndexCount;
+    AK_MemoryCopy(MeshGenerationResult.Vertices, BodyResult.Vertices, BodyResultVerticesSize);
+    AK_MemoryCopy(MeshGenerationResult.Indices, BodyResult.Indices, BodyResultIndicesSize);
+    AK_MemoryCopy((ak_u8*)MeshGenerationResult.Vertices+BodyResultVerticesSize, ArrowResult.Vertices, sizeof(ak_vertex_p3)*ArrowResult.VertexCount);
+    AK_MemoryCopy((ak_u8*)MeshGenerationResult.Indices+BodyResultIndicesSize, ArrowResult.Indices, sizeof(ak_u16)*ArrowResult.IndexCount);
+    
+    AK_OffsetIndices(MeshGenerationResult.Indices+BodyResult.IndexCount, AK_SafeU16(ArrowResult.IndexCount), AK_SafeU16(BodyResult.VertexCount));
     
     DevContext->TriangleArrowMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleArrowMesh.VertexCount = MeshGenerationResult.VertexCount;
     DevContext->TriangleArrowMesh.Vertices = MeshGenerationResult.Vertices;
     DevContext->TriangleArrowMesh.Indices = MeshGenerationResult.Indices;
     DevContext->TriangleArrowMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
-void CreateDevLineCapsuleMesh(dev_context* DevContext, f32 Radius, u16 CircleSampleCount)
-{    
-    mesh_generation_result CapResult = GenerateLineHemisphere(GetDefaultArena(), Radius, CircleSampleCount);    
-    mesh_generation_result BodyResult = AllocateMeshGenerationResult(GetDefaultArena(), 8, 8);
+void CreateDevLineCapsuleMesh(dev_context* DevContext, ak_f32 Radius, ak_u16 CircleSampleCount)
+{   
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    BodyResult.Vertices[0] = {V3( 1.0f*Radius,  0.0f, -0.5f)};
-    BodyResult.Vertices[1] = {V3( 1.0f*Radius,  0.0f,  0.5f)};
-    BodyResult.Vertices[2] = {V3( 0.0f,  1.0f*Radius, -0.5f)};
-    BodyResult.Vertices[3] = {V3( 0.0f,  1.0f*Radius,  0.5f)};
-    BodyResult.Vertices[4] = {V3(-1.0f*Radius,  0.0f, -0.5f)};
-    BodyResult.Vertices[5] = {V3(-1.0f*Radius,  0.0f,  0.5f)};
-    BodyResult.Vertices[6] = {V3( 0.0f, -1.0f*Radius, -0.5f)};
-    BodyResult.Vertices[7] = {V3( 0.0f, -1.0f*Radius,  0.5f)};
+    ak_mesh_result CapResult = AK_GenerateLineHemisphere(GlobalArena, Radius, CircleSampleCount);    
+    ak_mesh_result BodyResult = AK_AllocateMeshResult(GlobalArena, 8, 8);
+    
+    BodyResult.Vertices[0] = {AK_V3( 1.0f*Radius,  0.0f, -0.5f)};
+    BodyResult.Vertices[1] = {AK_V3( 1.0f*Radius,  0.0f,  0.5f)};
+    BodyResult.Vertices[2] = {AK_V3( 0.0f,  1.0f*Radius, -0.5f)};
+    BodyResult.Vertices[3] = {AK_V3( 0.0f,  1.0f*Radius,  0.5f)};
+    BodyResult.Vertices[4] = {AK_V3(-1.0f*Radius,  0.0f, -0.5f)};
+    BodyResult.Vertices[5] = {AK_V3(-1.0f*Radius,  0.0f,  0.5f)};
+    BodyResult.Vertices[6] = {AK_V3( 0.0f, -1.0f*Radius, -0.5f)};
+    BodyResult.Vertices[7] = {AK_V3( 0.0f, -1.0f*Radius,  0.5f)};
     
     BodyResult.Indices[0] = 0;
     BodyResult.Indices[1] = 1;
@@ -136,43 +178,41 @@ void CreateDevLineCapsuleMesh(dev_context* DevContext, f32 Radius, u16 CircleSam
     BodyResult.Indices[6] = 6;
     BodyResult.Indices[7] = 7;
     
-    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(GetDefaultArena(), CapResult.VertexCount+BodyResult.VertexCount, 
-                                                                               CapResult.IndexCount+BodyResult.IndexCount);
+    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(GlobalArena, CapResult.VertexCount+BodyResult.VertexCount, 
+                                                                CapResult.IndexCount+BodyResult.IndexCount);
     
-    ptr CapResultVerticesSize = sizeof(vertex_p3)*CapResult.VertexCount;
-    ptr CapResultIndicesSize = sizeof(u16)*CapResult.IndexCount;
-    CopyMemory(MeshGenerationResult.Vertices, CapResult.Vertices, CapResultVerticesSize);
-    CopyMemory(MeshGenerationResult.Indices, CapResult.Indices, CapResultIndicesSize);
-    CopyMemory((u8*)MeshGenerationResult.Vertices+CapResultVerticesSize, BodyResult.Vertices, sizeof(vertex_p3)*BodyResult.VertexCount);
-    CopyMemory((u8*)MeshGenerationResult.Indices+CapResultIndicesSize, BodyResult.Indices, sizeof(u16)*BodyResult.IndexCount);
+    ak_uaddr CapResultVerticesSize = sizeof(ak_vertex_p3)*CapResult.VertexCount;
+    ak_uaddr CapResultIndicesSize = sizeof(ak_u16)*CapResult.IndexCount;
+    AK_MemoryCopy(MeshGenerationResult.Vertices, CapResult.Vertices, CapResultVerticesSize);
+    AK_MemoryCopy(MeshGenerationResult.Indices, CapResult.Indices, CapResultIndicesSize);
+    AK_MemoryCopy((ak_u8*)MeshGenerationResult.Vertices+CapResultVerticesSize, BodyResult.Vertices, sizeof(ak_vertex_p3)*BodyResult.VertexCount);
+    CopyMemory((ak_u8*)MeshGenerationResult.Indices+CapResultIndicesSize, BodyResult.Indices, sizeof(ak_u16)*BodyResult.IndexCount);
     
     DevContext->LineCapsuleMesh.CapIndexCount = CapResult.IndexCount;
     DevContext->LineCapsuleMesh.CapVertexCount = CapResult.VertexCount;
     DevContext->LineCapsuleMesh.BodyIndexCount = BodyResult.IndexCount;
     DevContext->LineCapsuleMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+    
+    GlobalArena->EndTemp(&TempArena);
 }
 
-void CreateDevPlaneMesh(dev_context* DevContext, f32 Width, f32 Height)
-{     
-    mesh_generation_result BodyResult = AllocateMeshGenerationResult(GetDefaultArena(), 4, 6);
+
+void CreateDevPlaneMesh(dev_context* DevContext, ak_f32 Width, ak_f32 Height)
+{         
+    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(DevContext->DevStorage, 4, 6);
     
-    BodyResult.Vertices[0] = {V3(-0.5f*Width,  0.5f*Height, 0.0f)}; //TopLeft
-    BodyResult.Vertices[1] = {V3( 0.5f*Width,  0.5f*Height, 0.0f)}; //TopRight
-    BodyResult.Vertices[2] = {V3(-0.5f*Width, -0.5f*Height, 0.0f)}; //BottomLeft
-    BodyResult.Vertices[3] = {V3( 0.5f*Width, -0.5f*Height, 0.0f)}; //BottomRight
+    MeshGenerationResult.Vertices[0] = {AK_V3(-0.5f*Width,  0.5f*Height, 0.0f)}; //TopLeft
+    MeshGenerationResult.Vertices[1] = {AK_V3( 0.5f*Width,  0.5f*Height, 0.0f)}; //TopRight
+    MeshGenerationResult.Vertices[2] = {AK_V3(-0.5f*Width, -0.5f*Height, 0.0f)}; //BottomLeft
+    MeshGenerationResult.Vertices[3] = {AK_V3( 0.5f*Width, -0.5f*Height, 0.0f)}; //BottomRight
 
     //BottomLeft, BottomRight, TopRight, TopLeft: Unwinding order
-    BodyResult.Indices[0] = 2;
-    BodyResult.Indices[1] = 3;
-    BodyResult.Indices[2] = 1;
-    BodyResult.Indices[3] = 1;
-    BodyResult.Indices[4] = 0;
-    BodyResult.Indices[5] = 2;
-    
-    mesh_generation_result MeshGenerationResult = AllocateMeshGenerationResult(&DevContext->DevStorage, BodyResult.VertexCount, BodyResult.IndexCount);
-    
-    CopyMemory(MeshGenerationResult.Vertices, BodyResult.Vertices, sizeof(vertex_p3)*BodyResult.VertexCount);
-    CopyMemory(MeshGenerationResult.Indices, BodyResult.Indices, sizeof(u16)*BodyResult.IndexCount);
+    MeshGenerationResult.Indices[0] = 2;
+    MeshGenerationResult.Indices[1] = 3;
+    MeshGenerationResult.Indices[2] = 1;
+    MeshGenerationResult.Indices[3] = 1;
+    MeshGenerationResult.Indices[4] = 0;
+    MeshGenerationResult.Indices[5] = 2;
     
     DevContext->PlaneMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->PlaneMesh.VertexCount = MeshGenerationResult.VertexCount;
@@ -181,215 +221,221 @@ void CreateDevPlaneMesh(dev_context* DevContext, f32 Width, f32 Height)
     DevContext->PlaneMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
 }
 
-void DrawQuad(dev_context* DevContext, v3f CenterP, v3f Normal, v2f Dim, c4 Color)
+void DrawQuad(dev_context* DevContext, ak_v3f CenterP, ak_v3f Normal, ak_v2f Dim, ak_color4f Color)
 {
-    NOT_IMPLEMENTED;    
+    AK_NotImplemented();
 }
 
-void DrawOrientedBox(dev_context* DevContext, v3f P, v3f Dim, v3f XAxis, v3f YAxis, v3f ZAxis, c3 Color)
+void DrawOrientedBox(dev_context* DevContext, ak_v3f P, ak_v3f Dim, ak_v3f XAxis, ak_v3f YAxis, ak_v3f ZAxis, ak_color3f Color)
 {
-    m4 Model = TransformM4(P, XAxis, YAxis, ZAxis, Dim);
+    ak_m4f Model = AK_TransformM4(P, AK_M3(XAxis, YAxis, ZAxis), Dim);
     PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleBoxMesh.IndexCount, 0, 0);
 }
 
-void DrawBox(dev_context* DevContext, v3f P, v3f Dim, c3 Color)
+void DrawBox(dev_context* DevContext, ak_v3f P, ak_v3f Dim, ak_color3f Color)
 {
-    DrawOrientedBox(DevContext, P, Dim, Global_WorldXAxis, Global_WorldYAxis, Global_WorldZAxis, Color);
+    DrawOrientedBox(DevContext, P, Dim, AK_XAxis(), AK_YAxis(), AK_ZAxis(), Color);
 }
 
-void DrawPoint(dev_context* DevContext, v3f P, c3 Color)
+void DrawPoint(dev_context* DevContext, ak_v3f P, ak_color3f Color)
 {
-    DrawBox(DevContext, P, V3(0.025f), Color);
+    ak_f32 PointSize = 0.025f;
+    DrawBox(DevContext, P, AK_V3(PointSize, PointSize, PointSize), Color);
 }
 
 
-void DrawEdge(dev_context* DevContext, v3f P0, v3f P1, c3 Color)
+void DrawEdge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Color)
 {
-    v3f ZAxis = P1-P0;
-    f32 ZLength = Magnitude(ZAxis);
+    ak_v3f ZAxis = P1-P0;
+    ak_f32 ZLength = AK_Magnitude(ZAxis);
     ZAxis /= ZLength;
     
-    v3f XAxis, YAxis;
-    CreateBasis(ZAxis, &XAxis, &YAxis);
-    DrawOrientedBox(DevContext, P0, V3(0.025f, 0.025f, ZLength), XAxis, YAxis, ZAxis, Color);
+    ak_v3f XAxis, YAxis;
+    AK_Basis(ZAxis, &XAxis, &YAxis);
+    DrawOrientedBox(DevContext, P0, AK_V3(0.025f, 0.025f, ZLength), XAxis, YAxis, ZAxis, Color);
 }
 
-void DrawGrid(dev_context* DevContext, int xLeftBound, int xRightBound, int yTopBound, int yBottomBound, c3 Color)
+void DrawGrid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color)
 {
-    for(int x = xLeftBound; x <= xRightBound; x++)
+    for(ak_i32 x = xLeftBound; x <= xRightBound; x++)
     {
         if(x != 0)
         {
-            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Color);
+            DrawEdge(DevContext, AK_V3f(x, yTopBound, 0), AK_V3f(x, yBottomBound, 0), Color);
         }
         else
         {
-            DrawEdge(DevContext, V3((float)x, (float)yTopBound, 0.0f), V3((float)x, (float)yBottomBound, 0.0f), Green3());
+            DrawEdge(DevContext, AK_V3f(x, yTopBound, 0), AK_V3f(x, yBottomBound, 0), AK_Green3());
         }
     }
     
-    for(int y = yTopBound; y <= yBottomBound; y++)
+    for(ak_i32 y = yTopBound; y <= yBottomBound; y++)
     {
         if(y != 0)
         {
-            DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Color);
+            DrawEdge(DevContext, AK_V3f(xLeftBound, y, 0), AK_V3f(xRightBound, y, 0), Color);
         }
         else
         {            
-            DrawEdge(DevContext, V3((float)xLeftBound, (float)y, 0.0f), V3((float)xRightBound, (float)y, 0.0f), Red3());             
+            DrawEdge(DevContext, AK_V3f(xLeftBound, y, 0), AK_V3f(xRightBound, y, 0), AK_Red3());             
         }
     }
 }
 
-void DrawSphere(dev_context* DevContext, v3f CenterP, f32 Radius, c3 Color)
+void DrawSphere(dev_context* DevContext, ak_v3f CenterP, ak_f32 Radius, ak_color3f Color)
 {
-    m4 Model = TransformM4(CenterP, V3(Radius, Radius, Radius));
+    ak_m4f Model = AK_TransformM4(CenterP, AK_V3(Radius, Radius, Radius));
     PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleSphereMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleSphereMesh.IndexCount, 0, 0);    
 }
 
-void DrawLineBox(dev_context* DevContext, v3f P, v3f Dim, c3 Color)
+void DrawLineBox(dev_context* DevContext, ak_v3f P, ak_v3f Dim, ak_color3f Color)
 {    
-    m4 Model = TransformM4(P, Dim);
+    ak_m4f Model = AK_TransformM4(P, Dim);
     PushDrawLineMesh(DevContext->Graphics, DevContext->LineBoxMesh.MeshID, Model, Color, DevContext->LineBoxMesh.IndexCount, 0, 0);        
 }
 
-void DrawLineBoxMinMax(dev_context* DevContext, v3f Min, v3f Max, c3 Color)
+void DrawLineBoxMinMax(dev_context* DevContext, ak_v3f Min, ak_v3f Max, ak_color3f Color)
 {   
-    v3f Dim = Max-Min;
-    v3f P = V3(Min.xy + Dim.xy*0.5f, Min.z);    
+    ak_v3f Dim = Max-Min;
+    ak_v3f P = AK_V3(Min.xy + Dim.xy*0.5f, Min.z);    
     DrawLineBox(DevContext, P, Dim, Color);    
 }
 
-void DrawLineCapsule(dev_context* DevContext, v3f P0, v3f P1, f32 Radius, c3 Color)
+void DrawLineCapsule(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_f32 Radius, ak_color3f Color)
 {
-    v3f ZAxis = P0-P1;
-    f32 ZScale = Magnitude(ZAxis);
+    ak_v3f ZAxis = P0-P1;
+    ak_f32 ZScale = AK_Magnitude(ZAxis);
     ZAxis /= ZScale;
     
     dev_capsule_mesh* Mesh = &DevContext->LineCapsuleMesh;
     
     
-    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, TransformM4(P0, CreateBasis(ZAxis), V3(Radius, Radius, Radius)), 
+    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, AK_TransformM4(P0, AK_Basis(ZAxis), AK_V3(Radius, Radius, Radius)), 
                      Color, Mesh->CapIndexCount, 0, 0);
     
-    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, TransformM4(P1, CreateBasis(-ZAxis), V3(Radius, Radius, Radius)), 
+    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, AK_TransformM4(P1, AK_Basis(-ZAxis), AK_V3(Radius, Radius, Radius)), 
                      Color, Mesh->CapIndexCount, 0, 0);
     
-    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, TransformM4(P1 + (ZAxis*ZScale*0.5f), CreateBasis(ZAxis), V3(Radius, Radius, ZScale)),
+    PushDrawLineMesh(DevContext->Graphics, Mesh->MeshID, AK_TransformM4(P1 + (ZAxis*ZScale*0.5f), AK_Basis(ZAxis), AK_V3(Radius, Radius, ZScale)),
                      Color, Mesh->BodyIndexCount, Mesh->CapIndexCount, Mesh->CapVertexCount);
     
 }
 
-void DrawLineEllipsoid(dev_context* DevContext, v3f CenterP, v3f Radius, c3 Color)
+void DrawLineEllipsoid(dev_context* DevContext, ak_v3f CenterP, ak_v3f Radius, ak_color3f Color)
 {
-    m4 Model = TransformM4(CenterP, Radius);
+    ak_m4f Model = AK_TransformM4(CenterP, Radius);
     PushDrawLineMesh(DevContext->Graphics, DevContext->LineSphereMesh.MeshID, Model, Color, DevContext->LineSphereMesh.IndexCount, 0, 0); 
 }
 
-void DrawCylinder(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c3 Color)
+void DrawCylinder(dev_context* DevContext, ak_v3f Position, ak_v3f Axis, ak_f32 Radius, ak_color3f Color)
 {
-    v3f X, Y;
-    CreateBasis(Axis, &X, &Y);
+    ak_v3f X, Y;
+    AK_Basis(Axis, &X, &Y);
     X *= Radius;
     Y *= Radius;
     
-    m4 Model = TransformM4(Position, X, Y, Axis);
+    ak_m4f Model = AK_TransformM4(Position, X, Y, Axis);
     PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleCylinderMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleCylinderMesh.IndexCount, 0, 0);
 }
 
-void DrawCone(dev_context* DevContext, v3f Position, v3f Axis, f32 Radius, c3 Color)
+void DrawCone(dev_context* DevContext, ak_v3f Position, ak_v3f Axis, ak_f32 Radius, ak_color3f Color)
 {
-    v3f X, Y;
-    CreateBasis(Axis, &X, &Y);
+    ak_v3f X, Y;
+    AK_Basis(Axis, &X, &Y);
     X *= Radius;
     Y *= Radius;
     
-    m4 Model = TransformM4(Position, X, Y, Axis);
+    ak_m4f Model = AK_TransformM4(Position, X, Y, Axis);
     PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleConeMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleConeMesh.IndexCount, 0, 0);
 }
 
-void DrawFrame(dev_context* DevContext, v3f Position, v3f XAxis = Global_WorldXAxis, v3f YAxis = Global_WorldYAxis, v3f ZAxis = Global_WorldZAxis)
+void DrawFrame(dev_context* DevContext, ak_v3f Position, ak_v3f XAxis = AK_XAxis(), ak_v3f YAxis = AK_YAxis(), ak_v3f ZAxis = AK_ZAxis())
 {        
     
     {
-        v3f X, Y, Z;
+        ak_v3f X, Y, Z;
         Z = XAxis;
-        CreateBasis(Z, &X, &Y);
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(Red3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(AK_Red3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
     }
     
     {
-        v3f X, Y, Z;
+        ak_v3f X, Y, Z;
         Z = YAxis;
-        CreateBasis(Z, &X, &Y);
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(Green3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(AK_Green3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
     }
     
     {
-        v3f X, Y, Z;
+        ak_v3f X, Y, Z;
         Z = ZAxis;
-        CreateBasis(Z, &X, &Y);
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
-        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(Blue3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(AK_Blue3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
     }
     
-    DrawSphere(DevContext, Position, 0.04f, White3());    
+    DrawSphere(DevContext, Position, 0.04f, AK_White3());    
 }
 
-v3f GetGizmoColor(gizmo Gizmo)
+ak_v3f GetGizmoColor(gizmo Gizmo)
 {
     switch(Gizmo.MovementDirection)
     {
         case gizmo_movement_direction::X:
         {
-            return Red3();
-        } break;
-        case gizmo_movement_direction::Y:
-        {
-            return Green3();
-        } break;
-        case gizmo_movement_direction::Z:
-        {
-            return Blue3();
-        } break;
-        case gizmo_movement_direction::XY:
-        {
-            return Blue3();
-        } break;
-        case gizmo_movement_direction::XZ:
-        {
-            return Green3();
-        } break;
-        case gizmo_movement_direction::YZ:
-        {
-            return Red3();
+            return AK_Red3();
         } break;
         
-        INVALID_DEFAULT_CASE;
+        case gizmo_movement_direction::Y:
+        {
+            return AK_Green3();
+        } break;
+        
+        case gizmo_movement_direction::Z:
+        {
+            return AK_Blue3();
+        } break;
+        
+        case gizmo_movement_direction::XY:
+        {
+            return AK_Blue3();
+        } break;
+        
+        case gizmo_movement_direction::XZ:
+        {
+            return AK_Green3();
+        } break;
+        
+        case gizmo_movement_direction::YZ:
+        {
+            return AK_Red3();
+        } break;
+        
+        AK_INVALID_DEFAULT_CASE;
     }
-    return White3();
+    return AK_White3();
 }
 
-void DrawGizmos(dev_context* DevContext, v3f Position)
+void DrawGizmos(dev_context* DevContext, ak_v3f Position)
 {        
     if(DevContext->TransformationMode != gizmo_movement_type::ROTATE)
     {
-        for(int i = 0; i < 3; i++)
+        for(ak_i32 i = 0; i < 3; i++)
         {
             gizmo CurrentGizmo = DevContext->Gizmo[i];
-            v3f Color = GetGizmoColor(CurrentGizmo);
+            ak_v3f Color = GetGizmoColor(CurrentGizmo);
             PushDrawUnlitMesh(DevContext->Graphics, CurrentGizmo.Mesh->MeshID, CurrentGizmo.Transform, CreateDiffuseMaterialSlot(Color), CurrentGizmo.Mesh->IndexCount, 0, 0);  
         }
         PushCull(DevContext->Graphics, graphics_cull_mode::GRAPHICS_CULL_MODE_NONE);
-        for(int i = 3; i < 6; i++)
+        for(ak_i32 i = 3; i < 6; i++)
         {
             gizmo CurrentGizmo = DevContext->Gizmo[i];
-            v3f Color = GetGizmoColor(CurrentGizmo);
+            ak_v3f Color = GetGizmoColor(CurrentGizmo);
             PushDrawUnlitMesh(DevContext->Graphics, CurrentGizmo.Mesh->MeshID, CurrentGizmo.Transform, CreateDiffuseMaterialSlot(Color), CurrentGizmo.Mesh->IndexCount, 0, 0);  
         }
         PushCull(DevContext->Graphics, graphics_cull_mode::GRAPHICS_CULL_MODE_FRONT);
@@ -397,22 +443,22 @@ void DrawGizmos(dev_context* DevContext, v3f Position)
     else
     {
         PushCull(DevContext->Graphics, graphics_cull_mode::GRAPHICS_CULL_MODE_NONE);
-        for(int i = 0; i < 3; i++)
+        for(ak_i32 i = 0; i < 3; i++)
         {
             gizmo CurrentGizmo = DevContext->Gizmo[i];
-            v3f Color = GetGizmoColor(CurrentGizmo);
+            ak_v3f Color = GetGizmoColor(CurrentGizmo);
             PushDrawUnlitMesh(DevContext->Graphics, CurrentGizmo.Mesh->MeshID, CurrentGizmo.Transform, CreateDiffuseMaterialSlot(Color), CurrentGizmo.Mesh->IndexCount, 0, 0);  
         }
         PushCull(DevContext->Graphics, graphics_cull_mode::GRAPHICS_CULL_MODE_FRONT);
     }
     
     
-    DrawSphere(DevContext, Position, 0.04f, White3());    
+    DrawSphere(DevContext, Position, 0.04f, AK_White3());    
 }
 
 
 inline view_settings
-GetViewSettings(dev_context* DevContext, graphics_state* GraphicsState, u32 WorldIndex)
+GetViewSettings(dev_context* DevContext, graphics_state* GraphicsState, ak_u32 WorldIndex)
 {    
     game* Game = DevContext->Game;
     if(DevContext->UseDevCamera)
@@ -458,19 +504,19 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
                 Camera->Velocity.y += (Input->MouseDelta.y*Game->dt*CAMERA_LINEAR_ACCELERATION);                                        
             }
             
-            if(Abs(Input->Scroll) > 0.0f)            
+            if(AK_Abs(Input->Scroll) > 0.0f)            
                 Camera->Velocity.z -= Input->Scroll*Game->dt*CAMERA_SCROLL_ACCELERATION;                                            
         }            
         
         Camera->AngularVelocity *= (1.0f / (1.0f+Game->dt*CAMERA_ANGULAR_DAMPING));            
-        v3f Eulers = (Camera->AngularVelocity*Game->dt);            
+        ak_v3f Eulers = (Camera->AngularVelocity*Game->dt);            
         
-        quaternion Orientation = Normalize(RotQuat(Camera->Orientation.XAxis, Eulers.roll)*RotQuat(Camera->Orientation.YAxis, Eulers.pitch));
-        Camera->Orientation *= ToMatrix3(Orientation);
+        ak_quatf Orientation = AK_Normalize(AK_RotQuat(Camera->Orientation.XAxis, Eulers.r)*AK_RotQuat(Camera->Orientation.YAxis, Eulers.p));
+        Camera->Orientation *= AK_QuatToMatrix(Orientation);
         
         Camera->Velocity.xy *= (1.0f /  (1.0f+Game->dt*CAMERA_LINEAR_DAMPING));            
-        v2f Vel = Camera->Velocity.xy*Game->dt;
-        v3f Delta = Vel.x*Camera->Orientation.XAxis - Vel.y*Camera->Orientation.YAxis;
+        ak_v2f Vel = Camera->Velocity.xy*Game->dt;
+        ak_v3f Delta = Vel.x*Camera->Orientation.XAxis - Vel.y*Camera->Orientation.YAxis;
         
         Camera->FocalPoint += Delta;
         Camera->Position += Delta;
@@ -485,139 +531,139 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     }    
 }
 
-void PopulateArrowAndPlaneGizmos(dev_context* DevContext, v3f Position)
+void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
 {
     {
-        v3f X, Y, Z;
-        Z = Global_WorldXAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_XAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->TriangleArrowMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 0, 1);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
         Gizmo.MovementDirection = gizmo_movement_direction::X;
         DevContext->Gizmo[0] =  Gizmo;
     }
     
     {
-        v3f X, Y, Z;
-        Z = Global_WorldYAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_YAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->TriangleArrowMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 0, 1);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
         Gizmo.MovementDirection = gizmo_movement_direction::Y;
         DevContext->Gizmo[1] =  Gizmo;
     }
     
     {
-        v3f X, Y, Z;
-        Z = Global_WorldZAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_ZAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->TriangleArrowMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 1, 0);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
         Gizmo.MovementDirection = gizmo_movement_direction::Z;
         DevContext->Gizmo[2] =  Gizmo;
     }
 
     {
-        v3f X, Y, Z;
-        Z = Global_WorldZAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_ZAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position + V3(GIZMO_PLANE_DISTANCE, GIZMO_PLANE_DISTANCE, 0), X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + AK_V3(GIZMO_PLANE_DISTANCE, GIZMO_PLANE_DISTANCE, 0.0f), X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->PlaneMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 0, 1);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
         Gizmo.MovementDirection = gizmo_movement_direction::XY;
         DevContext->Gizmo[3] =  Gizmo;
     }
 
     {
-        v3f X, Y, Z;
-        Z = Global_WorldYAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_YAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position + V3(GIZMO_PLANE_DISTANCE, 0, GIZMO_PLANE_DISTANCE), X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + AK_V3(GIZMO_PLANE_DISTANCE, 0.0f, GIZMO_PLANE_DISTANCE), X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->PlaneMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 1, 0);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
         Gizmo.MovementDirection = gizmo_movement_direction::XZ;
         DevContext->Gizmo[4] =  Gizmo;
     }
 
     {
-        v3f X, Y, Z;
-        Z = Global_WorldXAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_XAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position + V3(0, GIZMO_PLANE_DISTANCE, GIZMO_PLANE_DISTANCE), X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + AK_V3(0.0f, GIZMO_PLANE_DISTANCE, GIZMO_PLANE_DISTANCE), X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->PlaneMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(1, 0, 0);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(1, 0, 0);
         Gizmo.MovementDirection = gizmo_movement_direction::YZ;
         DevContext->Gizmo[5] =  Gizmo;
     }
 }
 
-void PopulateCircleGizmos(dev_context* DevContext, v3f Position)
+void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
 {
     {
-        v3f X, Y, Z;
-        Z = Global_WorldXAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_XAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->TriangleCircleMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 1, 0);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
         Gizmo.MovementDirection = gizmo_movement_direction::X;
         DevContext->Gizmo[0] =  Gizmo;
     }
     
     {
-        v3f X, Y, Z;
-        Z = Global_WorldYAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_YAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->TriangleCircleMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 1, 0);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
         Gizmo.MovementDirection = gizmo_movement_direction::Y;
         DevContext->Gizmo[1] =  Gizmo;
     }
     
     {
-        v3f X, Y, Z;
-        Z = Global_WorldZAxis;
-        CreateBasis(Z, &X, &Y);
+        ak_v3f X, Y, Z;
+        Z = AK_ZAxis();
+        AK_Basis(Z, &X, &Y);
         
-        m4 Transform = TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->TriangleCircleMesh;
-        Gizmo.Transform = CreateSQT(Transform);
-        Gizmo.IntersectionPlane = V3(0, 0, 1);
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
         Gizmo.MovementDirection = gizmo_movement_direction::Z;
         DevContext->Gizmo[2] =  Gizmo;
     }
 }
 
-void PopulateGizmo(dev_context* DevContext, v3f Position)
+void PopulateGizmo(dev_context* DevContext, ak_v3f Position)
 {
     if(DevContext->TransformationMode != gizmo_movement_type::ROTATE)
     {
@@ -639,18 +685,19 @@ ray CastRayFromCameraToMouse(dev_context* DevContext, graphics_state* GraphicsSt
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);    
     
     //For not just getting the player entity. need to change to cast the ray and get the intersected object
-    i32 Height = Graphics->RenderDim.height;
-    i32 Width = Graphics->RenderDim.width;
-    f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
-    f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
-    f32 z = 1.0f;
-    v3f ray_nds = V3(x, y, z);
-    v4f ray_clip = V4(ray_nds.xy, -1.0f, 1.0f);
-    m4 Perspective = PerspectiveM4(ViewSettings.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), ViewSettings.ZNear, ViewSettings.ZFar);
-    v4f ray_eye =  ray_clip * Inverse(Perspective);
-    ray_eye = V4(ray_eye.xy, -1.0, 0.0);
-    v3f ray_wor =  (ray_eye * TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
-    ray_wor = Normalize(ray_wor);
+    
+    ak_i32 Height = Graphics->RenderDim.h;
+    ak_i32 Width = Graphics->RenderDim.w;
+    ak_f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
+    ak_f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
+    ak_f32 z = 1.0f;
+    ak_v3f ray_nds = AK_V3(x, y, z);
+    ak_v4f ray_clip = AK_V4(ray_nds.xy, -1.0f, 1.0f);
+    ak_m4f Perspective = AK_Perspective(ViewSettings.FieldOfView, AK_SafeRatio(Graphics->RenderDim.w, Graphics->RenderDim.h), ViewSettings.ZNear, ViewSettings.ZFar);
+    ak_v4f ray_eye =  ray_clip * AK_Inverse(Perspective);
+    ray_eye = AK_V4(ray_eye.xy, -1.0f, 0.0f);
+    ak_v3f ray_wor =  (ray_eye * AK_TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
+    ray_wor = AK_Normalize(ray_wor);
 
     Result.Origin = ViewSettings.Position;
     Result.Direction = ray_wor;
@@ -659,19 +706,37 @@ ray CastRayFromCameraToMouse(dev_context* DevContext, graphics_state* GraphicsSt
 }
 
 entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)
-{
-    f32 tBest = INFINITY;
-    entity* Result = NULL;
+{        
     game* Game = DevContext->Game;
-
+    graphics* Graphics = DevContext->Graphics;
+    dev_input* Input = &DevContext->Input;
+    
     if(DevContext->IsGizmoHit)
     {
         return DevContext->SelectedObject;
     }
-
+    
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);  
-
-    FOR_EACH(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])
+    
+    
+    
+    ak_i32 Height = Graphics->RenderDim.h;
+    ak_i32 Width = Graphics->RenderDim.w;
+    ak_f32 x = (2.0f * Input->MouseCoordinates.x) / Width - 1.0f;
+    ak_f32 y = 1.0f - (2.0f * Input->MouseCoordinates.y) / Height;
+    ak_f32 z = 1.0f;
+    ak_v3f ray_nds = AK_V3(x, y, z);
+    ak_v4f ray_clip = AK_V4(ray_nds.xy, -1.0f, 1.0f);
+    ak_m4f Perspective = AK_Perspective(ViewSettings.FieldOfView, AK_SafeRatio(Graphics->RenderDim.w, Graphics->RenderDim.h), ViewSettings.ZNear, ViewSettings.ZFar);
+    ak_v4f ray_eye =  ray_clip * AK_Inverse(Perspective);
+    ray_eye = AK_V4(ray_eye.xy, -1.0f, 0.0f);
+    ak_v3f ray_wor =  (ray_eye * AK_TransformM4(ViewSettings.Position, ViewSettings.Orientation)).xyz;
+    ray_wor = AK_Normalize(ray_wor);
+    
+    ak_f32 tBest = INFINITY;
+    entity* Result = NULL;
+    
+    AK_ForEach(Entity, &Game->EntityStorage[Game->CurrentWorldIndex])        
     {        
         if(Entity->MeshID != INVALID_MESH_ID)
         {   
@@ -680,8 +745,8 @@ entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState
             if(!Mesh)
                 Mesh = LoadMesh(DevContext->Game->Assets, Entity->MeshID);
             
-            sqt Transform = *GetEntityTransform(Game, Entity->ID);
-            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(RayCast.Origin, RayCast.Direction, Mesh, MeshInfo, Transform);
+            ak_sqtf Transform = *GetEntityTransform(Game, Entity->ID);
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(ViewSettings.Position, ray_wor, Mesh, MeshInfo, Transform);            
             if(IntersectionResult.FoundCollision)
             {
                 if(tBest > IntersectionResult.t && IntersectionResult.t > ViewSettings.ZNear)
@@ -698,31 +763,32 @@ entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState
 
 gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)
 {
-    f32 tBest = INFINITY;
+    ak_f32 tBest = INFINITY;
     gizmo_hit* Result = &DevContext->GizmoHit;
     game* Game = DevContext->Game;
-
-    if(DevContext->SelectedObject == nullptr || !DevContext->EditMode)
+    
+    if(DevContext->SelectedObject == NULL || !DevContext->EditMode)
     {
         DevContext->IsGizmoHit = false;
         return Result;
     }
-
+    
     if(DevContext->IsGizmoHit)
     {
         return &DevContext->GizmoHit;
     }
-
+    
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);  
-
-    int NumberOfGizmos = 6;
+    
+    ak_i32 NumberOfGizmos = 6;
     if(DevContext->TransformationMode == gizmo_movement_type::ROTATE)
     {
         NumberOfGizmos = 3;
     }
-    for(int i = 0; i < 6; i++)
+    
+    for(ak_i32 i = 0; i < 6; i++)
     {
-        if(DevContext->Gizmo[i].Mesh != nullptr)
+        if(DevContext->Gizmo[i].Mesh != NULL)
         {
             mesh_info MeshInfo = GetMeshInfoFromDevMesh(*DevContext->Gizmo[i].Mesh);
             mesh Mesh = GetMeshFromDevMesh(*DevContext->Gizmo[i].Mesh);
@@ -744,18 +810,18 @@ gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsSta
     return Result;
 }
 
-void DrawWireframeWorld(game* Game, graphics* Graphics, u32 WorldIndex, assets* Assets)
+void DrawWireframeWorld(game* Game, graphics* Graphics, ak_u32 WorldIndex, assets* Assets)
 {
     PushWireframe(Graphics, true);
     PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);        
-    FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+    AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
     {
         if(Entity->MeshID != INVALID_MESH_ID)
         {
             graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, Entity->MeshID);
             
-            sqt Transform = *GetEntityTransform(Game, Entity->ID);
-            PushDrawUnlitMesh(Graphics, MeshHandle, Transform, CreateDiffuseMaterialSlot(Cyan3()), 
+            ak_sqtf Transform = *GetEntityTransform(Game, Entity->ID);
+            PushDrawUnlitMesh(Graphics, MeshHandle, Transform, CreateDiffuseMaterialSlot(AK_Cyan3()), 
                               GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);
         }
     }
@@ -763,12 +829,12 @@ void DrawWireframeWorld(game* Game, graphics* Graphics, u32 WorldIndex, assets* 
     PushWireframe(Graphics, false);
 }
 
-void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u32 WorldIndex, graphics_state* GraphicsState, f32 tRenderInterpolate)
+void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, ak_u32 WorldIndex, graphics_state* GraphicsState, ak_f32 tRenderInterpolate)
 {           
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, WorldIndex);    
     
     PushRenderBufferViewportScissorAndView(DevContext->Graphics, RenderBuffer, &ViewSettings);
-    PushClearColorAndDepth(DevContext->Graphics, Black4(), 1.0f);                
+    PushClearColorAndDepth(DevContext->Graphics, AK_Black4(), 1.0f);                
     
     game* Game = DevContext->Game;
     assets* Assets = Game->Assets;
@@ -782,14 +848,14 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
         
         case VIEW_MODE_TYPE_UNLIT:        
         {                                    
-            FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+            AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
             {
                 if(Entity->MeshID != INVALID_MESH_ID)                    
                 {
                     graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, DevContext->Graphics, Entity->MeshID);                    
                     graphics_diffuse_material_slot Diffuse = ConvertToGraphicsDiffuse(Assets, DevContext->Graphics, Entity->Material.Diffuse);
                     
-                    sqt Transform = *GetEntityTransform(Game, Entity->ID);
+                    ak_sqtf Transform = *GetEntityTransform(Game, Entity->ID);
                     PushDrawUnlitMesh(DevContext->Graphics, MeshHandle, Transform, Diffuse, GetMeshIndexCount(Assets, Entity->MeshID), 0, 0);                                     
                 }
             }
@@ -806,29 +872,29 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
             DrawWireframeWorld(Game, DevContext->Graphics, WorldIndex, Assets);                        
         } break;
         
-        INVALID_DEFAULT_CASE;        
+        AK_INVALID_DEFAULT_CASE;        
     }
     
     PushDepth(DevContext->Graphics, false);
     
     if(DevContext->DrawColliders)
     {
-        FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+        AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
         {   
             mesh_convex_hull_gdi* ConvexHullGDI = NULL; 
             if(Entity->MeshID != INVALID_MESH_ID)
             {
                 ConvexHullGDI = DevContext->MeshConvexHulls + Entity->MeshID;
                 
-                if(ConvexHullGDI->Count == (u32)-1)
+                if(ConvexHullGDI->Count == (ak_u32)-1)
                 {
                     mesh_info* MeshInfo = GetMeshInfo(Assets, Entity->MeshID);                
                     ConvexHullGDI->Count = MeshInfo->Header.ConvexHullCount;
                     
                     if(ConvexHullGDI->Count > 0)
                     {
-                        ConvexHullGDI->Meshes = PushArray(&DevContext->DevStorage, ConvexHullGDI->Count, graphics_mesh_id, Clear, 0);
-                        for(u32 ConvexHullIndex = 0; ConvexHullIndex < ConvexHullGDI->Count; ConvexHullIndex++)
+                        ConvexHullGDI->Meshes = DevContext->DevStorage->PushArray<graphics_mesh_id>(ConvexHullGDI->Count);
+                        for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < ConvexHullGDI->Count; ConvexHullIndex++)
                         {
                             convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;                            
                             ConvexHullGDI->Meshes[ConvexHullIndex] = AllocateConvexHullMesh(DevContext->Graphics, ConvexHull);                            
@@ -837,55 +903,58 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
                 }                                
             }
             
-            sqt OldState = *GetEntityTransformOld(Game, Entity->ID);
-            sqt NewState = *GetEntityTransform(Game, Entity->ID);        
+            ak_sqtf OldState = *GetEntityTransformOld(Game, Entity->ID);
+            ak_sqtf NewState = *GetEntityTransform(Game, Entity->ID);        
             
             //CONFIRM(JJ): Should we be doing runtime changes on an entities scale? Definitely not on rigid bodies,
             //but do other entities might want this? Keep this assertion just in case. Not sure if we even need to 
             //interpolate them either
-            ASSERT(OldState.Scale == NewState.Scale);
+            AK_Assert(OldState.Scale == NewState.Scale, "Not interploating scale yet");
             
-            sqt InterpTransform;
-            InterpTransform.Translation = Lerp(OldState.Translation, tRenderInterpolate, NewState.Translation);    
-            InterpTransform.Orientation = Lerp(OldState.Orientation, tRenderInterpolate, NewState.Orientation);
+            ak_sqtf InterpTransform;
+            InterpTransform.Translation = AK_Lerp(OldState.Translation, tRenderInterpolate, NewState.Translation);    
+            InterpTransform.Orientation = AK_Lerp(OldState.Orientation, tRenderInterpolate, NewState.Orientation);
             InterpTransform.Scale = NewState.Scale;
             
-            u32 ConvexHullIndex = 0;
+            ak_u32 ConvexHullIndex = 0;
             
             simulation* Simulation = GetSimulation(Game, Entity->ID);
             sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
-            FOR_EACH(Volume, SimEntity->CollisionVolumes)
+            collision_volume* Volume = Simulation->CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
+            while(Volume)                
             {                
                 switch(Volume->Type)
                 {
                     case COLLISION_VOLUME_TYPE_SPHERE:
                     {
                         sphere Sphere = TransformSphere(&Volume->Sphere, InterpTransform);                    
-                        DrawLineEllipsoid(DevContext, Sphere.CenterP, V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), Blue3());
+                        DrawLineEllipsoid(DevContext, Sphere.CenterP, AK_V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), AK_Blue3());
                     } break;
                     
                     case COLLISION_VOLUME_TYPE_CAPSULE:
                     {
                         capsule Capsule = TransformCapsule(&Volume->Capsule, InterpTransform);
-                        DrawLineCapsule(DevContext, Capsule.P0, Capsule.P1, Capsule.Radius, Blue3());                                                
+                        DrawLineCapsule(DevContext, Capsule.P0, Capsule.P1, Capsule.Radius, AK_Blue3());                                                
                     } break;
                     
                     case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                     {                           
-                        ASSERT(Entity->MeshID != INVALID_MESH_ID && ConvexHullGDI);
-                        ASSERT(ConvexHullGDI->Count != 0);
+                        AK_Assert(Entity->MeshID != INVALID_MESH_ID && ConvexHullGDI, "Invalid collision volume mesh for the convex hull");
+                        AK_Assert(ConvexHullGDI->Count != 0, "No graphics device interface for the collision volume convex hull");
                         
-                        sqt Transform = ToParentCoordinates(Volume->ConvexHull->Header.Transform, InterpTransform);
-                        m4 Model = TransformM4(Transform);
+                        ak_sqtf Transform = Volume->ConvexHull->Header.Transform*InterpTransform;
+                        ak_m4f Model = AK_TransformM4(Transform);
                         
-                        PushDrawLineMesh(DevContext->Graphics, ConvexHullGDI->Meshes[ConvexHullIndex], Model, Blue3(), 
+                        PushDrawLineMesh(DevContext->Graphics, ConvexHullGDI->Meshes[ConvexHullIndex], Model, AK_Blue3(), 
                                          ConvexHullIndexCount(Volume->ConvexHull), 0, 0);
                         
                         ConvexHullIndex++;
                     } break;
                     
-                    INVALID_DEFAULT_CASE;
+                    AK_INVALID_DEFAULT_CASE;
                 }
+                
+                Volume = Simulation->CollisionVolumeStorage.Get(Volume->NextID);
             }                        
         }                        
     }   
@@ -893,7 +962,7 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, u3
     PushDepth(DevContext->Graphics, true);    
 }
 
-void DevelopmentHandleGizmoTranslate(dev_context* DevContext, graphics_state* GraphicsState, v3f PointDiff)
+void DevelopmentHandleGizmoTranslate(dev_context* DevContext, graphics_state* GraphicsState, ak_v3f PointDiff)
 {
     game* Game = DevContext->Game;
     gizmo_hit* GizmoHit = &DevContext->GizmoHit;
@@ -905,11 +974,13 @@ void DevelopmentHandleGizmoTranslate(dev_context* DevContext, graphics_state* Gr
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
     
-    sqt* Transform = GetEntityTransform(Game, EntityID);
+    ak_sqtf* Transform = GetEntityTransform(Game, EntityID);
     Transform->Translation -= PointDiff;
+    
+    SimEntity->Transform = *Transform;
 }
 
-void DevelopmentHandleGizmoScale(dev_context* DevContext, graphics_state* GraphicsState, v3f PointDiff)
+void DevelopmentHandleGizmoScale(dev_context* DevContext, graphics_state* GraphicsState, ak_v3f PointDiff)
 {
     game* Game = DevContext->Game;
     gizmo_hit* GizmoHit = &DevContext->GizmoHit;
@@ -921,11 +992,13 @@ void DevelopmentHandleGizmoScale(dev_context* DevContext, graphics_state* Graphi
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
     
-    sqt* Transform = GetEntityTransform(Game, EntityID);
+    ak_sqtf* Transform = GetEntityTransform(Game, EntityID);
     Transform->Scale -= PointDiff;
+    
+    SimEntity->Transform = *Transform;
 }
 
-void DevelopmentHandleGizmoRotate(dev_context* DevContext, graphics_state* GraphicsState, v3f PointDiff)
+void DevelopmentHandleGizmoRotate(dev_context* DevContext, graphics_state* GraphicsState, ak_v3f PointDiff)
 {
     game* Game = DevContext->Game;
     gizmo_hit* GizmoHit = &DevContext->GizmoHit;
@@ -937,25 +1010,32 @@ void DevelopmentHandleGizmoRotate(dev_context* DevContext, graphics_state* Graph
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
     
-    sqt* Transform = GetEntityTransform(Game, EntityID);
-    v3f* Rotation = &DevContext->EntityRotations[EntityID.WorldIndex][Game->EntityStorage[EntityID.WorldIndex].GetIndex(EntityID.ID)];
+    ak_sqtf* Transform = GetEntityTransform(Game, EntityID);
+    
+    ak_u32 Index = AK_PoolIndex(EntityID.ID);
+    if(DevContext->EntityRotations[EntityID.WorldIndex].Size < (Index+1))
+        DevContext->EntityRotations[EntityID.WorldIndex].Resize(Index+1);
+    
+    ak_v3f* Rotation = DevContext->EntityRotations[EntityID.WorldIndex].Get(Index);
     *Rotation -= PointDiff;
-    Transform->Orientation =  Normalize(EulerQuaternion(*Rotation));
+    Transform->Orientation =  AK_Normalize(AK_EulerToQuat(*Rotation));
+    
+    SimEntity->Transform = *Transform;
 }
 
-v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* GraphicsState, v3f SelectedObjectPosition)
+ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* GraphicsState, ak_v3f SelectedObjectPosition)
 {
     ray RayCast = CastRayFromCameraToMouse(DevContext, GraphicsState);
     ray_mesh_intersection_result IntersectionResult = RayPlaneIntersection(DevContext->GizmoHit.Gizmo->IntersectionPlane, DevContext->GizmoHit.HitMousePosition, RayCast);
 
-    v3f Result = V3();
+    ak_v3f Result = AK_V3<ak_f32>();
     if(!IntersectionResult.FoundCollision)
     {
         DebugLog(DevContext, "There was not intersection with Gizmp diff plane");
         return Result;
     }
 
-    v3f NewPoint = RayCast.Origin + (RayCast.Direction * IntersectionResult.t);
+    ak_v3f NewPoint = RayCast.Origin + (RayCast.Direction * IntersectionResult.t);
 
     if(DevContext->TransformationMode != gizmo_movement_type::ROTATE)
     {
@@ -963,53 +1043,62 @@ v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Graphi
         {
             case gizmo_movement_direction::X:
             {
-                Result = V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0, 0);
+                Result = AK_V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0.0f, 0.0f);
             } break;
+            
             case gizmo_movement_direction::Y:
             {
-                Result = V3(0, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0);
+                Result = AK_V3(0.0f, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0.0f);
             } break;
+            
             case gizmo_movement_direction::Z:
             {
-                Result = V3(0, 0, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
+                Result = AK_V3(0.0f, 0.0f, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
             } break;
+            
             case gizmo_movement_direction::XY:
             {
-                Result = V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0);
+                Result = AK_V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0.0f);
             } break;
+            
             case gizmo_movement_direction::XZ:
             {
-                Result = V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
+                Result = AK_V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0.0f, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
             } break;
+            
             case gizmo_movement_direction::YZ:
             {
-                Result = V3(0, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
+                Result = AK_V3(0.0f, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
             } break;
 
-            INVALID_DEFAULT_CASE;
+            AK_INVALID_DEFAULT_CASE;
         }
     }
     else
     {
-        v3f DirectionToOld = DevContext->GizmoHit.HitMousePosition - SelectedObjectPosition;
-        v3f DirectionToNew = NewPoint - SelectedObjectPosition;
-        f32 AngleDiff = atan2f(Dot(Cross(DirectionToNew, DirectionToOld), DevContext->GizmoHit.Gizmo->IntersectionPlane), Dot(DirectionToOld, DirectionToNew));
+        ak_v3f DirectionToOld = DevContext->GizmoHit.HitMousePosition - SelectedObjectPosition;
+        ak_v3f DirectionToNew = NewPoint - SelectedObjectPosition;
+        ak_f32 AngleDiff = AK_ATan2(AK_Dot(AK_Cross(DirectionToNew, DirectionToOld), DevContext->GizmoHit.Gizmo->IntersectionPlane), 
+                                    AK_Dot(DirectionToOld, DirectionToNew));
+        
         switch(DevContext->GizmoHit.Gizmo->MovementDirection)
         {
             case gizmo_movement_direction::X:
             {
-                Result = V3(AngleDiff, 0, 0);
+                Result = AK_V3(AngleDiff, 0.0f, 0.0f);
             } break;
+            
             case gizmo_movement_direction::Y:
             {
-                Result = V3(0, AngleDiff, 0);
+                Result = AK_V3(0.0f, AngleDiff, 0.0f);
             } break;
+            
             case gizmo_movement_direction::Z:
             {
-                Result = V3(0, 0, AngleDiff);
+                Result = AK_V3(0.0f, 0.0f, AngleDiff);
             } break;
 
-            INVALID_DEFAULT_CASE;
+            AK_INVALID_DEFAULT_CASE;
         }
     }
 
@@ -1017,9 +1106,9 @@ v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Graphi
     return Result;
 }
 
-void DevelopmentHandleGizmoTransform(dev_context* DevContext, graphics_state* GraphicsState, v3f SelectedObjectPosition)
+void DevelopmentHandleGizmoTransform(dev_context* DevContext, graphics_state* GraphicsState, ak_v3f SelectedObjectPosition)
 {
-    v3f PointDiff = DevelopmentGetGizmoPointDiff(DevContext, GraphicsState, SelectedObjectPosition);
+    ak_v3f PointDiff = DevelopmentGetGizmoPointDiff(DevContext, GraphicsState, SelectedObjectPosition);
 
     switch(DevContext->TransformationMode)
     {
@@ -1038,17 +1127,17 @@ void DevelopmentHandleGizmoTransform(dev_context* DevContext, graphics_state* Gr
             DevelopmentHandleGizmoRotate(DevContext, GraphicsState, PointDiff);
         } break;
         
-        INVALID_DEFAULT_CASE;
+        AK_INVALID_DEFAULT_CASE;
     }
 }
 
-void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f32 tRenderInterpolate)
+void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, ak_f32 tRenderInterpolate)
 {   
     graphics* Graphics = DevContext->Graphics;
     game* Game = DevContext->Game;
     dev_input* Input = &DevContext->Input;
     
-    if((Graphics->RenderDim.width <= 0) ||  (Graphics->RenderDim.height <= 0))
+    if((Graphics->RenderDim.w <= 0) ||  (Graphics->RenderDim.h <= 0))
         return;
     
     DevelopmentImGuiUpdate(DevContext);    
@@ -1068,15 +1157,15 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
     }    
     
     PushDepth(Graphics, false); 
-    v3f SelectedObjectPosition;
-    if(DevContext->SelectedObject != nullptr)
+    ak_v3f SelectedObjectPosition = {};
+    if(DevContext->SelectedObject != NULL)
     {                
-        SelectedObjectPosition = Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
-                            tRenderInterpolate, 
-                            GetEntityPosition(Game, DevContext->SelectedObject->ID));
+        SelectedObjectPosition = AK_Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
+                                         tRenderInterpolate, 
+                                         GetEntityPosition(Game, DevContext->SelectedObject->ID));
         if(!DevContext->EditMode)
         {
-            DrawFrame(DevContext, SelectedObjectPosition, V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1));
+            DrawFrame(DevContext, SelectedObjectPosition, AK_V3f(1, 0, 0), AK_V3f(0, 1, 0), AK_V3f(0, 0, 1));
         }
         else
         {
@@ -1084,12 +1173,12 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
             DrawGizmos(DevContext, SelectedObjectPosition);
         }
     }
-
+    
     if(DevContext->IsGizmoHit && DevContext->EditMode)
     {
         DevelopmentHandleGizmoTransform(DevContext, GraphicsState, SelectedObjectPosition);
     }
-
+    
     if(!IsDown(Input->Alt) && !ImGui::GetIO().WantCaptureMouse)
     {
         if(IsPressed(Input->LMB))
@@ -1109,8 +1198,8 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
         }
     }
     
-       
-    for(u32 PrimitiveIndex = 0; PrimitiveIndex < DevContext->DebugPrimitives.Size; PrimitiveIndex++)
+    PushDepth(Graphics, false);    
+    for(ak_u32 PrimitiveIndex = 0; PrimitiveIndex < DevContext->DebugPrimitives.Size; PrimitiveIndex++)        
     {
         debug_primitive* Primitive = DevContext->DebugPrimitives + PrimitiveIndex;
         switch(Primitive->Type)
@@ -1130,67 +1219,76 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, f
                 //DrawQuad(DevContext, Primitive->Quad.CenterP, Primitive->Quad.Normal, Primitive->Quad.Dim, Primitive->Quad.Color);                
             } break;
             
-            INVALID_DEFAULT_CASE;
+            AK_INVALID_DEFAULT_CASE;
         }
     }
     DevContext->DebugPrimitives.Size = 0;
+    
+    if(DevContext->SelectedObject != NULL)
+    {                
+        ak_v3f Position = AK_Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
+                                  tRenderInterpolate, 
+                                  GetEntityPosition(Game, DevContext->SelectedObject->ID));
+        DrawFrame(DevContext, Position, AK_XAxis(), AK_YAxis(), AK_ZAxis());
+    }
+    
     
     PushDepth(Graphics, true);
     
     if(DevContext->DrawGrid)
     {
-        m4 Perspective = PerspectiveM4(ViewSettings.FieldOfView, SafeRatio(Graphics->RenderDim.width, Graphics->RenderDim.height), ViewSettings.ZNear, ViewSettings.ZFar);
-        v3f FrustumCorners[8];
-        GetFrustumCorners(FrustumCorners, Perspective);
-        TransformPoints(FrustumCorners, 8, TransformM4(ViewSettings.Position, ViewSettings.Orientation));
+        ak_m4f Perspective = AK_Perspective(ViewSettings.FieldOfView, AK_SafeRatio(Graphics->RenderDim.w, Graphics->RenderDim.h), ViewSettings.ZNear, ViewSettings.ZFar);
+        ak_v3f FrustumCorners[8];
+        AK_GetFrustumCorners(FrustumCorners, Perspective);
+        AK_TransformPoints(FrustumCorners, 8, AK_TransformM4(ViewSettings.Position, ViewSettings.Orientation));
         
-        f32 MinX = FrustumCorners[0].x;
-        f32 MaxX = FrustumCorners[0].x;
-        f32 MinY = FrustumCorners[0].y;
-        f32 MaxY = FrustumCorners[0].y;
+        ak_f32 MinX = FrustumCorners[0].x;
+        ak_f32 MaxX = FrustumCorners[0].x;
+        ak_f32 MinY = FrustumCorners[0].y;
+        ak_f32 MaxY = FrustumCorners[0].y;
         for(int i = 0; i < 8; i++)
         {
-            MinX = MinimumF32(FrustumCorners[i].x, MinX);                                             
-            MaxX = MaximumF32(FrustumCorners[i].x, MaxX);
-            MinY = MinimumF32(FrustumCorners[i].y, MinY);
-            MaxY = MaximumF32(FrustumCorners[i].y, MaxY);            
+            MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
+            MaxX = AK_Max(FrustumCorners[i].x, MaxX);
+            MinY = AK_Min(FrustumCorners[i].y, MinY);
+            MaxY = AK_Max(FrustumCorners[i].y, MaxY);            
         }
         
-        DrawGrid(DevContext, Floor(MinX), Ceil(MaxX), Floor(MinY), Ceil(MaxY), RGB(0.1f, 0.1f, 0.1f));        
+        DrawGrid(DevContext, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f));        
     }
     
     DevelopmentImGuiRender(DevContext);  
     
-    PushScissor(Graphics, 0, 0, Game->RenderBuffer->Resolution.width, Game->RenderBuffer->Resolution.height);
-    PushCopyToOutput(Graphics, Game->RenderBuffer, V2i(0, 0), Game->RenderBuffer->Resolution);    
+    PushScissor(Graphics, 0, 0, Game->RenderBuffer->Resolution.w, Game->RenderBuffer->Resolution.h);
+    PushCopyToOutput(Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);    
     
     if(DevContext->DrawOtherWorld)
     {
-        v2i Offset = Game->RenderBuffer->Resolution - DevContext->RenderBuffer->Resolution;
+        ak_v2i Offset = Game->RenderBuffer->Resolution - DevContext->RenderBuffer->Resolution;
         PushCopyToOutput(Graphics, DevContext->RenderBuffer, Offset, DevContext->RenderBuffer->Resolution);    
     }
 }
 
-void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, graphics_state* GraphicsState, f32 tRenderInterpolate)
+void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, graphics_state* GraphicsState, ak_f32 tRenderInterpolate)
 {
     DevContext->Game = Game;
     DevContext->Graphics = Graphics;
     
     if(!DevContext->Initialized)
     {
-        DevContext->DevStorage = CreateArena(KILOBYTE(32));                               
-        DevContext->LogStorage = CreateArena(MEGABYTE(1));
+        DevContext->DevStorage = AK_CreateArena(AK_Kilobyte(32));                               
+        DevContext->LogStorage = AK_CreateArena(AK_Megabyte(1));
         
         DevContext->FramePlayback.MaxRecordingPathLength = 8092;
-        DevContext->FramePlayback.RecordingPath = (char*)PushSize(&DevContext->DevStorage, (DevContext->FramePlayback.MaxRecordingPathLength+1)*sizeof(char), Clear, 0); 
+        DevContext->FramePlayback.RecordingPath = DevContext->DevStorage->PushArray<ak_char>(DevContext->FramePlayback.MaxRecordingPathLength+1);
         
         DevContext->RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim/5);
         //DevContext->DrawGrid = true;
         //DevContext->DrawColliders = true;      
         //DevContext->EditMode = true;  
         
-        for(u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
-            DevContext->MeshConvexHulls[MeshIndex].Count = (u32)-1;
+        for(ak_u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
+            DevContext->MeshConvexHulls[MeshIndex].Count = (ak_u32)-1;
         
         CreateDevLineCapsuleMesh(DevContext, 1.0f, 60);
         CreateDevLineBoxMesh(DevContext);
@@ -1203,16 +1301,19 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         CreateDevPlaneMesh(DevContext, 0.4f, 0.4f);
         CreateDevTriangleCircleMesh(DevContext, 60, 0.05f);
         
-        DevContext->EntityRotations[0] = PushArray(&DevContext->DevStorage, Game->EntityStorage[0].Capacity, v3f, Clear, 0);
-        DevContext->EntityRotations[1] = PushArray(&DevContext->DevStorage, Game->EntityStorage[1].Capacity, v3f, Clear, 0);
+        DevContext->EntityRotations[0] = AK_CreateArray<ak_v3f>(Game->EntityStorage[0].Capacity);
+        DevContext->EntityRotations[1] = AK_CreateArray<ak_v3f>(Game->EntityStorage[1].Capacity);
         
-        for(u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {
-            FOR_EACH(Entity, &Game->EntityStorage[WorldIndex])
+            AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
             {
-                sqt* Transform = GetEntityTransform(Game, Entity->ID);
-                u32 PoolIndex = Game->EntityStorage[Entity->ID.WorldIndex].GetIndex(Entity->ID.ID);
-                DevContext->EntityRotations[WorldIndex][PoolIndex] = QuaternionEuler(Transform->Orientation);
+                ak_sqtf* Transform = GetEntityTransform(Game, Entity->ID);
+                ak_u32 PoolIndex = AK_PoolIndex(Entity->ID.ID);
+                
+                if(DevContext->EntityRotations[WorldIndex].Size < (PoolIndex+1))
+                    DevContext->EntityRotations[WorldIndex].Resize(PoolIndex+1);
+                DevContext->EntityRotations[WorldIndex][PoolIndex] = AK_QuatToEuler(Transform->Orientation);
             }
         }
         
@@ -1232,7 +1333,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
     
     Input->MouseDelta = {};
     Input->Scroll = 0.0f;
-    for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input->Buttons); ButtonIndex++)
+    for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(Input->Buttons); ButtonIndex++)
         Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
 }
 

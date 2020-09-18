@@ -3,7 +3,7 @@
 
 struct base_shader
 {
-    b32 Valid;
+    ak_bool Valid;
     GLuint Program;
 };
 

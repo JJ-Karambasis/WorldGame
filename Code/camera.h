@@ -5,36 +5,42 @@
 #define CAMERA_ZNEAR 0.01f
 #define CAMERA_ZFAR 500.0f
 
+struct camera_transform
+{
+    ak_v3f Translation;
+    ak_m3f Orientation;
+};
+
 struct game_camera
 {
     //TODO(JJ): We will probably need to convert the game camera orientation to a quaternion instead of spherical coordinates
     //to interpolate unless we can interpolate the spherical coordinates themselves for camera updating
-    spherical_coordinates Coordinates;
-    v3f Target;    
+    ak_v3f SphericalCoordinates;
+    ak_v3f Target;    
     
     //CONFIRM(JJ): Can we delete these or are we going to change some of this, only the field of view is 
     //something I can consider but it may be something that all game cameras share and shouldn't be specific to the individual camera
-    f32 FieldOfView;
-    f32 ZNear;
-    f32 ZFar;
+    ak_f32 FieldOfView;
+    ak_f32 ZNear;
+    ak_f32 ZFar;
 };
 
 struct camera
 {
-    v3f Velocity;
-    v3f Position;    
-    v3f FocalPoint;
-    m3 Orientation;
-    v3f AngularVelocity;
-    f32 Distance;
+    ak_v3f Velocity;
+    ak_v3f Position;    
+    ak_v3f FocalPoint;
+    ak_m3f Orientation;
+    ak_v3f AngularVelocity;
+    ak_f32 Distance;
 };
 
-inline rigid_transform_matrix 
+inline camera_transform
 GetCameraTransform(game_camera* Camera)
 {
-    rigid_transform_matrix Result = {};
-    Result.Translation = Camera->Target+ToCartesianCoordinates(Camera->Coordinates);
-    Result.Orientation = CreateBasis(Normalize(Result.Translation-Camera->Target));       
+    camera_transform Result = {};
+    Result.Translation = Camera->Target+AK_SphericalToCartesian(Camera->SphericalCoordinates);
+    Result.Orientation = AK_Basis(AK_Normalize(Result.Translation-Camera->Target));       
     return Result;
 }
 
@@ -42,7 +48,7 @@ inline view_settings
 GetViewSettings(game_camera* Camera)
 {
     view_settings Result = {};
-    rigid_transform_matrix CameraTransform = GetCameraTransform(Camera);            
+    camera_transform CameraTransform = GetCameraTransform(Camera);            
     Result.Position = CameraTransform.Translation;
     Result.Orientation = CameraTransform.Orientation;
     Result.FieldOfView = Camera->FieldOfView;

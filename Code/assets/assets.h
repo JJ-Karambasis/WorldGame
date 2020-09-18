@@ -1,45 +1,45 @@
-#ifndef ASSETS_2_H
-#define ASSETS_2_H
+#ifndef ASSETS_H
+#define ASSETS_H
 #include "asset_header.h"
 #include "asset_types.h"
 
 struct material_diffuse
 {
-    b32 IsTexture;
+    ak_bool IsTexture;
     union
     {
         texture_asset_id DiffuseID;
-        v3f Diffuse;
+        ak_v3f Diffuse;
     };
 };
 
 struct material_normal
 {
-    b32 InUse;
+    ak_bool InUse;
     texture_asset_id NormalID;    
 };
 
 struct material_specular
 {
-    b32 InUse;
-    b32 IsTexture;
+    ak_bool InUse;
+    ak_bool IsTexture;
     union
     {
         texture_asset_id SpecularID;
-        f32 Specular;
+        ak_f32 Specular;
     };
-    i32 Shininess;
+    ak_i32 Shininess;
 };
 
 struct samples
 {
-    u64 Count;
-    i16* Data;
+    ak_u64 Count;
+    ak_i16* Data;
 };
 
 struct audio
 {
-    u32 ChannelCount;
+    ak_u32 ChannelCount;
     samples Samples;    
 };
 
@@ -52,10 +52,10 @@ struct material
 
 struct assets
 {
-    platform_file_handle AssetFile;
+    ak_file_handle* AssetFile;
     
-    hash_map<char*, mesh_asset_id> MeshNameMap;        
-    hash_map<char*, texture_asset_id> TextureNameMap;
+    ak_hash_map<char*, mesh_asset_id> MeshNameMap;        
+    ak_hash_map<char*, texture_asset_id> TextureNameMap;
     
     mesh_info* MeshInfos;
     mesh** Meshes;
@@ -67,7 +67,7 @@ struct assets
 };
 
 inline material_diffuse
-CreateDiffuse(v3f Diffuse)
+CreateDiffuse(ak_v3f Diffuse)
 {
     material_diffuse Result = {};
     Result.Diffuse = Diffuse;
@@ -84,7 +84,7 @@ CreateDiffuse(texture_asset_id DiffuseID)
 }
 
 inline material_specular
-CreateSpecular(f32 Specular, i32 Shininess)
+CreateSpecular(ak_f32 Specular, ak_i32 Shininess)
 {
     material_specular Result = {};
     Result.InUse = true;
@@ -94,7 +94,7 @@ CreateSpecular(f32 Specular, i32 Shininess)
 }
 
 inline material_specular
-CreateSpecular(texture_asset_id SpecularID, i32 Shininess)
+CreateSpecular(texture_asset_id SpecularID, ak_i32 Shininess)
 {
     material_specular Result = {};
     Result.InUse = true;
@@ -132,7 +132,7 @@ InvalidNormal()
 
 global material Global_PlayerMaterial
 {
-    CreateDiffuse(Blue3()),
+    CreateDiffuse(AK_Blue3()),
     InvalidNormal(),
     CreateSpecular(0.5f, 8)
 };

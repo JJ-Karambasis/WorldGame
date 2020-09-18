@@ -62,7 +62,7 @@ inline GLenum GetInternalFormat(graphics_texture_format Format)
             return GL_SRGB8_ALPHA8;
         }        
         
-        INVALID_DEFAULT_CASE;
+        AK_INVALID_DEFAULT_CASE;
     }
     
     return (GLenum)-1;
@@ -89,17 +89,17 @@ inline GLenum GetFormat(graphics_texture_format Format)
             return GL_RGBA;
         }
         
-        INVALID_DEFAULT_CASE;
+        AK_INVALID_DEFAULT_CASE;
     }
     
     return (GLenum)-1;
 }
 
-inline ptr
+inline ak_uaddr
 GetIndexTypeSize(GLenum IndexType)
 {        
-    ASSERT((IndexType == GL_UNSIGNED_INT) || (IndexType == GL_UNSIGNED_SHORT));
-    ptr Result = (IndexType == GL_UNSIGNED_INT) ? sizeof(u32) : sizeof(u16);
+    AK_Assert((IndexType == GL_UNSIGNED_INT) || (IndexType == GL_UNSIGNED_SHORT), "Invalid index type");
+    ak_uaddr Result = (IndexType == GL_UNSIGNED_INT) ? sizeof(ak_u32) : sizeof(ak_u16);
     return Result;
 }
 
@@ -127,7 +127,7 @@ GetFilterType(graphics_filter Filter)
         case GRAPHICS_FILTER_LINEAR:
         return GL_LINEAR;                
         
-        INVALID_DEFAULT_CASE;
+        AK_INVALID_DEFAULT_CASE;
     }
     
     return (GLenum)-1;
@@ -144,31 +144,31 @@ GetBlendFactor(graphics_blend Blend)
         case GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA:
         return GL_ONE_MINUS_SRC_ALPHA;
         
-        INVALID_DEFAULT_CASE;
+        AK_INVALID_DEFAULT_CASE;
     }
     
     return (GLenum)-1;
 }
 
 inline void
-SetUniformM4(GLint Uniform, m4 Value)
+SetUniformM4(GLint Uniform, ak_m4f Value)
 {
-    glUniformMatrix4fv(Uniform, 1, GL_FALSE, Value.M);
+    glUniformMatrix4fv(Uniform, 1, GL_FALSE, Value.Data);
 }
 
 inline void 
-SetUniform4f(GLint Uniform, v4f Value)
+SetUniform4f(GLint Uniform, ak_v4f Value)
 {
     glUniform4f(Uniform, Value.x, Value.y, Value.z, Value.w);
 }
 
 inline void 
-SetUniform3f(GLint Uniform, v3f Value)
+SetUniform3f(GLint Uniform, ak_v3f Value)
 {
     glUniform3f(Uniform, Value.x, Value.y, Value.z);
 }
 
-b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
+ak_bool BindProgram(GLuint* BoundProgram, GLuint NewProgram)
 {
     if(*BoundProgram != NewProgram)
     {
@@ -180,7 +180,7 @@ b32 BindProgram(GLuint* BoundProgram, GLuint NewProgram)
     return false;
 }
 
-b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
+ak_bool BindVAO(GLuint* BoundVAO, GLuint NewVAO)
 {    
     if(*BoundVAO != NewVAO)
     {
@@ -192,7 +192,7 @@ b32 BindVAO(GLuint* BoundVAO, GLuint NewVAO)
     return false;
 }
 
-GLuint AllocateShadowMapArray(u32 ArrayCount)
+GLuint AllocateShadowMapArray(ak_u32 ArrayCount)
 {
     GLuint Result;
     glGenTextures(1, &Result);
@@ -204,13 +204,13 @@ GLuint AllocateShadowMapArray(u32 ArrayCount)
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     
-    c4 BorderColor = White4();
-    glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, (f32*)&BorderColor);            
+    ak_color4f BorderColor = AK_White4();
+    glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, (ak_f32*)&BorderColor);            
     
     return Result;
 }
 
-GLuint AllocateUBO(ptr UBOSize, u32 UBOIndex)
+GLuint AllocateUBO(ak_uaddr UBOSize, ak_u32 UBOIndex)
 {
     GLuint Result;
     glGenBuffers(1, &Result);
@@ -222,31 +222,31 @@ GLuint AllocateUBO(ptr UBOSize, u32 UBOIndex)
 }
 
 inline void 
-UploadUBO(GLuint UBO, ptr UploadSize, void* Data)
+UploadUBO(GLuint UBO, ak_uaddr UploadSize, void* Data)
 {
     glBindBuffer(GL_UNIFORM_BUFFER, UBO);
     glBufferSubData(GL_UNIFORM_BUFFER, 0, UploadSize, Data);                                
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 }
 
-void UploadSkinningMatrices(opengl_buffer_list* SkinningBuffers, u32 SkinningIndex, u32 JointCount, m4* Joints)
+void UploadSkinningMatrices(opengl_buffer_list* SkinningBuffers, ak_u32 SkinningIndex, ak_u32 JointCount, ak_m4f* Joints)
 {    
-    ASSERT(SkinningIndex <= SkinningBuffers->Count);    
+    AK_Assert(SkinningIndex <= SkinningBuffers->Count, "Index out of bounds");    
     
     if(SkinningIndex == SkinningBuffers->Count)
     {                    
-        ASSERT(SkinningBuffers->Count < SkinningBuffers->Capacity);
-        GLuint SkinningUBO = AllocateUBO(sizeof(m4)*MAX_JOINT_COUNT, SKINNING_BUFFER_INDEX);         
+        AK_Assert(SkinningBuffers->Count < SkinningBuffers->Capacity, "Allocating to many skinning buffers");
+        GLuint SkinningUBO = AllocateUBO(sizeof(ak_m4f)*MAX_JOINT_COUNT, SKINNING_BUFFER_INDEX);         
         SkinningBuffers->Ptr[SkinningBuffers->Count++] = SkinningUBO;                                                                                                    
     }
     
-    UploadUBO(SkinningBuffers->Ptr[SkinningIndex], sizeof(m4)*JointCount, Joints);    
+    UploadUBO(SkinningBuffers->Ptr[SkinningIndex], sizeof(ak_m4f)*JointCount, Joints);    
 }
 
 inline GLenum
 GetIndexType(graphics_index_format IndexFormat)
 {    
-    ASSERT(IndexFormat != GRAPHICS_INDEX_FORMAT_UNKNOWN);
+    AK_Assert(IndexFormat != GRAPHICS_INDEX_FORMAT_UNKNOWN, "Invalid index format");
     GLenum IndexType = (IndexFormat == GRAPHICS_INDEX_FORMAT_32_BIT) ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
     return IndexType;
 }
@@ -282,14 +282,14 @@ ALLOCATE_MESH(AllocateMesh)
     //TODO(JJ): We should allocate this data structure from a pool of opengl graphics meshes later
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    i64 ResultID = OpenGL->MeshPool.Allocate();
+    ak_u64 ResultID = OpenGL->MeshPool.Allocate();
     opengl_mesh* Mesh = OpenGL->MeshPool.Get(ResultID);
     
     Mesh->IsDynamic = false;
     Mesh->IndexType = GetIndexType(IndexFormat);
     
     glGenVertexArrays(1, &Mesh->VAO);
-    glGenBuffers(ARRAYCOUNT(Mesh->Buffers), Mesh->Buffers);    
+    glGenBuffers(AK_Count(Mesh->Buffers), Mesh->Buffers);    
     
     glBindVertexArray(Mesh->VAO);
     
@@ -304,15 +304,15 @@ ALLOCATE_MESH(AllocateMesh)
     {
         case GRAPHICS_VERTEX_FORMAT_P3:
         {                                    
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3, P));
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3, P));
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
         } break;
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3:
         {                        
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3, N));            
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3, N));            
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
@@ -321,10 +321,10 @@ ALLOCATE_MESH(AllocateMesh)
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3_WEIGHTS:
         {                        
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, N));            
-            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointI));                        
-            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_weights, JointW));
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_w, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_w, N));            
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_w, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_w, JointW));
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);
@@ -334,9 +334,9 @@ ALLOCATE_MESH(AllocateMesh)
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3_UV:
         {
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, N));            
-            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv, UV));
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv, N));            
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv, UV));
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
@@ -345,11 +345,11 @@ ALLOCATE_MESH(AllocateMesh)
         
         case GRAPHICS_VERTEX_FORMAT_P3_N3_UV_WEIGHTS:
         {
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, P));
-            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, N));            
-            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, UV));
-            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointI));                        
-            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p3_n3_uv_weights, JointW));
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv_w, P));
+            glVertexAttribPointer(NORMAL_ATTRIBUTE_INDEX, 3, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv_w, N));            
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv_w, UV));
+            glVertexAttribIPointer(JOINT_INDEX_ATTRIBUTE_INDEX, 1, GL_UNSIGNED_INT, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv_w, JointI));                        
+            glVertexAttribPointer(JOINT_WEIGHT_ATTRIBUTE_INDEX, 4, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p3_n3_uv_w, JointW));
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(NORMAL_ATTRIBUTE_INDEX);            
@@ -358,7 +358,7 @@ ALLOCATE_MESH(AllocateMesh)
             glEnableVertexAttribArray(JOINT_WEIGHT_ATTRIBUTE_INDEX);
         } break;
         
-        INVALID_DEFAULT_CASE;
+        AK_INVALID_DEFAULT_CASE;
     }
     
     glBindVertexArray(0);    
@@ -370,14 +370,14 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
     
-    i64 ResultID = OpenGL->MeshPool.Allocate();
+    ak_u64 ResultID = OpenGL->MeshPool.Allocate();
     opengl_mesh* Mesh = OpenGL->MeshPool.Get(ResultID);
     
     Mesh->IsDynamic = true;
     Mesh->IndexType = GetIndexType(IndexFormat);
     
     glGenVertexArrays(1, &Mesh->VAO);
-    glGenBuffers(ARRAYCOUNT(Mesh->Buffers), Mesh->Buffers);    
+    glGenBuffers(AK_Count(Mesh->Buffers), Mesh->Buffers);    
     
     glBindVertexArray(Mesh->VAO);
     
@@ -390,14 +390,16 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
         {
             
             GLsizei Stride = (GLsizei)GetVertexStride(VertexFormat);            
-            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX,  2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, P));
-            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, UV));
-            glVertexAttribPointer(COLOR_ATTRIBUTE_INDEX,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)OFFSET_OF(vertex_p2_uv_c, C));
+            glVertexAttribPointer(POSITION_ATTRIBUTE_INDEX,  2, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p2_uv_c, P));
+            glVertexAttribPointer(UV_ATTRIBUTE_INDEX, 2, GL_FLOAT, GL_FALSE, Stride, (void*)AK_FieldOffset(ak_vertex_p2_uv_c, UV));
+            glVertexAttribPointer(COLOR_ATTRIBUTE_INDEX,  4, GL_UNSIGNED_BYTE, GL_TRUE, Stride, (void*)AK_FieldOffset(ak_vertex_p2_uv_c, C));
             
             glEnableVertexAttribArray(POSITION_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(UV_ATTRIBUTE_INDEX);
             glEnableVertexAttribArray(COLOR_ATTRIBUTE_INDEX);
         } break;
+        
+        AK_INVALID_DEFAULT_CASE;
     }
     
     glBindVertexArray(0);
@@ -408,7 +410,7 @@ ALLOCATE_DYNAMIC_MESH(AllocateDynamicMesh)
 ALLOCATE_RENDER_BUFFER(AllocateRenderBuffer)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;    
-    opengl_render_buffer* Result = PushStruct(&OpenGL->Storage, opengl_render_buffer, Clear, 0);
+    opengl_render_buffer* Result = OpenGL->Storage->Push<opengl_render_buffer>();
     
     glGenFramebuffers(1, &Result->Framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, Result->Framebuffer);
@@ -416,7 +418,7 @@ ALLOCATE_RENDER_BUFFER(AllocateRenderBuffer)
     glGenTextures(1, &Result->ColorAttachment);
     glBindTexture(GL_TEXTURE_2D, Result->ColorAttachment);
     
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, Resolution.width, Resolution.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8, Resolution.w, Resolution.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -425,7 +427,7 @@ ALLOCATE_RENDER_BUFFER(AllocateRenderBuffer)
     
     glGenRenderbuffers(1, &Result->DepthStencilAttachment);
     glBindRenderbuffer(GL_RENDERBUFFER, Result->DepthStencilAttachment);    
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, Resolution.width, Resolution.height);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, Resolution.w, Resolution.h);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Result->DepthStencilAttachment);    
@@ -480,15 +482,19 @@ void* Platform_LoadProc(char* FunctionName)
     return Function;
 }
 
-b32 Platform_InitOpenGL(void** PlatformData)
+ak_bool Platform_InitOpenGL(void** PlatformData)
 {
     HWND Window = (HWND)PlatformData[0];
     HINSTANCE Instance = (HINSTANCE)PlatformData[1];
-    char ClassName[256];
+    ak_char ClassName[256];
     GetClassName(Window, ClassName, sizeof(ClassName));
     
     HWND TempWindow = CreateWindow(ClassName, "Temp", WS_SYSMENU, 0, 0, 1, 1, NULL, NULL, Instance, NULL);
-    BOOL_CHECK_AND_HANDLE(TempWindow, "Failed to create the temporary window.");
+    if(!TempWindow)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }    
     
     PIXELFORMATDESCRIPTOR TempPixelFormatDescriptor = 
     {
@@ -499,43 +505,85 @@ b32 Platform_InitOpenGL(void** PlatformData)
     
     HDC TempDeviceContext = GetDC(TempWindow);
     
-    i32 TempPixelFormatIndex = ChoosePixelFormat(TempDeviceContext, &TempPixelFormatDescriptor);
-    BOOL_CHECK_AND_HANDLE(TempPixelFormatIndex, "Failed to get the temporary pixel format index.");
-    BOOL_CHECK_AND_HANDLE(SetPixelFormat(TempDeviceContext, TempPixelFormatIndex, &TempPixelFormatDescriptor),
-                          "Failed to set the temporary pixel format.");
+    ak_i32 TempPixelFormatIndex = ChoosePixelFormat(TempDeviceContext, &TempPixelFormatDescriptor);
+    if(!TempPixelFormatIndex)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
+    
+    if(!SetPixelFormat(TempDeviceContext, TempPixelFormatIndex, &TempPixelFormatDescriptor))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+        
+    }
     
     HGLRC TempRenderingContext = wglCreateContext(TempDeviceContext);
-    BOOL_CHECK_AND_HANDLE(TempRenderingContext, "Failed to create the temporary rendering context.");    
-    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(TempDeviceContext, TempRenderingContext), "Failed to set the temporary context's as the current context.");
+    if(!TempRenderingContext)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;        
+    }
+    
+    if(!wglMakeCurrent(TempDeviceContext, TempRenderingContext))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;        
+    }
     
     PFNWGLGETEXTENSIONSSTRINGARBPROC wglGetExtensionsStringARB = (PFNWGLGETEXTENSIONSSTRINGARBPROC)wglGetProcAddress("wglGetExtensionsStringARB");
-    BOOL_CHECK_AND_HANDLE(wglGetExtensionsStringARB, "wglGetExtensionsStringARB function not found");
+    if(!wglGetExtensionsStringARB)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "wglGetExtensionsStringARB function not found");
+        return false;
+    }    
     
-    char* Extensions = (char*)wglGetExtensionsStringARB(TempDeviceContext);
-    char* Iter = Extensions;
+    ak_char* Extensions = (ak_char*)wglGetExtensionsStringARB(TempDeviceContext);
+    ak_char* Iter = Extensions;
     
-    b32 wglPixelFormatExtensionFound = false;
-    b32 wglSRBExtensionFound = false;
-    b32 wglSwapControlExtensionFound = false;
+    ak_bool wglPixelFormatExtensionFound = false;
+    ak_bool wglSRBExtensionFound = false;
+    ak_bool wglSwapControlExtensionFound = false;
     
     while(*Iter)
     {
-        char* End = ProcessToken(Iter);
+        ak_string Token = AK_ReadToken(Iter);        
         
-        if(StringEquals("WGL_ARB_pixel_format", Iter, End-Iter)) wglPixelFormatExtensionFound = true;        
-        if(StringEquals("WGL_EXT_swap_control", Iter, End-Iter)) wglSwapControlExtensionFound = true;
-        if(StringEquals("WGL_ARB_framebuffer_sRGB", Iter, End-Iter)) wglSRBExtensionFound = true;
-        if(StringEquals("WGL_EXT_framebuffer_sRGB", Iter, End-Iter)) wglSRBExtensionFound = true;        
+        if(AK_StringEquals("WGL_ARB_pixel_format", Token)) wglPixelFormatExtensionFound = true;        
+        if(AK_StringEquals("WGL_EXT_swap_control", Token)) wglSwapControlExtensionFound = true;
+        if(AK_StringEquals("WGL_ARB_framebuffer_sRGB", Token)) wglSRBExtensionFound = true;
+        if(AK_StringEquals("WGL_EXT_framebuffer_sRGB", Token)) wglSRBExtensionFound = true;        
         
-        Iter = EatWhitespace(End);        
+        Iter += Token.Length;        
     }
     
-    BOOL_CHECK_AND_HANDLE(wglPixelFormatExtensionFound, "WGL_ARB_pixel_format extension not found");
-    BOOL_CHECK_AND_HANDLE(wglSwapControlExtensionFound, "WGL_EXT_swap_control extension not found");
-    BOOL_CHECK_AND_HANDLE(wglSRBExtensionFound, "WGL_ARB_framebuffer_sRGB or WGL_EXT_framebuffer_sRGB extension not found");
+    if(!wglPixelFormatExtensionFound)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
+    
+    if(!wglSwapControlExtensionFound)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
+    
+    if(!wglSRBExtensionFound)
+    {
+        //TODO(JJ): Diagnostic and error loggin
+        return false;
+    }    
     
     PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)wglGetProcAddress("wglChoosePixelFormatARB");
-    BOOL_CHECK_AND_HANDLE(wglChoosePixelFormatARB, "wglChoosePixelFormatARB function not found");
+    if(!wglChoosePixelFormatARB)
+    {
+        //TOOD(JJ): Diagnostic and error logging
+        AK_Assert(false, "wglChoosePixelFormatARG function not found");
+        return false;
+    }    
     
     int PixelFormatAttributes[] = 
     {
@@ -553,15 +601,25 @@ b32 Platform_InitOpenGL(void** PlatformData)
     HDC DeviceContext = GetDC(Window);
     
     UINT NumFormat;
-    i32 PixelFormatIndex;
-    BOOL_CHECK_AND_HANDLE(wglChoosePixelFormatARB(DeviceContext, PixelFormatAttributes, NULL, 1, &PixelFormatIndex, &NumFormat) || !NumFormat,
-                          "Failed to choose an actual pixel format and retrieve its index.");
+    ak_i32 PixelFormatIndex;
+    if(!wglChoosePixelFormatARB(DeviceContext, PixelFormatAttributes, NULL, 1, &PixelFormatIndex, &NumFormat) || !NumFormat)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
     
     PIXELFORMATDESCRIPTOR PixelFormatDescriptor = {};
-    BOOL_CHECK_AND_HANDLE(DescribePixelFormat(DeviceContext, PixelFormatIndex, sizeof(PIXELFORMATDESCRIPTOR), &PixelFormatDescriptor),
-                          "Failed to get a description of the actual pixel format descriptor.");
-    BOOL_CHECK_AND_HANDLE(SetPixelFormat(DeviceContext, PixelFormatIndex, &PixelFormatDescriptor), 
-                          "Failed to set the actual pixel format descriptor.");
+    if(!DescribePixelFormat(DeviceContext, PixelFormatIndex, sizeof(PIXELFORMATDESCRIPTOR), &PixelFormatDescriptor))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
+    
+    if(!SetPixelFormat(DeviceContext, PixelFormatIndex, &PixelFormatDescriptor))
+    {
+        //TODO(JJ): Diangostic and error logging
+        return false;        
+    }    
     
     int AttribFlags = 0;
 #if DEVELOPER_BUILD
@@ -578,27 +636,49 @@ b32 Platform_InitOpenGL(void** PlatformData)
     };
     
     PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)wglGetProcAddress("wglCreateContextAttribsARB");
-    BOOL_CHECK_AND_HANDLE(wglCreateContextAttribsARB, "Failed to load the wglCreateContextAttribsARB function");
+    if(!wglCreateContextAttribsARB)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
     
     HGLRC RenderingContext = wglCreateContextAttribsARB(DeviceContext, 0, Attribs);
-    BOOL_CHECK_AND_HANDLE(RenderingContext, "Failed to create the opengl rendering context.");
+    if(!RenderingContext)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }    
     
-    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(NULL, NULL), "Failed to unset the current contexts.");
-    BOOL_CHECK_AND_HANDLE(wglDeleteContext(TempRenderingContext), "Failed to delete the rendering temporary context.");
-    BOOL_CHECK_AND_HANDLE(wglMakeCurrent(DeviceContext, RenderingContext), "Failed to set the actual context as the current context.");
+    if(!wglMakeCurrent(NULL, NULL))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
+    
+    if(!wglDeleteContext(TempRenderingContext))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
+    
+    if(!wglMakeCurrent(DeviceContext, RenderingContext))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
     
     PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
-    BOOL_CHECK_AND_HANDLE(wglSwapIntervalEXT, "Failed to load the wglSwapIntervalEXT function.");
+    if(!wglSwapIntervalEXT)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "Failed to load the wglSwapIntervalEXT function");
+        return false;
+    }    
     
-    wglSwapIntervalEXT(1);
-    
+    wglSwapIntervalEXT(1);    
     DestroyWindow(TempWindow);
     
-    return true;
-    
-    handle_error:
-    
-    return false;
+    return true;    
 }
 
 void Platform_SwapBuffers(void* PlatformData)
@@ -617,15 +697,13 @@ void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLs
     if((ID == 131185) || (ID == 131204) || (ID == 131218) || (ID == 131139) || (ID == 131169))        
         return;
     
-    ConsoleLog("GL Debug Message: %s\n", Message);    
-    
-    ASSERT(false);
+    AK_Assert(false, "GL Debug Message: %s\n", Message);
 }
 
 #endif
 
 extern "C"
-EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
+AK_EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
 {       
     Graphics->AllocateTexture = AllocateTexture;
     Graphics->AllocateMesh = AllocateMesh;
@@ -691,7 +769,7 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback = (PFNGLDEBUGMESSAGECALLBACKPROC)Platform_LoadProc("glDebugMessageCallback");
     PFNGLDEBUGMESSAGECONTROLPROC glDebugMessageControl = (PFNGLDEBUGMESSAGECONTROLPROC)Platform_LoadProc("glDebugMessageControl");
     
-    ASSERT(glDebugMessageControl && glDebugMessageCallback);
+    AK_Assert(glDebugMessageControl && glDebugMessageCallback, "Failed to load glDebugMessageControl or glDebugMessageCallback");
     glEnable(GL_DEBUG_OUTPUT);
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
     
@@ -700,57 +778,63 @@ EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     
 #endif        
     
-    return true;
-    
-    handle_error:
-    return false;
+    return true;    
 }
 
 extern "C"
-EXPORT INIT_GRAPHICS(InitGraphics)
-{    
-    SetDefaultArena(TempStorage);    
+AK_EXPORT INIT_GRAPHICS(InitGraphics)
+{       
+    AK_SetGlobalArena(TempStorage);
     
-    arena GraphicsStorage = CreateArena(KILOBYTE(128));    
-    opengl_context* OpenGL = PushStruct(&GraphicsStorage, opengl_context, Clear, 0);
-    OpenGL->TempStorage = TempStorage;
+    ak_arena* GraphicsStorage = AK_CreateArena(AK_Kilobyte(128));    
+    opengl_context* OpenGL = GraphicsStorage->Push<opengl_context>();    
     
     OpenGL->Storage = GraphicsStorage;
-    OpenGL->MeshPool = CreatePool<opengl_mesh>(&OpenGL->Storage, 128);
-    OpenGL->TexturePool = CreatePool<opengl_texture>(&OpenGL->Storage, 128);
+    OpenGL->TempStorage = TempStorage;
+    OpenGL->MeshPool = AK_CreatePool<opengl_mesh>();
+    OpenGL->TexturePool = AK_CreatePool<opengl_texture>();
     
     graphics* Graphics = &OpenGL->Graphics;
     Graphics->PlatformData = PlatformData;
     
-    BOOL_CHECK_AND_HANDLE(Platform_InitOpenGL(PlatformData), "Failed to initialize opengl.");
+    if(!Platform_InitOpenGL(PlatformData))
+    {
+        //TODO(JJ): Diangostic and error logging
+        return NULL;
+    }    
     
     PFNGLGETSTRINGIPROC glGetStringi = (PFNGLGETSTRINGIPROC)Platform_LoadProc("glGetStringi");
-    BOOL_CHECK_AND_HANDLE(glGetStringi, "Failed to load the glGetStringi function.");
-    
-    b32 GeometryShaderExtensionFound = false;
-    for(u32 ExtensionIndex = 0; ; ExtensionIndex++)
+    if(!glGetStringi)
     {
-        const char* Extension = (const char*)glGetStringi(GL_EXTENSIONS, ExtensionIndex);
+        //TODO(JJ: Diagnostic and error logging
+        AK_Assert(false, "Failed to load the glGetStringi function");
+        return false;
+    }
+    
+    ak_bool GeometryShaderExtensionFound = false;
+    for(ak_u32 ExtensionIndex = 0; ; ExtensionIndex++)
+    {
+        const char* Extension = (const ak_char*)glGetStringi(GL_EXTENSIONS, ExtensionIndex);
         if(!Extension)
             break;
         
-        if(StringEquals("GL_ARB_geometry_shader4", Extension)) GeometryShaderExtensionFound = true;        
+        if(AK_StringEquals("GL_ARB_geometry_shader4", Extension)) GeometryShaderExtensionFound = true;        
     }
     
-    //CONFIRM(JJ): Do we need a geometry shader?
-    //BOOL_CHECK_AND_HANDLE(GeometryShaderExtensionFound, "Failed GL_ARB_geometry_shader4 extension not found.");
+    //CONFIRM(JJ): Do we need a geometry shader?   
     
-    BindGraphicsFunctions(Graphics);
+    if(!BindGraphicsFunctions(Graphics))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return false;
+    }
     
     glGenFramebuffers(1, &OpenGL->ShadowMapFBO);
     glGenFramebuffers(1, &OpenGL->OmniShadowMapFBO);
     OpenGL->ShadowMapTextureArray     = AllocateShadowMapArray(MAX_DIRECTIONAL_LIGHT_COUNT);
     OpenGL->OmniShadowMapTextureArray = AllocateShadowMapArray(MAX_POINT_LIGHT_COUNT*6);
     
-    return Graphics;
-    
-    handle_error:
-    return NULL;
+    return Graphics;    
 }
 
 #define CHECK_SHADER(shader) \
@@ -766,13 +850,13 @@ do \
            } \
            else \
            { \
-               ASSERT(OpenGL->##shader.Program > 0); \
-                      OpenGL->##shader.Valid = true; \
+               AK_Assert(OpenGL->##shader.Program > 0, "Failed to create the shader %s", #shader); \
+                         OpenGL->##shader.Valid = true; \
            } \
        } \
 } while(0)
 
-b32 BindShadowMapFBO(GLuint FBO, GLuint TextureArray, u32* Counter)
+ak_bool BindShadowMapFBO(GLuint FBO, GLuint TextureArray, ak_u32* Counter)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, FBO);
     glBindTexture(GL_TEXTURE_2D_ARRAY, TextureArray);                
@@ -780,24 +864,24 @@ b32 BindShadowMapFBO(GLuint FBO, GLuint TextureArray, u32* Counter)
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);                
     
-    b32 Result = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    ak_bool Result = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
     
     (*Counter)++;
     return Result;
 }
 
 extern "C"
-EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
+AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {
     SET_DEVELOPER_CONTEXT();
         
     opengl_context* OpenGL = (opengl_context*)Graphics;            
-    SetDefaultArena(OpenGL->TempStorage);
+    AK_SetGlobalArena(OpenGL->TempStorage);
     
     if(!OpenGL->SkinningBuffers.Ptr)
     {
         OpenGL->SkinningBuffers.Capacity = 32;
-        OpenGL->SkinningBuffers.Ptr = PushArray(&OpenGL->Storage, OpenGL->SkinningBuffers.Capacity, GLuint, Clear, 0);
+        OpenGL->SkinningBuffers.Ptr = OpenGL->Storage->PushArray<GLuint>(OpenGL->SkinningBuffers.Capacity);
     }    
     
     CHECK_SHADER(ImGuiShader);
@@ -818,15 +902,15 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     CHECK_SHADER(ShadowMapShader);
     CHECK_SHADER(OmniShadowMapShader);
     
-    m4 Projection = IdentityM4();    
-    m4 ViewProjection = IdentityM4();
-    v3f ViewPosition = V3();    
+    ak_m4f Projection = AK_IdentityM4<ak_f32>();    
+    ak_m4f ViewProjection = AK_IdentityM4<ak_f32>();
+    ak_v3f ViewPosition = AK_V3<ak_f32>();    
     
     if(!OpenGL->LightUBO)
         OpenGL->LightUBO = AllocateUBO(sizeof(opengl_light_buffer), LIGHT_BUFFER_INDEX);
     
     if(!OpenGL->LightViewProjectionUBO)
-        OpenGL->LightViewProjectionUBO = AllocateUBO(sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LIGHT_VIEW_PROJECTION_INDEX);
+        OpenGL->LightViewProjectionUBO = AllocateUBO(sizeof(ak_m4f)*MAX_DIRECTIONAL_LIGHT_COUNT, LIGHT_VIEW_PROJECTION_INDEX);
     
     glEnable(GL_SCISSOR_TEST);        
     
@@ -837,7 +921,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     opengl_texture_pool* TexturePool = &OpenGL->TexturePool;
     opengl_mesh_pool* MeshPool = &OpenGL->MeshPool;
     
-    u32 SkinningIndex = 0;            
+    ak_u32 SkinningIndex = 0;            
     
     shadow_pass ShadowPass = {};
     opengl_forward_pass ForwardPass = InitForwardPass();        
@@ -845,7 +929,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     GLint ModelUniform = -1;
     
     push_command_list* CommandList = &Graphics->CommandList;            
-    for(u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
+    for(ak_u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
     {
         push_command* Command = CommandList->Ptr[CommandIndex];
         switch(Command->Type)
@@ -856,8 +940,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ShadowPass.LastState = SHADOW_PASS_STATE_NONE;                
                 ShadowPass.Current = true;                
                 
-                if(!BindShadowMapFBO(OpenGL->ShadowMapFBO, OpenGL->ShadowMapTextureArray, &ShadowPass.ShadowMapCounter))
-                    INVALID_CODE;
+                ak_bool Result = BindShadowMapFBO(OpenGL->ShadowMapFBO, OpenGL->ShadowMapTextureArray, &ShadowPass.ShadowMapCounter);
+                AK_Assert(Result, "Shadow map failed to bind");
                 
                 ShadowPass.State = SHADOW_PASS_STATE_DIRECTIONAL;                
             } break;
@@ -869,8 +953,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 ShadowPass.Current = true;                     
                 
                 push_command_omni_shadow_map* OmniShadowMap = (push_command_omni_shadow_map*)Command;                
-                if(!BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &ShadowPass.OmniShadowMapCounter))
-                    INVALID_CODE;
+                ak_bool Result = BindShadowMapFBO(OpenGL->OmniShadowMapFBO, OpenGL->OmniShadowMapTextureArray, &ShadowPass.OmniShadowMapCounter);
+                AK_Assert(Result, "Shadow map failed to bind");
                 
                 ShadowPass.State = SHADOW_PASS_STATE_OMNI_DIRECTIONAL;
                 ShadowPass.FarPlaneDistance = OmniShadowMap->FarPlaneDistance;                
@@ -900,29 +984,29 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 DstLightBuffer.DirectionalLightCount = SrcLightBuffer.DirectionalLightCount;
                 DstLightBuffer.PointLightCount = SrcLightBuffer.PointLightCount;
                 
-                m4 LightViewProjectionBuffers[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
+                ak_m4f LightViewProjectionBuffers[MAX_DIRECTIONAL_LIGHT_COUNT] = {};
                 
-                for(i32 DirectionalLightIndex = 0; DirectionalLightIndex < DstLightBuffer.DirectionalLightCount; DirectionalLightIndex++)
+                for(ak_i32 DirectionalLightIndex = 0; DirectionalLightIndex < DstLightBuffer.DirectionalLightCount; DirectionalLightIndex++)
                 {
                     graphics_directional_light* SrcLight = SrcLightBuffer.DirectionalLights + DirectionalLightIndex;
                     opengl_directional_light* DstLight = DstLightBuffer.DirectionalLights + DirectionalLightIndex;
                     
                     LightViewProjectionBuffers[DirectionalLightIndex] = SrcLight->ViewProjection;
                     
-                    DstLight->Direction =  V4(SrcLight->Direction, 0.0f);
-                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);                    
+                    DstLight->Direction =  AK_V4(SrcLight->Direction, 0.0f);
+                    DstLight->Color = AK_V4(SrcLight->Color*SrcLight->Intensity, 0.0f);                    
                 }
                 
-                for(i32 PointLightIndex = 0; PointLightIndex < DstLightBuffer.PointLightCount; PointLightIndex++)
+                for(ak_i32 PointLightIndex = 0; PointLightIndex < DstLightBuffer.PointLightCount; PointLightIndex++)
                 {
                     graphics_point_light* SrcLight = SrcLightBuffer.PointLights + PointLightIndex;
                     opengl_point_light* DstLight = DstLightBuffer.PointLights + PointLightIndex;
                     
-                    DstLight->Color = V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
-                    DstLight->Position = V4(SrcLight->Position, SrcLight->Radius);                                                           
+                    DstLight->Color = AK_V4(SrcLight->Color*SrcLight->Intensity, 0.0f);
+                    DstLight->Position = AK_V4(SrcLight->Position, SrcLight->Radius);                                                           
                 }
                 
-                UploadUBO(OpenGL->LightViewProjectionUBO, sizeof(m4)*MAX_DIRECTIONAL_LIGHT_COUNT, LightViewProjectionBuffers);
+                UploadUBO(OpenGL->LightViewProjectionUBO, sizeof(ak_m4f)*MAX_DIRECTIONAL_LIGHT_COUNT, LightViewProjectionBuffers);
                 UploadUBO(OpenGL->LightUBO, sizeof(opengl_light_buffer), &DstLightBuffer);                
                 
                 glActiveTexture(GL_TEXTURE0+SHADOW_MAP_TEXTURE_UNIT);
@@ -934,14 +1018,14 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_MATERIAL:
             {
-                ASSERT(ForwardPass.Current);
+                AK_Assert(ForwardPass.Current, "Forward pass is not set. This is a programming error");
                 push_command_material* PushCommandMaterial = (push_command_material*)Command;
                 ForwardPass.BoundMaterial = PushCommandMaterial->Material;                
             } break;
             
             case PUSH_COMMAND_DRAW_MESH:
             {    
-                ASSERT(ForwardPass.Current != ShadowPass.Current);
+                AK_Assert(ForwardPass.Current != ShadowPass.Current, "Cannot set both shaodw pass and forward pass at the same time");
                 if(ForwardPass.Current)
                 {                       
                     if(ShouldUpdateMaterial(ForwardPass.BoundMaterial, ForwardPass.PrevBoundMaterial))
@@ -1143,7 +1227,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                             SET_VIEW_UNIFORMS();                        
                             glUniform1f(Shader->FarPlaneDistanceUniform, ShadowPass.FarPlaneDistance);
                         }
-                        INVALID_ELSE;
+                        AK_INVALID_ELSE;
                     }
                 }
                 
@@ -1157,8 +1241,8 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_DRAW_SKELETON_MESH:
             {
-                NOT_IMPLEMENTED;
-                ASSERT(ForwardPass.Current != ShadowPass.Current);
+                AK_NotImplemented();
+                AK_Assert(ForwardPass.Current != ShadowPass.Current, "Cannot set both forward pass and shadow pass at the same time");
                 if(ForwardPass.Current)
                 {                    
                     if(ShouldUpdateMaterial(ForwardPass.BoundMaterial, ForwardPass.PrevBoundMaterial))
@@ -1168,18 +1252,18 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                         graphics_material BoundMaterial = ForwardPass.BoundMaterial;
                         if(!BoundMaterial.Specular.InUse && BoundMaterial.Normal.InUse)
                         {
-                            NOT_IMPLEMENTED;
+                            AK_NotImplemented();
                         }
                         else if(BoundMaterial.Specular.InUse && !BoundMaterial.Normal.InUse)
                         {                        
                         }
                         else if(!BoundMaterial.Specular.InUse && BoundMaterial.Normal.InUse)
                         {
-                            NOT_IMPLEMENTED;
+                            AK_NotImplemented();
                         }
                         else
                         {                        
-                            NOT_IMPLEMENTED;
+                            AK_NotImplemented();
                         }
                     }
                 }
@@ -1191,7 +1275,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     else if(ShadowPass.State == SHADOW_PASS_STATE_OMNI_DIRECTIONAL)
                     {                        
                     }
-                    INVALID_ELSE;
+                    AK_INVALID_ELSE;
                 }
                 
             } break;
@@ -1233,7 +1317,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
             
             case PUSH_COMMAND_DRAW_UNLIT_SKELETON_MESH:
             {
-                NOT_IMPLEMENTED;
+                AK_NotImplemented();
             } break;
             
             case PUSH_COMMAND_DRAW_LINE_MESH:            
@@ -1264,7 +1348,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 push_command_draw_imgui_ui* DrawImGuiUI = (push_command_draw_imgui_ui*)Command;                                
                 opengl_texture* Texture = TexturePool->Get(DrawImGuiUI->TextureID);
                 opengl_mesh* Mesh = MeshPool->Get(DrawImGuiUI->MeshID);
-                ASSERT(Mesh->IsDynamic);
+                AK_Assert(Mesh->IsDynamic, "Mesh must be dynamic in order for it to be drawn in IMGUI");
                 
                 if(BindProgram(&BoundProgram, OpenGL->ImGuiShader.Program))                    
                     SetUniformM4(OpenGL->ImGuiShader.ProjectionUniform, Projection);                                                                    
@@ -1392,14 +1476,14 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, SrcBuffer->Framebuffer);
                 glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
                 
-                glBlitFramebuffer(0, 0, SrcBuffer->Resolution.width, SrcBuffer->Resolution.height, 
+                glBlitFramebuffer(0, 0, SrcBuffer->Resolution.w, SrcBuffer->Resolution.h, 
                                   CopyToOutput->DstOffset.x, CopyToOutput->DstOffset.y, 
-                                  CopyToOutput->DstOffset.x+CopyToOutput->DstResolution.width, CopyToOutput->DstOffset.y+CopyToOutput->DstResolution.height, 
+                                  CopyToOutput->DstOffset.x+CopyToOutput->DstResolution.w, CopyToOutput->DstOffset.y+CopyToOutput->DstResolution.h, 
                                   GL_COLOR_BUFFER_BIT, GL_LINEAR);
                 
             } break;
             
-            INVALID_DEFAULT_CASE;                        
+            AK_INVALID_DEFAULT_CASE;                        
         }
     }    
     
@@ -1412,7 +1496,7 @@ EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 }
 
 extern "C"
-EXPORT INVALIDATE_SHADERS(InvalidateShaders)
+AK_EXPORT INVALIDATE_SHADERS(InvalidateShaders)
 {
     opengl_context* OpenGL = (opengl_context*)Graphics;
 #define INVALIDATE_SHADER(shader) OpenGL->shader.Valid = false
@@ -1434,3 +1518,6 @@ EXPORT INVALIDATE_SHADERS(InvalidateShaders)
     INVALIDATE_SHADER(ShadowMapShader);
     INVALIDATE_SHADER(OmniShadowMapShader);    
 }
+
+#define AK_COMMON_IMPLEMENTATION
+#include <ak_common.h>

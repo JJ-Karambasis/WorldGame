@@ -1,14 +1,14 @@
 #define GJK_RELATIVE_ERROR 1e-6f
 struct gjk_vertex
 {
-    v3f W;
-    v3f V;
-    v3f A;
-    v3f B;
+    ak_v3f W;
+    ak_v3f V;
+    ak_v3f A;
+    ak_v3f B;
 };
 
 template <typename typeA, typename typeB>
-gjk_vertex GetSupport(typeA* ObjectA, typeB* ObjectB, v3f V)
+gjk_vertex GetSupport(typeA* ObjectA, typeB* ObjectB, ak_v3f V)
 {
     gjk_vertex Vertex;
     Vertex.V = V;
@@ -19,7 +19,7 @@ gjk_vertex GetSupport(typeA* ObjectA, typeB* ObjectB, v3f V)
 }
 
 template <typename typeA, typename typeB>
-gjk_vertex GetSupport2(typeA* ObjectA, typeB* ObjectB, v3f V)
+gjk_vertex GetSupport2(typeA* ObjectA, typeB* ObjectB, ak_v3f V)
 {
     gjk_vertex Vertex;
     Vertex.V = V;
@@ -31,20 +31,20 @@ gjk_vertex GetSupport2(typeA* ObjectA, typeB* ObjectB, v3f V)
 
 struct gjk_simplex_usage
 {
-    b32 UsedVertex0;
-    b32 UsedVertex1;
-    b32 UsedVertex2;
-    b32 UsedVertex3;
+    ak_bool UsedVertex0;
+    ak_bool UsedVertex1;
+    ak_bool UsedVertex2;
+    ak_bool UsedVertex3;
 };
 
 struct gjk_simplex_barycentric
 {
-    v3f ClosestPoint;
+    ak_v3f ClosestPoint;
     gjk_simplex_usage Usage;
-    f32 U, V, W, X;    
-    b32 IsDegenerate;
+    ak_f32 U, V, W, X;    
+    ak_bool IsDegenerate;
     
-    void Set(f32 A = 0.0f, f32 B = 0.0f, f32 C = 0.0f, f32 D = 0.0f)
+    void Set(ak_f32 A = 0.0f, ak_f32 B = 0.0f, ak_f32 C = 0.0f, ak_f32 D = 0.0f)
     {
         U = A;
         V = B;
@@ -52,23 +52,23 @@ struct gjk_simplex_barycentric
         X = D;        
     }
     
-    b32 IsValid()
+    ak_bool IsValid()
     {
-        b32 Result = ((U >= 0) && (V >= 0) && (W >= 0) && (X >= 0));
+        ak_bool Result = ((U >= 0) && (V >= 0) && (W >= 0) && (X >= 0));
         return Result;
     }
 };
 
-b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_barycentric* Barycentric)
+ak_bool ClosestPointFromPointToTriangle(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f C, gjk_simplex_barycentric* Barycentric)
 {
     Barycentric->Usage = {};
     
-    v3f AB = B-A;
-    v3f AC = C-A;
-    v3f AP = P-A;
+    ak_v3f AB = B-A;
+    ak_v3f AC = C-A;
+    ak_v3f AP = P-A;
     
-    f32 D1 = Dot(AB, AP);
-    f32 D2 = Dot(AC, AP);
+    ak_f32 D1 = AK_Dot(AB, AP);
+    ak_f32 D2 = AK_Dot(AC, AP);
     
     if((D1 <= 0.0f) && (D2 <= 0.0f))
     {
@@ -78,9 +78,9 @@ b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_bary
         return true;
     }
     
-    v3f BP = P-B;
-    f32 D3 = Dot(AB, BP);
-    f32 D4 = Dot(AC, BP);
+    ak_v3f BP = P-B;
+    ak_f32 D3 = AK_Dot(AB, BP);
+    ak_f32 D4 = AK_Dot(AC, BP);
     if((D3 >= 0.0f) &&  (D4 <= D3))
     {
         Barycentric->ClosestPoint = B;
@@ -89,10 +89,10 @@ b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_bary
         return true;
     }
     
-    f32 VC = D1*D4 - D3*D2;
+    ak_f32 VC = D1*D4 - D3*D2;
     if((VC <= 0.0f) && (D1 >= 0.0f) && (D3 <= 0.0f))
     {
-        f32 V = D1 / (D1-D3);
+        ak_f32 V = D1 / (D1-D3);
         Barycentric->ClosestPoint = A + V*AB;
         Barycentric->Usage.UsedVertex0 = true;
         Barycentric->Usage.UsedVertex1 = true;
@@ -100,9 +100,9 @@ b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_bary
         return true;
     }
     
-    v3f CP = P-C;
-    f32 D5 = Dot(AB, CP);
-    f32 D6 = Dot(AC, CP);
+    ak_v3f CP = P-C;
+    ak_f32 D5 = AK_Dot(AB, CP);
+    ak_f32 D6 = AK_Dot(AC, CP);
     if((D6 >= 0.0f) && (D5 <= D6))
     {
         Barycentric->ClosestPoint = C;
@@ -111,10 +111,10 @@ b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_bary
         return true;
     }
     
-    f32 VB = D5*D2 - D1*D6;
+    ak_f32 VB = D5*D2 - D1*D6;
     if((VB <= 0.0f) && (D2 >= 0.0f) && (D6 <= 0.0f))
     {
-        f32 W = D2/(D2-D6);
+        ak_f32 W = D2/(D2-D6);
         Barycentric->ClosestPoint = A + W*AC;
         Barycentric->Usage.UsedVertex0 = true;
         Barycentric->Usage.UsedVertex2 = true;
@@ -122,10 +122,10 @@ b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_bary
         return true;
     }
     
-    f32 VA = D3*D6 - D5*D4;
+    ak_f32 VA = D3*D6 - D5*D4;
     if((VA <= 0.0f) && ((D4-D3) >= 0.0f) && ((D5-D6) >= 0.0f))
     {
-        f32 W = (D4-D3) / ((D4-D3) + (D5-D6));
+        ak_f32 W = (D4-D3) / ((D4-D3) + (D5-D6));
         Barycentric->ClosestPoint = B + W*(C-B);
         Barycentric->Usage.UsedVertex1 = true;
         Barycentric->Usage.UsedVertex2 = true;
@@ -133,9 +133,9 @@ b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_bary
         return true;
     }
     
-    f32 Denominator = 1.0f / (VA+VB+VC);
-    f32 V = VB*Denominator;
-    f32 W = VC*Denominator;
+    ak_f32 Denominator = 1.0f / (VA+VB+VC);
+    ak_f32 V = VB*Denominator;
+    ak_f32 W = VC*Denominator;
     
     Barycentric->ClosestPoint = A + AB*V + AC*W;
     Barycentric->Usage.UsedVertex0 = true;
@@ -145,31 +145,31 @@ b32 ClosestPointFromPointToTriangle(v3f P, v3f A, v3f B, v3f C, gjk_simplex_bary
     return true;
 }
 
-int IsPointOutsidePlane(v3f P, v3f A, v3f B, v3f C, v3f D)
+ak_i32  IsPointOutsidePlane(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f C, ak_v3f D)
 {
-    v3f Normal = Cross(B-A, C-A);
+    ak_v3f Normal = AK_Cross(B-A, C-A);
     
-    f32 SignP = Dot(P-A, Normal);
-    f32 SignD = Dot(D-A, Normal);
+    ak_f32 SignP = AK_Dot(P-A, Normal);
+    ak_f32 SignD = AK_Dot(D-A, Normal);
     
-    if(Square(SignD) < (Square(1e-4f)))
+    if(AK_Square(SignD) < (AK_Square(1e-4f)))
         return -1;
     
-    int Result = (SignP*SignD) < 0.0f;
+    ak_i32 Result = (SignP*SignD) < 0.0f;
     return Result;
 }
 
-b32 ClosestPointFromPointToTetrahedron(v3f P, v3f A, v3f B, v3f C, v3f D, gjk_simplex_barycentric* Barycentric)
+ak_bool ClosestPointFromPointToTetrahedron(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f C, ak_v3f D, gjk_simplex_barycentric* Barycentric)
 {
     gjk_simplex_barycentric TempBarycentric;
     
     Barycentric->ClosestPoint = P;
     Barycentric->Usage = {true, true, true, true};
     
-    int IsPointOutsideABC = IsPointOutsidePlane(P, A, B, C, D);
-    int IsPointOutsideACD = IsPointOutsidePlane(P, A, C, D, B);
-    int IsPointOutsideADB = IsPointOutsidePlane(P, A, D, B, C);
-    int IsPointOutsideBDC = IsPointOutsidePlane(P, B, D, C, A);
+    ak_i32 IsPointOutsideABC = IsPointOutsidePlane(P, A, B, C, D);
+    ak_i32 IsPointOutsideACD = IsPointOutsidePlane(P, A, C, D, B);
+    ak_i32 IsPointOutsideADB = IsPointOutsidePlane(P, A, D, B, C);
+    ak_i32 IsPointOutsideBDC = IsPointOutsidePlane(P, B, D, C, A);
     
     if((IsPointOutsideABC < 0) || (IsPointOutsideACD < 0) || (IsPointOutsideADB < 0) || (IsPointOutsideBDC < 0))
     {
@@ -180,12 +180,12 @@ b32 ClosestPointFromPointToTetrahedron(v3f P, v3f A, v3f B, v3f C, v3f D, gjk_si
     if(!IsPointOutsideABC && !IsPointOutsideACD && !IsPointOutsideADB && !IsPointOutsideBDC)
         return false;
     
-    f32 BestSqrDistance = FLT_MAX;
+    ak_f32 BestSqrDistance = FLT_MAX;
     if(IsPointOutsideABC)
     {
         ClosestPointFromPointToTriangle(P, A, B, C, &TempBarycentric);
-        v3f Q = TempBarycentric.ClosestPoint;
-        f32 SqrDistance = SquareMagnitude(Q-P);
+        ak_v3f Q = TempBarycentric.ClosestPoint;
+        ak_f32 SqrDistance = AK_SqrMagnitude(Q-P);
         
         if(SqrDistance < BestSqrDistance)
         {
@@ -204,8 +204,8 @@ b32 ClosestPointFromPointToTetrahedron(v3f P, v3f A, v3f B, v3f C, v3f D, gjk_si
     if(IsPointOutsideACD)
     {
         ClosestPointFromPointToTriangle(P, A, C, D, &TempBarycentric);
-        v3f Q = TempBarycentric.ClosestPoint;
-        f32 SqrDistance = SquareMagnitude(Q-P);
+        ak_v3f Q = TempBarycentric.ClosestPoint;
+        ak_f32 SqrDistance = AK_SqrMagnitude(Q-P);
         
         if(SqrDistance < BestSqrDistance)
         {
@@ -224,8 +224,8 @@ b32 ClosestPointFromPointToTetrahedron(v3f P, v3f A, v3f B, v3f C, v3f D, gjk_si
     if(IsPointOutsideADB)
     {
         ClosestPointFromPointToTriangle(P, A, D, B, &TempBarycentric);
-        v3f Q = TempBarycentric.ClosestPoint;
-        f32 SqrDistance = SquareMagnitude(Q-P);
+        ak_v3f Q = TempBarycentric.ClosestPoint;
+        ak_f32 SqrDistance = AK_SqrMagnitude(Q-P);
         
         if(SqrDistance < BestSqrDistance)
         {
@@ -244,8 +244,8 @@ b32 ClosestPointFromPointToTetrahedron(v3f P, v3f A, v3f B, v3f C, v3f D, gjk_si
     if(IsPointOutsideBDC)
     {
         ClosestPointFromPointToTriangle(P, B, D, C, &TempBarycentric);
-        v3f Q = TempBarycentric.ClosestPoint;
-        f32 SqrDistance = SquareMagnitude(Q-P);
+        ak_v3f Q = TempBarycentric.ClosestPoint;
+        ak_f32 SqrDistance = AK_SqrMagnitude(Q-P);
         
         if(SqrDistance < BestSqrDistance)
         {
@@ -266,28 +266,28 @@ b32 ClosestPointFromPointToTetrahedron(v3f P, v3f A, v3f B, v3f C, v3f D, gjk_si
 
 struct gjk_distance_simplex
 {    
-    u32 VertexCount;
-    v3f Vertex[4];
-    v3f AVertex[4];
-    v3f BVertex[4];
-    v3f LastVertex;
+    ak_u32 VertexCount;
+    ak_v3f Vertex[4];
+    ak_v3f AVertex[4];
+    ak_v3f BVertex[4];
+    ak_v3f LastVertex;
     gjk_simplex_barycentric Barycentric;
     
-    b32 NeedsUpdate;
-    v3f V;
-    v3f CP[2];
+    ak_bool NeedsUpdate;
+    ak_v3f V;
+    ak_v3f CP[2];
     
     void Reset()
     {
-        LastVertex = InvalidV3();
+        LastVertex = AK_InvalidV3f();
         NeedsUpdate = true;
         VertexCount = 0;
         Barycentric = {};
     }
     
-    b32 HasVertex(v3f W)
+    ak_bool HasVertex(ak_v3f W)
     {
-        for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+        for(ak_u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
         {
             if(Vertex[VertexIndex] == W)
                 return true;
@@ -299,9 +299,9 @@ struct gjk_distance_simplex
         return false;
     }
     
-    void RemoveVertex(u32 Index)
+    void RemoveVertex(ak_u32 Index)
     {
-        ASSERT(VertexCount > 0);
+        AK_Assert(VertexCount > 0, "Cannot remove vertex from simplex that has no vertices");
         VertexCount--;
         
         Vertex[Index]  = Vertex[VertexCount];
@@ -335,12 +335,12 @@ struct gjk_distance_simplex
         
         VertexCount++;
         
-        ASSERT(VertexCount < 5);
+        AK_Assert(VertexCount < 5, "Index out of bounds");
     }
     
-    b32 UpdateVectorAndPoints()
+    ak_bool UpdateVectorAndPoints()
     {
-        b32 Result = true;
+        ak_bool Result = true;
         
         if(NeedsUpdate)
         {                        
@@ -360,13 +360,13 @@ struct gjk_distance_simplex
                 
                 case 2:
                 {                                           
-                    v3f P0 = -Vertex[0];
-                    v3f P1 = Vertex[1]-Vertex[0];
-                    f32 t = Dot(P1, P0);
+                    ak_v3f P0 = -Vertex[0];
+                    ak_v3f P1 = Vertex[1]-Vertex[0];
+                    ak_f32 t = AK_Dot(P1, P0);
                     
                     if(t > 0)
                     {
-                        f32 P1Sqr = SquareMagnitude(P1);
+                        ak_f32 P1Sqr = AK_SqrMagnitude(P1);
                         if(t < P1Sqr)
                         {
                             t /= P1Sqr;
@@ -396,11 +396,11 @@ struct gjk_distance_simplex
                 
                 case 3:
                 {
-                    v3f A = Vertex[0];
-                    v3f B = Vertex[1];
-                    v3f C = Vertex[2];
+                    ak_v3f A = Vertex[0];
+                    ak_v3f B = Vertex[1];
+                    ak_v3f C = Vertex[2];
                     
-                    ClosestPointFromPointToTriangle(V3(), A, B, C, &Barycentric);
+                    ClosestPointFromPointToTriangle(AK_V3<ak_f32>(), A, B, C, &Barycentric);
                     
                     CP[0] = ((AVertex[0] * Barycentric.U) + (AVertex[1] * Barycentric.V) + (AVertex[2] * Barycentric.W));                    
                     CP[1] = ((BVertex[0] * Barycentric.U) + (BVertex[1] * Barycentric.V) + (BVertex[2] * Barycentric.W));
@@ -412,12 +412,12 @@ struct gjk_distance_simplex
                 
                 case 4:
                 {
-                    v3f A = Vertex[0];
-                    v3f B = Vertex[1];
-                    v3f C = Vertex[2];
-                    v3f D = Vertex[3];
+                    ak_v3f A = Vertex[0];
+                    ak_v3f B = Vertex[1];
+                    ak_v3f C = Vertex[2];
+                    ak_v3f D = Vertex[3];
                     
-                    b32 NotIntersected = ClosestPointFromPointToTetrahedron(V3(), A, B, C, D, &Barycentric);
+                    ak_bool NotIntersected = ClosestPointFromPointToTetrahedron(AK_V3<ak_f32>(), A, B, C, D, &Barycentric);
                     
                     if(NotIntersected)
                     {
@@ -432,28 +432,28 @@ struct gjk_distance_simplex
                         if(Barycentric.IsDegenerate)
                             return false;
                         else
-                            V = V3();
+                            V = AK_V3<ak_f32>();
                     }
                     
                 } break;
                 
-                INVALID_DEFAULT_CASE;
+                AK_INVALID_DEFAULT_CASE;
             }
         }
         
         return Barycentric.IsValid();        
     }
     
-    void GetClosestPoints(v3f* A, v3f* B)
+    void GetClosestPoints(ak_v3f* A, ak_v3f* B)
     {
         UpdateVectorAndPoints();
         *A = CP[0];
         *B = CP[1];
     }    
     
-    b32 GetClosestPointToOrigin(v3f* P)
+    ak_bool GetClosestPointToOrigin(ak_v3f* P)
     {
-        b32 Result = UpdateVectorAndPoints();
+        ak_bool Result = UpdateVectorAndPoints();
         *P = V;      
         return Result;
     }
@@ -473,10 +473,10 @@ struct gjk_distance
 {    
     gjk_distance_simplex Simplex;
     gjk_distance_status Status;
-    v3f V;
-    f32 SquareDistance;
+    ak_v3f V;
+    ak_f32 SquareDistance;
     
-    void GetClosestPoints(v3f* A, v3f* B)
+    void GetClosestPoints(ak_v3f* A, ak_v3f* B)
     {
         Simplex.GetClosestPoints(A, B);
     }
@@ -485,15 +485,15 @@ struct gjk_distance
 template <typename typeA, typename typeB>
 gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
 {    
-    v3f V = Global_WorldXAxis;
+    ak_v3f V = AK_XAxis();
     
     gjk_distance_simplex Simplex = {};    
     Simplex.Reset();
     gjk_distance_status Status = GJK_DISTANCE_STATUS_NONE;
     
-    f32 SqrDistance = FLT_MAX;
+    ak_f32 SqrDistance = AK_MAX32;
     
-    u32 Iterations = 0;
+    ak_u64 Iterations = 0;
     for(;;)
     {
         Iterations++;
@@ -506,7 +506,7 @@ gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
             break;
         }
         
-        f32 Delta = Dot(V, Support.W);
+        ak_f32 Delta = AK_Dot(V, Support.W);
         
         if((SqrDistance - Delta) <= (SqrDistance * GJK_RELATIVE_ERROR))
         {
@@ -516,15 +516,15 @@ gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
         
         Simplex.AddVertex(&Support);
         
-        v3f NewV;
+        ak_v3f NewV;
         if(!Simplex.GetClosestPointToOrigin(&NewV))
         {
             Status = GJK_DISTANCE_STATUS_INVALID_SIMPLEX;
             break;
         }
         
-        f32 PrevSqrDistance = SqrDistance;
-        SqrDistance = SquareMagnitude(NewV);
+        ak_f32 PrevSqrDistance = SqrDistance;
+        SqrDistance = AK_SqrMagnitude(NewV);
         if(SqrDistance < GJK_RELATIVE_ERROR)
         {
             V = NewV;
@@ -540,16 +540,16 @@ gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
         
         V = NewV;
         
-        ASSERT(Simplex.VertexCount < 4);        
+        AK_Assert(Simplex.VertexCount < 4, "GJK Simplex vertex overflow");        
     }
     
-    ASSERT(Status != GJK_DISTANCE_STATUS_NONE);
+    AK_Assert(Status != GJK_DISTANCE_STATUS_NONE, "GJK failed to get proper results");
     
     gjk_distance Result;
     Result.Status         = Status;
     Result.Simplex        = Simplex;
     Result.V              = V;
-    Result.SquareDistance = SquareMagnitude(V);
+    Result.SquareDistance = AK_SqrMagnitude(V);
     
     DEVELOPER_MAX_GJK_ITERATIONS(Iterations);
     
@@ -559,7 +559,7 @@ gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
 struct gjk_simplex
 {
     gjk_vertex Vertex[4];     
-    i32 LastIndex;
+    ak_i32 LastIndex;
     
     inline void Add(gjk_vertex* Support)
     {
@@ -567,7 +567,7 @@ struct gjk_simplex
         Vertex[LastIndex] = *Support;        
     }
     
-    inline u32 GetVertexCount()
+    inline ak_u32 GetVertexCount()
     {
         return LastIndex+1;
     }
@@ -580,19 +580,19 @@ gjk_simplex InitSimplex()
     return Result;
 }
 
-i32 PerformLineTest(gjk_simplex* Simplex, v3f* V)
+ak_i32 PerformLineTest(gjk_simplex* Simplex, ak_v3f* V)
 {
-    v3f A = Simplex->Vertex[Simplex->LastIndex].W;
-    v3f B = Simplex->Vertex[0].W;    
-    v3f AB = B-A;
-    v3f AO =  -A;
+    ak_v3f A = Simplex->Vertex[Simplex->LastIndex].W;
+    ak_v3f B = Simplex->Vertex[0].W;    
+    ak_v3f AB = B-A;
+    ak_v3f AO =  -A;
     
-    f32 DotResult = Dot(AB, AO);
-    v3f Temp = Cross(AB, AO);
-    if(IsFuzzyZero(SquareMagnitude(Temp)) && (DotResult > 0))
+    ak_f32 DotResult = AK_Dot(AB, AO);
+    ak_v3f Temp = AK_Cross(AB, AO);
+    if(AK_EqualZeroEps(AK_SqrMagnitude(Temp)) && (DotResult > 0))
         return 1;
     
-    if(IsFuzzyZero(DotResult) || (DotResult < 0))
+    if(AK_EqualZeroEps(DotResult) || (DotResult < 0))
     {
         Simplex->Vertex[0] = Simplex->Vertex[Simplex->LastIndex];
         Simplex->LastIndex = 0;
@@ -600,15 +600,15 @@ i32 PerformLineTest(gjk_simplex* Simplex, v3f* V)
     }
     else
     {
-        *V = Cross(Cross(AB, AO), AB);
+        *V = AK_Cross(AK_Cross(AB, AO), AB);
     }
     
     return 0;
 }
 
-i32 SignCCD(f32 Value)
+ak_i32 SignCCD(ak_f32 Value)
 {
-    if(IsFuzzyZero(Value))
+    if(AK_EqualZeroEps(Value))
         return 0;
     else if(Value < 0)
         return -1;
@@ -616,57 +616,57 @@ i32 SignCCD(f32 Value)
         return 1;
 }
 
-f32 PointSegmentDistance(v3f P, v3f A, v3f B)
+ak_f32 PointSegmentDistance(ak_v3f P, ak_v3f A, ak_v3f B)
 {
-    v3f AB = B-A;
-    v3f PA = A-P;
+    ak_v3f AB = B-A;
+    ak_v3f PA = A-P;
     
-    f32 t = -1 * Dot(PA, AB);
-    t /= SquareMagnitude(AB);
+    ak_f32 t = -1 * AK_Dot(PA, AB);
+    t /= AK_SqrMagnitude(AB);
     
-    f32 Result;
-    if(t < 0 || IsFuzzyZero(t))
+    ak_f32 Result;
+    if(t < 0 || AK_EqualZeroEps(t))
     {
-        Result = SquareMagnitude(A-P);
+        Result = AK_SqrMagnitude(A-P);
     }
-    else if(t > 1 || AreEqual32(t, 1))
+    else if(t > 1 || AK_EqualEps(t, 1))
     {
-        Result = SquareMagnitude(B-P);
+        Result = AK_SqrMagnitude(B-P);
     }
     else
     {
         AB *= t;
         AB += PA;
-        Result = SquareMagnitude(AB);
+        Result = AK_SqrMagnitude(AB);
     }
     
     return Result;
 }
 
-f32 PointTriangleDistance(v3f P, v3f A, v3f B, v3f C)
+ak_f32 PointTriangleDistance(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f C)
 {
-    v3f AB = B-A;
-    v3f AC = C-A;
-    v3f PA = A-P;
+    ak_v3f AB = B-A;
+    ak_v3f AC = C-A;
+    ak_v3f PA = A-P;
     
     //IMPORTANT(EVERYONE): There are a lot of rounding and precision errors with these values so we made them
     //f64 bit floats  otherwise they can report a zero distance which is completely wrong. Maybe there is a better way
-    f64 u = SquareMagnitude(PA);
-    f64 v = SquareMagnitude(AB);
-    f64 w = SquareMagnitude(AC);
-    f64 p = Dot(PA, AB);
-    f64 q = Dot(PA, AC);
-    f64 r = Dot(AB, AC);
+    ak_f64 u = AK_SqrMagnitude(PA);
+    ak_f64 v = AK_SqrMagnitude(AB);
+    ak_f64 w = AK_SqrMagnitude(AC);
+    ak_f64 p = AK_Dot(PA, AB);
+    ak_f64 q = AK_Dot(PA, AC);
+    ak_f64 r = AK_Dot(AB, AC);
     
-    f64 s = (q*r - w*p) / (w*v - r*r);
-    f64 t = (-s*r - q) / w;
+    ak_f64 s = (q*r - w*p) / (w*v - r*r);
+    ak_f64 t = (-s*r - q) / w;
     
-    f64 Result;
-    if((IsFuzzyZero(s) || (s > 0)) && 
-       (AreEqual64(s, 1) || s < 1) &&
-       (IsFuzzyZero(t) || (t > 0)) &&
-       (AreEqual64(t, 1) || t < 1) &&
-       (AreEqual64(t+s, 1) || (t+s < 1)))
+    ak_f64 Result;
+    if((AK_EqualZeroEps(s) || (s > 0)) && 
+       (AK_EqualEps(s, 1) || s < 1) &&
+       (AK_EqualZeroEps(t) || (t > 0)) &&
+       (AK_EqualEps(t, 1) || t < 1) &&
+       (AK_EqualEps(t+s, 1) || (t+s < 1)))
     {
         Result = s*s*v;
         Result += t*t*w;
@@ -678,57 +678,57 @@ f32 PointTriangleDistance(v3f P, v3f A, v3f B, v3f C)
     else
     {
         Result = PointSegmentDistance(P, A, B);
-        f32 Dist1 = PointSegmentDistance(P, A, C);
+        ak_f32 Dist1 = PointSegmentDistance(P, A, C);
         
         if(Result > Dist1)        
             Result = Dist1;        
         
-        f32 Dist2 = PointSegmentDistance(P, B, C);
+        ak_f32 Dist2 = PointSegmentDistance(P, B, C);
         if(Result > Dist2)
             Result = Dist2;                
     }
     
-    return (f32)Result;
+    return (ak_f32)Result;
 }
 
-i32 PerformTriangleTest(gjk_simplex* Simplex, v3f* V)
+ak_i32 PerformTriangleTest(gjk_simplex* Simplex, ak_v3f* V)
 {
-    v3f A = Simplex->Vertex[Simplex->LastIndex].W;
-    v3f B = Simplex->Vertex[1].W;
-    v3f C = Simplex->Vertex[0].W;
+    ak_v3f A = Simplex->Vertex[Simplex->LastIndex].W;
+    ak_v3f B = Simplex->Vertex[1].W;
+    ak_v3f C = Simplex->Vertex[0].W;
     
-    f32 Distance = PointTriangleDistance(V3(), A, B, C);
-    if(IsFuzzyZero(Distance))
+    ak_f32 Distance = PointTriangleDistance(AK_V3<ak_f32>(), A, B, C);
+    if(AK_EqualZeroEps(Distance))
         return 1;
     
-    if(AreEqualV3(A, B) || AreEqualV3(A, C))
+    if(AK_EqualEps(A, B) || AK_EqualEps(A, C))
         return -1;
     
-    v3f AO = -A;
-    v3f AB = B-A;
-    v3f AC = C-A;
-    v3f ABC = Cross(AB, AC);
-    v3f Temp = Cross(ABC, AC);
-    f32 DotResult = Dot(Temp, AO);
+    ak_v3f AO = -A;
+    ak_v3f AB = B-A;
+    ak_v3f AC = C-A;
+    ak_v3f ABC = AK_Cross(AB, AC);
+    ak_v3f Temp = AK_Cross(ABC, AC);
+    ak_f32 DotResult = AK_Dot(Temp, AO);
     
-    if(IsFuzzyZero(DotResult) || (DotResult > 0))
+    if(AK_EqualZeroEps(DotResult) || (DotResult > 0))
     {
-        DotResult = Dot(AC, AO);
-        if(IsFuzzyZero(DotResult) || (DotResult > 0))
+        DotResult = AK_Dot(AC, AO);
+        if(AK_EqualZeroEps(DotResult) || (DotResult > 0))
         {
             Simplex->Vertex[1] = Simplex->Vertex[Simplex->LastIndex];
             Simplex->LastIndex = 1;
-            *V = Cross(Cross(AC, AO), AC);
+            *V = AK_Cross(AK_Cross(AC, AO), AC);
         }
         else
         {
-            DotResult = Dot(AB, AO);
-            if(IsFuzzyZero(DotResult) || (DotResult > 0))
+            DotResult = AK_Dot(AB, AO);
+            if(AK_EqualZeroEps(DotResult) || (DotResult > 0))
             {
                 Simplex->Vertex[0] = Simplex->Vertex[1];
                 Simplex->Vertex[1] = Simplex->Vertex[Simplex->LastIndex];
                 Simplex->LastIndex = 1;
-                *V = Cross(Cross(AB, AO), AB);
+                *V = AK_Cross(AK_Cross(AB, AO), AB);
             }
             else
             {
@@ -740,8 +740,8 @@ i32 PerformTriangleTest(gjk_simplex* Simplex, v3f* V)
     }
     else
     {
-        DotResult = Dot(ABC, AO);
-        if(IsFuzzyZero(DotResult) || (DotResult > 0))
+        DotResult = AK_Dot(ABC, AO);
+        if(AK_EqualZeroEps(DotResult) || (DotResult > 0))
             *V = ABC;
         else
         {
@@ -755,48 +755,48 @@ i32 PerformTriangleTest(gjk_simplex* Simplex, v3f* V)
     return 0;    
 }
 
-i32 PerformTetrahedronTest(gjk_simplex* Simplex, v3f* V)
+ak_i32 PerformTetrahedronTest(gjk_simplex* Simplex, ak_v3f* V)
 {
-    v3f A = Simplex->Vertex[Simplex->LastIndex].W;
-    v3f B = Simplex->Vertex[2].W;
-    v3f C = Simplex->Vertex[1].W;
-    v3f D = Simplex->Vertex[0].W;
+    ak_v3f A = Simplex->Vertex[Simplex->LastIndex].W;
+    ak_v3f B = Simplex->Vertex[2].W;
+    ak_v3f C = Simplex->Vertex[1].W;
+    ak_v3f D = Simplex->Vertex[0].W;
     
-    f32 Distance = PointTriangleDistance(A, B, C, D);
-    if(IsFuzzyZero(Distance))
+    ak_f32 Distance = PointTriangleDistance(A, B, C, D);
+    if(AK_EqualZeroEps(Distance))
         return -1;
     
-    Distance = PointTriangleDistance(V3(), A, B, C);
-    if(IsFuzzyZero(Distance))
+    Distance = PointTriangleDistance(AK_V3<ak_f32>(), A, B, C);
+    if(AK_EqualZeroEps(Distance))
         return 1;
     
-    Distance = PointTriangleDistance(V3(), A, C, D);
-    if(IsFuzzyZero(Distance))
+    Distance = PointTriangleDistance(AK_V3<ak_f32>(), A, C, D);
+    if(AK_EqualZeroEps(Distance))
         return 1;
     
-    Distance = PointTriangleDistance(V3(), A, B, D);
-    if(IsFuzzyZero(Distance))
+    Distance = PointTriangleDistance(AK_V3<ak_f32>(), A, B, D);
+    if(AK_EqualZeroEps(Distance))
         return 1;
     
-    Distance = PointTriangleDistance(V3(), B, C, D);
-    if(IsFuzzyZero(Distance))
+    Distance = PointTriangleDistance(AK_V3<ak_f32>(), B, C, D);
+    if(AK_EqualZeroEps(Distance))
         return 1;
     
-    v3f AO  =  -A;
-    v3f AB  = B-A;
-    v3f AC  = C-A;
-    v3f AD  = D-A;
-    v3f ABC = Cross(AB, AC);
-    v3f ACD = Cross(AC, AD);
-    v3f ADB = Cross(AD, AB);
+    ak_v3f AO  =  -A;
+    ak_v3f AB  = B-A;
+    ak_v3f AC  = C-A;
+    ak_v3f AD  = D-A;
+    ak_v3f ABC = AK_Cross(AB, AC);
+    ak_v3f ACD = AK_Cross(AC, AD);
+    ak_v3f ADB = AK_Cross(AD, AB);
     
-    i32 IsBOnACD = SignCCD(Dot(ACD, AB));
-    i32 IsCOnADB = SignCCD(Dot(ADB, AC));
-    i32 IsDOnABC = SignCCD(Dot(ABC, AD));
+    ak_i32 IsBOnACD = SignCCD(AK_Dot(ACD, AB));
+    ak_i32 IsCOnADB = SignCCD(AK_Dot(ADB, AC));
+    ak_i32 IsDOnABC = SignCCD(AK_Dot(ABC, AD));
     
-    b32 AB_O = SignCCD(Dot(ACD, AO)) == IsBOnACD;
-    b32 AC_O = SignCCD(Dot(ADB, AO)) == IsCOnADB;
-    b32 AD_O = SignCCD(Dot(ABC, AO)) == IsDOnABC;
+    ak_bool AB_O = SignCCD(AK_Dot(ACD, AO)) == IsBOnACD;
+    ak_bool AC_O = SignCCD(AK_Dot(ADB, AO)) == IsCOnADB;
+    ak_bool AD_O = SignCCD(AK_Dot(ABC, AO)) == IsDOnABC;
     
     if(AB_O && AC_O && AD_O)    
         return 1;
@@ -823,7 +823,7 @@ i32 PerformTetrahedronTest(gjk_simplex* Simplex, v3f* V)
     return PerformTriangleTest(Simplex, V);
 }
 
-i32 PerformSimplexTest(gjk_simplex* Simplex, v3f* V)
+ak_i32 PerformSimplexTest(gjk_simplex* Simplex, ak_v3f* V)
 {
     switch(Simplex->GetVertexCount())
     {
@@ -842,16 +842,16 @@ i32 PerformSimplexTest(gjk_simplex* Simplex, v3f* V)
             return PerformTetrahedronTest(Simplex, V);
         } break;
         
-        INVALID_DEFAULT_CASE;        
+        AK_INVALID_DEFAULT_CASE;        
     }
     
     return -1;
 }
 
 template <typename typeA, typename typeB>
-b32 GJKIntersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
+ak_bool GJKIntersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
 {    
-    v3f V = Global_WorldXAxis;     
+    ak_v3f V = AK_XAxis();
     *Simplex = InitSimplex();
     
     gjk_vertex Support = GetSupport2(ObjectA, ObjectB, V);    
@@ -859,42 +859,42 @@ b32 GJKIntersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
     
     V = -Support.W;
     
-    u32 Iterations = 0;
+    ak_u64 Iterations = 0;
     for(;;)
     {
         DEVELOPER_MAX_GJK_ITERATIONS(Iterations);
         Iterations++;                        
         Support = GetSupport2(ObjectA, ObjectB, V);
         
-        f32 Delta = Dot(V, Support.W);
+        ak_f32 Delta = AK_Dot(V, Support.W);
         
         if(Delta < 0)        
             return false;        
         
         Simplex->Add(&Support);
         
-        i32 SimplexResult = PerformSimplexTest(Simplex, &V);
+        ak_i32 SimplexResult = PerformSimplexTest(Simplex, &V);
         if(SimplexResult == 1)
             return true;
         else if(SimplexResult == -1)
             return false;
         
-        if(IsFuzzyZero(SquareMagnitude(V)))
+        if(AK_EqualZeroEps(AK_SqrMagnitude(V)))
             return false;
     }    
 }
 
 template <typename typeA, typename typeB>
-b32 GJKIntersected(typeA* ObjectA, typeB* ObjectB)
+ak_bool GJKIntersected(typeA* ObjectA, typeB* ObjectB)
 {
     gjk_simplex Simplex;
     return GJKIntersected(ObjectA, ObjectB, &Simplex);
 }
 
 template <typename typeA, typename typeB>
-b32 GJKQuadraticIntersected(typeA* ObjectA, typeB* ObjectB, f32 Radius)
+ak_bool GJKQuadraticIntersected(typeA* ObjectA, typeB* ObjectB, ak_f32 Radius)
 {
     gjk_distance Distance = GJKDistance(ObjectA, ObjectB);
-    b32 Result = Distance.SquareDistance <= Square(Radius);
+    ak_bool Result = Distance.SquareDistance <= AK_Square(Radius);
     return Result;
 }

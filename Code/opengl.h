@@ -72,7 +72,7 @@ global PFNGLDELETERENDERBUFFERSPROC glDeleteRenderbuffers;
 //hold one of each
 struct opengl_mesh
 {
-    b32 IsDynamic;
+    ak_bool IsDynamic;
     
     GLenum IndexType;
     union
@@ -88,34 +88,34 @@ struct opengl_texture
     GLuint Handle;
 };
 
-typedef pool<opengl_mesh> opengl_mesh_pool; 
-typedef pool<opengl_texture> opengl_texture_pool;
+typedef ak_pool<opengl_mesh> opengl_mesh_pool; 
+typedef ak_pool<opengl_texture> opengl_texture_pool;
 
 struct opengl_buffer_list
 {    
-    u32 Capacity;
-    u32 Count;
+    ak_u32 Capacity;
+    ak_u32 Count;
     GLuint* Ptr;
 };
 
 struct opengl_directional_light
 {
-    v4f Direction;
-    c4 Color;
+    ak_v4f Direction;
+    ak_color4f Color;
 };
 
 struct opengl_point_light
 {
-    v4f Position;
-    c4 Color;
+    ak_v4f Position;
+    ak_color4f Color;
 };
 
 struct opengl_light_buffer
 {
     opengl_directional_light DirectionalLights[MAX_DIRECTIONAL_LIGHT_COUNT];
     opengl_point_light PointLights[MAX_POINT_LIGHT_COUNT];
-    i32 DirectionalLightCount;
-    i32 PointLightCount;
+    ak_i32 DirectionalLightCount;
+    ak_i32 PointLightCount;
 };
 
 enum shadow_pass_state
@@ -127,17 +127,17 @@ enum shadow_pass_state
 
 struct shadow_pass
 {
-    b32 Current;    
-    u32 ShadowMapCounter;
-    u32 OmniShadowMapCounter;
-    f32 FarPlaneDistance;    
+    ak_bool Current;    
+    ak_u32 ShadowMapCounter;
+    ak_u32 OmniShadowMapCounter;
+    ak_f32 FarPlaneDistance;    
     shadow_pass_state LastState;
     shadow_pass_state State;
 };
 
 struct opengl_forward_pass
 {
-    b32 Current;
+    ak_bool Current;
     graphics_material PrevBoundMaterial;
     graphics_material BoundMaterial;        
 };
@@ -153,9 +153,8 @@ struct opengl_context
 {
     graphics Graphics;
     
-    arena* TempStorage;
-    
-    arena Storage;        
+    ak_arena* TempStorage;    
+    ak_arena* Storage;        
     opengl_mesh_pool MeshPool;
     opengl_texture_pool TexturePool;        
     
@@ -192,8 +191,12 @@ struct opengl_context
 #define LOAD_FUNCTION(type, function) \
 do \
 { \
-function = (type)Platform_LoadProc(#function); \
-BOOL_CHECK_AND_HANDLE(function, "Failed to load the %.*s function", LiteralStringLength(#function), #function); \
+    function = (type)Platform_LoadProc(#function); \
+if(!function) \
+{ \
+AK_Assert(false, "Failed to load the %.*s function", AK_StringLength(#function), #function); \
+return false; \
+} \
 } while(0)
-
+                                                                                                         
 #endif

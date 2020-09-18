@@ -1,8 +1,8 @@
 #include "asset_loader.cpp"
 
-b32 PopulateAssetMap(assets* Assets)
+ak_bool PopulateAssetMap(assets* Assets)
 {
-    for(u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
+    for(ak_u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
     {
         mesh_info* MeshInfo = Assets->MeshInfos + MeshIndex;        
         if(Assets->MeshNameMap.Find(MeshInfo->Name))
@@ -14,7 +14,7 @@ b32 PopulateAssetMap(assets* Assets)
         Assets->MeshNameMap.Insert(MeshInfo->Name, (mesh_asset_id)MeshIndex);        
     }
     
-    for(u32 TextureIndex = 0; TextureIndex < TEXTURE_ASSET_COUNT; TextureIndex++)
+    for(ak_u32 TextureIndex = 0; TextureIndex < TEXTURE_ASSET_COUNT; TextureIndex++)
     {
         texture_info* TextureInfo = Assets->TextureInfos + TextureIndex;
         if(Assets->TextureNameMap.Find(TextureInfo->Name))
@@ -29,24 +29,25 @@ b32 PopulateAssetMap(assets* Assets)
     return true;
 }
 
-assets* InitAssets(arena* Storage, string AssetPath)
-{    
-    assets* Assets = PushStruct(Storage, assets, Clear, 0);
-    
-    Assets->AssetFile = LoadAssetFile(AssetPath);
-    if(!Assets->AssetFile.IsValid())
+assets* InitAssets(ak_arena* Storage, ak_string AssetPath)
+{        
+    ak_file_handle* AssetFile = LoadAssetFile(AssetPath);
+    if(!AssetFile)
         return NULL;
     
-    Assets->MeshNameMap = CreateHashMap<char*, mesh_asset_id>(MESH_ASSET_COUNT*10, StringEquals, Storage);    
-    Assets->TextureNameMap = CreateHashMap<char*, texture_asset_id>(TEXTURE_ASSET_COUNT*10, StringEquals, Storage);        
+    assets* Assets = Storage->Push<assets>();    
+    Assets->AssetFile = AssetFile;
     
-    Assets->MeshInfos = PushArray(Storage, MESH_ASSET_COUNT, mesh_info, Clear, 0);
-    Assets->Meshes = PushArray(Storage, MESH_ASSET_COUNT, mesh*, Clear, 0);
-    Assets->GraphicsMeshes = PushArray(Storage, MESH_ASSET_COUNT, graphics_mesh_id, Clear, 0);
+    Assets->MeshNameMap = AK_CreateHashMap<char*, mesh_asset_id>(8191);
+    Assets->TextureNameMap = AK_CreateHashMap<char*, texture_asset_id>(8191);
     
-    Assets->TextureInfos = PushArray(Storage, TEXTURE_ASSET_COUNT, texture_info, Clear, 0);
-    Assets->Textures = PushArray(Storage, TEXTURE_ASSET_COUNT, texture*, Clear, 0);
-    Assets->GraphicsTextures = PushArray(Storage, TEXTURE_ASSET_COUNT, graphics_texture_id, Clear, 0);
+    Assets->MeshInfos = Storage->PushArray<mesh_info>(MESH_ASSET_COUNT);
+    Assets->Meshes = Storage->PushArray<mesh*>(MESH_ASSET_COUNT);
+    Assets->GraphicsMeshes = Storage->PushArray<graphics_mesh_id>(MESH_ASSET_COUNT);
+    
+    Assets->TextureInfos = Storage->PushArray<texture_info>(TEXTURE_ASSET_COUNT);
+    Assets->Textures = Storage->PushArray<texture*>(TEXTURE_ASSET_COUNT);
+    Assets->GraphicsTextures = Storage->PushArray<graphics_texture_id>(TEXTURE_ASSET_COUNT);
     
     if(!LoadAssetInfos(Assets, Storage))
     {
@@ -69,7 +70,7 @@ GetMeshInfo(assets* Assets, mesh_asset_id ID)
     return Assets->MeshInfos + ID;    
 }
 
-inline u32
+inline ak_u32
 GetMeshIndexCount(assets* Assets, mesh_asset_id ID)
 {
     return GetMeshInfo(Assets, ID)->Header.IndexCount;

@@ -18,29 +18,29 @@ void AddCollisionVolume(game* Game, entity_id EntityID, type* Collider)
     GetSimEntity(Game, EntityID)->AddCollisionVolume(GetSimulation(Game, EntityID), Collider);    
 }
 
-inline sqt* GetEntityTransformOld(game* Game, entity_id ID)
-{
-    u32 PoolIndex = Game->EntityStorage[ID.WorldIndex].GetIndex(ID.ID);
-    sqt* Result = &Game->PrevTransforms[ID.WorldIndex][PoolIndex];
+inline ak_sqtf* GetEntityTransformOld(game* Game, entity_id ID)
+{    
+    ak_u32 Index = AK_PoolIndex(ID.ID);
+    ak_sqtf* Result = &Game->PrevTransforms[ID.WorldIndex][Index];
     return Result;
 }
 
-inline sqt* GetEntityTransform(game* Game, entity_id ID)
+inline ak_sqtf* GetEntityTransform(game* Game, entity_id ID)
 {
-    u32 PoolIndex = Game->EntityStorage[ID.WorldIndex].GetIndex(ID.ID);
-    sqt* Result = &Game->CurrentTransforms[ID.WorldIndex][PoolIndex];
+    ak_u32 Index = AK_PoolIndex(ID.ID);
+    ak_sqtf* Result = &Game->CurrentTransforms[ID.WorldIndex][Index];
     return Result;
 }
 
-inline v3f GetEntityPositionOld(game* Game, entity_id ID)
+inline ak_v3f GetEntityPositionOld(game* Game, entity_id ID)
 {
-    v3f Result = GetEntityTransformOld(Game, ID)->Translation;
+    ak_v3f Result = GetEntityTransformOld(Game, ID)->Translation;
     return Result;
 }
 
-inline v3f GetEntityPosition(game* Game, entity_id ID)
+inline ak_v3f GetEntityPosition(game* Game, entity_id ID)
 {
-    v3f Result = GetEntityTransform(Game, ID)->Translation;
+    ak_v3f Result = GetEntityTransform(Game, ID)->Translation;
     return Result;
 }
 
@@ -52,15 +52,14 @@ void FreeEntity(game* Game, entity_id ID)
 }
 
 entity_id
-CreateEntity(game* Game, entity_type Type, sim_entity_type SimType, u32 WorldIndex, 
-             v3f Position, v3f Scale, v3f Euler,
-             mesh_asset_id MeshID, material Material, b32 NoMeshColliders = false)
+CreateEntity(game* Game, entity_type Type, sim_entity_type SimType, ak_u32 WorldIndex, 
+             ak_v3f Position, ak_v3f Scale, ak_v3f Euler,
+             mesh_asset_id MeshID, material Material, ak_bool NoMeshColliders = false)
 {
     entity_storage* EntityStorage = Game->EntityStorage + WorldIndex;
     simulation* Simulation = GetSimulation(Game, WorldIndex);        
     
-    entity_id Result = MakeEntityID(EntityStorage->Allocate(), WorldIndex);
-    
+    entity_id Result = MakeEntityID(EntityStorage->Allocate(), WorldIndex);    
     entity* Entity = EntityStorage->Get(Result.ID);
     
     Entity->Type = Type;    
@@ -70,11 +69,17 @@ CreateEntity(game* Game, entity_type Type, sim_entity_type SimType, u32 WorldInd
     Entity->MeshID = MeshID; 
     Entity->Material = Material;    
     
-    sqt Transform = CreateSQT(Position, Scale, Euler);
+    ak_sqtf Transform = AK_SQT(Position, AK_EulerToQuat(Euler), Scale);
     
-    u32 PoolIndex = EntityStorage->GetIndex(Result.ID);
-    Game->PrevTransforms[WorldIndex][PoolIndex]    = Transform;
-    Game->CurrentTransforms[WorldIndex][PoolIndex] = Transform;        
+    ak_u32 Index = AK_PoolIndex(Result.ID);
+    if(Game->PrevTransforms[WorldIndex].Size < (Index+1))
+    {
+        Game->PrevTransforms[WorldIndex].Resize(Index+1);
+        Game->CurrentTransforms[WorldIndex].Resize(Index+1);
+    }
+
+    Game->PrevTransforms[WorldIndex][Index]    = Transform;
+    Game->CurrentTransforms[WorldIndex][Index] = Transform;        
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
     SimEntity->UserData = Entity;
@@ -83,7 +88,7 @@ CreateEntity(game* Game, entity_type Type, sim_entity_type SimType, u32 WorldInd
     if((MeshID != INVALID_MESH_ID) && !NoMeshColliders)
     {                              
         mesh_info* MeshInfo = GetMeshInfo(Game->Assets, MeshID);
-        for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
+        for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
         {
             convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;
             Simulation->AddCollisionVolume(SimEntity, ConvexHull);           
@@ -94,16 +99,16 @@ CreateEntity(game* Game, entity_type Type, sim_entity_type SimType, u32 WorldInd
 }
 
 entity_id
-CreateStaticEntity(game* Game, u32 WorldIndex, v3f Position, v3f Scale, v3f Euler, 
-                   mesh_asset_id Mesh, material Material, b32 NoMeshColliders = false)
+CreateStaticEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_v3f Euler, 
+                   mesh_asset_id Mesh, material Material, ak_bool NoMeshColliders = false)
 {    
     entity_id Result = CreateEntity(Game, ENTITY_TYPE_STATIC, SIM_ENTITY_TYPE_SIM_ENTITY, WorldIndex, Position, Scale, Euler, Mesh, Material, NoMeshColliders);    
     return Result;
 }
 
 dual_entity_id
-CreateDualStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler,
-                       mesh_asset_id Mesh, material Material, b32 NoMeshColliders = false)
+CreateDualStaticEntity(game* Game, ak_v3f Position, ak_v3f Scale, ak_v3f Euler,
+                       mesh_asset_id Mesh, material Material, ak_bool NoMeshColliders = false)
 {
     dual_entity_id Result;
     Result.EntityA = CreateStaticEntity(Game, 0, Position, Scale, Euler, Mesh, Material, NoMeshColliders);
@@ -112,14 +117,16 @@ CreateDualStaticEntity(game* Game, v3f Position, v3f Scale, v3f Euler,
 }
 
 entity_id 
-CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, f32 Mass, material Material, capsule* Capsule)
+CreatePlayerEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Euler, ak_f32 Mass, material Material, capsule* Capsule)
 {
+    AK_Assert(Mass != 0, "Cannot have zero mass for the player");    
+    
     Position.z += 0.01f;
-    entity_id Result = CreateEntity(Game, ENTITY_TYPE_PLAYER, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f), Euler, MESH_ASSET_ID_PLAYER, Material, true);            
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_PLAYER, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, AK_V3(1.0f, 1.0f, 1.0f), Euler, MESH_ASSET_ID_PLAYER, Material, true);            
     simulation* Simulation = GetSimulation(Game, WorldIndex);
     entity* Entity = GetEntity(Game, Result);                
     
-    player* Player = PushStruct(Game->GameStorage, player, Clear, 0);
+    player* Player = Game->GameStorage->Push<player>();
     Entity->UserData = Player;
     
     rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
@@ -134,50 +141,53 @@ CreatePlayerEntity(game* Game, u32 WorldIndex, v3f Position, v3f Euler, f32 Mass
 }
 
 entity_id
-CreateSphereRigidBody(game* Game, u32 WorldIndex, v3f Position, f32 Radius, f32 Mass, f32 Restitution, material Material)
+CreateSphereRigidBody(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Radius, ak_f32 Mass, ak_f32 Restitution, material Material)
 {
-    ASSERT(Mass != 0);    
-    entity_id Result = CreateEntity(Game, ENTITY_TYPE_RIGID_BODY, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, V3(1.0f, 1.0f, 1.0f)*Radius, V3(), MESH_ASSET_ID_SPHERE, Material, true);            
+    AK_Assert(Mass != 0, "Cannot have zero mass for a rigid body");    
+    entity_id Result = CreateEntity(Game, ENTITY_TYPE_RIGID_BODY, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, AK_V3(1.0f, 1.0f, 1.0f)*Radius, AK_V3<ak_f32>(), MESH_ASSET_ID_SPHERE, Material, true);            
     entity* Entity = GetEntity(Game, Result);    
     simulation* Simulation = GetSimulation(Game, WorldIndex);        
     
     rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
     
-    sphere Sphere = CreateSphere(V3(0.0f, 0.0f, 0.0f), 1.0f);    
+    sphere Sphere = CreateSphere(AK_V3(0.0f, 0.0f, 0.0f), 1.0f);    
     Simulation->AddCollisionVolume(RigidBody, &Sphere);
     
-    f32 SphereRadius = Sphere.Radius*GetEntityTransform(Game, Result)->Scale.LargestComponent();
+    ak_f32 SphereRadius = Sphere.Radius*GetEntityTransform(Game, Result)->Scale.LargestComp();
     
     RigidBody->Restitution = Restitution;
     RigidBody->InvMass = 1.0f/Mass;
     RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
-    RigidBody->LocalCenterOfMass = V3();
+    RigidBody->LocalCenterOfMass = AK_V3<ak_f32>();
     
     return Result;
 }
 
 entity_id
-CreatePushableBox(game* Game, u32 WorldIndex, v3f Position, f32 Dimensions, f32 Mass, material Material)
+CreatePushableBox(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material)
 {
+    AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
     entity_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, 
-                                    Position, V3(Dimensions, Dimensions, Dimensions), V3(), MESH_ASSET_ID_BOX, Material, false);        
+                                    Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_V3<ak_f32>(), MESH_ASSET_ID_BOX, Material, false);        
     entity* Entity = GetEntity(Game, Result);
-    Entity->UserData = PushStruct(Game->GameStorage, pushing_object, Clear, 0);
+    Entity->UserData = Game->GameStorage->Push<pushing_object>();
     
     simulation* Simulation = GetSimulation(Game, WorldIndex);                
     rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
     
     RigidBody->Restitution = 0;
     RigidBody->InvMass = 1.0f/Mass;
-    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(V3(Dimensions, Dimensions, Dimensions), Mass);
-    RigidBody->LocalCenterOfMass = V3(0.0f, 0.0f, Dimensions*0.5f);
+    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(AK_V3(Dimensions, Dimensions, Dimensions), Mass);
+    RigidBody->LocalCenterOfMass = AK_V3(0.0f, 0.0f, Dimensions*0.5f);
     
     return Result;
 }
 
 dual_entity_id
-CreateDualPushableBox(game* Game, v3f Position, f32 Dimensions, f32 Mass, material Material)
+CreateDualPushableBox(game* Game, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material)
 {
+    AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
+
     dual_entity_id Result;
     Result.EntityA = CreatePushableBox(Game, 0, Position, Dimensions, Mass, Material);
     Result.EntityB = CreatePushableBox(Game, 1, Position, Dimensions, Mass, Material);
@@ -191,10 +201,10 @@ CreateDualPushableBox(game* Game, v3f Position, f32 Dimensions, f32 Mass, materi
     return Result;
 }
 
-inline b32 
+inline ak_bool
 IsEntityType(entity* Entity, entity_type Type)
 {
-    b32 Result = Entity->Type == Type;
+    ak_bool Result = Entity->Type == Type;
     return Result;
 }
 

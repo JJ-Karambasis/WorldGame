@@ -2,8 +2,8 @@
 #define INPUT_H
 struct button
 {
-    b32 WasDown;
-    b32 IsDown;
+    ak_bool WasDown;
+    ak_bool IsDown;
 };
 
 struct input
@@ -23,21 +23,21 @@ struct input
     };                
 };
 
-inline b32 IsDown(button Button)
+inline ak_bool IsDown(button Button)
 {
-    b32 Result = Button.IsDown;
+    ak_bool Result = Button.IsDown;
     return Result;
 }
 
-inline b32 IsPressed(button Button)
+inline ak_bool IsPressed(button Button)
 {
-    b32 Result = IsDown(Button) && !Button.WasDown;
+    ak_bool Result = IsDown(Button) && !Button.WasDown;
     return Result;
 }
 
-inline b32 IsReleased(button Button)
+inline ak_bool IsReleased(button Button)
 {
-    b32 Result = !IsDown(Button) && Button.WasDown;
+    ak_bool Result = !IsDown(Button) && Button.WasDown;
     return Result;
 }
 

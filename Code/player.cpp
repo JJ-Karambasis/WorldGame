@@ -1,6 +1,6 @@
-inline b32 CanBePushed(v2f MoveDirection, v2f ObjectDirection)
+inline ak_bool CanBePushed(ak_v2f MoveDirection, ak_v2f ObjectDirection)
 {            
-    b32 Result = Dot(ObjectDirection, MoveDirection) > 0.98f;
+    ak_bool Result = AK_Dot(ObjectDirection, MoveDirection) > 0.98f;
     return Result;
 }
 
@@ -22,8 +22,8 @@ COLLISION_EVENT(OnPlayerCollision)
             {
                 rigid_body* PlayerRigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
                 
-                v2f N = Normalize(Normal.xy);                
-                v2f MoveDirection = Normalize(PlayerRigidBody->Acceleration.xy);
+                ak_v2f N = AK_Normalize(Normal.xy);                
+                ak_v2f MoveDirection = AK_Normalize(PlayerRigidBody->Acceleration.xy);
                 if(CanBePushed(MoveDirection, N))                
                 {                    
                     Player->State = PLAYER_STATE_PUSHING;

@@ -9,7 +9,7 @@
 
 #if DEVELOPER_BUILD
 #include "dev_world_game.cpp"
-b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam);
+ak_bool Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam);
 void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* Keyboard);
 void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
@@ -25,15 +25,14 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define DEVELOPMENT_RECORD(Game)
 #endif
 
-global string Global_EXEFilePath;
-global arena __Global_PlatformArena__;
-global arena* Global_PlatformArena = &__Global_PlatformArena__;
+global ak_string Global_EXEFilePath;
+global ak_arena* Global_PlatformArena;
 global win32_game_code Global_GameCode;
-global b32 Global_Running;
+global ak_bool Global_Running;
 global void* Global_DevPointer;
 
 //TODO(JJ): This lock can probably be moved out into some developer code macros since it is only used for hot reloading (for the audio thread)
-global lock Global_Lock;
+global ak_lock Global_Lock;
 
 internal LRESULT CALLBACK 
 Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
@@ -60,12 +59,12 @@ Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 }
 
 HWND Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,  
-                        v2i WindowDim)
+                        ak_v2i WindowDim)
 {    
     DWORD ExStyle = 0;
     DWORD Style = WS_OVERLAPPEDWINDOW|WS_VISIBLE;
     
-    RECT WindowRect = {0, 0, (LONG)WindowDim.width, (LONG)WindowDim.height};
+    RECT WindowRect = {0, 0, (LONG)WindowDim.w, (LONG)WindowDim.h};
     AdjustWindowRectEx(&WindowRect, Style, FALSE, ExStyle);
     
     HWND Window = CreateWindowEx(ExStyle, WindowClass->lpszClassName, "AKEngine", Style, 
@@ -79,26 +78,17 @@ HWND Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,
     return Window;
 }
 
-inline v2i 
+inline ak_v2i 
 Win32_GetWindowDim(HWND Window)
 {
-    v2i Result = {};    
+    ak_v2i Result = {};    
     RECT Rect;
     if(GetClientRect(Window, &Rect))    
-        Result = V2i(Rect.right-Rect.left, Rect.bottom-Rect.top);            
+        Result = AK_V2((ak_i32)(Rect.right-Rect.left), (ak_i32)(Rect.bottom-Rect.top));            
     return Result;
 }
 
-string Win32_GetExePathWithName()
-{
-    //TODO(JJ): We need to test and handle the case when our file path is larger than MAX_PATH
-    char EXEPathWithName[MAX_PATH+1];
-    ptr Size = GetModuleFileName(NULL, EXEPathWithName, MAX_PATH+1);
-    string Result = PushLiteralString(EXEPathWithName, Size, Global_PlatformArena);
-    return Result;
-}
-
-FILETIME Win32_GetFileCreationTime(string FilePath)
+FILETIME Win32_GetFileCreationTime(ak_string FilePath)
 {    
     WIN32_FILE_ATTRIBUTE_DATA FindData;
     GetFileAttributesExA(FilePath.Data, GetFileExInfoStandard, &FindData);    
@@ -117,7 +107,7 @@ win32_game_code Win32_DefaultGameCode()
 }
 
 win32_game_code 
-Win32_LoadGameCode(string DLLPath, string TempDLLPath)
+Win32_LoadGameCode(ak_string DLLPath, ak_string TempDLLPath)
 {
     win32_game_code Result = {};    
     BOOL CopyResult = CopyFile(DLLPath.Data, TempDLLPath.Data, false);
@@ -138,7 +128,7 @@ Win32_LoadGameCode(string DLLPath, string TempDLLPath)
 }
 
 void 
-Win32_UnloadGameCode(win32_game_code* GameCode, string TempDLLPath)
+Win32_UnloadGameCode(win32_game_code* GameCode, ak_string TempDLLPath)
 {
     if(GameCode->GameLibrary.Library)
     {
@@ -160,7 +150,7 @@ Win32_DefaultGraphicsCode()
 }
 
 win32_graphics_code
-Win32_LoadGraphicsCode(string DLLPath, string TempDLLPath)
+Win32_LoadGraphicsCode(ak_string DLLPath, ak_string TempDLLPath)
 {
     win32_graphics_code Result = {};
     BOOL CopyResult = CopyFile(DLLPath.Data, TempDLLPath.Data, false);
@@ -192,7 +182,7 @@ Win32_LoadGraphicsCode(string DLLPath, string TempDLLPath)
 }
 
 void 
-Win32_UnloadGraphicsCode(win32_graphics_code* GraphicsCode, string TempDLLPath)
+Win32_UnloadGraphicsCode(win32_graphics_code* GraphicsCode, ak_string TempDLLPath)
 {
     if(GraphicsCode->GraphicsLibrary.Library)
     {
@@ -202,23 +192,40 @@ Win32_UnloadGraphicsCode(win32_graphics_code* GraphicsCode, string TempDLLPath)
     }
 }
 
-win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
+win32_audio_output Win32_InitDSound(HWND Window, ak_uaddr BufferLength)
 {    
     HMODULE DSoundLibrary = LoadLibrary("dsound.dll");
-    BOOL_CHECK_AND_HANDLE(DSoundLibrary, "Failed to load the dsound.dll library.");
+    if(!DSoundLibrary)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return {};
+    }    
     
     direct_sound_create* DirectSoundCreate = (direct_sound_create*)GetProcAddress(DSoundLibrary, "DirectSoundCreate");
-    BOOL_CHECK_AND_HANDLE(DirectSoundCreate, "Failed to load the DirectSoundCreate function");
+    if(!DirectSoundCreate)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return {};
+    }    
     
     IDirectSound* DirectSound;
-    HRESULT_CHECK_AND_HANDLE(DirectSoundCreate(0, &DirectSound, 0), "Failed to create the DirectSound object.");    
-    HRESULT_CHECK_AND_HANDLE(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY), "Failed to set the cooperation level for direct sound.");    
+    if(FAILED(DirectSoundCreate(0, &DirectSound, 0)))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return {};
+    }
+        
+    if(FAILED(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY)))
+    {
+        //TODO(JJ): Diagnostic and error logging 
+        return {};
+    }
     
     WAVEFORMATEX WaveFormat = {};
     WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
     WaveFormat.nChannels = AUDIO_OUTPUT_CHANNEL_COUNT;    
     WaveFormat.nSamplesPerSec = AUDIO_OUTPUT_SAMPLES_PER_SECOND;
-    WaveFormat.wBitsPerSample = sizeof(i16)*8;
+    WaveFormat.wBitsPerSample = sizeof(ak_i16)*8;
     WaveFormat.nBlockAlign = (WaveFormat.nChannels*WaveFormat.wBitsPerSample) / 8;
     WaveFormat.nAvgBytesPerSec = WaveFormat.nSamplesPerSec*WaveFormat.nBlockAlign;    
     
@@ -227,28 +234,40 @@ win32_audio_output Win32_InitDSound(HWND Window, ptr BufferLength)
     BufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
     
     IDirectSoundBuffer* PrimaryBuffer;
-    HRESULT_CHECK_AND_HANDLE(DirectSound->CreateSoundBuffer(&BufferDescription, &PrimaryBuffer, 0), "Failed to create the direct sound primary buffer.");    
-    HRESULT_CHECK_AND_HANDLE(PrimaryBuffer->SetFormat(&WaveFormat), "Failed to set the direct sound wave format.");
+    if(FAILED(DirectSound->CreateSoundBuffer(&BufferDescription, &PrimaryBuffer, 0)))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return {};
+    }
+    
+    if(FAILED(PrimaryBuffer->SetFormat(&WaveFormat)))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return {};
+    }
     
     BufferDescription = {};
     BufferDescription.dwSize = sizeof(BufferDescription);
     BufferDescription.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
-    BufferDescription.dwBufferBytes = (u32)GetAudioBufferSizeFromSeconds(AUDIO_OUTPUT_CHANNEL_COUNT, BufferLength);
+    BufferDescription.dwBufferBytes = (ak_u32)GetAudioBufferSizeFromSeconds(AUDIO_OUTPUT_CHANNEL_COUNT, BufferLength);
     BufferDescription.lpwfxFormat = &WaveFormat;
     
     IDirectSoundBuffer* SoundBuffer;
-    HRESULT_CHECK_AND_HANDLE(DirectSound->CreateSoundBuffer(&BufferDescription, &SoundBuffer, 0), "Failed to create the direct sound buffer.");
+    if(FAILED(DirectSound->CreateSoundBuffer(&BufferDescription, &SoundBuffer, 0)))
+    {
+        //TODO(JJ): Diagnostic and error logging
+        return {};
+    }
     
     win32_audio_output Result = {};        
     Result.SoundBuffer = SoundBuffer;    
     Result.Samples.Count = BufferLength*AUDIO_OUTPUT_SAMPLES_PER_SECOND;
-    Result.Samples.Data = (i16*)AllocateMemory(BufferDescription.dwBufferBytes);
+    Result.Samples.Data = (ak_i16*)AK_Allocate(BufferDescription.dwBufferBytes);
     Result.Mute = true;
+    Result.AudioThreadArena = AK_CreateArena(AK_Megabyte(1));
+    Result.PlayingAudioStorage = AK_CreatePool<playing_audio>(16);
     
-    return Result;
-    
-    handle_error:
-    return {};
+    return Result;    
 }
 
 void Win32_ClearSoundBuffer(win32_audio_output* Output)
@@ -262,8 +281,8 @@ void Win32_ClearSoundBuffer(win32_audio_output* Output)
     
     if(SUCCEEDED(SoundBuffer->Lock(0, 0, &Region1, &Region1Size, &Region2, &Region2Size, DSBLOCK_ENTIREBUFFER)))
     {   
-        ClearMemory(Region1, Region1Size);
-        ClearMemory(Region2, Region2Size);        
+        AK_MemoryClear(Region1, Region1Size);
+        AK_MemoryClear(Region2, Region2Size);        
         SoundBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
     }
 }
@@ -272,10 +291,7 @@ DWORD WINAPI
 Win32_AudioThread(void* Paramter)
 {    
     game* Game = (game*)Paramter;
-    
-    arena AudioThreadArena = CreateArena(MEGABYTE(1));
-    win32_audio_output* AudioOutput = (win32_audio_output*)Game->AudioOutput;    
-    AudioOutput->PlayingAudioPool = CreatePool<playing_audio>(&AudioThreadArena, 16);
+    win32_audio_output* AudioOutput = (win32_audio_output*)Game->AudioOutput;
     
 #define TARGET_AUDIO_HZ 20
     
@@ -283,21 +299,21 @@ Win32_AudioThread(void* Paramter)
     Win32_ClearSoundBuffer(AudioOutput);
     SoundBuffer->Play(0, 0, DSBPLAY_LOOPING);
     
-    u64 FlipWallClock = WallClock();    
-    b32 SoundIsValid = false;
+    ak_high_res_clock FlipWallClock = AK_WallClock();    
+    ak_bool SoundIsValid = false;
     
-    u16 BytesPerSample = sizeof(u16)*AUDIO_OUTPUT_CHANNEL_COUNT;
-    u32 SoundBufferSize = SafeU32(AudioOutput->Samples.Count*BytesPerSample);    
-    f32 TargetSecondsPerFrame = SafeInverse(TARGET_AUDIO_HZ);
+    ak_u16 BytesPerSample = sizeof(ak_u16)*AUDIO_OUTPUT_CHANNEL_COUNT;
+    ak_u32 SoundBufferSize = AK_SafeU32(AudioOutput->Samples.Count*BytesPerSample);    
+    ak_f32 TargetSecondsPerFrame = AK_SafeInverse(TARGET_AUDIO_HZ);
     
-    i32 SafetyBytes = (i32)(((f32)AUDIO_OUTPUT_CHANNEL_COUNT*(f32)BytesPerSample / TARGET_AUDIO_HZ)/3.0f);
+    ak_i32 SafetyBytes = (ak_i32)(((ak_f32)AUDIO_OUTPUT_CHANNEL_COUNT*(ak_f32)BytesPerSample / TARGET_AUDIO_HZ)/3.0f);
     
     for(;;)
     {                
-        temp_arena TemporaryArena = BeginTemporaryMemory(&AudioThreadArena);
+        ak_temp_arena TempArena = AudioOutput->AudioThreadArena->BeginTemp();
         
-        u64 AudioWallClock = WallClock();
-        f32 FromBeginToAudioSeconds = (f32)GetElapsedTime(AudioWallClock, FlipWallClock);
+        ak_high_res_clock AudioWallClock = AK_WallClock();
+        ak_f32 FromBeginToAudioSeconds = (ak_f32)AK_GetElapsedTime(AudioWallClock, FlipWallClock);
         
         DWORD PlayCursor;
         DWORD WriteCursor;
@@ -312,9 +328,9 @@ Win32_AudioThread(void* Paramter)
             DWORD ByteToLock = ((AudioOutput->RunningSampleIndex*BytesPerSample) % SoundBufferSize);
             
             DWORD ExpectedSoundBytesPerFrame =
-                (int)((f32)(AUDIO_OUTPUT_SAMPLES_PER_SECOND*BytesPerSample) / TARGET_AUDIO_HZ);
-            f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
-            DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(f32)ExpectedSoundBytesPerFrame);
+                (ak_i32)((ak_f32)(AUDIO_OUTPUT_SAMPLES_PER_SECOND*BytesPerSample) / TARGET_AUDIO_HZ);
+            ak_f32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
+            DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(ak_f32)ExpectedSoundBytesPerFrame);
             
             DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
             
@@ -323,10 +339,10 @@ Win32_AudioThread(void* Paramter)
             {
                 SafeWriteCursor += SoundBufferSize;
             }
-            ASSERT(SafeWriteCursor >= PlayCursor);
+            AK_Assert(SafeWriteCursor >= PlayCursor, "Write cursor needs to be ahead of the play cursor");
             SafeWriteCursor += SafetyBytes;
             
-            b32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
+            ak_bool AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);
             
             DWORD TargetCursor = 0;
             if(AudioCardIsLowLatency)
@@ -351,12 +367,12 @@ Win32_AudioThread(void* Paramter)
             }
             
             DWORD SamplesToWrite = BytesToWrite / BytesPerSample;
-            if(!IsLocked(&Global_Lock))
+            if(!Global_Lock.IsLocked())
             {   
-                ASSERT(SamplesToWrite < AudioOutput->Samples.Count);
+                AK_Assert(SamplesToWrite < AudioOutput->Samples.Count, "Samples to write must be smaller the samples allocated in the audio buffer");
                 samples Samples = {SamplesToWrite, AudioOutput->Samples.Data};
                 
-                Global_GameCode.OutputSoundSamples(Game, &Samples, &AudioThreadArena);
+                Global_GameCode.OutputSoundSamples(Game, &Samples);
                 
                 VOID* Region1;
                 VOID* Region2;
@@ -364,10 +380,10 @@ Win32_AudioThread(void* Paramter)
                 DWORD Region2Size;
                 if(SUCCEEDED(SoundBuffer->Lock(ByteToLock, BytesToWrite, &Region1, &Region1Size, &Region2, &Region2Size, 0)))
                 {   
-                    i16* SrcSamples = AudioOutput->Samples.Data;                    
+                    ak_i16* SrcSamples = AudioOutput->Samples.Data;                    
                     DWORD Region1SampleCount = Region1Size/BytesPerSample;
                     
-                    i16* DstSample  = (i16*)Region1;                 
+                    ak_i16* DstSample  = (ak_i16*)Region1;                 
                     for(DWORD SampleIndex = 0; SampleIndex < Region1SampleCount; SampleIndex++)
                     {                            
                         *DstSample++ = *SrcSamples++;
@@ -376,7 +392,7 @@ Win32_AudioThread(void* Paramter)
                     }
                     
                     DWORD Region2SampleCount = Region2Size/BytesPerSample;
-                    DstSample  = (i16*)Region2;                 
+                    DstSample  = (ak_i16*)Region2;                 
                     for(DWORD SampleIndex = 0; SampleIndex < Region2SampleCount; SampleIndex++)
                     {                            
                         *DstSample++ = *SrcSamples++;
@@ -394,14 +410,14 @@ Win32_AudioThread(void* Paramter)
         }                  
         
         
-        f32 Delta = (f32)GetElapsedTime(WallClock(), FlipWallClock);
+        ak_f32 Delta = (ak_f32)AK_GetElapsedTime(AK_WallClock(), FlipWallClock);
         while(Delta < TargetSecondsPerFrame)        
-            Delta = (f32)GetElapsedTime(WallClock(), FlipWallClock);        
+            Delta = (ak_f32)AK_GetElapsedTime(AK_WallClock(), FlipWallClock);        
         
-        FlipWallClock = WallClock();        
+        FlipWallClock = AK_WallClock();        
         
-        EndTemporaryMemory(&TemporaryArena);
-        CHECK_ARENA(&AudioThreadArena);        
+        AudioOutput->AudioThreadArena->EndTemp(&TempArena);
+        AK_Assert(AudioOutput->AudioThreadArena->TemporaryArenas == 0, "Still have some temporary arenas at the end of the audio frame in use");        
     }    
 }
 
@@ -422,7 +438,10 @@ void Win32_ProcessMessages(input* Input)
                 UINT Size;
                 UINT Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
                 
-                void* InputData = PushSize(Size, NoClear, 8);                    
+                ak_arena* GlobalArena = AK_GetGlobalArena();
+                ak_temp_arena TempArena = GlobalArena->BeginTemp();
+                
+                void* InputData = GlobalArena->Push(Size, AK_ARENA_CLEAR_FLAGS_NOCLEAR, 8);                    
                 Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, InputData, &Size, sizeof(RAWINPUTHEADER));                    
                 
                 RAWINPUT* RawInput = (RAWINPUT*)InputData;
@@ -439,7 +458,7 @@ void Win32_ProcessMessages(input* Input)
                     case RIM_TYPEKEYBOARD:
                     {
                         RAWKEYBOARD* RawKeyboard = &RawInput->data.keyboard;                            
-                        b32 Quit = ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) && (RawKeyboard->VKey == VK_F4) && (RawKeyboard->Flags == RI_KEY_MAKE);
+                        ak_bool Quit = ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) && (RawKeyboard->VKey == VK_F4) && (RawKeyboard->Flags == RI_KEY_MAKE);
                         if(Quit)
                             PostQuitMessage(0);
                         
@@ -460,6 +479,8 @@ void Win32_ProcessMessages(input* Input)
                         DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard);                            
                     } break;
                 }
+                
+                GlobalArena->EndTemp(&TempArena);
             } break;
             
             default:
@@ -473,21 +494,19 @@ void Win32_ProcessMessages(input* Input)
 
 int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
 {   
-    *Global_PlatformArena = CreateArena(MEGABYTE(1));
+    AK_SetGlobalArena(AK_CreateArena(AK_Megabyte(32)));    
+    Global_PlatformArena = AK_CreateArena(AK_Megabyte(1));        
     
-    error_stream ErrorStream = CreateErrorStream();
-    SetGlobalErrorStream(&ErrorStream);
+    Global_EXEFilePath = AK_GetExecutablePath(Global_PlatformArena);
+    ak_string GameDLLPathName = AK_StringConcat(Global_EXEFilePath, "World_Game.dll", Global_PlatformArena);
+    ak_string TempDLLPathName = AK_StringConcat(Global_EXEFilePath, "World_Game_Temp.dll", Global_PlatformArena);    
+    ak_string OpenGLGraphicsDLLPathName = AK_StringConcat(Global_EXEFilePath, "OpenGL.dll", Global_PlatformArena);
+    ak_string OpenGLGraphicsTempDLLPathName = AK_StringConcat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
+    ak_string AssetFilePath = AK_StringConcat(Global_EXEFilePath, "WorldGame.assets", Global_PlatformArena);
     
-    Global_EXEFilePath = GetProgramPath(Global_PlatformArena);
-    string GameDLLPathName = Concat(Global_EXEFilePath, "World_Game.dll", Global_PlatformArena);
-    string TempDLLPathName = Concat(Global_EXEFilePath, "World_Game_Temp.dll", Global_PlatformArena);    
-    string OpenGLGraphicsDLLPathName = Concat(Global_EXEFilePath, "OpenGL.dll", Global_PlatformArena);
-    string OpenGLGraphicsTempDLLPathName = Concat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
-    string AssetFilePath = Concat(Global_EXEFilePath, "WorldGame.assets", Global_PlatformArena);
-    
-    u16 KeyboardUsage = 6;
-    u16 MouseUsage = 2;
-    u16 UsagePage = 1;
+    ak_u16 KeyboardUsage = 6;
+    ak_u16 MouseUsage = 2;
+    ak_u16 UsagePage = 1;
     
     RAWINPUTDEVICE RawInputDevices[] = 
     {
@@ -495,7 +514,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         {UsagePage, MouseUsage, 0, NULL}
     };
     
-    RegisterRawInputDevices(RawInputDevices, ARRAYCOUNT(RawInputDevices), sizeof(RAWINPUTDEVICE));
+    RegisterRawInputDevices(RawInputDevices, AK_Count(RawInputDevices), sizeof(RAWINPUTDEVICE));
     
     WNDCLASSEX WindowClass = {};
     WindowClass.cbSize = sizeof(WNDCLASSEX);
@@ -504,27 +523,47 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     WindowClass.hInstance = Instance;
     WindowClass.lpszClassName = GAME_NAME;    
     if(!RegisterClassEx(&WindowClass))    
-        WRITE_AND_HANDLE_ERROR("Failed to register window class.");                    
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "Failed to register window class");
+        return -1;
+    }
     
     //HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
-    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1920, 1080));
-    if(!Window)    
-        WRITE_AND_HANDLE_ERROR("Failed to create game window."); 
+    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, AK_V2(1920, 1080));
+    if(!Window)   
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "Failed to create the game window");
+        return -1;
+    }
     
-    u32 SoundBufferSeconds = 2;
+    ak_u32 SoundBufferSeconds = 2;
     win32_audio_output AudioOutput = Win32_InitDSound(Window, SoundBufferSeconds); 
     if(!AudioOutput.SoundBuffer)
-        WRITE_AND_HANDLE_ERROR("Failed to initialize direct sound.");        
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "Failed to initialize direct sound");
+        return -1;
+    }
     
     input Input = {};
     
     Global_GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);
     if(!Global_GameCode.GameLibrary.Library)    
-        WRITE_AND_HANDLE_ERROR("Failed to load the game's dll code.");
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "Failed to load the game's dll code");
+        return -1;
+    }
     
     win32_graphics_code GraphicsCode = Win32_LoadGraphicsCode(OpenGLGraphicsDLLPathName, OpenGLGraphicsTempDLLPathName);
     if(!GraphicsCode.GraphicsLibrary.Library)
-        WRITE_AND_HANDLE_ERROR("Failed to load the graphics's dll code.");
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "Failed to load the graphics's dll code");
+        return -1;
+    }
     
     void* PlatformData[2] = 
     {
@@ -540,27 +579,30 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     Global_DevPointer = DevContext;
 #endif        
     
-    game* Game = Global_GameCode.Initialize(&Input, &AudioOutput, AssetFilePath, &ErrorStream, Global_DevPointer);                                                
+    game* Game = Global_GameCode.Initialize(AK_GetGlobalArena(), &Input, &AudioOutput, AssetFilePath, Global_DevPointer);                                                
     CloseHandle(CreateThread(NULL, 0, Win32_AudioThread, Game, 0, NULL));    
-    
-    SetDefaultArena(Game->TempStorage);
     
     graphics* Graphics = GraphicsCode.InitGraphics(Game->TempStorage, PlatformData);
     if(!Graphics)
-        WRITE_AND_HANDLE_ERROR("Failed to initialize the graphics.");    
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_Assert(false, "Failed to initialize the graphics");
+        return-1;
+    }
     
     Global_Running = true;
     
     Game->dtFixed = 1.0f/60.0f;        
-    f32 Accumulator = 0.0f;        
+    ak_f32 Accumulator = 0.0f;        
     
-    platform_time CurrentTime = WallClock();
+    ak_high_res_clock CurrentTime = AK_WallClock();
     while(Global_Running)
     {           
-        temp_arena FrameArena = BeginTemporaryMemory();
+        ak_arena* GlobalArena = AK_GetGlobalArena();
+        ak_temp_arena TempArena = GlobalArena->BeginTemp();
         
-        platform_time NewTime = WallClock();
-        f32 FrameTime = (f32)GetElapsedTime(NewTime, CurrentTime);
+        ak_high_res_clock NewTime = AK_WallClock();
+        ak_f32 FrameTime = (ak_f32)AK_GetElapsedTime(NewTime, CurrentTime);
         
         if(FrameTime > 0.05f)
             FrameTime = 0.05f;
@@ -572,12 +614,12 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         FILETIME GameDLLWriteTime = Win32_GetFileCreationTime(GameDLLPathName);
         if(CompareFileTime(&Global_GameCode.GameLibrary.LastWriteTime, &GameDLLWriteTime) < 0)
         {
-            BeginLock(&Global_Lock);
+            Global_Lock.Begin();
             {
                 Win32_UnloadGameCode(&Global_GameCode, TempDLLPathName);                        
                 Global_GameCode = Win32_LoadGameCode(GameDLLPathName, TempDLLPathName);            
             }
-            EndLock(&Global_Lock);
+            Global_Lock.End();
         }
         
         FILETIME GraphicsDLLWriteTime = Win32_GetFileCreationTime(OpenGLGraphicsDLLPathName);
@@ -591,11 +633,11 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         //DEVELOPMENT_RECORD_FRAME(Game);
         //DEVELOPMENT_PLAY_FRAME(Game);
-                
+        
         while(Accumulator >= Game->dtFixed)
-        {            
-            CopyMemory(Game->PrevTransforms[0], Game->CurrentTransforms[0], sizeof(sqt)*Game->EntityStorage[0].Capacity);
-            CopyMemory(Game->PrevTransforms[1], Game->CurrentTransforms[1], sizeof(sqt)*Game->EntityStorage[1].Capacity);
+        {                        
+            AK_MemoryCopy(Game->PrevTransforms[0].Entries, Game->CurrentTransforms[0].Entries, sizeof(ak_sqtf)*Game->EntityStorage[0].Capacity);
+            AK_MemoryCopy(Game->PrevTransforms[1].Entries, Game->CurrentTransforms[1].Entries, sizeof(ak_sqtf)*Game->EntityStorage[1].Capacity);
             Game->PrevCameras[0] = Game->CurrentCameras[0];
             Game->PrevCameras[1] = Game->CurrentCameras[1];
             
@@ -614,7 +656,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             Accumulator -= Game->dtFixed;
         }
         
-        for(u32 ButtonIndex = 0; ButtonIndex < ARRAYCOUNT(Input.Buttons); ButtonIndex++)        
+        for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(Input.Buttons); ButtonIndex++)        
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
         
         Win32_ProcessMessages(&Input);
@@ -623,7 +665,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         Game->dt = FrameTime;                
         Graphics->RenderDim = Win32_GetWindowDim(Window);
         
-        f32 tRenderInterpolate = Accumulator / Game->dtFixed;        
+        ak_f32 tRenderInterpolate = Accumulator / Game->dtFixed;        
         graphics_state GraphicsState = GetGraphicsState(Game, Game->CurrentWorldIndex, tRenderInterpolate);
         
         if(NOT_IN_DEVELOPMENT_MODE())
@@ -635,22 +677,16 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         GraphicsCode.ExecuteRenderCommands(Graphics, Global_DevPointer);
         
-        EndTemporaryMemory(&FrameArena);        
-        CHECK_ARENA(GetDefaultArena());
+        GlobalArena->EndTemp(&TempArena);
+        AK_Assert(GlobalArena->TemporaryArenas == 0, "There are still temporary arena's being used in the frame");
     }
     
     return 0;
-     
-    handle_error:
-    string ErrorMessage = GetGlobalErrorStream()->GetString();
-    WriteEntireFile("Errors.log", ErrorMessage.Data, SafeU32(ErrorMessage.Length));
-    MessageBox(NULL, "Error has occurred, please see Errors.log file.", NULL, MB_OK);     
-    return -1;
 } 
 
 int CALLBACK 
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
-{
+{            
     int Result;
     __try
     {        
@@ -667,8 +703,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 }
 
 #if DEVELOPER_BUILD
-
-
 void Platform_InitImGui(void* PlatformData)
 {    
     IMGUI_CHECKVERSION();
@@ -677,7 +711,7 @@ void Platform_InitImGui(void* PlatformData)
     
     ImGuiIO& IO = GetIO();
     IO.BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
-    IO.BackendPlatformName = "world_game_win32_platform";
+    IO.BackendPlatformName = "world_ga me_win32_platform";
     IO.ImeWindowHandle = (HWND)PlatformData;
     IO.KeyMap[ImGuiKey_Tab] = VK_TAB;
     IO.KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
@@ -703,25 +737,25 @@ void Platform_InitImGui(void* PlatformData)
     IO.KeyMap[ImGuiKey_Z] = 'Z';    
 }
 
-void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* DevContext)
+void Platform_DevUpdate(void* PlatformData, ak_v2i RenderDim, ak_f32 dt, dev_context* DevContext)
 {
     HWND Window = (HWND)PlatformData;
     
     ImGuiIO* IO = &GetIO();
     
-    IO->DisplaySize = ImVec2((f32)RenderDim.width, (f32)RenderDim.height);
+    IO->DisplaySize = ImVec2((ak_f32)RenderDim.w, (ak_f32)RenderDim.h);
     IO->DeltaTime = dt;
     IO->KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     IO->KeyShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     IO->KeyAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
     if(IO->WantSetMousePos)
     {
-        v2i Position = V2i(IO->MousePos.x, IO->MousePos.y);
+        ak_v2i Position = AK_V2((ak_i32)IO->MousePos.x, (ak_i32)IO->MousePos.y);
         ClientToScreen(Window, (POINT*)&Position);
         SetCursorPos(Position.x, Position.y);
     }
     
-    IO->MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+    IO->MousePos = ImVec2(-AK_MAX32, -AK_MAX32);
     POINT MousePosition;
     if(HWND ActiveWindow = GetForegroundWindow())
     {
@@ -729,25 +763,25 @@ void Platform_DevUpdate(void* PlatformData, v2i RenderDim, f32 dt, dev_context* 
         {
             if(GetCursorPos(&MousePosition) && ScreenToClient(Window, &MousePosition))
             {                
-                IO->MousePos = ImVec2((f32)MousePosition.x, (f32)MousePosition.y);                
-                DevContext->Input.MouseCoordinates = V2i((f32)MousePosition.x, (f32)MousePosition.y);
+                IO->MousePos = ImVec2((ak_f32)MousePosition.x, (ak_f32)MousePosition.y);                
+                DevContext->Input.MouseCoordinates = AK_V2((ak_i32)MousePosition.x, (ak_i32)MousePosition.y);
             }
         }
     }      
 }
 
-const global char Global_FrameRecordingPrefix[] = "FrameRecording_";
-global char* Global_DataPath;
-global i32 Global_FrameRecordingIndex = 1;
-string Platform_FindNewFrameRecordingPath()
+const global ak_char Global_FrameRecordingPrefix[] = "FrameRecording_";
+global ak_char* Global_DataPath;
+global ak_i32 Global_FrameRecordingIndex = 1;
+ak_string Platform_FindNewFrameRecordingPath()
 {
-    string Result = InvalidString();
+    ak_string Result = AK_CreateEmptyString();
     
     if(!Global_DataPath)
     {
-        Global_DataPath = PushArray(Global_PlatformArena, Global_EXEFilePath.Length*2, char, Clear, 0);
+        Global_DataPath = Global_PlatformArena->PushArray<ak_char>(Global_EXEFilePath.Length*2);
         DWORD ReadSize = GetCurrentDirectory((DWORD)Global_EXEFilePath.Length*2, Global_DataPath);
-        ASSERT(ReadSize <= Global_EXEFilePath.Length*2);
+        AK_Assert(ReadSize <= Global_EXEFilePath.Length*2, "Directory size for frame recording path is much larger than the executable path");
     }
     
     WIN32_FIND_DATAA FindData;
@@ -755,9 +789,9 @@ string Platform_FindNewFrameRecordingPath()
     
     while(FileHandle != INVALID_HANDLE_VALUE)
     {                
-        if(BeginsWith(FindData.cFileName, Global_FrameRecordingPrefix))
+        if(AK_StringBeginsWith(FindData.cFileName, Global_FrameRecordingPrefix))
         {            
-            i32 IndexValue = ToInt(&FindData.cFileName[sizeof(Global_FrameRecordingPrefix)-1]);
+            ak_i32 IndexValue = AK_ToInt(&FindData.cFileName[sizeof(Global_FrameRecordingPrefix)-1]);
             if(IndexValue >= Global_FrameRecordingIndex)
                 Global_FrameRecordingIndex = IndexValue+1;
         }
@@ -766,11 +800,11 @@ string Platform_FindNewFrameRecordingPath()
             break;
     }        
     
-    Result = FormatString("%s\\frame_recordings\\FrameRecording_%d.recording", Global_DataPath, Global_FrameRecordingIndex);    
+    Result = AK_FormatString(AK_GetGlobalArena(), "%s\\frame_recordings\\FrameRecording_%d.recording", Global_DataPath, Global_FrameRecordingIndex);    
     return Result;
 }
 
-b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
+ak_bool Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     if(!GetCurrentContext())
         return false;
@@ -799,7 +833,7 @@ b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_MBUTTONUP:
         case WM_XBUTTONUP:
         {
-            i32 Button = 0;
+            ak_i32 Button = 0;
             if (Message == WM_LBUTTONUP) { Button = 0; }
             if (Message == WM_RBUTTONUP) { Button = 1; }
             if (Message == WM_MBUTTONUP) { Button = 2; }
@@ -811,7 +845,7 @@ b32 Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
         
         case WM_MOUSEWHEEL:
         {
-            IO.MouseWheel += (f32)GET_WHEEL_DELTA_WPARAM(WParam) / (f32)WHEEL_DELTA;                    
+            IO.MouseWheel += (ak_f32)GET_WHEEL_DELTA_WPARAM(WParam) / (ak_f32)WHEEL_DELTA;                    
         } break;
         
         case WM_KEYDOWN:
@@ -859,7 +893,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
 {
     dev_input* Input = &DevContext->Input;
     
-    Input->MouseDelta = V2i(RawMouse->lLastX, RawMouse->lLastY);
+    Input->MouseDelta = AK_V2((ak_i32)RawMouse->lLastX, (ak_i32)RawMouse->lLastY);
     
     switch(RawMouse->usButtonFlags)
     {
@@ -887,9 +921,12 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
         
         case RI_MOUSE_WHEEL:
         {
-            Input->Scroll = (f32)(i16)RawMouse->usButtonData / (f32)WHEEL_DELTA;
+            Input->Scroll = (ak_f32)(ak_i16)RawMouse->usButtonData / (ak_f32)WHEEL_DELTA;
         } break;
     }           
 }
 
 #endif
+
+#define AK_COMMON_IMPLEMENTATION
+#include <ak_common.h>

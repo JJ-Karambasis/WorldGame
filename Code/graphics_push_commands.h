@@ -41,23 +41,23 @@ struct push_command
 
 struct push_command_clear_color : public push_command
 {
-    f32 R, G, B, A;
+    ak_f32 R, G, B, A;
 };
 
 struct push_command_clear_depth : public push_command
 {
-    f32 Depth;
+    ak_f32 Depth;
 };
 
 struct push_command_clear_color_and_depth : public push_command
 {
-    f32 R, G, B, A;
-    f32 Depth;
+    ak_f32 R, G, B, A;
+    ak_f32 Depth;
 };
 
 struct push_command_depth : public push_command
 {
-    b32 Enable;
+    ak_bool Enable;
 };
 
 struct push_command_cull : public push_command
@@ -67,40 +67,40 @@ struct push_command_cull : public push_command
 
 struct push_command_wireframe : public push_command
 {
-    b32 Enable;
+    ak_bool Enable;
 };
 
 struct push_command_srgb_render_buffer_writes : public push_command
 {
-    b32 Enable;
+    ak_bool Enable;
 };
 
 struct push_command_blend : public push_command
 {
-    b32 Enable;
+    ak_bool Enable;
     graphics_blend SrcGraphicsBlend;
     graphics_blend DstGraphicsBlend;
 };
 
 struct push_command_rect : public push_command
 { 
-    i32 X, Y;
-    i32 Width, Height;
+    ak_i32 X, Y;
+    ak_i32 Width, Height;
 };
 
 struct push_command_4x4_matrix : public push_command
 {
-    m4 Matrix;
+    ak_m4f Matrix;
 };
 
 struct push_command_view_position : public push_command
 {
-    v3f Position;    
+    ak_v3f Position;    
 };
 
 struct push_command_omni_shadow_map : public push_command
 {        
-    f32 FarPlaneDistance;
+    ak_f32 FarPlaneDistance;
 };
 
 struct push_command_render_buffer : public push_command
@@ -121,22 +121,22 @@ struct push_command_material : public push_command
 struct push_command_draw_mesh : public push_command
 {
     graphics_mesh_id MeshID;
-    m4 WorldTransform;    
+    ak_m4f WorldTransform;    
     graphics_draw_info DrawInfo;    
 };
 
 struct push_command_draw_skeleton_mesh : public push_command
 {
     graphics_mesh_id MeshID;
-    m4 WorldTransform;    
+    ak_m4f WorldTransform;    
     graphics_draw_info DrawInfo;        
-    m4 Joints[MAX_JOINT_COUNT];
+    ak_m4f Joints[MAX_JOINT_COUNT];
 };
 
 struct push_command_draw_unlit_mesh : public push_command
 {
     graphics_mesh_id MeshID;
-    m4 WorldTransform;
+    ak_m4f WorldTransform;
     graphics_diffuse_material_slot DiffuseSlot;
     graphics_draw_info DrawInfo;
 };
@@ -144,39 +144,38 @@ struct push_command_draw_unlit_mesh : public push_command
 struct push_command_draw_unlit_skeleton_mesh : public push_command
 {
     graphics_mesh_id MeshID;
-    m4 WorldTransform;
+    ak_m4f WorldTransform;
     graphics_diffuse_material_slot DiffuseSlot;
     graphics_draw_info DrawInfo;    
-    m4 Joints[MAX_JOINT_COUNT];
+    ak_m4f Joints[MAX_JOINT_COUNT];
 };
 
 struct push_command_draw_line_mesh : public push_command
 {
     graphics_mesh_id MeshID;
-    m4 WorldTransform;
-    c3 Color;
+    ak_m4f WorldTransform;
+    ak_color3f Color;
     graphics_draw_info DrawInfo;        
 };
 
 struct push_command_draw_imgui_ui : public push_command
 {
     graphics_mesh_id MeshID;
-    graphics_texture_id TextureID;
-    
+    graphics_texture_id TextureID;    
     graphics_draw_info DrawInfo;
 };
 
 struct push_command_copy_to_output: public push_command
 {
     graphics_render_buffer* RenderBuffer;
-    v2i DstOffset;
-    v2i DstResolution;
+    ak_v2i DstOffset;
+    ak_v2i DstResolution;
 };
 
 struct push_command_list
 {
     push_command* Ptr[MAX_COMMAND_COUNT];
-    u32 Count;
+    ak_u32 Count;
 };
 
 #endif

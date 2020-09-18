@@ -2,68 +2,80 @@
 
 struct fbx_skeleton
 {
-    u32 JointCount;
+    ak_u32 JointCount;
     FbxNode* Nodes[128];
 };
 
 struct fbx_mesh_context
 {
-    b32 ShouldSkip;
-    dynamic_array<FbxNode*> ConvexHullNodes;
+    ak_bool ShouldSkip;
+    ak_array<FbxNode*> ConvexHullNodes;
     fbx_skeleton Skeleton;    
 };
 
 struct control_point_joint_data
 {
-    u32 Count;
-    f32 Weights[4];
-    u8 Indices[4];
+    ak_u32 Count;
+    ak_f32 Weights[4];
+    ak_u8 Indices[4];
 };
 
 struct fbx_joint_context
 {
-    b32 ShouldSkip;
+    ak_bool ShouldSkip;
     control_point_joint_data* JointsData;
 };
 
 struct vertex_p3_n3_uv_index
 {
-    vertex_p3_n3_uv Vertex;
-    u32 Index;
+    ak_vertex_p3_n3_uv Vertex;
+    ak_u32 Index;
 };
 
-inline u64 Hash(vertex_p3_n3_uv_index Data, u64 TableSize)
+inline ak_u32 AK_HashFunction(ak_v2f V)
 {
-    u64 Result = Hash(Data.Vertex, TableSize);
+    ak_u32 Result = ((AK_HashFunction(V.x) ^ (AK_HashFunction(V.y) << 1)) >> 1);
     return Result;
 }
 
-inline b32 operator!=(vertex_p3_n3_uv_index Left, vertex_p3_n3_uv_index Right)
+inline ak_u32 AK_HashFunction(ak_v3f V)
 {
-    b32 Result = Left.Vertex != Right.Vertex;
+    ak_u32 Result = AK_HashFunction(V.xy) ^ (AK_HashFunction(V.z) << 1);    
+    return Result;
+}
+
+inline ak_u32 AK_HashFunction(ak_vertex_p3_n3_uv Vertex)
+{
+    ak_u32 Result = ((AK_HashFunction(Vertex.P) ^ (AK_HashFunction(Vertex.N) << 1)) >> 1) ^ (AK_HashFunction(Vertex.UV) << 1);
+    return Result;
+}
+
+inline ak_bool AK_HashCompare(ak_vertex_p3_n3_uv A, ak_vertex_p3_n3_uv B)
+{
+    ak_bool Result = (A.P == B.P) && (A.N == B.N) && (A.UV == B.UV);
     return Result;
 }
 
 global FbxManager* Global_FBXManager = NULL;
 
-inline b32 
+inline ak_bool 
 FBX_ValidateMappingMode(FbxLayerElement::EMappingMode MappingMode)
 {
-    b32 Result = (MappingMode == FbxGeometryElement::eByPolygonVertex) || (MappingMode == FbxGeometryElement::eByControlPoint);
+    ak_bool Result = (MappingMode == FbxGeometryElement::eByPolygonVertex) || (MappingMode == FbxGeometryElement::eByControlPoint);
     return Result;
 }
 
-inline b32 
+inline ak_bool 
 FBX_ValidateReferenceMode(FbxLayerElement::EReferenceMode ReferenceMode)
 {
-    b32 Result = (ReferenceMode == FbxGeometryElement::eDirect) || (ReferenceMode == FbxGeometryElement::eIndexToDirect);
+    ak_bool Result = (ReferenceMode == FbxGeometryElement::eDirect) || (ReferenceMode == FbxGeometryElement::eIndexToDirect);
     return Result;
 }
 
-inline b32
+inline ak_bool
 FBX_HasAttribute(FbxNode* Node, FbxNodeAttribute::EType Type)
 {
-    for(i32 AttributeIndex = 0; AttributeIndex < Node->GetNodeAttributeCount(); AttributeIndex++)
+    for(ak_i32 AttributeIndex = 0; AttributeIndex < Node->GetNodeAttributeCount(); AttributeIndex++)
     {
         FbxNodeAttribute* Attribute = Node->GetNodeAttributeByIndex(AttributeIndex);            
         if(Attribute->GetAttributeType() == Type)
@@ -72,7 +84,7 @@ FBX_HasAttribute(FbxNode* Node, FbxNodeAttribute::EType Type)
     return false;
 }
 
-inline b32 IsValidConvexHull(FbxNode* Node)
+inline ak_bool IsValidConvexHull(FbxNode* Node)
 {
     if(!Node->GetMesh()->IsTriangleMesh())
     {
@@ -84,28 +96,48 @@ inline b32 IsValidConvexHull(FbxNode* Node)
     return true;
 }
 
-b32 AreConvexHullsIdentical(convex_hull* NewConvexHull, convex_hull* OldConvexHull)
+ak_bool AreIdenticalSQTs(ak_sqtf A, ak_sqtf B)
 {
-    if(NewConvexHull->Header.Transform   != OldConvexHull->Header.Transform)   return false;
+    ak_bool Result = (A.Translation == B.Translation) && (A.Orientation == B.Orientation) && (A.Scale == B.Scale);
+    return Result;
+}
+
+ak_bool AreIdenticalVertices(ak_vertex_p3_n3_uv A, ak_vertex_p3_n3_uv B)
+{
+    ak_bool Result = (A.P == B.P) && (A.N == B.N) && (A.UV == B.UV);
+    return Result;
+}
+
+ak_bool AreIdenticalVertices(ak_vertex_p3_n3_uv_w A, ak_vertex_p3_n3_uv_w B)
+{
+    ak_bool Result = ((A.P == B.P) && (A.N == B.N) && (A.UV == B.UV) &&
+                      (A.JointI[0] == B.JointI[0]) && (A.JointI[1] == B.JointI[1]) && (A.JointI[2] == B.JointI[2]) && (A.JointI[3] == B.JointI[3]) &&
+                      (A.JointW[0] == B.JointW[0]) && (A.JointW[1] == B.JointW[1]) && (A.JointW[2] == B.JointW[2]) && (A.JointW[3] == B.JointW[3]));
+    return Result;
+}
+
+ak_bool AreConvexHullsIdentical(convex_hull* NewConvexHull, convex_hull* OldConvexHull)
+{
+    if(!AreIdenticalSQTs(NewConvexHull->Header.Transform, OldConvexHull->Header.Transform))   return false;
     if(NewConvexHull->Header.VertexCount != OldConvexHull->Header.VertexCount) return false;
     if(NewConvexHull->Header.EdgeCount   != OldConvexHull->Header.EdgeCount)   return false;
     if(NewConvexHull->Header.FaceCount   != OldConvexHull->Header.FaceCount)   return false;
     
-    for(u32 VertexIndex = 0; VertexIndex < NewConvexHull->Header.VertexCount; VertexIndex++)
+    for(ak_u32 VertexIndex = 0; VertexIndex < NewConvexHull->Header.VertexCount; VertexIndex++)
     {
         half_vertex* NewVertex = NewConvexHull->Vertices + VertexIndex;
         half_vertex* OldVertex = OldConvexHull->Vertices + VertexIndex;        
         if(*NewVertex != *OldVertex) return false;
     }
     
-    for(u32 EdgeIndex = 0; EdgeIndex < NewConvexHull->Header.EdgeCount; EdgeIndex++)
+    for(ak_u32 EdgeIndex = 0; EdgeIndex < NewConvexHull->Header.EdgeCount; EdgeIndex++)
     {
         half_edge* NewEdge = NewConvexHull->Edges + EdgeIndex;
         half_edge* OldEdge = OldConvexHull->Edges + EdgeIndex;
         if(*NewEdge != *OldEdge) return false;
     }
     
-    for(u32 FaceIndex = 0; FaceIndex < NewConvexHull->Header.FaceCount; FaceIndex++)
+    for(ak_u32 FaceIndex = 0; FaceIndex < NewConvexHull->Header.FaceCount; FaceIndex++)
     {
         half_face* NewFace = NewConvexHull->Faces + FaceIndex;
         half_face* OldFace = OldConvexHull->Faces + FaceIndex;
@@ -115,7 +147,7 @@ b32 AreConvexHullsIdentical(convex_hull* NewConvexHull, convex_hull* OldConvexHu
     return true;
 }
 
-b32 AreMeshesIdentical(mesh* NewMesh, mesh_info* NewMeshInfo, mesh* OldMesh, mesh_info* OldMeshInfo)
+ak_bool AreMeshesIdentical(mesh* NewMesh, mesh_info* NewMeshInfo, mesh* OldMesh, mesh_info* OldMeshInfo)
 {
     if(NewMeshInfo->Header.IsSkeletalMesh  != OldMeshInfo->Header.IsSkeletalMesh)  return false;
     if(NewMeshInfo->Header.IsIndexFormat32 != OldMeshInfo->Header.IsIndexFormat32) return false;
@@ -123,42 +155,41 @@ b32 AreMeshesIdentical(mesh* NewMesh, mesh_info* NewMeshInfo, mesh* OldMesh, mes
     if(NewMeshInfo->Header.IndexCount      != OldMeshInfo->Header.IndexCount)      return false;
     if(NewMeshInfo->Header.ConvexHullCount != OldMeshInfo->Header.ConvexHullCount) return false;
     
-    for(u32 ConvexHullIndex = 0; ConvexHullIndex < NewMeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
+    for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < NewMeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
     {
         convex_hull* NewConvexHull = NewMeshInfo->ConvexHulls + ConvexHullIndex;
         convex_hull* OldConvexHull = OldMeshInfo->ConvexHulls + ConvexHullIndex;        
         if(!AreConvexHullsIdentical(NewConvexHull, OldConvexHull)) return false;
     }
     
-    for(u32 VertexIndex = 0; VertexIndex < NewMeshInfo->Header.VertexCount; VertexIndex++)
+    for(ak_u32 VertexIndex = 0; VertexIndex < NewMeshInfo->Header.VertexCount; VertexIndex++)
     {
         if(NewMeshInfo->Header.IsSkeletalMesh)
         {
-            vertex_p3_n3_uv_weights* NewVertex = (vertex_p3_n3_uv_weights*)NewMesh->Vertices + VertexIndex;
-            vertex_p3_n3_uv_weights* OldVertex = (vertex_p3_n3_uv_weights*)OldMesh->Vertices + VertexIndex;            
-            if(*NewVertex != *OldVertex) return false;                
+            ak_vertex_p3_n3_uv_w* NewVertex = (ak_vertex_p3_n3_uv_w*)NewMesh->Vertices + VertexIndex;
+            ak_vertex_p3_n3_uv_w* OldVertex = (ak_vertex_p3_n3_uv_w*)OldMesh->Vertices + VertexIndex;            
+            if(!AreIdenticalVertices(*NewVertex, *OldVertex)) return false;                
         }
         else
         {
-            vertex_p3_n3_uv* NewVertex = (vertex_p3_n3_uv*)NewMesh->Vertices + VertexIndex;
-            vertex_p3_n3_uv* OldVertex = (vertex_p3_n3_uv*)OldMesh->Vertices + VertexIndex;
-            if(*NewVertex != *OldVertex) 
-                return false;
+            ak_vertex_p3_n3_uv* NewVertex = (ak_vertex_p3_n3_uv*)NewMesh->Vertices + VertexIndex;
+            ak_vertex_p3_n3_uv* OldVertex = (ak_vertex_p3_n3_uv*)OldMesh->Vertices + VertexIndex;
+            if(!AreIdenticalVertices(*NewVertex, *OldVertex)) return false;
         }
     }
     
-    for(u32 Index = 0; Index < NewMeshInfo->Header.IndexCount; Index++)
+    for(ak_u32 Index = 0; Index < NewMeshInfo->Header.IndexCount; Index++)
     {
         if(NewMeshInfo->Header.IsIndexFormat32)
         {
-            u32* NewIndex = (u32*)NewMesh->Indices + Index;
-            u32* OldIndex = (u32*)OldMesh->Indices + Index;            
+            ak_u32* NewIndex = (ak_u32*)NewMesh->Indices + Index;
+            ak_u32* OldIndex = (ak_u32*)OldMesh->Indices + Index;            
             if(*NewIndex != *OldIndex) return false;
         }
         else
         {
-            u16* NewIndex = (u16*)NewMesh->Indices + Index;
-            u16* OldIndex = (u16*)OldMesh->Indices + Index;
+            ak_u16* NewIndex = (ak_u16*)NewMesh->Indices + Index;
+            ak_u16* OldIndex = (ak_u16*)OldMesh->Indices + Index;
             if(*NewIndex != *OldIndex) return false;
         }
     }
@@ -168,16 +199,15 @@ b32 AreMeshesIdentical(mesh* NewMesh, mesh_info* NewMeshInfo, mesh* OldMesh, mes
 
 fbx_mesh_context FBX_GetMeshContext(FbxNode* Node)
 {   
-    fbx_mesh_context MeshContext = {};
-    MeshContext.ConvexHullNodes = CreateDynamicArray<FbxNode*>(16);
+    fbx_mesh_context MeshContext = {};    
     
-    u32 ChildCount = Node->GetChildCount();
-    for(u32 ChildIndex = 0; ChildIndex < ChildCount; ChildIndex++)
+    ak_u32 ChildCount = Node->GetChildCount();
+    for(ak_u32 ChildIndex = 0; ChildIndex < ChildCount; ChildIndex++)
     {
         FbxNode* ChildNode = Node->GetChild(ChildIndex);
-        const char* ChildName = ChildNode->GetName();
+        const ak_char* ChildName = ChildNode->GetName();
         
-        if(FBX_HasAttribute(ChildNode, FbxNodeAttribute::eMesh) && EndsWith(ChildName, "_ConvexHull"))
+        if(FBX_HasAttribute(ChildNode, FbxNodeAttribute::eMesh) && AK_StringEndsWith(ChildName, "_ConvexHull"))
         {   
             if(!IsValidConvexHull(ChildNode))
             {
@@ -190,7 +220,7 @@ fbx_mesh_context FBX_GetMeshContext(FbxNode* Node)
         
         if(FBX_HasAttribute(ChildNode, FbxNodeAttribute::eSkeleton))
         {
-            u32 StackCount = 0;
+            ak_u32 StackCount = 0;
             FbxNode* NodeStack[256];
             
             NodeStack[StackCount++] = ChildNode;
@@ -199,7 +229,7 @@ fbx_mesh_context FBX_GetMeshContext(FbxNode* Node)
             {
                 FbxNode* StackNode = NodeStack[StackCount--];    
                 
-                if(MeshContext.Skeleton.JointCount == ARRAYCOUNT(MeshContext.Skeleton.Nodes))
+                if(MeshContext.Skeleton.JointCount == AK_Count(MeshContext.Skeleton.Nodes))
                 {
                     ConsoleError("Skeleton nodes exceeds the maximum value for a skeletal mesh (128). Skipping Mesh");
                     MeshContext.ShouldSkip = true;                    
@@ -208,8 +238,8 @@ fbx_mesh_context FBX_GetMeshContext(FbxNode* Node)
                 
                 MeshContext.Skeleton.Nodes[MeshContext.Skeleton.JointCount++] = StackNode;                            
                 
-                u32 StackNodeChildCount = StackNode->GetChildCount();
-                for(u32 StackNodeIndex = 0; StackNodeIndex < StackNodeChildCount; StackNodeIndex++)
+                ak_u32 StackNodeChildCount = StackNode->GetChildCount();
+                for(ak_u32 StackNodeIndex = 0; StackNodeIndex < StackNodeChildCount; StackNodeIndex++)
                 {
                     FbxNode* StackNodeChild = StackNode->GetChild(StackNodeIndex);
                     if(FBX_HasAttribute(StackNodeChild, FbxNodeAttribute::eSkeleton))
@@ -223,51 +253,54 @@ fbx_mesh_context FBX_GetMeshContext(FbxNode* Node)
     return MeshContext;
 }
 
-u8 FBX_FindJoint(fbx_skeleton* Skeleton, const char* JointName)
+ak_u8 FBX_FindJoint(fbx_skeleton* Skeleton, const ak_char* JointName)
 {
-    ASSERT(Skeleton->JointCount != (u8)-1);
-    for(u8 JointIndex = 0; JointIndex < Skeleton->JointCount; JointIndex++)
+    AK_Assert(Skeleton->JointCount != (ak_u8)-1, "Invalid skeleton");
+    for(ak_u8 JointIndex = 0; JointIndex < Skeleton->JointCount; JointIndex++)
     {
         FbxNode* Node = Skeleton->Nodes[JointIndex];
-        if(StringEquals(Node->GetName(), JointName))
+        if(AK_StringEquals(Node->GetName(), JointName))
             return JointIndex;
     }
     
-    return (u8)-1;
+    return (ak_u8)-1;
 }
 
 fbx_joint_context FBX_GetJointContext(FbxMesh* Mesh, fbx_mesh_context* MeshContext)
 {        
-    u32 ControlPointCount = Mesh->GetControlPointsCount();
+    ak_u32 ControlPointCount = Mesh->GetControlPointsCount();
     FbxVector4* ControlPoints = Mesh->GetControlPoints();
     
     fbx_joint_context Result = {};
     
-    u32 SkinCount = Mesh->GetDeformerCount(FbxDeformer::eSkin);
+    ak_u32 SkinCount = Mesh->GetDeformerCount(FbxDeformer::eSkin);
     
-    for(u32 SkinIndex = 0; SkinIndex < SkinCount; SkinIndex++)
+    for(ak_u32 SkinIndex = 0; SkinIndex < SkinCount; SkinIndex++)
     {                    
         FbxSkin* Skin = (FbxSkin*)Mesh->GetDeformer(SkinIndex, FbxDeformer::eSkin);
-        u32 ClusterCount = Skin->GetClusterCount();
-        for(u32 ClusterIndex = 0; ClusterIndex < ClusterCount; ClusterIndex++)
+        ak_u32 ClusterCount = Skin->GetClusterCount();
+        for(ak_u32 ClusterIndex = 0; ClusterIndex < ClusterCount; ClusterIndex++)
         {
             FbxCluster* Cluster = Skin->GetCluster(ClusterIndex);
             FbxNode* Link = Cluster->GetLink();
             if(Link)
             {
-                i8 JointIndex = FBX_FindJoint(&MeshContext->Skeleton, Link->GetName());
+                ak_i8 JointIndex = FBX_FindJoint(&MeshContext->Skeleton, Link->GetName());
                 if(JointIndex != -1)
                 {
-                    u32 IndexCount = Cluster->GetControlPointIndicesCount();
-                    i32* Indices = Cluster->GetControlPointIndices();
-                    f64* Weights = Cluster->GetControlPointWeights();
+                    ak_u32 IndexCount = Cluster->GetControlPointIndicesCount();
+                    ak_i32* Indices = Cluster->GetControlPointIndices();
+                    ak_f64* Weights = Cluster->GetControlPointWeights();
                     
-                    for(u32 Index = 0; Index < IndexCount; Index++)
-                    {
+                    for(ak_u32 Index = 0; Index < IndexCount; Index++)
+                    {                                                
                         if(!Result.JointsData)
-                            Result.JointsData = PushArray(ControlPointCount, control_point_joint_data, Clear, 0);
+                        {
+                            ak_arena* GlobalArena = AK_GetGlobalArena();
+                            Result.JointsData = GlobalArena->PushArray<control_point_joint_data>(ControlPointCount);
+                        }
                         
-                        i32 ControlPointIndex = Indices[Index];
+                        ak_i32 ControlPointIndex = Indices[Index];
                         
                         control_point_joint_data* JointData = Result.JointsData + ControlPointIndex;
                         if(JointData->Count >= 4)
@@ -276,7 +309,7 @@ fbx_joint_context FBX_GetJointContext(FbxMesh* Mesh, fbx_mesh_context* MeshConte
                             return Result;
                         }
                         
-                        JointData->Weights[JointData->Count] = (f32)Weights[Index];
+                        JointData->Weights[JointData->Count] = (ak_f32)Weights[Index];
                         JointData->Indices[JointData->Count] = JointIndex;                        
                         JointData->Count++;
                     }
@@ -288,7 +321,7 @@ fbx_joint_context FBX_GetJointContext(FbxMesh* Mesh, fbx_mesh_context* MeshConte
     if(Result.JointsData)
     {
         
-        for(u32 ControlPointIndex = 0; ControlPointIndex < ControlPointCount; ControlPointIndex++)
+        for(ak_u32 ControlPointIndex = 0; ControlPointIndex < ControlPointCount; ControlPointIndex++)
         {
             control_point_joint_data* JointData = Result.JointsData + ControlPointIndex;            
             
@@ -305,10 +338,10 @@ fbx_joint_context FBX_GetJointContext(FbxMesh* Mesh, fbx_mesh_context* MeshConte
 }
 
 template <typename type>
-i32 GetElementIndex(FbxLayerElementTemplate<type>* GeometryElement, FbxLayerElement::EMappingMode MappingMode, FbxLayerElement::EReferenceMode ReferenceMode, 
-                    i32 VertexID, i32 ControlPointID)
+ak_i32 GetElementIndex(FbxLayerElementTemplate<type>* GeometryElement, FbxLayerElement::EMappingMode MappingMode, FbxLayerElement::EReferenceMode ReferenceMode, 
+                       ak_i32 VertexID, ak_i32 ControlPointID)
 {
-    i32 Result = -1;
+    ak_i32 Result = -1;
     
     if(MappingMode == FbxGeometryElement::eByPolygonVertex)
     {
@@ -316,7 +349,7 @@ i32 GetElementIndex(FbxLayerElementTemplate<type>* GeometryElement, FbxLayerElem
             Result = VertexID;                
         else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)                
             Result = GeometryElement->GetIndexArray().GetAt(VertexID);                
-        INVALID_ELSE;
+        AK_INVALID_ELSE;
     }
     else if(MappingMode == FbxGeometryElement::eByControlPoint)
     {
@@ -324,42 +357,35 @@ i32 GetElementIndex(FbxLayerElementTemplate<type>* GeometryElement, FbxLayerElem
             Result = ControlPointID;
         else if(ReferenceMode == FbxGeometryElement::eIndexToDirect)
             Result = GeometryElement->GetIndexArray().GetAt(ControlPointID);
-        INVALID_ELSE;        
+        AK_INVALID_ELSE;
     }
-    INVALID_ELSE;
+    AK_INVALID_ELSE;
     
     return Result;
 }
 
-inline v4f 
-OrthogonalTangent(v3f B, v3f T, v3f N)
-{
-    v4f Result = V4(Normalize(T - N * Dot(N, T)), (Dot(Cross(N, T), B) < 0.0f) ? -1.0f : 1.0f);
-    return Result;
-}
-
-inline v3f
+inline ak_v3f
 FBX_GetPivot(FbxNode* Node)
 {    
-    v3f Result = V3(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
+    ak_v3f Result = AK_V3f(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
     return Result;
 }
 
-inline m4
+inline ak_m4f
 FBX_GetLocalToParentTransform(FbxNode* Node)
 {
-    m4 Result = M4(Node->EvaluateLocalTransform());
+    ak_m4f Result = AK_M4f(Node->EvaluateLocalTransform());
     return Result;
 }
 
-inline v3f
-FBX_GetPivotDelta(v3f Pivot, m4 Transform)
+inline ak_v3f
+FBX_GetPivotDelta(ak_v3f Pivot, ak_m4f Transform)
 {
-    v3f Delta = (Pivot.x*Transform.XAxis.xyz) + (Pivot.y*Transform.YAxis.xyz) + (Pivot.z*Transform.ZAxis.xyz);
+    ak_v3f Delta = (Pivot.x*Transform.XAxis.xyz) + (Pivot.y*Transform.YAxis.xyz) + (Pivot.z*Transform.ZAxis.xyz);
     return Delta;
 }
 
-void ParseFBX(asset_builder* AssetBuilder, string Path)
+void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
 {
     if(!Global_FBXManager)
     {
@@ -368,14 +394,15 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
         Global_FBXManager->SetIOSettings(IOSettings);
     }
     
-    temp_arena TempArena = BeginTemporaryMemory();
+    ak_arena* GlobalArena = AK_GetGlobalArena();    
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
     FbxImporter* Importer = FbxImporter::Create(Global_FBXManager, "");
     
     ConsoleLog("Loading FBX File %s", Path.Data);
     if(Importer->Initialize(Path.Data, -1, Global_FBXManager->GetIOSettings()))
     {
-        i32 MajorVersion, MinorVersion, RevisionVersion;
+        ak_i32 MajorVersion, MinorVersion, RevisionVersion;
         Importer->GetFileVersion(MajorVersion, MinorVersion, RevisionVersion);        
         ConsoleLog("Version %d.%d.%d", MajorVersion, MinorVersion, RevisionVersion);
         
@@ -384,16 +411,18 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
         
         FbxNode* RootNode = Scene->GetRootNode();
         
-        u32 RootChildCount = RootNode->GetChildCount();
+        ak_u32 RootChildCount = RootNode->GetChildCount();
+        ak_hash_map<ak_vertex_p3_n3_uv, ak_u32> VertexMap = AK_CreateHashMap<ak_vertex_p3_n3_uv, ak_u32>(8191);
+        ak_hash_map<ak_pair<ak_i32>, ak_i32> HalfEdgeMap = AK_CreateHashMap<ak_pair<ak_i32>, ak_i32>(8191);
         
-        for(u32 RootChildIndex = 0; RootChildIndex < RootChildCount; RootChildIndex++)
+        for(ak_u32 RootChildIndex = 0; RootChildIndex < RootChildCount; RootChildIndex++)
         {
             FbxNode* Node = RootNode->GetChild(RootChildIndex);
             
             if(FBX_HasAttribute(Node, FbxNodeAttribute::eMesh))
             {
                 FbxMesh* MeshFBX = Node->GetMesh();
-                const char* MeshName = Node->GetName();
+                const ak_char* MeshName = Node->GetName();
                 
                 ConsoleNewLine();
                 ConsoleLog("Processing Mesh %s", MeshName);
@@ -419,56 +448,57 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                 if(!FBX_ValidateReferenceMode(UVReferenceMode)) { ConsoleError("Reference mode for the mesh uvs is not supported. Must be direct or index to direct. Skipping Mesh"); continue; }
                 
                 fbx_mesh_context MeshContext = FBX_GetMeshContext(Node);
-                if(MeshContext.ShouldSkip) { DeleteDynamicArray(&MeshContext.ConvexHullNodes); continue; }
+                if(MeshContext.ShouldSkip) { AK_DeleteArray(&MeshContext.ConvexHullNodes); continue; }
                 
                 ConsoleLog("Mesh has %d Convex Hulls", MeshContext.ConvexHullNodes.Size);
                 
                 fbx_joint_context JointContext = FBX_GetJointContext(MeshFBX, &MeshContext);
-                if(JointContext.ShouldSkip) { DeleteDynamicArray(&MeshContext.ConvexHullNodes); continue; }                                
+                if(JointContext.ShouldSkip) { AK_DeleteArray(&MeshContext.ConvexHullNodes); continue; }                                
                 
-                u32 TriangleCount = MeshFBX->GetPolygonCount();                
-                u32 IndexCount = TriangleCount*3;
-                u32 VertexCount = 0;
+                ak_u32 TriangleCount = MeshFBX->GetPolygonCount();                
+                ak_u32 IndexCount = TriangleCount*3;
+                ak_u32 VertexCount = 0;
                 
-                u32* IndexData = PushArray(IndexCount, u32, Clear, 0);
-                hash_map<vertex_p3_n3_uv, u32> VertexMap = CreateHashMap<vertex_p3_n3_uv, u32>(IndexCount*4, [](vertex_p3_n3_uv A, vertex_p3_n3_uv B){ return A == B; });                
+                ak_u32* IndexData = GlobalArena->PushArray<ak_u32>(IndexCount);
+                VertexMap.Reset();                
                 
                 void* VertexData;
                 if(JointContext.JointsData)
-                    VertexData = PushArray(IndexCount, vertex_p3_n3_uv_weights, Clear, 0);
+                    VertexData = GlobalArena->PushArray<ak_vertex_p3_n3_uv_w>(IndexCount);
                 else
-                    VertexData = PushArray(IndexCount, vertex_p3_n3_uv, Clear, 0);
+                    VertexData = GlobalArena->PushArray<ak_vertex_p3_n3_uv>(IndexCount);
                 
                 FbxVector4* ControlPoints = MeshFBX->GetControlPoints();                                
-                for(u32 TriangleIndex = 0; TriangleIndex < TriangleCount; TriangleIndex++)
+                for(ak_u32 TriangleIndex = 0; TriangleIndex < TriangleCount; TriangleIndex++)
                 {
-                    for(u32 VertexIndex = 0; VertexIndex < 3; VertexIndex++)
+                    for(ak_u32 VertexIndex = 0; VertexIndex < 3; VertexIndex++)
                     {
-                        u32 VertexID = (TriangleIndex*3)+VertexIndex;                        
-                        i32 ControlPointIndex = MeshFBX->GetPolygonVertex(TriangleIndex, VertexIndex);
-                        i32 NormalIndex = GetElementIndex(ElementNormals, NormalMappingMode, NormalReferenceMode, VertexID, ControlPointIndex);
-                        i32 UVIndex = GetElementIndex(ElementUVs, UVMappingMode, UVReferenceMode, VertexID, ControlPointIndex);
+                        ak_u32 VertexID = (TriangleIndex*3)+VertexIndex;                        
+                        ak_i32 ControlPointIndex = MeshFBX->GetPolygonVertex(TriangleIndex, VertexIndex);
+                        ak_i32 NormalIndex = GetElementIndex(ElementNormals, NormalMappingMode, NormalReferenceMode, VertexID, ControlPointIndex);
+                        ak_i32 UVIndex = GetElementIndex(ElementUVs, UVMappingMode, UVReferenceMode, VertexID, ControlPointIndex);
                         
-                        v3f Position = V3(ControlPoints[ControlPointIndex].Buffer());
-                        v3f Normal = V3(ElementNormals->GetDirectArray().GetAt(NormalIndex).Buffer());
-                        v2f UV = V2(ElementUVs->GetDirectArray().GetAt(UVIndex).Buffer());
+                        ak_v3f Position = AK_V3f(ControlPoints[ControlPointIndex].Buffer());
+                        ak_v3f Normal = AK_V3f(ElementNormals->GetDirectArray().GetAt(NormalIndex).Buffer());
+                        ak_v2f UV = AK_V2f(ElementUVs->GetDirectArray().GetAt(UVIndex).Buffer());
                         
-                        vertex_p3_n3_uv Vertex = {Position, Normal, UV};
+                        ak_vertex_p3_n3_uv Vertex = {Position, Normal, UV};
                         
-                        u32 Index;
-                        if(VertexMap.Find(Vertex, &Index))
-                            IndexData[VertexID] = Index;
+                        
+                        ak_u32* Index = VertexMap.Find(Vertex);                       
+                        if(Index)
+                            IndexData[VertexID] = *Index;
                         else
                         {
                             VertexMap.Insert(Vertex, VertexCount);
                             
                             if(JointContext.JointsData)
                             {
-                                u8* JointIndices = JointContext.JointsData[ControlPointIndex].Indices;
-                                f32* JointWeights = JointContext.JointsData[ControlPointIndex].Weights;
+                                ak_u8* JointIndices = JointContext.JointsData[ControlPointIndex].Indices;
+                                ak_f32* JointWeights = JointContext.JointsData[ControlPointIndex].Weights;
                                 
                                 control_point_joint_data JointData = JointContext.JointsData[ControlPointIndex];
-                                ((vertex_p3_n3_uv_weights*)VertexData)[VertexCount] = 
+                                ((ak_vertex_p3_n3_uv_w*)VertexData)[VertexCount] = 
                                 {
                                     Position, Normal, UV, JointIndices[0], JointIndices[1], JointIndices[2], JointIndices[3],
                                     JointWeights[0], JointWeights[1], JointWeights[2], JointWeights[3]
@@ -476,7 +506,7 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                             }
                             else
                             {
-                                ((vertex_p3_n3_uv*)VertexData)[VertexCount] = Vertex;
+                                ((ak_vertex_p3_n3_uv*)VertexData)[VertexCount] = Vertex;
                             }
                             
                             IndexData[VertexID] = VertexCount;
@@ -485,36 +515,36 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                     }
                 }
                 
-                b32 IsSkeletalMesh = false;
+                ak_bool IsSkeletalMesh = false;
                 
-                ptr VerticesSize;
+                ak_u32 VerticesSize;
                 if(JointContext.JointsData)
                 {
                     IsSkeletalMesh = true;
-                    VerticesSize = VertexCount*sizeof(vertex_p3_n3_uv_weights);
+                    VerticesSize = VertexCount*sizeof(ak_vertex_p3_n3_uv_w);
                 }
                 else
-                    VerticesSize = VertexCount*sizeof(vertex_p3_n3_uv);
+                    VerticesSize = VertexCount*sizeof(ak_vertex_p3_n3_uv);
                 
-                b32 IsIndexFormat32 = false;
-                ptr IndicesSize;
+                ak_bool IsIndexFormat32 = false;
+                ak_u32 IndicesSize;
                 if(VertexCount >= USHRT_MAX)
                 {
                     IsIndexFormat32 = true;
-                    IndicesSize = IndexCount*sizeof(u32);
+                    IndicesSize = IndexCount*sizeof(ak_u32);
                 }
                 else
-                    IndicesSize = IndexCount*sizeof(u16);
+                    IndicesSize = IndexCount*sizeof(ak_u16);
                 
                 
-                ptr MeshSize = sizeof(list_entry<mesh>) + VerticesSize + IndicesSize;
-                list_entry<mesh>* MeshLink = (list_entry<mesh>*)PushSize(&AssetBuilder->AssetArena, MeshSize, Clear, 0);
+                ak_u32 MeshSize = sizeof(ak_link_entry<mesh>) + VerticesSize + IndicesSize;
+                ak_link_entry<mesh>* MeshLink = (ak_link_entry<mesh>*)AssetBuilder->AssetArena->Push(MeshSize);
                 
-                list_entry<mesh_info>* MeshInfoLink = PushStruct(&AssetBuilder->AssetArena, list_entry<mesh_info>, Clear, 0);
+                ak_link_entry<mesh_info>* MeshInfoLink = AssetBuilder->AssetArena->Push<ak_link_entry<mesh_info>>();
                 
                 mesh* Mesh = &MeshLink->Entry;
-                Mesh->Vertices = (u8*)MeshLink + sizeof(list_entry<mesh>);
-                Mesh->Indices = (u8*)Mesh->Vertices + VerticesSize;
+                Mesh->Vertices = (ak_u8*)MeshLink + sizeof(ak_link_entry<mesh>);
+                Mesh->Indices = (ak_u8*)Mesh->Vertices + VerticesSize;
                 
                 mesh_info* MeshInfo = &MeshInfoLink->Entry;
                 MeshInfo->Header.IsSkeletalMesh = IsSkeletalMesh;
@@ -522,89 +552,89 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                 MeshInfo->Header.VertexCount = VertexCount;
                 MeshInfo->Header.IndexCount = IndexCount;
                 MeshInfo->Header.ConvexHullCount = MeshContext.ConvexHullNodes.Size;
-                MeshInfo->Header.NameLength = (u32)LiteralStringLength(MeshName);
+                MeshInfo->Header.NameLength = (ak_u32)AK_StringLength(MeshName);
                 
-                MeshInfo->Name = PushArray(&AssetBuilder->AssetArena, MeshInfo->Header.NameLength+1, char, Clear, 0);
-                CopyMemory(MeshInfo->Name, MeshName, sizeof(char)*MeshInfo->Header.NameLength);
+                MeshInfo->Name = AssetBuilder->AssetArena->PushArray<char>(MeshInfo->Header.NameLength+1);
+                AK_MemoryCopy(MeshInfo->Name, MeshName, sizeof(char)*MeshInfo->Header.NameLength);
                 MeshInfo->Name[MeshInfo->Header.NameLength] = 0;
                 
-                v3f MeshPivot = FBX_GetPivot(Node);
-                m4  MeshTransform = FBX_GetLocalToParentTransform(Node);                                
-                v3f MeshDelta = FBX_GetPivotDelta(MeshPivot, MeshTransform);
+                ak_v3f MeshPivot = FBX_GetPivot(Node);
+                ak_m4f MeshTransform = FBX_GetLocalToParentTransform(Node);                                
+                ak_v3f MeshDelta = FBX_GetPivotDelta(MeshPivot, MeshTransform);
                 
-                m3 MeshModelR = M3(MeshTransform);
-                m3 NormalMeshModelR = Transpose(InverseTransformM3(MeshModelR));
+                ak_m3f MeshModelR = AK_M3(MeshTransform);
+                ak_m3f NormalMeshModelR = AK_Transpose(AK_InvTransformM3(MeshModelR));
                 
-                for(u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
+                for(ak_u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
                 {                                                            
                     if(IsSkeletalMesh)
                     {
-                        vertex_p3_n3_uv_weights* DstVertex = (vertex_p3_n3_uv_weights*)Mesh->Vertices + VertexIndex;
-                        vertex_p3_n3_uv_weights* SrcVertex = (vertex_p3_n3_uv_weights*)VertexData + VertexIndex;                                                                        
+                        ak_vertex_p3_n3_uv_w* DstVertex = (ak_vertex_p3_n3_uv_w*)Mesh->Vertices + VertexIndex;
+                        ak_vertex_p3_n3_uv_w* SrcVertex = (ak_vertex_p3_n3_uv_w*)VertexData + VertexIndex;                                                                        
                         
                         *DstVertex = *SrcVertex;                        
                         DstVertex->P = SrcVertex->P*MeshModelR - MeshPivot;                        
-                        DstVertex->N = Normalize(DstVertex->N*NormalMeshModelR);                        
+                        DstVertex->N = AK_Normalize(DstVertex->N*NormalMeshModelR);                        
                     }
                     else
                     {
-                        vertex_p3_n3_uv* DstVertex = (vertex_p3_n3_uv*)Mesh->Vertices + VertexIndex;
-                        vertex_p3_n3_uv* SrcVertex = (vertex_p3_n3_uv*)VertexData + VertexIndex;
+                        ak_vertex_p3_n3_uv* DstVertex = (ak_vertex_p3_n3_uv*)Mesh->Vertices + VertexIndex;
+                        ak_vertex_p3_n3_uv* SrcVertex = (ak_vertex_p3_n3_uv*)VertexData + VertexIndex;
                         
                         *DstVertex = *SrcVertex;
                         DstVertex->P = SrcVertex->P*MeshModelR - MeshPivot;                        
-                        DstVertex->N = Normalize(DstVertex->N*NormalMeshModelR);                                       
+                        DstVertex->N = AK_Normalize(DstVertex->N*NormalMeshModelR);                                       
                     }
                 }
                 
                 if(IsIndexFormat32)
                 {
-                    u32* Indices = (u32*)Mesh->Indices;
-                    for(u32 Index = 0; Index < IndexCount; Index++) Indices[Index] = IndexData[Index];
+                    ak_u32* Indices = (ak_u32*)Mesh->Indices;
+                    for(ak_u32 Index = 0; Index < IndexCount; Index++) Indices[Index] = IndexData[Index];
                 }
                 else
                 {
-                    u16* Indices = (u16*)Mesh->Indices;
-                    for(u32 Index = 0; Index < IndexCount; Index++) Indices[Index] =  SafeU16(IndexData[Index]);
+                    ak_u16* Indices = (ak_u16*)Mesh->Indices;
+                    for(ak_u32 Index = 0; Index < IndexCount; Index++) Indices[Index] =  AK_SafeU16(IndexData[Index]);
                 }
                 
-                MeshInfo->ConvexHulls = PushArray(&AssetBuilder->AssetArena, MeshInfo->Header.ConvexHullCount, convex_hull, Clear, 0);                
-                for(u32 ConvexHullIndex = 0; ConvexHullIndex < MeshContext.ConvexHullNodes.Size; ConvexHullIndex++)
+                MeshInfo->ConvexHulls = AssetBuilder->AssetArena->PushArray<convex_hull>(MeshInfo->Header.ConvexHullCount);
+                for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < MeshContext.ConvexHullNodes.Size; ConvexHullIndex++)
                 {
                     convex_hull* ConvexHull = MeshInfo->ConvexHulls + ConvexHullIndex;
                     
                     FbxNode* ConvexHullNode = MeshContext.ConvexHullNodes[ConvexHullIndex];
                     FbxMesh* ConvexHullMesh = ConvexHullNode->GetMesh();
                     
-                    v3f ConvexPivot = FBX_GetPivot(ConvexHullNode);
-                    m4  ConvexTransform = FBX_GetLocalToParentTransform(ConvexHullNode);                                
-                    v3f ConvexDelta = FBX_GetPivotDelta(ConvexPivot, ConvexTransform);
+                    ak_v3f ConvexPivot = FBX_GetPivot(ConvexHullNode);
+                    ak_m4f ConvexTransform = FBX_GetLocalToParentTransform(ConvexHullNode);                                
+                    ak_v3f ConvexDelta = FBX_GetPivotDelta(ConvexPivot, ConvexTransform);
                     
-                    m3 ConvexHullModelR = M3(ConvexTransform);                    
+                    ak_m3f ConvexHullModelR = AK_M3(ConvexTransform);                    
                     
-                    v3f NewLocalToParentT = (ConvexTransform.Translation.xyz - MeshDelta) + ConvexDelta;                    
-                                        
+                    ak_v3f NewLocalToParentT = (ConvexTransform.Translation.xyz - MeshDelta) + ConvexDelta;                    
+                    
                     FbxVector4* ConvexHullVertices = ConvexHullMesh->GetControlPoints();
                     
-                    ConvexHull->Header.Transform = CreateSQT(NewLocalToParentT);                    
+                    ConvexHull->Header.Transform = AK_SQT(NewLocalToParentT);                    
                     ConvexHull->Header.VertexCount = ConvexHullMesh->GetControlPointsCount();
                     ConvexHull->Header.EdgeCount = ConvexHullMesh->GetMeshEdgeCount()*2;
                     ConvexHull->Header.FaceCount = ConvexHullMesh->GetPolygonCount();
                     
-                    ConvexHull->Vertices = PushArray(&AssetBuilder->AssetArena, ConvexHull->Header.VertexCount, half_vertex, Clear, 0);
-                    ConvexHull->Edges = PushArray(&AssetBuilder->AssetArena, ConvexHull->Header.EdgeCount, half_edge, Clear, 0);
-                    ConvexHull->Faces = PushArray(&AssetBuilder->AssetArena, ConvexHull->Header.FaceCount, half_face, Clear, 0);
+                    ConvexHull->Vertices = AssetBuilder->AssetArena->PushArray<half_vertex>(ConvexHull->Header.VertexCount);
+                    ConvexHull->Edges = AssetBuilder->AssetArena->PushArray<half_edge>(ConvexHull->Header.EdgeCount);
+                    ConvexHull->Faces = AssetBuilder->AssetArena->PushArray<half_face>(ConvexHull->Header.FaceCount);
                     
-                    for(u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
+                    for(ak_u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
                     {
-                        ConvexHull->Vertices[VertexIndex].V    = V3(ConvexHullVertices[VertexIndex].Buffer())*ConvexHullModelR - ConvexPivot;
+                        ConvexHull->Vertices[VertexIndex].V    = AK_V3f(ConvexHullVertices[VertexIndex].Buffer())*ConvexHullModelR - ConvexPivot;
                         ConvexHull->Vertices[VertexIndex].Edge = -1;
                     }
                     
-                    for(u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
+                    for(ak_u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
                         ConvexHull->Faces[FaceIndex].Edge = -1;
                     
-                    for(u32 EdgeIndex = 0; EdgeIndex < ConvexHull->Header.EdgeCount; EdgeIndex++)
+                    for(ak_u32 EdgeIndex = 0; EdgeIndex < ConvexHull->Header.EdgeCount; EdgeIndex++)
                     {
                         ConvexHull->Edges[EdgeIndex].Vertex   = -1;
                         ConvexHull->Edges[EdgeIndex].EdgePair = -1;
@@ -612,33 +642,36 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                         ConvexHull->Edges[EdgeIndex].NextEdge = -1;
                     }
                     
-                    hash_map<int_pair, i32> EdgeMap = CreateHashMap<int_pair, i32>((ConvexHull->Header.EdgeCount+ConvexHull->Header.VertexCount)*3, IntPairCompare);
-                    u32 EdgeIndex = 0;
+                    HalfEdgeMap.Reset();                    
+                    ak_u32 EdgeIndex = 0;
                     
-                    for(u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
+                    for(ak_u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
                     {
                         half_face* Face = ConvexHull->Faces + FaceIndex;
                         
-                        i32 FaceVertices[3] = 
+                        ak_i32 FaceVertices[3] = 
                         {
                             ConvexHullMesh->GetPolygonVertex(FaceIndex, 0),
                             ConvexHullMesh->GetPolygonVertex(FaceIndex, 1),
                             ConvexHullMesh->GetPolygonVertex(FaceIndex, 2)
                         };
                         
-                        i32 FaceEdgeIndices[3] = {-1, -1, -1};
-                        for(u32 i = 2, j = 0; j < 3; i = j++)
+                        ak_i32 FaceEdgeIndices[3] = {-1, -1, -1};
+                        for(ak_u32 i = 2, j = 0; j < 3; i = j++)
                         {
-                            i32 v0 = FaceVertices[i];
-                            i32 v1 = FaceVertices[j];
+                            ak_i32 v0 = FaceVertices[i];
+                            ak_i32 v1 = FaceVertices[j];
                             
                             half_vertex* Vertex0 = ConvexHull->Vertices + v0;
                             half_vertex* Vertex1 = ConvexHull->Vertices + v1;
                             
-                            i32 e0 = -1;
-                            i32 e1 = -1;
-                            if(EdgeMap.Find({v0,v1}, &e0))
+                            ak_i32 e0 = -1;
+                            ak_i32 e1 = -1;
+                            
+                            ak_i32* pe0 = HalfEdgeMap.Find({v0,v1});
+                            if(pe0)
                             {
+                                e0 = *pe0;
                                 e1 = ConvexHull->Edges[e0].EdgePair;
                             }
                             else
@@ -649,8 +682,8 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                                 ConvexHull->Edges[e0].EdgePair = e1;
                                 ConvexHull->Edges[e1].EdgePair = e0;
                                 
-                                EdgeMap.Insert({v0, v1}, e0);
-                                EdgeMap.Insert({v1, v0}, e1);                
+                                HalfEdgeMap.Insert({v0, v1}, e0);
+                                HalfEdgeMap.Insert({v1, v0}, e1);                
                             }
                             
                             half_edge* Edge0 = ConvexHull->Edges + e0;
@@ -674,43 +707,43 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
                             FaceEdgeIndices[i] = e0;           
                         }
                         
-                        for(u32 i = 2, j = 0; j < 3; i = j++)
+                        for(ak_u32 i = 2, j = 0; j < 3; i = j++)
                         {
-                            i32 e0 = FaceEdgeIndices[i];
-                            i32 e1 = FaceEdgeIndices[j];            
+                            ak_i32 e0 = FaceEdgeIndices[i];
+                            ak_i32 e1 = FaceEdgeIndices[j];            
                             ConvexHull->Edges[e0].NextEdge = e1;
                         }
                     }
                 }
                 
-                DeleteDynamicArray(&MeshContext.ConvexHullNodes);
+                AK_DeleteArray(&MeshContext.ConvexHullNodes);
                 
-                mesh_pair Pair;
-                if(AssetBuilder->MeshTable.Find(MeshInfo->Name, &Pair))
+                mesh_pair* Pair = AssetBuilder->MeshTable.Find(MeshInfo->Name);
+                if(Pair)
                 {
-                    if(!AreMeshesIdentical(Mesh, MeshInfo, Pair.Mesh, Pair.MeshInfo))
+                    if(!AreMeshesIdentical(Mesh, MeshInfo, Pair->Mesh, Pair->MeshInfo))
                     {
-                        b32 OverrideMesh = ConsoleTrueFalse("Duplicate meshes found with the same name are not identical. Override the mesh");
+                        ak_bool OverrideMesh = ConsoleTrueFalse("Duplicate meshes found with the same name are not identical. Override the mesh");
                         if(OverrideMesh)
                         {
-                            list_entry<mesh_info>* OldMeshInfo = (list_entry<mesh_info>*)Pair.MeshInfo;
-                            list_entry<mesh>* OldMesh = (list_entry<mesh>*)Pair.Mesh;
+                            ak_link_entry<mesh_info>* OldMeshInfo = (ak_link_entry<mesh_info>*)Pair->MeshInfo;
+                            ak_link_entry<mesh>* OldMesh = (ak_link_entry<mesh>*)Pair->Mesh;
                             
                             AssetBuilder->MeshInfos.Remove(OldMeshInfo);
                             AssetBuilder->Meshes.Remove(OldMesh);
                             
-                            AssetBuilder->MeshInfos.Add(MeshInfoLink);
-                            AssetBuilder->Meshes.Add(MeshLink);                            
+                            AssetBuilder->MeshInfos.Push(MeshInfoLink);
+                            AssetBuilder->Meshes.Push(MeshLink);                            
                         }
                     }
                 }
                 else
                 {
-                    Pair = {MeshInfo, Mesh};
-                    AssetBuilder->MeshTable.Insert(MeshInfo->Name, Pair);
+                    mesh_pair MeshPair = {MeshInfo, Mesh};
+                    AssetBuilder->MeshTable.Insert(MeshInfo->Name, MeshPair);
                     
-                    AssetBuilder->MeshInfos.Add(MeshInfoLink);
-                    AssetBuilder->Meshes.Add(MeshLink);                    
+                    AssetBuilder->MeshInfos.Push(MeshInfoLink);
+                    AssetBuilder->Meshes.Push(MeshLink);                    
                 }
                 
                 ConsoleLog("Successful processed mesh!");
@@ -727,5 +760,5 @@ void ParseFBX(asset_builder* AssetBuilder, string Path)
     
     Importer->Destroy();
     
-    EndTemporaryMemory(&TempArena);
+    GlobalArena->EndTemp(&TempArena);    
 }

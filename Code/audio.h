@@ -7,15 +7,16 @@
 struct playing_audio
 {
     audio* Audio;
-    u64 PlayingSampleIndex;
-    b32 IsFinishedPlaying;
-    f32 Volume;
+    ak_u64 PlayingSampleIndex;
+    ak_bool IsFinishedPlaying;
+    ak_f32 Volume;
 };
 
 struct audio_output
 {
-    b32 Mute;
-    pool<playing_audio> PlayingAudioPool;
+    ak_arena* AudioThreadArena;
+    ak_bool Mute;
+    ak_pool<playing_audio> PlayingAudioStorage;    
 };
 
 #endif

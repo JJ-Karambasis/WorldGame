@@ -10,65 +10,39 @@ enum collision_volume_type
 
 struct sphere
 {
-    v3f CenterP;
-    f32 Radius;
+    ak_v3f CenterP;
+    ak_f32 Radius;
 };
 
 struct capsule
 {
     union
     {
-        v3f P[2];
+        ak_v3f P[2];
         struct
         {
-            v3f P0;
-            v3f P1;
+            ak_v3f P0;
+            ak_v3f P1;
         };
     };
-    f32 Radius;
+    ak_f32 Radius;
     
-    inline f32 GetHeight() { return Magnitude(P1-P0); }
-    inline v3f GetCenter() { return P0 + (P1-P0)*0.5f; }
+    inline ak_f32 GetHeight() { return AK_Magnitude(P1-P0); }
+    inline ak_v3f GetCenter() { return P0 + (P1-P0)*0.5f; }
 };
 
 struct collision_volume
-{
+{    
     collision_volume_type Type;    
     union
     { 
         sphere Sphere;
         capsule Capsule;        
         convex_hull* ConvexHull;        
-    };
+    };    
     
-    collision_volume* Next;
+    ak_u64 ID;
+    ak_u64 NextID;
 };
-
-struct collision_volume_iter
-{
-    collision_volume* First;
-    collision_volume* Current;
-};
-
-collision_volume_iter BeginIter(collision_volume* First)
-{
-    collision_volume_iter Result = {};
-    Result.First = First;
-    return Result;
-}
-
-collision_volume* GetFirst(collision_volume_iter* Iter)
-{
-    ASSERT(!Iter->Current);
-    Iter->Current = Iter->First;
-    return Iter->Current;
-}
-
-collision_volume* GetNext(collision_volume_iter* Iter)
-{
-    collision_volume* Result = Iter->Current->Next;
-    Iter->Current = Result;
-    return Result;
-}
 
 #endif
