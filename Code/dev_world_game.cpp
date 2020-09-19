@@ -152,6 +152,35 @@ void CreateDevTriangleArrowMesh(dev_context* DevContext, ak_u16 CircleSampleCoun
     GlobalArena->EndTemp(&TempArena);
 }
 
+void CreateDevTriangleScaleMesh(dev_context* DevContext, ak_u16 CircleSampleCount, ak_f32 Radius, ak_f32 Height, ak_f32 CubeSize)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_mesh_result BodyResult = AK_GenerateTriangleCylinder(GlobalArena, Radius, Height, CircleSampleCount);
+    ak_mesh_result BoxResult = AK_GenerateTriangleBox(GlobalArena, AK_V3f(CubeSize, CubeSize, CubeSize), AK_V3(0.0f, 0.0f, Height));
+    
+    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(DevContext->DevStorage, BodyResult.VertexCount+BoxResult.VertexCount, 
+                                                                BodyResult.IndexCount+BoxResult.IndexCount);    
+    
+    ak_uaddr BodyResultVerticesSize = sizeof(ak_vertex_p3)*BodyResult.VertexCount;
+    ak_uaddr BodyResultIndicesSize = sizeof(ak_u16)*BodyResult.IndexCount;
+    AK_MemoryCopy(MeshGenerationResult.Vertices, BodyResult.Vertices, BodyResultVerticesSize);
+    AK_MemoryCopy(MeshGenerationResult.Indices, BodyResult.Indices, BodyResultIndicesSize);
+    AK_MemoryCopy((ak_u8*)MeshGenerationResult.Vertices+BodyResultVerticesSize, BoxResult.Vertices, sizeof(ak_vertex_p3)*BoxResult.VertexCount);
+    AK_MemoryCopy((ak_u8*)MeshGenerationResult.Indices+BodyResultIndicesSize, BoxResult.Indices, sizeof(ak_u16)*BoxResult.IndexCount);
+    
+    AK_OffsetIndices(MeshGenerationResult.Indices+BodyResult.IndexCount, AK_SafeU16(BoxResult.IndexCount), AK_SafeU16(BodyResult.VertexCount));
+    
+    DevContext->TriangleScaleMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleScaleMesh.VertexCount = MeshGenerationResult.VertexCount;
+    DevContext->TriangleScaleMesh.Vertices = MeshGenerationResult.Vertices;
+    DevContext->TriangleScaleMesh.Indices = MeshGenerationResult.Indices;
+    DevContext->TriangleScaleMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
+    
+    GlobalArena->EndTemp(&TempArena);
+}
+
 void CreateDevLineCapsuleMesh(dev_context* DevContext, ak_f32 Radius, ak_u16 CircleSampleCount)
 {   
     ak_arena* GlobalArena = AK_GetGlobalArena();
@@ -430,7 +459,7 @@ ak_v3f GetGizmoColor(gizmo Gizmo)
 void DrawGizmos(dev_context* DevContext, ak_v3f Position)
 {        
     if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
-    {
+    {   
         for(ak_i32 i = 0; i < 3; i++)
         {
             gizmo CurrentGizmo = DevContext->Gizmo[i];
@@ -537,7 +566,7 @@ void DevelopmentUpdateCamera(dev_context* DevContext)
     }    
 }
 
-void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
+void PopulateTranslateAndScaleGizmos(dev_context* DevContext, ak_v3f Position, dev_mesh* DirectionMesh)
 {
     {
         ak_v3f X, Y, Z;
@@ -546,7 +575,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
-        Gizmo.Mesh = &DevContext->TriangleArrowMesh;
+        Gizmo.Mesh = DirectionMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
         Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_X;
@@ -560,7 +589,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
-        Gizmo.Mesh = &DevContext->TriangleArrowMesh;
+        Gizmo.Mesh = DirectionMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
         Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Y;
@@ -574,7 +603,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
-        Gizmo.Mesh = &DevContext->TriangleArrowMesh;
+        Gizmo.Mesh = DirectionMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
         Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Z;
@@ -673,7 +702,12 @@ void PopulateGizmo(dev_context* DevContext, ak_v3f Position)
 {
     if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
     {
-        PopulateArrowAndPlaneGizmos(DevContext, Position);
+        dev_mesh* DirectionMesh = &DevContext->TriangleArrowMesh;
+        if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_SCALE)
+        {
+            DirectionMesh = &DevContext->TriangleScaleMesh;
+        }
+        PopulateTranslateAndScaleGizmos(DevContext, Position, DirectionMesh);
     }
     else
     {
@@ -1242,14 +1276,6 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
     }
     DevContext->DebugPrimitives.Size = 0;
     
-    if(DevContext->SelectedObjectID.IsValid())
-    {                
-        ak_v3f Position = AK_Lerp(GetEntityPositionOld(Game, DevContext->SelectedObjectID), 
-                                  tRenderInterpolate, 
-                                  GetEntityPosition(Game, DevContext->SelectedObjectID));
-        DrawFrame(DevContext, Position, AK_XAxis(), AK_YAxis(), AK_ZAxis());
-    }
-    
     
     PushDepth(Graphics, true);
     
@@ -1343,6 +1369,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);
         CreateDevPlaneMesh(DevContext, 0.4f, 0.4f);
         CreateDevTriangleCircleMesh(DevContext, 60, 0.05f);
+        CreateDevTriangleScaleMesh(DevContext, 60, 0.02f, 0.85f, 0.1f);
         
         DevContext->EntityRotations[0] = AK_CreateArray<ak_v3f>(Game->EntityStorage[0].Capacity);
         DevContext->EntityRotations[1] = AK_CreateArray<ak_v3f>(Game->EntityStorage[1].Capacity);

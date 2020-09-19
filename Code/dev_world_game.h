@@ -222,6 +222,7 @@ struct dev_context
     dev_mesh TriangleConeMesh;
     dev_mesh TriangleArrowMesh;
     dev_mesh TriangleCircleMesh;
+    dev_mesh TriangleScaleMesh;
     
     ak_array<debug_primitive> DebugPrimitives;
     
