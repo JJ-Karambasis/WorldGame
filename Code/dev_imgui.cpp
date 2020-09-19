@@ -168,6 +168,9 @@ void MaterialImGui(assets* Assets, material* Material)
         Text("Is Texture"); SameLine(); Checkbox(AK_HashFunction("Diffuse Is Texture"), "", &Diffuse->IsTexture); SameLine();
         if(Diffuse->IsTexture)
         {
+            if(Diffuse->DiffuseID == INVALID_TEXTURE_ID)
+                Diffuse->DiffuseID = (texture_asset_id)0;
+            
             AlignTextToFramePadding();
             Text("Texture");
             SameLine();
@@ -197,6 +200,9 @@ void MaterialImGui(assets* Assets, material* Material)
             Text("Is Texture"); SameLine(); Checkbox(AK_HashFunction("Specular Is Texture"), "", &Specular->IsTexture); SameLine();
             if(Specular->IsTexture)
             {
+                if(Specular->SpecularID == INVALID_TEXTURE_ID)
+                    Specular->SpecularID = (texture_asset_id)0;
+                
                 AlignTextToFramePadding();
                 Text("Texture");
                 SameLine();
@@ -234,6 +240,9 @@ void MaterialImGui(assets* Assets, material* Material)
         
         if(Normal->InUse)
         {
+            if(Normal->NormalID == INVALID_TEXTURE_ID)
+                Normal->NormalID = (texture_asset_id)0;
+            
             SameLine();
             AlignTextToFramePadding();
             Text("Texture");
@@ -287,17 +296,17 @@ void RestitutionImGui(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Restitution)
 
 ak_bool ValidateMaterial(material* Material)
 {
-    if(Material->Diffuse.IsTexture && (Material->Diffuse.DiffuseID >= MESH_ASSET_COUNT))
+    if(Material->Diffuse.IsTexture && ((Material->Diffuse.DiffuseID >= TEXTURE_ASSET_COUNT) || (Material->Diffuse.DiffuseID == -1)))
     {
         AK_MessageBoxOk("Entity Create Error", "Material specifies an invalid diffuse texture. Please select a valid one");
         return false;
     }
-    else if(Material->Specular.InUse && Material->Specular.IsTexture && (Material->Specular.SpecularID >= TEXTURE_ASSET_COUNT))
+    else if(Material->Specular.InUse && Material->Specular.IsTexture && ((Material->Specular.SpecularID >= TEXTURE_ASSET_COUNT) || (Material->Specular.SpecularID == -1)))
     {
         AK_MessageBoxOk("Entity Create Error", "Material specifies an invalid specular texture. Please select a valid one");
         return false;
     }
-    else if(Material->Normal.InUse && Material->Normal.NormalID >= TEXTURE_ASSET_COUNT)
+    else if(Material->Normal.InUse && ((Material->Normal.NormalID >= TEXTURE_ASSET_COUNT) || (Material->Normal.NormalID == -1)))
     {
         AK_MessageBoxOk("Entity Create Error", "Material specifies an invalid normal texture. Please select a valid one");
         return false;
