@@ -177,7 +177,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     
     //IMPORTANT(EVERYONE): If you need help figuring out how to use ImGui you can always switch this to 1 and look at the imgui demo window
     //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start
-#if 0
+#if 1 
     local bool demo_window;
     ShowDemoWindow(&demo_window);
 #endif
@@ -234,7 +234,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     ImGui::Checkbox("Edit Mode", (bool*)&DevContext->EditMode);  
     
     local ak_bool Open = true;
-    if(CollapsingHeader("Game Information", ImGuiTreeNodeFlags_DefaultOpen))
+    if(CollapsingHeader("Game Information"))
     {
         game_information* GameInformation = &DevContext->GameInformation;
         
@@ -282,12 +282,30 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
         }
     }
     
-    if(ImGui::CollapsingHeader("SelectedObject"))
+    if(CollapsingHeader("Entity Tool", ImGuiTreeNodeFlags_DefaultOpen))
+    {        
+        if(TreeNode("Entity Spawner"))
+        {
+            
+            TreePop();
+        }                
+        
+        ImGuiTreeNodeFlags Flag = DevContext->SelectedObjectID.IsValid() ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;        
+        if(TreeNodeEx("Entity Information", Flag))
+        {            
+            Text("Translation");
+            //SliderFloat("X",
+            
+            TreePop();
+        }
+    }
+    
+    if(CollapsingHeader("SelectedObject"))
     {
         game_information* GameInformation = &DevContext->GameInformation;
-        if(DevContext->SelectedObject != nullptr)
+        if(DevContext->SelectedObjectID.IsValid())
         {               
-            entity_id EntityID = DevContext->SelectedObject->ID;
+            entity_id EntityID = DevContext->SelectedObjectID;
             entity* Entity = GetEntity(Game, EntityID);
             
             simulation* Simulation = GetSimulation(Game, EntityID);
@@ -348,28 +366,28 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             if(RigidBody)
                 ObjectVelocity = RigidBody->Velocity;            
             
-            ImGui::Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
-            ImGui::Text("Type: (%d)", DevContext->SelectedObject->Type);
-            ImGui::Text("ID: (%d)", DevContext->SelectedObject->ID.ID);
-            ImGui::Text("WorldIndex: (%d)", DevContext->SelectedObject->ID.WorldIndex);
-            if(DevContext->SelectedObject->LinkID.IsValid())
+            Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
+            Text("Type: (%d)", Entity->Type);
+            Text("ID: (%d)", Entity->ID.ID);
+            Text("WorldIndex: (%d)", Entity->ID.WorldIndex);
+            if(Entity->LinkID.IsValid())
             {
-                ImGui::Text("Link ID: (%d)", DevContext->SelectedObject->LinkID.ID);
-                ImGui::Text("Link WorldIndex: (%d)", DevContext->SelectedObject->LinkID.WorldIndex);
+                Text("Link ID: (%d)", Entity->LinkID.ID);
+                Text("Link WorldIndex: (%d)", Entity->LinkID.WorldIndex);
             }
             else
             {
-                ImGui::Text("Link ID: (%s)", "No Linked Entity");
-                ImGui::Text("Link WorldIndex: (%s)", "No Linked Entity");
+                Text("Link ID: (%s)", "No Linked Entity");
+                Text("Link WorldIndex: (%s)", "No Linked Entity");
             }
-            ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);            
+            Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);            
             
             SimEntity->Transform = *Transform;
         }
         else
         {
-            ImGui::Text("No object selected");
-            ImGui::Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);
+            Text("No object selected");
+            Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);
         }
     }
     

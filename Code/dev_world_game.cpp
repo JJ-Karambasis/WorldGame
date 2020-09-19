@@ -386,32 +386,32 @@ ak_v3f GetGizmoColor(gizmo Gizmo)
 {
     switch(Gizmo.MovementDirection)
     {
-        case gizmo_movement_direction::X:
+        case GIZMO_MOVEMENT_DIRECTION_X:
         {
             return AK_Red3();
         } break;
         
-        case gizmo_movement_direction::Y:
+        case GIZMO_MOVEMENT_DIRECTION_Y:
         {
             return AK_Green3();
         } break;
         
-        case gizmo_movement_direction::Z:
+        case GIZMO_MOVEMENT_DIRECTION_Z:
         {
             return AK_Blue3();
         } break;
         
-        case gizmo_movement_direction::XY:
+        case GIZMO_MOVEMENT_DIRECTION_XY:
         {
             return AK_Blue3();
         } break;
         
-        case gizmo_movement_direction::XZ:
+        case GIZMO_MOVEMENT_DIRECTION_XZ:
         {
             return AK_Green3();
         } break;
         
-        case gizmo_movement_direction::YZ:
+        case GIZMO_MOVEMENT_DIRECTION_YZ:
         {
             return AK_Red3();
         } break;
@@ -423,7 +423,7 @@ ak_v3f GetGizmoColor(gizmo Gizmo)
 
 void DrawGizmos(dev_context* DevContext, ak_v3f Position)
 {        
-    if(DevContext->TransformationMode != gizmo_movement_type::ROTATE)
+    if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
     {
         for(ak_i32 i = 0; i < 3; i++)
         {
@@ -543,7 +543,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->TriangleArrowMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
-        Gizmo.MovementDirection = gizmo_movement_direction::X;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_X;
         DevContext->Gizmo[0] =  Gizmo;
     }
     
@@ -557,7 +557,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->TriangleArrowMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
-        Gizmo.MovementDirection = gizmo_movement_direction::Y;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Y;
         DevContext->Gizmo[1] =  Gizmo;
     }
     
@@ -571,7 +571,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->TriangleArrowMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
-        Gizmo.MovementDirection = gizmo_movement_direction::Z;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Z;
         DevContext->Gizmo[2] =  Gizmo;
     }
 
@@ -585,7 +585,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->PlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
-        Gizmo.MovementDirection = gizmo_movement_direction::XY;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_XY;
         DevContext->Gizmo[3] =  Gizmo;
     }
 
@@ -599,7 +599,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->PlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
-        Gizmo.MovementDirection = gizmo_movement_direction::XZ;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_XZ;
         DevContext->Gizmo[4] =  Gizmo;
     }
 
@@ -613,7 +613,7 @@ void PopulateArrowAndPlaneGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->PlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(1, 0, 0);
-        Gizmo.MovementDirection = gizmo_movement_direction::YZ;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_YZ;
         DevContext->Gizmo[5] =  Gizmo;
     }
 }
@@ -630,7 +630,7 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->TriangleCircleMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
-        Gizmo.MovementDirection = gizmo_movement_direction::X;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_X;
         DevContext->Gizmo[0] =  Gizmo;
     }
     
@@ -644,7 +644,7 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->TriangleCircleMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
-        Gizmo.MovementDirection = gizmo_movement_direction::Y;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Y;
         DevContext->Gizmo[1] =  Gizmo;
     }
     
@@ -658,14 +658,14 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
         Gizmo.Mesh = &DevContext->TriangleCircleMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
-        Gizmo.MovementDirection = gizmo_movement_direction::Z;
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Z;
         DevContext->Gizmo[2] =  Gizmo;
     }
 }
 
 void PopulateGizmo(dev_context* DevContext, ak_v3f Position)
 {
-    if(DevContext->TransformationMode != gizmo_movement_type::ROTATE)
+    if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
     {
         PopulateArrowAndPlaneGizmos(DevContext, Position);
     }
@@ -705,16 +705,14 @@ ray CastRayFromCameraToMouse(dev_context* DevContext, graphics_state* GraphicsSt
     return Result;
 }
 
-entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)
+entity_id GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)
 {        
     game* Game = DevContext->Game;
     graphics* Graphics = DevContext->Graphics;
     dev_input* Input = &DevContext->Input;
     
-    if(DevContext->IsGizmoHit)
-    {
-        return DevContext->SelectedObject;
-    }
+    if(DevContext->IsGizmoHit)    
+        return DevContext->SelectedObjectID;    
     
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);  
     
@@ -758,7 +756,7 @@ entity* GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsState
         }
     }
     
-    return Result;
+    return Result->ID;
 }
 
 gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)
@@ -767,7 +765,7 @@ gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsSta
     gizmo_hit* Result = &DevContext->GizmoHit;
     game* Game = DevContext->Game;
     
-    if(DevContext->SelectedObject == NULL || !DevContext->EditMode)
+    if(!DevContext->SelectedObjectID.IsValid() || !DevContext->EditMode)
     {
         DevContext->IsGizmoHit = false;
         return Result;
@@ -781,7 +779,7 @@ gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsSta
     view_settings ViewSettings = GetViewSettings(DevContext, GraphicsState, Game->CurrentWorldIndex);  
     
     ak_i32 NumberOfGizmos = 6;
-    if(DevContext->TransformationMode == gizmo_movement_type::ROTATE)
+    if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_ROTATE)
     {
         NumberOfGizmos = 3;
     }
@@ -963,20 +961,17 @@ void DrawWorld(dev_context* DevContext, graphics_render_buffer* RenderBuffer, ak
 }
 
 void DevelopmentHandleGizmoTranslate(dev_context* DevContext, graphics_state* GraphicsState, ak_v3f PointDiff)
-{
-    
-    
+{        
     game* Game = DevContext->Game;
     gizmo_hit* GizmoHit = &DevContext->GizmoHit;
 
-    entity_id EntityID = DevContext->SelectedObject->ID;
-    entity* Entity = GetEntity(Game, EntityID);
+    entity* Entity = GetEntity(Game, DevContext->SelectedObjectID);
     
-    simulation* Simulation = GetSimulation(Game, EntityID);
+    simulation* Simulation = GetSimulation(Game, DevContext->SelectedObjectID);
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
     
-    ak_sqtf* Transform = GetEntityTransform(Game, EntityID);
+    ak_sqtf* Transform = GetEntityTransform(Game, DevContext->SelectedObjectID);
     Transform->Translation -= PointDiff;
     
     SimEntity->Transform = *Transform;
@@ -987,14 +982,13 @@ void DevelopmentHandleGizmoScale(dev_context* DevContext, graphics_state* Graphi
     game* Game = DevContext->Game;
     gizmo_hit* GizmoHit = &DevContext->GizmoHit;
 
-    entity_id EntityID = DevContext->SelectedObject->ID;
-    entity* Entity = GetEntity(Game, EntityID);
+    entity* Entity = GetEntity(Game, DevContext->SelectedObjectID);
     
-    simulation* Simulation = GetSimulation(Game, EntityID);
+    simulation* Simulation = GetSimulation(Game, DevContext->SelectedObjectID);
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
     
-    ak_sqtf* Transform = GetEntityTransform(Game, EntityID);
+    ak_sqtf* Transform = GetEntityTransform(Game, DevContext->SelectedObjectID);
     Transform->Scale -= PointDiff;
     
     SimEntity->Transform = *Transform;
@@ -1005,20 +999,19 @@ void DevelopmentHandleGizmoRotate(dev_context* DevContext, graphics_state* Graph
     game* Game = DevContext->Game;
     gizmo_hit* GizmoHit = &DevContext->GizmoHit;
 
-    entity_id EntityID = DevContext->SelectedObject->ID;
-    entity* Entity = GetEntity(Game, EntityID);
+    entity* Entity = GetEntity(Game, DevContext->SelectedObjectID);
     
-    simulation* Simulation = GetSimulation(Game, EntityID);
+    simulation* Simulation = GetSimulation(Game, DevContext->SelectedObjectID);
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
     
-    ak_sqtf* Transform = GetEntityTransform(Game, EntityID);
+    ak_sqtf* Transform = GetEntityTransform(Game, DevContext->SelectedObjectID);
     
-    ak_u32 Index = AK_PoolIndex(EntityID.ID);
-    if(DevContext->EntityRotations[EntityID.WorldIndex].Size < (Index+1))
-        DevContext->EntityRotations[EntityID.WorldIndex].Resize(Index+1);
+    ak_u32 Index = AK_PoolIndex(DevContext->SelectedObjectID.ID);
+    if(DevContext->EntityRotations[DevContext->SelectedObjectID.WorldIndex].Size < (Index+1))
+        DevContext->EntityRotations[DevContext->SelectedObjectID.WorldIndex].Resize(Index+1);
     
-    ak_v3f* Rotation = DevContext->EntityRotations[EntityID.WorldIndex].Get(Index);
+    ak_v3f* Rotation = DevContext->EntityRotations[DevContext->SelectedObjectID.WorldIndex].Get(Index);
     *Rotation -= PointDiff;
     Transform->Orientation =  AK_Normalize(AK_EulerToQuat(*Rotation));
     
@@ -1039,36 +1032,36 @@ ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Gra
 
     ak_v3f NewPoint = RayCast.Origin + (RayCast.Direction * IntersectionResult.t);
 
-    if(DevContext->TransformationMode != gizmo_movement_type::ROTATE)
+    if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
     {
         switch(DevContext->GizmoHit.Gizmo->MovementDirection)
         {
-            case gizmo_movement_direction::X:
+            case GIZMO_MOVEMENT_DIRECTION_X:
             {
                 Result = AK_V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0.0f, 0.0f);
             } break;
             
-            case gizmo_movement_direction::Y:
+            case GIZMO_MOVEMENT_DIRECTION_Y:
             {
                 Result = AK_V3(0.0f, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0.0f);
             } break;
             
-            case gizmo_movement_direction::Z:
+            case GIZMO_MOVEMENT_DIRECTION_Z:
             {
                 Result = AK_V3(0.0f, 0.0f, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
             } break;
             
-            case gizmo_movement_direction::XY:
+            case GIZMO_MOVEMENT_DIRECTION_XY:
             {
                 Result = AK_V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, 0.0f);
             } break;
             
-            case gizmo_movement_direction::XZ:
+            case GIZMO_MOVEMENT_DIRECTION_XZ:
             {
                 Result = AK_V3(DevContext->GizmoHit.HitMousePosition.x - NewPoint.x, 0.0f, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
             } break;
             
-            case gizmo_movement_direction::YZ:
+            case GIZMO_MOVEMENT_DIRECTION_YZ:
             {
                 Result = AK_V3(0.0f, DevContext->GizmoHit.HitMousePosition.y - NewPoint.y, DevContext->GizmoHit.HitMousePosition.z - NewPoint.z);
             } break;
@@ -1089,17 +1082,17 @@ ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Gra
         
         switch(DevContext->GizmoHit.Gizmo->MovementDirection)
         {
-            case gizmo_movement_direction::X:
+            case GIZMO_MOVEMENT_DIRECTION_X:
             {
                 Result = AK_V3(AngleDiff, 0.0f, 0.0f);
             } break;
             
-            case gizmo_movement_direction::Y:
+            case GIZMO_MOVEMENT_DIRECTION_Y:
             {
                 Result = AK_V3(0.0f, AngleDiff, 0.0f);
             } break;
             
-            case gizmo_movement_direction::Z:
+            case GIZMO_MOVEMENT_DIRECTION_Z:
             {
                 Result = AK_V3(0.0f, 0.0f, AngleDiff);
             } break;
@@ -1118,17 +1111,17 @@ void DevelopmentHandleGizmoTransform(dev_context* DevContext, graphics_state* Gr
 
     switch(DevContext->TransformationMode)
     {
-        case gizmo_movement_type::TRANSLATE:
+        case GIZMO_MOVEMENT_TYPE_TRANSLATE:
         {
             DevelopmentHandleGizmoTranslate(DevContext, GraphicsState, PointDiff);
         } break;
 
-        case gizmo_movement_type::SCALE:
+        case GIZMO_MOVEMENT_TYPE_SCALE:
         {
             DevelopmentHandleGizmoScale(DevContext, GraphicsState, PointDiff);
         } break;
 
-        case gizmo_movement_type::ROTATE:
+        case GIZMO_MOVEMENT_TYPE_ROTATE:
         {
             DevelopmentHandleGizmoRotate(DevContext, GraphicsState, PointDiff);
         } break;
@@ -1164,11 +1157,11 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
     
     PushDepth(Graphics, false); 
     ak_v3f SelectedObjectPosition = {};
-    if(DevContext->SelectedObject != NULL)
+    if(DevContext->SelectedObjectID.IsValid())
     {                
-        SelectedObjectPosition = AK_Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
+        SelectedObjectPosition = AK_Lerp(GetEntityPositionOld(Game, DevContext->SelectedObjectID), 
                                          tRenderInterpolate, 
-                                         GetEntityPosition(Game, DevContext->SelectedObject->ID));
+                                         GetEntityPosition(Game, DevContext->SelectedObjectID));
         if(!DevContext->EditMode)
         {
             DrawFrame(DevContext, SelectedObjectPosition, AK_V3f(1, 0, 0), AK_V3f(0, 1, 0), AK_V3f(0, 0, 1));
@@ -1192,11 +1185,11 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
             ray RayCast = CastRayFromCameraToMouse(DevContext, GraphicsState);
             DevContext->InspectRay = RayCast.Direction;
             GetSelectedGizmo(DevContext, GraphicsState, RayCast);
-            DevContext->SelectedObject = GetSelectedObject(DevContext, GraphicsState, RayCast);
+            DevContext->SelectedObjectID = GetSelectedObject(DevContext, GraphicsState, RayCast);
         }
         if(IsPressed(Input->MMB))
         {
-            DevContext->SelectedObject = nullptr;
+            DevContext->SelectedObjectID = InvalidEntityID();
         }
         if(IsReleased(Input->LMB))
         {
@@ -1230,11 +1223,11 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
     }
     DevContext->DebugPrimitives.Size = 0;
     
-    if(DevContext->SelectedObject != NULL)
+    if(DevContext->SelectedObjectID.IsValid())
     {                
-        ak_v3f Position = AK_Lerp(GetEntityPositionOld(Game, DevContext->SelectedObject->ID), 
+        ak_v3f Position = AK_Lerp(GetEntityPositionOld(Game, DevContext->SelectedObjectID), 
                                   tRenderInterpolate, 
-                                  GetEntityPosition(Game, DevContext->SelectedObject->ID));
+                                  GetEntityPosition(Game, DevContext->SelectedObjectID));
         DrawFrame(DevContext, Position, AK_XAxis(), AK_YAxis(), AK_ZAxis());
     }
     

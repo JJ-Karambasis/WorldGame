@@ -35,19 +35,19 @@ global struct dev_context* __Internal_Dev_Context__;
 
 enum gizmo_movement_type
 {
-    TRANSLATE,
-    SCALE,
-    ROTATE
+    GIZMO_MOVEMENT_TYPE_TRANSLATE,
+    GIZMO_MOVEMENT_TYPE_SCALE,
+    GIZMO_MOVEMENT_TYPE_ROTATE
 };
 
 enum gizmo_movement_direction
 {
-    X,
-    Y,
-    Z,
-    XY,
-    XZ,
-    YZ
+    GIZMO_MOVEMENT_DIRECTION_X,
+    GIZMO_MOVEMENT_DIRECTION_Y,
+    GIZMO_MOVEMENT_DIRECTION_Z,
+    GIZMO_MOVEMENT_DIRECTION_XY,
+    GIZMO_MOVEMENT_DIRECTION_XZ,
+    GIZMO_MOVEMENT_DIRECTION_YZ
 };
 
 struct dev_input
@@ -193,7 +193,7 @@ struct dev_context
     ak_bool DrawGrid;
     ak_bool EditMode;
     ak_bool IsGizmoHit;
-        
+    
     
     ak_f32 tInterpolated;
     graphics_render_buffer* RenderBuffer;
@@ -229,7 +229,7 @@ struct dev_context
     
     void** PlatformData;
     ak_bool Initialized;
-    struct entity* SelectedObject;
+    entity_id SelectedObjectID;    
     ak_v3f InspectRay;
     ak_char DebugMessage[100];
     
