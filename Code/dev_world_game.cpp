@@ -257,15 +257,18 @@ void DrawEdge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Color)
 
 void DrawGrid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color)
 {
+    int GridLinesDraw = 0;
     for(ak_i32 x = xLeftBound; x <= xRightBound; x++)
     {
         if(x != 0)
         {
             DrawEdge(DevContext, AK_V3f(x, yTopBound, 0), AK_V3f(x, yBottomBound, 0), Color);
+            GridLinesDraw++;
         }
         else
         {
             DrawEdge(DevContext, AK_V3f(x, yTopBound, 0), AK_V3f(x, yBottomBound, 0), AK_Green3());
+            GridLinesDraw++;
         }
     }
     
@@ -274,12 +277,15 @@ void DrawGrid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound, ak
         if(y != 0)
         {
             DrawEdge(DevContext, AK_V3f(xLeftBound, y, 0), AK_V3f(xRightBound, y, 0), Color);
+            GridLinesDraw++;
         }
         else
         {            
-            DrawEdge(DevContext, AK_V3f(xLeftBound, y, 0), AK_V3f(xRightBound, y, 0), AK_Red3());             
+            DrawEdge(DevContext, AK_V3f(xLeftBound, y, 0), AK_V3f(xRightBound, y, 0), AK_Red3());
+            GridLinesDraw++;
         }
     }
+    DebugLog(DevContext, "Draw %d GridLines", GridLinesDraw);
 }
 
 void DrawSphere(dev_context* DevContext, ak_v3f CenterP, ak_f32 Radius, ak_color3f Color)
@@ -1253,20 +1259,45 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
         ak_v3f FrustumCorners[8];
         AK_GetFrustumCorners(FrustumCorners, Perspective);
         AK_TransformPoints(FrustumCorners, 8, AK_TransformM4(ViewSettings.Position, ViewSettings.Orientation));
-        
-        ak_f32 MinX = FrustumCorners[0].x;
-        ak_f32 MaxX = FrustumCorners[0].x;
-        ak_f32 MinY = FrustumCorners[0].y;
-        ak_f32 MaxY = FrustumCorners[0].y;
-        for(int i = 0; i < 8; i++)
+
+        ak_v3f FrustumPlaneIntersectionPoints[4];
+        ak_i8 IntersectedCount = 0;
+        for(int i = 0; i < 4; i++)
         {
-            MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
-            MaxX = AK_Max(FrustumCorners[i].x, MaxX);
-            MinY = AK_Min(FrustumCorners[i].y, MinY);
-            MaxY = AK_Max(FrustumCorners[i].y, MaxY);            
+            ray FrustumRay = {};
+            FrustumRay.Origin = FrustumCorners[i];
+            FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
+            ray_mesh_intersection_result FrustumRayResult = RayPlaneIntersection(AK_V3f(0, 0, 1), AK_V3f(0,0,0), FrustumRay);
+            if(FrustumRayResult.FoundCollision)
+            {
+                IntersectedCount++;
+                ak_f32 Distance = FrustumRayResult.t;
+                Distance = AK_Min(Distance, ViewSettings.ZFar);
+                FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+            }
+            else
+            {
+                ak_f32 Distance = ViewSettings.ZFar;
+                FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+            }
         }
-        
-        DrawGrid(DevContext, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f));        
+
+        if(IntersectedCount != 0)
+        {
+            ak_f32 MinX = FrustumPlaneIntersectionPoints[0].x;
+            ak_f32 MaxX = FrustumPlaneIntersectionPoints[0].x;
+            ak_f32 MinY = FrustumPlaneIntersectionPoints[0].y;
+            ak_f32 MaxY = FrustumPlaneIntersectionPoints[0].y;
+            for(int i = 0; i < 4; i++)
+            {
+                MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
+                MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
+                MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
+                MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+            }
+            
+            DrawGrid(DevContext, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
+        }       
     }
     
     DevelopmentImGuiRender(DevContext);  
