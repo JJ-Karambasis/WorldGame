@@ -756,7 +756,7 @@ entity_id GetSelectedObject(dev_context* DevContext, graphics_state* GraphicsSta
         }
     }
     
-    return Result->ID;
+    return Result ? Result->ID : InvalidEntityID();
 }
 
 gizmo_hit* GetSelectedGizmo(dev_context* DevContext, graphics_state* GraphicsState, ray RayCast)

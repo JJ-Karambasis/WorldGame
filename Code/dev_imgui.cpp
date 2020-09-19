@@ -5,6 +5,39 @@
 
 using namespace ImGui;
 
+void DragFloat(ak_u32 ID, const ak_char* Label, ak_f32* Value, ak_f32 Speed, ak_f32 Min, ak_f32 Max, const ak_char* Format = "%.3f")
+{
+    PushID(ID);
+    DragFloat(Label, Value, Speed, Min, Max);
+    PopID();
+}
+
+void DragAngle(ak_u32 ID, const ak_char* Label, ak_f32* Radians, ak_f32 Speed, ak_f32 Min, ak_f32 Max, const ak_char* Format = "%.3f")
+{
+    ak_f32 Degree = AK_ToDegree(*Radians);
+    PushID(ID);
+    DragFloat(Label, &Degree, Speed, Min, Max, Format);
+    PopID();
+    *Radians = AK_ToRadians(Degree);
+}
+
+ak_char* EntityTypeUI(entity_type Type)
+{
+#define ENUM_TYPE(type) case type: return #type
+    switch(Type)
+    {
+        ENUM_TYPE(ENTITY_TYPE_STATIC);
+        ENUM_TYPE(ENTITY_TYPE_PLAYER);
+        ENUM_TYPE(ENTITY_TYPE_RIGID_BODY);
+        ENUM_TYPE(ENTITY_TYPE_PUSHABLE);
+        
+        AK_INVALID_DEFAULT_CASE;
+    }   
+#undef ENUM_TYPE
+    
+    return NULL;
+}
+
 graphics_texture_id AllocateImGuiFont(graphics* Graphics)
 {    
     ImGuiIO* IO = &GetIO();
@@ -27,7 +60,7 @@ void DevelopmentImGuiInit(dev_context* DevContext)
     Platform_InitImGui(DevContext->PlatformData[0]);                
     AllocateImGuiFont(DevContext->Graphics);                
     
-    ImGuiIO* IO = &ImGui::GetIO();
+    ImGuiIO* IO = &GetIO();
     IO->BackendRendererName = "OpenGL";
     IO->BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 }
@@ -55,7 +88,7 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
     
     if(RecordButtonText)
     {
-        if(ImGui::Button(RecordButtonText))
+        if(Button(RecordButtonText))
         {
             if(State == FRAME_PLAYBACK_STATE_NONE)
             {
@@ -83,7 +116,7 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
     
     if(State == FRAME_PLAYBACK_STATE_NONE)
     {
-        if(ImGui::Button("Load Recording"))
+        if(Button("Load Recording"))
         {
             ak_string RecordingPath = AK_OpenFileDialog("recording", AK_GetGlobalArena());
             if(!AK_StringIsNullOrEmpty(RecordingPath))
@@ -102,7 +135,7 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
         if(StopPlaying)
             PlayButtonText = "Stop Playing";
         
-        if(ImGui::Button(PlayButtonText))
+        if(Button(PlayButtonText))
         {
             if(StopPlaying)
             {                
@@ -121,8 +154,8 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
     
     if(FramePlayback->RecordingPath[0] != 0)
     {
-        ImGui::SameLine();
-        ImGui::Text("Recording File: %s\n", FramePlayback->RecordingPath);
+        SameLine();
+        Text("Recording File: %s\n", FramePlayback->RecordingPath);
     }
     
     if((State == FRAME_PLAYBACK_STATE_PLAYING) || (State == FRAME_PLAYBACK_STATE_INSPECT_FRAMES))
@@ -132,7 +165,7 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
         if(Inspecting)
             InspectText = "Stop Inspecting";
         
-        if(ImGui::Button(InspectText))
+        if(Button(InspectText))
         {
             if(Inspecting)            
                 State = FRAME_PLAYBACK_STATE_PLAYING;            
@@ -140,14 +173,14 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
                 State = FRAME_PLAYBACK_STATE_INSPECT_FRAMES;            
         }
         
-        ImGui::SameLine();
-        ImGui::Text("Frame %d/%d", FramePlayback->CurrentFrameIndex, Recording->FrameCount-1);                 
+        SameLine();
+        Text("Frame %d/%d", FramePlayback->CurrentFrameIndex, Recording->FrameCount-1);                 
         
         if(Inspecting)
         {            
-            ImGuiIO* IO = &ImGui::GetIO();
+            ImGuiIO* IO = &GetIO();
             
-            if(ImGui::IsKeyPressedMap(ImGuiKey_LeftArrow))       
+            if(IsKeyPressedMap(ImGuiKey_LeftArrow))       
             {
                 if(FramePlayback->CurrentFrameIndex == 0)
                     FramePlayback->CurrentFrameIndex = Recording->FrameCount-1;
@@ -155,7 +188,7 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
                     FramePlayback->CurrentFrameIndex--;
             }
             
-            if(ImGui::IsKeyPressedMap(ImGuiKey_RightArrow))            
+            if(IsKeyPressedMap(ImGuiKey_RightArrow))            
             {
                 if(FramePlayback->CurrentFrameIndex == (Recording->FrameCount-1))
                     FramePlayback->CurrentFrameIndex = 0;
@@ -220,18 +253,18 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     Text("View Modes");
     SameLine();
     Combo("", (int*)&DevContext->ViewModeType, ViewModeTypes, AK_Count(ViewModeTypes));
-
+    
     const char* TransformTypes[] = {"Translate", "Scale", "Rotate"};
     AlignTextToFramePadding();
     Text("Object Transform Mode");
     SameLine();
     Combo("TransformMode", (int*)&DevContext->TransformationMode, TransformTypes, AK_Count(TransformTypes));
    
-    ImGui::Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
-    ImGui::Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    
-    ImGui::Checkbox("Draw colliders", (bool*)&DevContext->DrawColliders);    
-    ImGui::Checkbox("Draw Grid", (bool*)&DevContext->DrawGrid);  
-    ImGui::Checkbox("Edit Mode", (bool*)&DevContext->EditMode);  
+    Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
+    Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    
+    Checkbox("Draw colliders", (bool*)&DevContext->DrawColliders);    
+    Checkbox("Draw Grid", (bool*)&DevContext->DrawGrid);  
+    Checkbox("Edit Mode", (bool*)&DevContext->EditMode);  
     
     local ak_bool Open = true;
     if(CollapsingHeader("Game Information"))
@@ -289,77 +322,62 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             
             TreePop();
         }                
-        
-        ImGuiTreeNodeFlags Flag = DevContext->SelectedObjectID.IsValid() ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;        
-        if(TreeNodeEx("Entity Information", Flag))
-        {            
-            Text("Translation");
-            //SliderFloat("X",
-            
-            TreePop();
-        }
-    }
-    
-    if(CollapsingHeader("SelectedObject"))
-    {
-        game_information* GameInformation = &DevContext->GameInformation;
+                
+        Text("Entity Information");
         if(DevContext->SelectedObjectID.IsValid())
-        {               
-            entity_id EntityID = DevContext->SelectedObjectID;
-            entity* Entity = GetEntity(Game, EntityID);
+        {   
+            entity* Entity = GetEntity(Game, DevContext->SelectedObjectID);            
+            ak_sqtf* Transform = GetEntityTransform(Game, DevContext->SelectedObjectID);
             
-            simulation* Simulation = GetSimulation(Game, EntityID);
-            
-            sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
-            
-            ak_sqtf* Transform = GetEntityTransform(Game, EntityID);
-            
-            ak_array<ak_v3f>* EntityRotations = &DevContext->EntityRotations[EntityID.WorldIndex];            
-            ak_u32 Index = AK_PoolIndex(EntityID.ID);
+            ak_array<ak_v3f>* EntityRotations = &DevContext->EntityRotations[DevContext->SelectedObjectID.WorldIndex];            
+            ak_u32 Index = AK_PoolIndex(DevContext->SelectedObjectID.ID);
             if(Index > EntityRotations->Size)
-                EntityRotations->Resize(Index);            
+                EntityRotations->Resize(Index);                        
             
-            ak_v3f* Rotation = EntityRotations->Get(Index);            
-            if(DevContext->EditMode)
+            ak_v3f Translation = Transform->Translation;            
+            ak_v3f Scale = Transform->Scale;
+            ak_v3f Rotation = EntityRotations->Entries[Index];            
+            
+            ak_f32 TransformItemWidth = 80;
+            
             {
-                DragFloat("X Translation", &Transform->Translation.x, 0.1f, -1000.0f, 1000.0f);
-                DragFloat("Y Translation", &Transform->Translation.y, 0.1f, -1000.0f, 1000.0f);
-                DragFloat("Z Translation", &Transform->Translation.z, 0.1f, -1000.0f, 1000.0f);
+                ak_u32 Hash = AK_HashFunction("Translation");
+                Text("Translation");                
+                PushItemWidth(TransformItemWidth);
                 
-                DragFloat("X Scale", &Transform->Scale.x, 0.1f, 0.0f, 100.0f);
-                DragFloat("Y Scale", &Transform->Scale.y, 0.1f, 0.0f, 100.0f);
-                DragFloat("Z Scale", &Transform->Scale.z, 0.1f, 0.0f, 100.0f);
+                DragFloat(Hash+0, "X", &Translation.x, 0.1f, -1000.0f, 1000.0f); SameLine();                                
+                DragFloat(Hash+1, "Y", &Translation.y, 0.1f, -1000.0f, 1000.0f); SameLine();                                
+                DragFloat(Hash+2, "Z", &Translation.z, 0.1f, -1000.0f, 1000.0f);                            
                 
-                ak_f32 ObjectRoll = AK_ToDegree(Rotation->roll);
-                ak_f32 ObjectPitch = AK_ToDegree(Rotation->pitch);
-                ak_f32 ObjectYaw = AK_ToDegree(Rotation->yaw);
-                DragFloat("Roll", &ObjectRoll, 0.1f, -180.0f, 180.0f, "%.3f");
-                DragFloat("Pitch", &ObjectPitch, 0.1f, -180.0f, 180.0f, "%.3f");
-                DragFloat("Yaw", &ObjectYaw, 0.1f, -180.0f, 180.0f, "%.3f");
-                
-                
-                DevelopmentUpdateSelectedObjectRotation(Transform, Rotation, AK_V3(AK_ToRadians(ObjectRoll), AK_ToRadians(ObjectPitch), AK_ToRadians(ObjectYaw)));
-            }
-            else
-            {
-                ak_v3f Translation = Transform->Translation;
-                DragFloat("X Translation", &Translation.x, 0.0f, Translation.x, Translation.x);
-                DragFloat("Y Translation", &Translation.y, 0.0f, Translation.y, Translation.y);
-                DragFloat("Z Translation", &Translation.z, 0.0f, Translation.z, Translation.z);
-                
-                ak_v3f Scale = Transform->Scale;
-                DragFloat("X Scale", &Scale.x, 0.0f, Scale.x, Scale.x);
-                DragFloat("Y Scale", &Scale.y, 0.0f, Scale.y, Scale.y);
-                DragFloat("Z Scale", &Scale.z, 0.0f, Scale.z, Scale.z);
-                                
-                ak_f32 ObjectRoll = AK_ToDegree(Rotation->roll);
-                ak_f32 ObjectPitch = AK_ToDegree(Rotation->pitch);
-                ak_f32 ObjectYaw = AK_ToDegree(Rotation->yaw);
-                DragFloat("Roll", &ObjectRoll, 0.0f, ObjectRoll, ObjectRoll, "%.3f");
-                DragFloat("Pitch", &ObjectPitch, 0.0f, ObjectPitch, ObjectPitch, "%.3f");
-                DragFloat("Yaw", &ObjectYaw, 0.0f, ObjectYaw, ObjectYaw, "%.3f");
+                PopItemWidth();
             }
             
+            {
+                ak_u32 Hash = AK_HashFunction("Scale");
+                Text("Scale");
+                PushItemWidth(TransformItemWidth);
+                
+                DragFloat(Hash+0, "X", &Scale.x, 0.1f, 0.0f, 100.0f); SameLine();                                
+                DragFloat(Hash+1, "Y", &Scale.y, 0.1f, 0.0f, 100.0f); SameLine();                                
+                DragFloat(Hash+2, "Z", &Scale.z, 0.1f, 0.0f, 100.0f);                 
+                
+                PopItemWidth();
+            }
+            
+            {
+                ak_u32 Hash = AK_HashFunction("Rotation");
+                Text("Rotation");
+                PushItemWidth(TransformItemWidth);
+                
+                DragAngle(Hash+0, "X", &Rotation.x, 0.1f, -180.0f, 180.0f); SameLine();
+                DragAngle(Hash+1, "Y", &Rotation.y, 0.1f, -180.0f, 180.0f); SameLine();
+                DragAngle(Hash+2, "Z", &Rotation.z, 0.1f, -180.0f, 180.0f); 
+                
+                PopItemWidth();
+            }
+            
+            simulation* Simulation = GetSimulation(Game, Entity->ID);                
+            sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
             
             ak_v3f ObjectVelocity = {};
             rigid_body* RigidBody = SimEntity->ToRigidBody();
@@ -367,27 +385,16 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 ObjectVelocity = RigidBody->Velocity;            
             
             Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
-            Text("Type: (%d)", Entity->Type);
-            Text("ID: (%d)", Entity->ID.ID);
-            Text("WorldIndex: (%d)", Entity->ID.WorldIndex);
-            if(Entity->LinkID.IsValid())
-            {
-                Text("Link ID: (%d)", Entity->LinkID.ID);
-                Text("Link WorldIndex: (%d)", Entity->LinkID.WorldIndex);
-            }
-            else
-            {
-                Text("Link ID: (%s)", "No Linked Entity");
-                Text("Link WorldIndex: (%s)", "No Linked Entity");
-            }
-            Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);            
+            Text("Type: %s", EntityTypeUI(Entity->Type));                        
             
-            SimEntity->Transform = *Transform;
-        }
-        else
-        {
-            Text("No object selected");
-            Text("RayCast Direction: (%.2f, %.2f, %.2f)", DevContext->InspectRay.x, DevContext->InspectRay.y, DevContext->InspectRay.z);
+            if(DevContext->EditMode)
+            {                                
+                Transform->Translation = Translation;
+                Transform->Scale = Scale;
+                DevelopmentUpdateSelectedObjectRotation(Transform, EntityRotations->Get(Index), Rotation);
+                SimEntity->Transform = *Transform;
+            }
+            
         }
     }
     

@@ -494,8 +494,13 @@ void Win32_ProcessMessages(input* Input)
 
 int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
 {   
-    AK_SetGlobalArena(AK_CreateArena(AK_Megabyte(32)));    
-    Global_PlatformArena = AK_CreateArena(AK_Megabyte(1));        
+    AK_SetGlobalArena(AK_CreateArena(AK_Megabyte(32)));        
+    Global_PlatformArena = AK_CreateArena(AK_Megabyte(1)); 
+    
+    LARGE_INTEGER Seed;
+    QueryPerformanceCounter(&Seed);
+    AK_SetRandomSeed64(Seed.QuadPart);
+    AK_SetRandomSeed32(Seed.LowPart);
     
     Global_EXEFilePath = AK_GetExecutablePath(Global_PlatformArena);
     ak_string GameDLLPathName = AK_StringConcat(Global_EXEFilePath, "World_Game.dll", Global_PlatformArena);
