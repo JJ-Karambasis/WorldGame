@@ -890,7 +890,10 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* RawKeyboard)
     switch(RawKeyboard->VKey)
     {
         BIND_KEY(VK_F5, Input->ToggleDevState);
-        BIND_KEY(VK_MENU, Input->Alt);        
+        BIND_KEY(VK_MENU, Input->Alt);  
+        BIND_KEY('W', Input->W);
+        BIND_KEY('E', Input->E);
+        BIND_KEY('R', Input->R);      
     }       
 }
 

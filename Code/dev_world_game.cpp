@@ -1155,6 +1155,19 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
         PushRenderBufferViewportScissorAndView(Graphics, Game->RenderBuffer, &ViewSettings);        
     }    
     
+    if(DevContext->EditMode && IsPressed(Input->W))
+    {
+        DevContext->TransformationMode = GIZMO_MOVEMENT_TYPE_TRANSLATE;
+    }
+    if(DevContext->EditMode && IsPressed(Input->E))
+    {
+        DevContext->TransformationMode = GIZMO_MOVEMENT_TYPE_SCALE;
+    }
+    if(DevContext->EditMode && IsPressed(Input->R))
+    {
+        DevContext->TransformationMode = GIZMO_MOVEMENT_TYPE_ROTATE;
+    }
+
     PushDepth(Graphics, false); 
     ak_v3f SelectedObjectPosition = {};
     if(DevContext->SelectedObjectID.IsValid())

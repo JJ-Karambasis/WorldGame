@@ -54,13 +54,16 @@ struct dev_input
 {
     union
     {
-        button Buttons[4];
+        button Buttons[7];
         struct
         {
             button ToggleDevState;
             button Alt;
             button LMB;
-            button MMB;            
+            button MMB;
+            button W;
+            button E;
+            button R;            
         };
     };
     
