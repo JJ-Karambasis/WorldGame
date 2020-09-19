@@ -54,7 +54,7 @@ struct dev_input
 {
     union
     {
-        button Buttons[7];
+        button Buttons[8];
         struct
         {
             button ToggleDevState;
@@ -64,6 +64,7 @@ struct dev_input
             button W;
             button E;
             button R;            
+            button Delete;
         };
     };
     
@@ -180,6 +181,22 @@ struct frame_playback
     frame_recording Recording;    
 };
 
+struct entity_spawner
+{
+    ak_bool Init;
+    entity_type EntityType;
+    ak_v3f Translation;
+    ak_v3f Scale;
+    ak_f32 Radius;
+    ak_f32 Restitution;
+    ak_v3f Axis;
+    ak_f32 Angle;
+    ak_u32 WorldIndex;    
+    mesh_asset_id MeshID;
+    material Material;
+    ak_f32 Mass;
+};
+
 #define MAX_IMGUI_MESHES 32
 struct dev_context
 {
@@ -197,6 +214,7 @@ struct dev_context
     ak_bool EditMode;
     ak_bool IsGizmoHit;
     
+    entity_spawner EntitySpawner;
     
     ak_f32 tInterpolated;
     graphics_render_buffer* RenderBuffer;

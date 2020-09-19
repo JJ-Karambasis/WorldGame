@@ -894,6 +894,7 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* RawKeyboard)
         BIND_KEY('W', Input->W);
         BIND_KEY('E', Input->E);
         BIND_KEY('R', Input->R);      
+        BIND_KEY(VK_DELETE, Input->Delete);
     }       
 }
 

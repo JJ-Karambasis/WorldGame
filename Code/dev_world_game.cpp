@@ -1396,6 +1396,19 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
     if(IsInDevelopmentMode(DevContext))
     {        
         Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, Game->dt, DevContext);        
+        
+        if(IsPressed(Input->Delete))
+        {
+            if(DevContext->SelectedObjectID.IsValid())
+            {                
+                if(GetEntityType(DevContext->Game, DevContext->SelectedObjectID) != ENTITY_TYPE_PLAYER)
+                {
+                    FreeEntity(DevContext->Game, DevContext->SelectedObjectID);
+                    DevContext->SelectedObjectID = InvalidEntityID();
+                }
+            }
+        }
+        
         DevelopmentRender(DevContext, GraphicsState, tRenderInterpolate);        
     }
     

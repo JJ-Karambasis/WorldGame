@@ -42,7 +42,7 @@ void LoadTestLevel(game* Game)
         
         ak_v3f P0 = AK_V3<ak_f32>() + AK_ZAxis()*PLAYER_RADIUS;
         capsule PlayerCapsule = CreateCapsule(P0, P0+AK_ZAxis()*PLAYER_HEIGHT, PLAYER_RADIUS);        
-        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, AK_V3(0.0f, 0.0f, 0.1f), AK_V3<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
+        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, AK_V3(0.0f, 0.0f, 0.1f), AK_IdentityQuat<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
         
         game_camera* Camera = Game->CurrentCameras + WorldIndex;        
         Camera->Target = GetEntityPosition(Game, PlayerID);        
@@ -54,13 +54,13 @@ void LoadTestLevel(game* Game)
         Game->PrevCameras[WorldIndex] = *Camera;
     }
         
-    CreateDualStaticEntity(Game, AK_V3(0.0f, 0.0f, -0.01f), AK_V3(10.0f, 10.0f, 0.01f), AK_V3(0.0f, 0.0f, AK_PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, AK_V3(-6.2f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.1f),  MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, AK_V3(-3.0f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.25f), MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, AK_V3(-4.6f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.33f), MESH_ASSET_ID_BOX,   Global_Material0);
-    CreateDualStaticEntity(Game, AK_V3(-1.6f, -3.5f, -2.0f), AK_V3(1.0f, 1.0f, 10.0f), AK_V3(AK_PI*0.3f, 0.0f, AK_PI*0.0f),  MESH_ASSET_ID_BOX,   Global_Material1);
-    CreateDualStaticEntity(Game, AK_V3(-1.0f, 5.5f, 0.0f),  AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.2f),  MESH_ASSET_ID_BOX,   Global_Material1);
-    CreateDualStaticEntity(Game, AK_V3(1.0f, 4.5f, 0.0f),   AK_V3(1.0f, 1.0f, 1.0f), AK_V3(0.0f, 0.0f, AK_PI*0.6f),  MESH_ASSET_ID_BOX,   Global_Material1);                    
+    CreateDualStaticEntity(Game, AK_V3(0.0f, 0.0f, -0.01f), AK_V3(10.0f, 10.0f, 0.01f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.0f)),  MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-6.2f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.1f)),  MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-3.0f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.25f)), MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-4.6f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.33f)), MESH_ASSET_ID_BOX,   Global_Material0);
+    CreateDualStaticEntity(Game, AK_V3(-1.6f, -3.5f, -2.0f), AK_V3(1.0f, 1.0f, 10.0f), AK_EulerToQuat(AK_V3(AK_PI*0.3f, 0.0f, AK_PI*0.0f)),  MESH_ASSET_ID_BOX,   Global_Material1);
+    CreateDualStaticEntity(Game, AK_V3(-1.0f, 5.5f, 0.0f),  AK_V3(1.0f, 1.0f, 1.0f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.2f)),  MESH_ASSET_ID_BOX,   Global_Material1);
+    CreateDualStaticEntity(Game, AK_V3(1.0f, 4.5f, 0.0f),   AK_V3(1.0f, 1.0f, 1.0f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.6f)),  MESH_ASSET_ID_BOX,   Global_Material1);                    
     CreateSphereRigidBody(Game, 0, AK_V3( 1.0f, 1.0f, 5.0f), 0.5f, 30.0f, 0.2f, Global_Material0);
     CreateDualPushableBox(Game, AK_V3(-2.0f, 0.0f, 0.001f), 1.0f, 35.0f, Global_Material0);
     

@@ -5,10 +5,11 @@ struct sim_entity_base;
 
 enum entity_type
 {
-    ENTITY_TYPE_STATIC,
     ENTITY_TYPE_PLAYER,
+    ENTITY_TYPE_STATIC,    
     ENTITY_TYPE_RIGID_BODY,
-    ENTITY_TYPE_PUSHABLE
+    ENTITY_TYPE_PUSHABLE,
+    ENTITY_TYPE_COUNT
 };
 
 struct entity_id

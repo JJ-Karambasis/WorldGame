@@ -3,7 +3,16 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
+#define TRANSFORM_ITEM_WIDTH 80
+
 using namespace ImGui;
+
+void DragInt(ak_u32 ID, const ak_char* Label, ak_i32* Value, ak_f32 Speed, ak_i32 Min, ak_i32 Max)
+{
+    PushID(ID);    
+    DragInt(Label, Value, Speed, Min, Max);    
+    PopID();
+}
 
 void DragFloat(ak_u32 ID, const ak_char* Label, ak_f32* Value, ak_f32 Speed, ak_f32 Min, ak_f32 Max, const ak_char* Format = "%.3f")
 {
@@ -21,7 +30,40 @@ void DragAngle(ak_u32 ID, const ak_char* Label, ak_f32* Radians, ak_f32 Speed, a
     *Radians = AK_ToRadians(Degree);
 }
 
-ak_char* EntityTypeUI(entity_type Type)
+ak_bool Combo(ak_u32 ID, const ak_char* Label, ak_i32* Data, const ak_char** List, ak_i32 ListCount)
+{
+    PushID(ID);
+    ak_bool Result = Combo(Label, Data, List, ListCount);
+    PopID();
+    return Result;
+}
+
+
+ak_bool ColorEdit3(ak_u32 ID, const ak_char* Label, ak_f32* Data, ImGuiColorEditFlags Flags)
+{
+    PushID(ID);
+    ak_bool Result = ColorEdit3(Label, Data, Flags);
+    PopID();
+    return Result;
+}
+
+ak_bool Checkbox(ak_u32 ID, const ak_char* Label, ak_bool* Flag)
+{
+    PushID(ID);
+    ak_bool Result = Checkbox(Label, (bool*)Flag);
+    PopID();
+    return Result;
+}
+
+ak_bool Button(ak_u32 ID, const ak_char* ButtonText)
+{
+    PushID(ID);
+    ak_bool Result = Button(ButtonText);
+    PopID();
+    return Result;
+}
+
+const ak_char* EntityTypeUI(entity_type Type)
 {
 #define ENUM_TYPE(type) case type: return #type
     switch(Type)
@@ -36,6 +78,232 @@ ak_char* EntityTypeUI(entity_type Type)
 #undef ENUM_TYPE
     
     return NULL;
+}
+
+void ClearSpawner(entity_spawner* Spawner)
+{
+    Spawner->EntityType = ENTITY_TYPE_STATIC;                
+    Spawner->Translation = {};
+    Spawner->Scale = AK_V3(1.0f, 1.0f, 1.0f);
+    Spawner->Radius = 1.0f;
+    Spawner->Restitution = 0.0f;
+    Spawner->Axis = {};
+    Spawner->Angle = 0;
+    Spawner->WorldIndex = 0;
+    Spawner->MeshID = (mesh_asset_id)0;
+    Spawner->Material = {};
+    Spawner->Mass = 1.0f;
+}
+
+ak_fixed_array<const ak_char*> GetAllEntityTypesNotPlayerUI()
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_u32 Size = ENTITY_TYPE_COUNT-1;
+    ak_fixed_array<const ak_char*> Result = AK_CreateArray(GlobalArena->PushArray<const ak_char*>(Size), Size);    
+    ak_u32 Counter = 0;
+    
+    for(ak_u32 TypeIndex = 0; TypeIndex < ENTITY_TYPE_COUNT; TypeIndex++)
+    {
+        if((entity_type)TypeIndex != ENTITY_TYPE_PLAYER)
+            Result[Counter++] = EntityTypeUI((entity_type)TypeIndex);
+    }
+        
+    return Result;
+}
+
+ak_fixed_array<const ak_char*> GetAllMeshInfoNamesUI(assets* Assets)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_fixed_array<const ak_char*> Result = AK_CreateArray(GlobalArena->PushArray<const ak_char*>(MESH_ASSET_COUNT), MESH_ASSET_COUNT);
+    for(ak_u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)    
+        Result[MeshIndex] = Assets->MeshInfos[MeshIndex].Name;          
+    return Result;
+}
+
+ak_fixed_array<const ak_char*> GetAllTextureInfoNamesUI(assets* Assets)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_fixed_array<const ak_char*> Result = AK_CreateArray(GlobalArena->PushArray<const ak_char*>(TEXTURE_ASSET_COUNT), TEXTURE_ASSET_COUNT);
+    for(ak_u32 TextureIndex = 0; TextureIndex < TEXTURE_ASSET_COUNT; TextureIndex++)    
+        Result[TextureIndex] = Assets->TextureInfos[TextureIndex].Name;          
+    return Result;
+}
+
+void WorldIndexImGui(ak_u32* WorldIndex, const ak_char** WorldIndexList, ak_u32 WorldIndexCount)
+{
+    AlignTextToFramePadding();
+    Text("World Index");
+    SameLine();
+    Combo(AK_HashFunction("World Index"), "", (int*)WorldIndex, WorldIndexList, WorldIndexCount);    
+}
+
+void MeshImGui(assets* Assets, mesh_asset_id* MeshID)
+{
+    ak_fixed_array<const ak_char*> MeshNames = GetAllMeshInfoNamesUI(Assets);
+    AlignTextToFramePadding();
+    Text("Mesh");
+    SameLine();
+    Combo(AK_HashFunction("Mesh"), "", (int*)MeshID, MeshNames.Data, MeshNames.Size);
+}
+
+void MassImGui(ak_f32* Mass)
+{
+    AlignTextToFramePadding();
+    Text("Mass");                    
+    SameLine();
+    DragFloat(AK_HashFunction("Mass"), "", Mass, 0.01f, 1.0f, 10000.0f);
+}
+
+void MaterialImGui(assets* Assets, material* Material)
+{    
+    ak_fixed_array<const ak_char*> TextureNames = GetAllTextureInfoNamesUI(Assets);
+    
+    Text("Material");    
+    {
+        material_diffuse* Diffuse = &Material->Diffuse;
+        
+        AlignTextToFramePadding();
+        Text("Diffuse: "); SameLine(); 
+        AlignTextToFramePadding();
+        Text("Is Texture"); SameLine(); Checkbox(AK_HashFunction("Diffuse Is Texture"), "", &Diffuse->IsTexture); SameLine();
+        if(Diffuse->IsTexture)
+        {
+            AlignTextToFramePadding();
+            Text("Texture");
+            SameLine();
+            Combo(AK_HashFunction("Diffuse Texture"), "", (int*)&Diffuse->DiffuseID, TextureNames.Data, TextureNames.Size);
+        }
+        else
+        {
+            AlignTextToFramePadding();
+            Text("Color");
+            SameLine();
+            ColorEdit3(AK_HashFunction("Diffuse Color"), "", (ak_f32*)&Diffuse->Diffuse, ImGuiColorEditFlags_RGB);
+        }
+    }
+    
+    {
+        material_specular* Specular = &Material->Specular;
+        
+        AlignTextToFramePadding();
+        Text("Specular: "); SameLine();
+        AlignTextToFramePadding();
+        Text("In Use"); SameLine(); Checkbox(AK_HashFunction("Specular In Use"), "", &Specular->InUse); 
+        
+        if(Specular->InUse)
+        {
+            SameLine();
+            AlignTextToFramePadding();
+            Text("Is Texture"); SameLine(); Checkbox(AK_HashFunction("Specular Is Texture"), "", &Specular->IsTexture); SameLine();
+            if(Specular->IsTexture)
+            {
+                AlignTextToFramePadding();
+                Text("Texture");
+                SameLine();
+                Combo(AK_HashFunction("Specular Texture"), "", (int*)&Specular->SpecularID, TextureNames.Data, TextureNames.Size);
+            }
+            else
+            {
+                AlignTextToFramePadding();
+                Text("Value");
+                SameLine();
+                PushItemWidth(60);
+                DragFloat(AK_HashFunction("Specular Color"), "", &Specular->Specular, 0.01f, 0.0f, 1.0f); SameLine();                                
+                PopItemWidth();
+                
+                ak_v3f SpecularDisplay = AK_V3(Specular->Specular, Specular->Specular, Specular->Specular);
+                ColorEdit3("", (ak_f32*)&SpecularDisplay, ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoPicker);                                                                
+            }
+            
+            SameLine();
+            Text("Shininess");
+            PushItemWidth(40);
+            SameLine();
+            DragInt(AK_HashFunction("Specular Shininess"), "", &Specular->Shininess, 0.1f, 1, 512);
+            PopItemWidth();
+        }                                                
+    }                    
+    
+    {
+        material_normal* Normal = &Material->Normal;
+        
+        AlignTextToFramePadding();
+        Text("Normal: "); SameLine();
+        AlignTextToFramePadding();
+        Text("In Use"); SameLine(); Checkbox(AK_HashFunction("Normal In Use"), "", &Normal->InUse);
+        
+        if(Normal->InUse)
+        {
+            SameLine();
+            AlignTextToFramePadding();
+            Text("Texture");
+            SameLine();
+            Combo(AK_HashFunction("Normal Texture"), "", (int*)&Normal->NormalID, TextureNames.Data, TextureNames.Size);
+        }
+    }    
+}
+
+void TranslationImGui(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Translation)
+{
+    Text("Translation");
+    PushItemWidth(ItemWidth);
+        
+    DragFloat(Hash+0, "X", &Translation->x, 0.1f, -1000.0f, 1000.0f); SameLine();                                
+    DragFloat(Hash+1, "Y", &Translation->y, 0.1f, -1000.0f, 1000.0f); SameLine();                                
+    DragFloat(Hash+2, "Z", &Translation->z, 0.1f, -1000.0f, 1000.0f);                                
+    
+    PopItemWidth();
+}
+
+void ScaleImGui(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Scale)
+{
+    Text("Scale");
+    PushItemWidth(ItemWidth);
+        
+    DragFloat(Hash+0, "X", &Scale->x, 0.1f, 0.0f, 100.0f); SameLine();                                
+    DragFloat(Hash+1, "Y", &Scale->y, 0.1f, 0.0f, 100.0f); SameLine();                                
+    DragFloat(Hash+2, "Z", &Scale->z, 0.1f, 0.0f, 100.0f);                 
+    
+    PopItemWidth();
+}
+
+void RadiusImGui(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Radius)
+{
+    Text("Radius");
+    SameLine();
+    PushItemWidth(ItemWidth);
+    DragFloat(Hash, "", Radius, 0.01f, 0.0f, 100.0f);
+    PopItemWidth();
+}
+
+void RestitutionImGui(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Restitution)
+{
+    Text("Restitution");
+    SameLine();
+    PushItemWidth(ItemWidth);
+    DragFloat(Hash, "", Restitution, 0.001f, 0.0f, 1.0f);
+    PopItemWidth();
+}
+
+ak_bool ValidateMaterial(material* Material)
+{
+    if(Material->Diffuse.IsTexture && (Material->Diffuse.DiffuseID >= MESH_ASSET_COUNT))
+    {
+        AK_MessageBoxOk("Entity Create Error", "Material specifies an invalid diffuse texture. Please select a valid one");
+        return false;
+    }
+    else if(Material->Specular.InUse && Material->Specular.IsTexture && (Material->Specular.SpecularID >= TEXTURE_ASSET_COUNT))
+    {
+        AK_MessageBoxOk("Entity Create Error", "Material specifies an invalid specular texture. Please select a valid one");
+        return false;
+    }
+    else if(Material->Normal.InUse && Material->Normal.NormalID >= TEXTURE_ASSET_COUNT)
+    {
+        AK_MessageBoxOk("Entity Create Error", "Material specifies an invalid normal texture. Please select a valid one");
+        return false;
+    }
+    
+    return true;
 }
 
 graphics_texture_id AllocateImGuiFont(graphics* Graphics)
@@ -201,6 +469,178 @@ void DevelopmentFramePlayback(dev_context* DevContext, frame_playback* FramePlay
     FramePlayback->PlaybackState = State;
 }
 
+void DevelopmentEntitySpawner(dev_context* DevContext)
+{
+    if(TreeNode("Entity Spawner"))
+    {                        
+        entity_spawner* Spawner = &DevContext->EntitySpawner;
+        if(!Spawner->Init)
+        {
+            Spawner->Init = true;
+            ClearSpawner(Spawner);                
+        }
+        
+        ak_fixed_array<const ak_char*> EntityTypes = GetAllEntityTypesNotPlayerUI();
+        AlignTextToFramePadding();
+        Text("Entity Type");            
+        SameLine();            
+        
+        entity_type PrevType = Spawner->EntityType;
+        
+        ak_i32 SpawnType = Spawner->EntityType-1;            
+        Combo(AK_HashFunction("Entity Type"), "", (int*)&SpawnType, EntityTypes.Data, EntityTypes.Size);            
+        entity_type Type = (entity_type)(SpawnType+1);
+        
+        if(PrevType != Type)
+        {
+            ClearSpawner(Spawner);
+            Spawner->EntityType = Type;
+        }
+        
+        Separator();                        
+        TranslationImGui(AK_HashFunction("Translation Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Translation);                            
+        
+        switch(Spawner->EntityType)
+        {
+            case ENTITY_TYPE_STATIC:
+            {                    
+                Separator();                    
+                ScaleImGui(AK_HashFunction("Scale Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Scale);                    
+                Separator();
+                
+                {
+                    ak_u32 Hash = AK_HashFunction("Rotation Spawner");
+                    Text("Rotation");
+                    
+                    PushItemWidth(TRANSFORM_ITEM_WIDTH);
+                    
+                    DragFloat(Hash+0, "Axis X", &Spawner->Axis.x, 0.01f, -1, 1); SameLine();
+                    DragFloat(Hash+1, "Axis Y", &Spawner->Axis.y, 0.01f, -1, 1); SameLine();
+                    DragFloat(Hash+2, "Axis Z", &Spawner->Axis.z, 0.01f, -1, 1); SameLine();
+                    DragAngle(Hash+3, "Angle", &Spawner->Angle,   0.1f, -180.0f, 180.0f);
+                    
+                    Spawner->Axis = AK_Normalize(Spawner->Axis);                                                                        
+                    
+                    PopItemWidth();
+                }
+                
+                Separator();                    
+                const ak_char* WorldIndexList[] = {"World A", "World B", "Both"}; 
+                WorldIndexImGui(&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));                    
+                Separator();                    
+                MeshImGui(DevContext->Game->Assets, &Spawner->MeshID);                    
+                Separator();                    
+                MaterialImGui(DevContext->Game->Assets, &Spawner->Material);
+                Separator();
+                
+                if(Button(AK_HashFunction("Create Entity Button"), "Create"))
+                {
+                    if(ValidateMaterial(&Spawner->Material))                        
+                    {
+                        if(Spawner->WorldIndex == 2)
+                        {
+                            dual_entity_id IDs = CreateDualStaticEntity(DevContext->Game, Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle),
+                                                                        Spawner->MeshID, Spawner->Material);
+                            
+                            if(DevContext->Game->CurrentWorldIndex == IDs.EntityA.WorldIndex)
+                                DevContext->SelectedObjectID = IDs.EntityA;
+                            else
+                                DevContext->SelectedObjectID = IDs.EntityB;
+                        }
+                        else
+                        {                            
+                            entity_id ID = CreateStaticEntity(DevContext->Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle), 
+                                                              Spawner->MeshID, Spawner->Material);
+                            if(ID.WorldIndex == DevContext->Game->CurrentWorldIndex)
+                                DevContext->SelectedObjectID = ID;
+                        }
+                    }
+                }
+            } break;
+            
+            case ENTITY_TYPE_RIGID_BODY:
+            {
+                Separator();          
+                RadiusImGui(AK_HashFunction("Radius Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Radius);
+                Separator();
+                RestitutionImGui(AK_HashFunction("Restitution Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Restitution);
+                Separator();
+                const ak_char* WorldIndexList[] = {"World A", "World B"};
+                WorldIndexImGui(&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));                    
+                Separator();
+                MassImGui(&Spawner->Mass);
+                Separator();
+                MaterialImGui(DevContext->Game->Assets, &Spawner->Material);
+                Separator();                    
+                
+                
+                if(Button(AK_HashFunction("Create Entity Button"), "Create"))
+                {
+                    if(ValidateMaterial(&Spawner->Material))                        
+                    {
+                        entity_id ID = CreateSphereRigidBody(DevContext->Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius, 
+                                                             Spawner->Mass, Spawner->Restitution, Spawner->Material);
+                        if(ID.WorldIndex == DevContext->Game->CurrentWorldIndex)
+                            DevContext->SelectedObjectID = ID;
+                    }
+                }
+            } break;
+            
+            case ENTITY_TYPE_PUSHABLE:
+            {
+                Separator();
+                RadiusImGui(AK_HashFunction("Radius Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Radius);
+                Separator();
+                const ak_char* WorldIndexList[] = {"World A", "World B", "Both", "Linked"};
+                WorldIndexImGui(&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+                Separator();
+                MassImGui(&Spawner->Mass);
+                Separator();
+                MaterialImGui(DevContext->Game->Assets, &Spawner->Material);
+                Separator();
+                
+                if(Button(AK_HashFunction("Create Entity Button"), "Create"))
+                {
+                    if(ValidateMaterial(&Spawner->Material))
+                    {
+                        if(Spawner->WorldIndex == 2)
+                        {
+                            entity_id A = CreatePushableBox(DevContext->Game, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);
+                            entity_id B = CreatePushableBox(DevContext->Game, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);
+                            
+                            if(DevContext->Game->CurrentWorldIndex == 0)
+                                DevContext->SelectedObjectID = A;
+                            else
+                                DevContext->SelectedObjectID = B;
+                        }
+                        else if(Spawner->WorldIndex == 3)
+                        {
+                            dual_entity_id IDs = CreateDualPushableBox(DevContext->Game, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);
+                            if(IDs.EntityA.WorldIndex == DevContext->Game->CurrentWorldIndex)
+                                DevContext->SelectedObjectID = IDs.EntityA;
+                            else
+                                DevContext->SelectedObjectID = IDs.EntityB;
+                        }
+                        else
+                        {
+                            entity_id ID = CreatePushableBox(DevContext->Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);
+                            if(ID.WorldIndex == DevContext->Game->CurrentWorldIndex)
+                                DevContext->SelectedObjectID = ID;
+                        }
+                    }
+                }
+            } break;
+            
+            AK_INVALID_DEFAULT_CASE;
+        }
+        
+        TreePop();
+    }                
+    
+    Separator();       
+    Separator();    
+}
+
 void DevelopmentImGuiUpdate(dev_context* DevContext)
 {
     graphics* Graphics = DevContext->Graphics;
@@ -216,7 +656,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
 #endif
     
     SetNextWindowPos(ImVec2(0, 0));
-    SetNextWindowSize(ImVec2((ak_f32)Graphics->RenderDim.x/3.0f, (ak_f32)Graphics->RenderDim.y));    
+    //SetNextWindowSize(ImVec2((ak_f32)Graphics->RenderDim.x/3.0f, (ak_f32)Graphics->RenderDim.y));    
     
     local bool open = true;
     Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize);    
@@ -252,7 +692,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     AlignTextToFramePadding();
     Text("View Modes");
     SameLine();
-    Combo("", (int*)&DevContext->ViewModeType, ViewModeTypes, AK_Count(ViewModeTypes));
+    Combo(AK_HashFunction("ViewModes"), "", (int*)&DevContext->ViewModeType, ViewModeTypes, AK_Count(ViewModeTypes));
     
     const char* TransformTypes[] = {"Translate", "Scale", "Rotate"};
     AlignTextToFramePadding();
@@ -317,12 +757,8 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     
     if(CollapsingHeader("Entity Tool", ImGuiTreeNodeFlags_DefaultOpen))
     {        
-        if(TreeNode("Entity Spawner"))
-        {
-             
-            TreePop();
-        }                
-                
+        DevelopmentEntitySpawner(DevContext);
+        
         Text("Entity Information");
         if(DevContext->SelectedObjectID.IsValid())
         {   
@@ -331,43 +767,25 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
             
             ak_array<ak_v3f>* EntityRotations = &DevContext->EntityRotations[DevContext->SelectedObjectID.WorldIndex];            
             ak_u32 Index = AK_PoolIndex(DevContext->SelectedObjectID.ID);
-            if(Index > EntityRotations->Size)
-                EntityRotations->Resize(Index);                        
+            if((Index+1) > EntityRotations->Size)
+                EntityRotations->Resize(Index+1);                        
             
             ak_v3f Translation = Transform->Translation;            
             ak_v3f Scale = Transform->Scale;
             ak_v3f Rotation = EntityRotations->Entries[Index];            
             
-            ak_f32 TransformItemWidth = 80;
-            
-            {
-                ak_u32 Hash = AK_HashFunction("Translation");
-                Text("Translation");                
-                PushItemWidth(TransformItemWidth);
-                
-                DragFloat(Hash+0, "X", &Translation.x, 0.1f, -1000.0f, 1000.0f); SameLine();                                
-                DragFloat(Hash+1, "Y", &Translation.y, 0.1f, -1000.0f, 1000.0f); SameLine();                                
-                DragFloat(Hash+2, "Z", &Translation.z, 0.1f, -1000.0f, 1000.0f);                            
-                
-                PopItemWidth();
+            {                
+                TranslationImGui(AK_HashFunction("Edit Translation"), TRANSFORM_ITEM_WIDTH, &Translation);                                
             }
             
             {
-                ak_u32 Hash = AK_HashFunction("Scale");
-                Text("Scale");
-                PushItemWidth(TransformItemWidth);
-                
-                DragFloat(Hash+0, "X", &Scale.x, 0.1f, 0.0f, 100.0f); SameLine();                                
-                DragFloat(Hash+1, "Y", &Scale.y, 0.1f, 0.0f, 100.0f); SameLine();                                
-                DragFloat(Hash+2, "Z", &Scale.z, 0.1f, 0.0f, 100.0f);                 
-                
-                PopItemWidth();
+                ScaleImGui(AK_HashFunction("Edit Scale"), TRANSFORM_ITEM_WIDTH, &Scale);                
             }
             
             {
-                ak_u32 Hash = AK_HashFunction("Rotation");
+                ak_u32 Hash = AK_HashFunction("Edit Rotation");
                 Text("Rotation");
-                PushItemWidth(TransformItemWidth);
+                PushItemWidth(TRANSFORM_ITEM_WIDTH);
                 
                 DragAngle(Hash+0, "X", &Rotation.x, 0.1f, -180.0f, 180.0f); SameLine();
                 DragAngle(Hash+1, "Y", &Rotation.y, 0.1f, -180.0f, 180.0f); SameLine();
@@ -385,7 +803,10 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 ObjectVelocity = RigidBody->Velocity;            
             
             Text("Velocity: (%.2f, %.2f, %.2f)", ObjectVelocity.x, ObjectVelocity.y, ObjectVelocity.z);
-            Text("Type: %s", EntityTypeUI(Entity->Type));                        
+            Text("Type: %s", EntityTypeUI(Entity->Type));       
+            
+            material Material = Entity->Material;
+            MaterialImGui(DevContext->Game->Assets, &Material);
             
             if(DevContext->EditMode)
             {                                
@@ -393,6 +814,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
                 Transform->Scale = Scale;
                 DevelopmentUpdateSelectedObjectRotation(Transform, EntityRotations->Get(Index), Rotation);
                 SimEntity->Transform = *Transform;
+                
+                if(ValidateMaterial(&Material))
+                    Entity->Material = Material;
             }
             
         }
