@@ -258,7 +258,8 @@ struct dev_context
     ak_array<ak_v3f> EntityRotations[2];
     gizmo Gizmo[6];
     gizmo_hit GizmoHit;
-    gizmo_movement_type TransformationMode;    
+    gizmo_movement_type TransformationMode;
+    ak_f32 GridDistance;
 };
 
 void Platform_InitImGui(void* PlatformData);

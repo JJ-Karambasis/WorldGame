@@ -286,35 +286,39 @@ void DrawEdge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Color)
 
 void DrawGrid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color)
 {
-    int GridLinesDraw = 0;
-    for(ak_i32 x = xLeftBound; x <= xRightBound; x++)
+    for(ak_f32 x = 0; x <= xRightBound; x+=DevContext->GridDistance)
     {
         if(x != 0)
         {
-            DrawEdge(DevContext, AK_V3f(x, yTopBound, 0), AK_V3f(x, yBottomBound, 0), Color);
-            GridLinesDraw++;
-        }
-        else
-        {
-            DrawEdge(DevContext, AK_V3f(x, yTopBound, 0), AK_V3f(x, yBottomBound, 0), AK_Green3());
-            GridLinesDraw++;
+            DrawEdge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), Color);
         }
     }
-    
-    for(ak_i32 y = yTopBound; y <= yBottomBound; y++)
+    for(ak_f32 x = 0; x >= xLeftBound; x-=DevContext->GridDistance)
+    {
+        if(x != 0)
+        {
+            DrawEdge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), Color);
+        }
+    }
+
+    for(ak_f32 y = 0; y <= yBottomBound; y+=DevContext->GridDistance)
     {
         if(y != 0)
         {
-            DrawEdge(DevContext, AK_V3f(xLeftBound, y, 0), AK_V3f(xRightBound, y, 0), Color);
-            GridLinesDraw++;
-        }
-        else
-        {            
-            DrawEdge(DevContext, AK_V3f(xLeftBound, y, 0), AK_V3f(xRightBound, y, 0), AK_Red3());
-            GridLinesDraw++;
+            DrawEdge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), Color);
         }
     }
-    DebugLog(DevContext, "Draw %d GridLines", GridLinesDraw);
+
+    for(ak_f32 y = 0; y >= yTopBound; y-=DevContext->GridDistance)
+    {
+        if(y != 0)
+        {
+            DrawEdge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), Color);
+        }
+    }
+    
+    DrawEdge(DevContext, AK_V3f(0.0f, (ak_f32)yTopBound, 0.0f), AK_V3f(0.0f, (ak_f32)yBottomBound, 0.0f), AK_Green3());
+    DrawEdge(DevContext, AK_V3f((ak_f32)xLeftBound, 0.0f, 0.0f), AK_V3f((ak_f32)xRightBound, 0.0f, 0.0f), AK_Red3());
 }
 
 void DrawSphere(dev_context* DevContext, ak_v3f CenterP, ak_f32 Radius, ak_color3f Color)
@@ -1323,7 +1327,7 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
             }
             
             DrawGrid(DevContext, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
-        }       
+        }
     }
     
     DevelopmentImGuiRender(DevContext);  
@@ -1355,6 +1359,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         //DevContext->DrawGrid = true;
         //DevContext->DrawColliders = true;      
         //DevContext->EditMode = true;  
+        DevContext->GridDistance = 1.0f;
         
         for(ak_u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
             DevContext->MeshConvexHulls[MeshIndex].Count = (ak_u32)-1;

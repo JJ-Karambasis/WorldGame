@@ -703,7 +703,11 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    
     Checkbox("Draw colliders", (bool*)&DevContext->DrawColliders);    
-    Checkbox("Draw Grid", (bool*)&DevContext->DrawGrid);  
+    Checkbox("Draw Grid", (bool*)&DevContext->DrawGrid);
+    if(DevContext->DrawGrid)
+    {
+        DragFloat("GridSize", &DevContext->GridDistance, 0.1f, 0.1f, 10);
+    }  
     Checkbox("Edit Mode", (bool*)&DevContext->EditMode);  
     
     local ak_bool Open = true;
