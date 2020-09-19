@@ -210,7 +210,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     
     //IMPORTANT(EVERYONE): If you need help figuring out how to use ImGui you can always switch this to 1 and look at the imgui demo window
     //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start
-#if 1 
+#if SHOW_IMGUI_DEMO_WINDOW
     local bool demo_window;
     ShowDemoWindow(&demo_window);
 #endif
@@ -319,7 +319,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     {        
         if(TreeNode("Entity Spawner"))
         {
-            
+             
             TreePop();
         }                
                 

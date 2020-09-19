@@ -39,8 +39,8 @@ inline camera_transform
 GetCameraTransform(game_camera* Camera)
 {
     camera_transform Result = {};
-    Result.Translation = Camera->Target+AK_SphericalToCartesian(Camera->SphericalCoordinates);
-    Result.Orientation = AK_Basis(AK_Normalize(Result.Translation-Camera->Target));       
+    Result.Translation = Camera->Target+AK_SphericalToCartesian(Camera->SphericalCoordinates);    
+    Result.Orientation = AK_OrientAt(Result.Translation, Camera->Target);       
     return Result;
 }
 

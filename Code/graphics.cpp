@@ -513,12 +513,12 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
         
         ak_m4f LightViewProjections[6] = 
         {
-            AK_LookAt(PointLight->Position, PointLight->Position + AK_XAxis())*LightPerspective,
-            AK_LookAt(PointLight->Position, PointLight->Position - AK_XAxis())*LightPerspective,
-            AK_LookAt(PointLight->Position, PointLight->Position + AK_YAxis())*LightPerspective,
-            AK_LookAt(PointLight->Position, PointLight->Position - AK_YAxis())*LightPerspective,
-            AK_LookAt(PointLight->Position, PointLight->Position + AK_ZAxis())*LightPerspective,
-            AK_LookAt(PointLight->Position, PointLight->Position - AK_ZAxis())*LightPerspective
+            AK_LookAt(PointLight->Position, PointLight->Position + AK_XAxis(), AK_YAxis())*LightPerspective,
+            AK_LookAt(PointLight->Position, PointLight->Position - AK_XAxis(), AK_YAxis())*LightPerspective,
+            AK_LookAt(PointLight->Position, PointLight->Position + AK_YAxis(), AK_ZAxis())*LightPerspective,
+            AK_LookAt(PointLight->Position, PointLight->Position - AK_YAxis(), AK_ZAxis())*LightPerspective,
+            AK_LookAt(PointLight->Position, PointLight->Position + AK_ZAxis(), AK_YAxis())*LightPerspective,
+            AK_LookAt(PointLight->Position, PointLight->Position - AK_ZAxis(), AK_YAxis())*LightPerspective
         };
         
         PushViewPosition(Graphics, PointLight->Position);
