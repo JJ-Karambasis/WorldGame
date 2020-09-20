@@ -262,6 +262,8 @@ struct dev_context
     gizmo_hit GizmoHit;
     gizmo_movement_type TransformationMode;
     ak_f32 GridDistance;
+    ak_f32 ScaleSnapTo;
+    ak_f32 RotationSnapTo;
 };
 
 void Platform_InitImGui(void* PlatformData);

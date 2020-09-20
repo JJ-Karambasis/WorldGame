@@ -1173,28 +1173,43 @@ ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Gra
         }
     }
 
-    if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_TRANSLATE)
+    ak_f32 SnapTo = DevContext->GridDistance;
+    if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_SCALE)
     {
-        if(IsDown(DevContext->Input.Ctl))
+        SnapTo = DevContext->ScaleSnapTo;
+    }
+    else if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_ROTATE)
+    {
+        SnapTo = AK_ToRadians(DevContext->RotationSnapTo);
+    }
+
+    if(IsDown(DevContext->Input.Ctl))
         {
             for(int i = 0; i < 3; i++)
             {
-                if(AK_Abs(Result[i]) < DevContext->GridDistance && Result[i] != 0 )
+                if(AK_Abs(Result[i]) < SnapTo && Result[i] != 0 )
                 {
-                    NewPoint[i] = DevContext->GizmoHit.HitMousePosition[i];
-                    Result[i] = 0.0f;
+                    if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
+                    {
+                        NewPoint[i] = DevContext->GizmoHit.HitMousePosition[i];
+                        Result[i] = 0.0f;
+                    }
+                    else
+                    {
+                        NewPoint = DevContext->GizmoHit.HitMousePosition;
+                        Result = AK_V3f(0.0f, 0.0f, 0.0f);
+                    }
                 }
                 else if(Result[i] < 0)
                 {
-                    Result[i] = -1 * DevContext->GridDistance;
+                    Result[i] = -1 * SnapTo;
                 }
                 else if(Result[i] > 0)
                 {
-                    Result[i] = DevContext->GridDistance;
+                    Result[i] = SnapTo;
                 }
             }
         }
-    }
 
     DevContext->GizmoHit.HitMousePosition = NewPoint;
     return Result;
@@ -1433,6 +1448,8 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         //DevContext->DrawColliders = true;      
         //DevContext->EditMode = true;  
         DevContext->GridDistance = 1.0f;
+        DevContext->ScaleSnapTo = 1.0f;
+        DevContext->RotationSnapTo = 90.0f;
         
         for(ak_u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)
             DevContext->MeshConvexHulls[MeshIndex].Count = (ak_u32)-1;

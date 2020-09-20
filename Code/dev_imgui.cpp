@@ -708,6 +708,14 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     Text("Object Transform Mode");
     SameLine();
     Combo(AK_HashFunction("Object Transform Mode"), "", (int*)&DevContext->TransformationMode, TransformTypes, AK_Count(TransformTypes));
+    if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_SCALE)
+    {
+        DragFloat("Scale SnapTo", &DevContext->ScaleSnapTo, 0.1f, 0.1f, 10.0f);
+    }
+    if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_ROTATE)
+    {
+        DragFloat("Rotate SnapTo", &DevContext->RotationSnapTo, 0.1f, 0.1f, 180.0f);
+    }
    
     Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    
