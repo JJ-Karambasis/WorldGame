@@ -53,7 +53,7 @@ void LoadTestLevel(game* Game)
         
         Game->PrevCameras[WorldIndex] = *Camera;
     }
-        
+    
     CreateDualStaticEntity(Game, AK_V3(0.0f, 0.0f, -0.01f), AK_V3(10.0f, 10.0f, 0.01f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.0f)),  MESH_ASSET_ID_BOX,   Global_Material0);
     CreateDualStaticEntity(Game, AK_V3(-6.2f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.1f)),  MESH_ASSET_ID_BOX,   Global_Material0);
     CreateDualStaticEntity(Game, AK_V3(-3.0f, -4.5f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_EulerToQuat(AK_V3(0.0f, 0.0f, AK_PI*0.25f)), MESH_ASSET_ID_BOX,   Global_Material0);
@@ -103,7 +103,7 @@ AK_EXPORT GAME_INITIALIZE(Initialize)
     return Game;
 }
 
-void AddRigidBodyContacts(simulation* Simulation, rigid_body* RigidBody, sim_entity* SimEntity, entity_type TypeB, contact_list ContactList)
+void AddRigidBodyContacts(game* Game, simulation* Simulation, rigid_body* RigidBody, sim_entity* SimEntity, entity_type TypeB, contact_list ContactList)
 {
     switch(TypeB)
     {
@@ -122,7 +122,7 @@ void AddRigidBodyContacts(simulation* Simulation, rigid_body* RigidBody, sim_ent
         
         case ENTITY_TYPE_PUSHABLE:
         {
-            pushing_object* PushingObject = GetUserData(GetUserData(SimEntity, entity), pushing_object);
+            pushing_object* PushingObject = GetPushingObject(Game, GetUserData(SimEntity, entity));
             if(PushingObject->PlayerID.IsValid())
             {
                 Simulation->AddContactConstraints(RigidBody, SimEntity->ToRigidBody(), ContactList);
@@ -268,7 +268,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                 {
                     Simulation->AddConstraint(RigidBody, NULL, LockConstraint);
                     
-                    pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+                    pushing_object* PushingObject = GetPushingObject(Game, Entity);
                     if(PushingObject->PlayerID.IsValid())
                     {                                                                           
                         RigidBody->LinearDamping = AK_V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
@@ -308,12 +308,12 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                 {                                
                     if(TypeA == ENTITY_TYPE_RIGID_BODY)
                     {
-                        AddRigidBodyContacts(Simulation, Pair->SimEntityA->ToRigidBody(), Pair->SimEntityB, TypeB, ContactList);                    
+                        AddRigidBodyContacts(Game, Simulation, Pair->SimEntityA->ToRigidBody(), Pair->SimEntityB, TypeB, ContactList);                    
                     }
                     else if(TypeB == ENTITY_TYPE_RIGID_BODY)
                     {                    
                         ContactList.FlipNormals();
-                        AddRigidBodyContacts(Simulation, Pair->SimEntityB->ToRigidBody(), Pair->SimEntityA, TypeA, ContactList);
+                        AddRigidBodyContacts(Game, Simulation, Pair->SimEntityB->ToRigidBody(), Pair->SimEntityA, TypeA, ContactList);
                     }                
                 }
             }
@@ -349,7 +349,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                     ak_v3f StartPosition = RigidBody->Transform.Translation;                                                            
                     HandleSlidingCollisions(Simulation, RigidBody);                                        
                     
-                    pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+                    pushing_object* PushingObject = GetPushingObject(Game, Entity);
                     if(PushingObject->PlayerID.IsValid())
                     {
                         entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
@@ -418,7 +418,7 @@ AK_EXPORT GAME_TICK(Tick)
     
     AK_SetGlobalArena(Game->TempStorage);
     ak_f32 dt = Game->dt;
-        
+    
     input* Input = Game->Input;
     
     ak_v2f MoveDirection = {};    
@@ -523,7 +523,7 @@ AK_EXPORT GAME_TICK(Tick)
                     
                     case ENTITY_TYPE_PUSHABLE:
                     {
-                        pushing_object* PushingObject = GetUserData(Entity, pushing_object);
+                        pushing_object* PushingObject = GetPushingObject(Game, Entity);
                         if(PushingObject->PlayerID.IsValid())
                         {
                             entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);

@@ -50,6 +50,7 @@ void FreeEntity(game* Game, entity_id ID)
     Simulation->DeleteSimEntity(GetEntity(Game, ID)->SimEntityID);        
     
     entity* Entity = Game->EntityStorage[ID.WorldIndex].Get(ID.ID);
+    
     if(Entity->LinkID.IsValid())
     {
         entity* LinkEntity = Game->EntityStorage[Entity->LinkID.WorldIndex].Get(Entity->LinkID.ID);
@@ -58,6 +59,25 @@ void FreeEntity(game* Game, entity_id ID)
     }
     
     Game->EntityStorage[ID.WorldIndex].Free(ID.ID);    
+}
+
+ak_u64 CreatePushingObject(game* Game)
+{
+    ak_u64 Result = Game->PushingObjectStorage.Allocate();
+    pushing_object* PushingObject = Game->PushingObjectStorage.Get(Result);
+    PushingObject->ID = Result;
+    return Result;
+}
+
+void DeletePushingObject(game* Game, ak_u64 ID)
+{
+    Game->PushingObjectStorage.Free(ID);
+}
+
+pushing_object* GetPushingObject(game* Game, entity* Entity)
+{
+    AK_Assert(Entity->Type == ENTITY_TYPE_PUSHABLE, "Cannot get a pushing object of an entity that is not a pushing object");
+    return Game->PushingObjectStorage.Get((ak_u64)Entity->UserData);
 }
 
 entity_id
@@ -136,7 +156,7 @@ CreatePlayerEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_quatf Orie
     simulation* Simulation = GetSimulation(Game, WorldIndex);
     entity* Entity = GetEntity(Game, Result);                
     
-    player* Player = Game->GameStorage->Push<player>();
+    player* Player = Game->Players + WorldIndex;
     Entity->UserData = Player;
     
     rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
@@ -180,7 +200,7 @@ CreatePushableBox(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensi
     entity_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, 
                                     Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, Material, false);        
     entity* Entity = GetEntity(Game, Result);
-    Entity->UserData = Game->GameStorage->Push<pushing_object>();
+    Entity->UserData = (void*)CreatePushingObject(Game);
     
     simulation* Simulation = GetSimulation(Game, WorldIndex);                
     rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
@@ -224,4 +244,44 @@ GetEntityType(game* Game, entity_id ID)
     return Game->EntityStorage[ID.WorldIndex].Get(ID.ID)->Type;
 }
 
+inline ak_bool CanBePushed(ak_v2f MoveDirection, ak_v2f ObjectDirection)
+{            
+    ak_bool Result = AK_Dot(ObjectDirection, MoveDirection) > 0.98f;
+    return Result;
+}
+
+COLLISION_EVENT(OnPlayerCollision)
+{
+    player* Player = GetUserData(Entity, player);
+    simulation* Simulation = GetSimulation(Game, Entity->ID);        
+    
+    switch(Player->State)
+    {
+        case PLAYER_STATE_JUMPING:
+        {
+            Player->State = PLAYER_STATE_NONE;            
+        } break;
+        
+        case PLAYER_STATE_NONE:
+        {   
+            if(CollidedEntity->Type == ENTITY_TYPE_PUSHABLE)
+            {
+                rigid_body* PlayerRigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+                
+                ak_v2f N = AK_Normalize(Normal.xy);                
+                ak_v2f MoveDirection = AK_Normalize(PlayerRigidBody->Acceleration.xy);
+                if(CanBePushed(MoveDirection, N))                
+                {                    
+                    Player->State = PLAYER_STATE_PUSHING;
+                    pushing_object* PushingObject = GetPushingObject(Game, CollidedEntity);
+                    PushingObject->PlayerID = Entity->ID;                    
+                    PushingObject->Direction = N;
+                    
+                    PlayerRigidBody->Velocity = {};
+                }                     
+            }
+            
+        } break;
+    }                
+}
 #include "player.cpp"

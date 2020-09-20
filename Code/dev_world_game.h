@@ -230,7 +230,7 @@ struct dev_context
     ak_u32 ImGuiMeshCount;
     ak_i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
-    dev_capsule_mesh LineCapsuleMesh;
+    dev_capsule_mesh LineCapsuleMesh;        
     
     dev_mesh PlaneMesh;
     dev_mesh LineBoxMesh;

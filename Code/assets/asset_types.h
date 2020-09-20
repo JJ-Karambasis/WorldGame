@@ -1,14 +1,14 @@
 #ifndef ASSET_TYPES_H
 #define ASSET_TYPES_H
 
-global const char ASSET_SIGNATURE[] = "WGASSET";
+global const ak_char ASSET_SIGNATURE[] = "WGASSET";
 global const ak_u16 ASSET_MAJOR_VERSION = 1;
 global const ak_u16 ASSET_MINOR_VERSION = 1;
 
 #pragma pack(push, 1)
 struct asset_header
 {
-    char Signature[AK_Count(ASSET_SIGNATURE)];
+    ak_char Signature[AK_Count(ASSET_SIGNATURE)];
     ak_u16 MajorVersion;
     ak_u16 MinorVersion;
     ak_u32 MeshCount;

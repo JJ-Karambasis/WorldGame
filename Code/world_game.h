@@ -30,6 +30,7 @@ struct jumping_quad
 
 #include "simulation/simulation.h"
 #include "entity.h"
+#include "world_loader.h"
 
 struct goal_rect
 {
@@ -55,6 +56,7 @@ struct block_puzzle
 };
 
 typedef ak_pool<entity> entity_storage;
+typedef ak_pool<pushing_object> pushing_object_storage;
 
 struct game
 {                    
@@ -62,6 +64,8 @@ struct game
     ak_arena* TempStorage;
     
     ak_u32 CurrentWorldIndex;
+    player Players[2];    
+    pushing_object_storage PushingObjectStorage;    
     
     //This stuff is probably going to be our level data    
     entity_storage EntityStorage[2];    

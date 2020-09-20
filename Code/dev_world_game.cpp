@@ -1,5 +1,6 @@
 /* Original Author: Armand (JJ) Karambasis */
 #include "dev_imgui.cpp"
+#include "world_loader.cpp"
 
 graphics_mesh_id AllocateConvexHullMesh(graphics* Graphics, convex_hull* ConvexHull)
 {

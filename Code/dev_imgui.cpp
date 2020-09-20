@@ -781,7 +781,24 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     }
     
     if(CollapsingHeader("Entity Tool", ImGuiTreeNodeFlags_DefaultOpen))
-    {        
+    {           
+        if(Button("Save World"))
+        {
+        }
+        
+        SameLine();
+        if(Button("Save World As"))
+        {
+        }
+        
+        SameLine();        
+        if(Button("Load World"))
+        {
+        }
+        
+        Separator();
+        Separator();
+        
         DevelopmentEntitySpawner(DevContext);
         
         Text("Entity Information");
