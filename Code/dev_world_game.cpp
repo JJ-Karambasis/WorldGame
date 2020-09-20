@@ -688,6 +688,24 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
     }
     
     {
+        gizmo Gizmo;
+        Gizmo.Mesh = nullptr;
+        DevContext->Gizmo[3] =  Gizmo;
+    }
+
+    {
+        gizmo Gizmo;
+        Gizmo.Mesh = nullptr;
+        DevContext->Gizmo[4] =  Gizmo;
+    }
+
+    {
+        gizmo Gizmo;
+        Gizmo.Mesh = nullptr;
+        DevContext->Gizmo[5] =  Gizmo;
+    }
+
+    {
         ak_v3f X, Y, Z;
         Z = AK_ZAxis();
         AK_Basis(Z, &X, &Y);
