@@ -1173,6 +1173,30 @@ ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Gra
         }
     }
 
+    if(DevContext->TransformationMode == GIZMO_MOVEMENT_TYPE_TRANSLATE)
+    {
+        if(IsDown(DevContext->Input.Ctl))
+        {
+            for(int i = 0; i < 3; i++)
+            {
+                if(AK_Abs(Result[i]) < DevContext->GridDistance && Result[i] != 0 )
+                {
+                    NewPoint = DevContext->GizmoHit.HitMousePosition;
+                    Result = AK_V3f(0.0f, 0.0f, 0.0f);
+                    break;
+                }
+                else if(Result[i] < 0)
+                {
+                    Result[i] = -1 * DevContext->GridDistance;
+                }
+                else if(Result[i] > 0)
+                {
+                    Result[i] = DevContext->GridDistance;
+                }
+            }
+        }
+    }
+
     DevContext->GizmoHit.HitMousePosition = NewPoint;
     return Result;
 }
