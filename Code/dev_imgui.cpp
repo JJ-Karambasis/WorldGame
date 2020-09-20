@@ -716,6 +716,10 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     if(DevContext->DrawGrid)
     {
         DragFloat("GridSize", &DevContext->GridDistance, 0.1f, 0.1f, 10);
+        if(DevContext->GridDistance < 0.1f)
+        {
+            DevContext->GridDistance = 0.1f;
+        }
     }  
     Checkbox("Edit Mode", (bool*)&DevContext->EditMode);  
     
