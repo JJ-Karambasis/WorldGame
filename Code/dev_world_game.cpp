@@ -1181,9 +1181,8 @@ ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Gra
             {
                 if(AK_Abs(Result[i]) < DevContext->GridDistance && Result[i] != 0 )
                 {
-                    NewPoint = DevContext->GizmoHit.HitMousePosition;
-                    Result = AK_V3f(0.0f, 0.0f, 0.0f);
-                    break;
+                    NewPoint[i] = DevContext->GizmoHit.HitMousePosition[i];
+                    Result[i] = 0.0f;
                 }
                 else if(Result[i] < 0)
                 {
