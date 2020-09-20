@@ -568,7 +568,7 @@ void UpdateRenderBuffer(graphics_render_buffer** RenderBuffer, graphics* Graphic
     if((*RenderBuffer)->Resolution != RenderDim)
     {
         Graphics->FreeRenderBuffer(Graphics, *RenderBuffer);
-        *RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, Graphics->RenderDim);
+        *RenderBuffer = Graphics->AllocateRenderBuffer(Graphics, RenderDim);
     }
 }
 

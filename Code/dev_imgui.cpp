@@ -707,7 +707,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     AlignTextToFramePadding();
     Text("Object Transform Mode");
     SameLine();
-    Combo("TransformMode", (int*)&DevContext->TransformationMode, TransformTypes, AK_Count(TransformTypes));
+    Combo(AK_HashFunction("Object Transform Mode"), "", (int*)&DevContext->TransformationMode, TransformTypes, AK_Count(TransformTypes));
    
     Checkbox("Mute", (bool*)&Game->AudioOutput->Mute);    
     Checkbox("Draw Other World", (bool*)&DevContext->DrawOtherWorld);    
