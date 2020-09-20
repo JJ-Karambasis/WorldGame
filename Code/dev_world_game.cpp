@@ -1332,16 +1332,38 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
 
         if(IntersectedCount != 0)
         {
-            ak_f32 MinX = FrustumPlaneIntersectionPoints[0].x;
-            ak_f32 MaxX = FrustumPlaneIntersectionPoints[0].x;
-            ak_f32 MinY = FrustumPlaneIntersectionPoints[0].y;
-            ak_f32 MaxY = FrustumPlaneIntersectionPoints[0].y;
-            for(int i = 0; i < 4; i++)
+            //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
+            ak_f32 MinX;
+            ak_f32 MaxX;
+            ak_f32 MinY;
+            ak_f32 MaxY;
+            if(IntersectedCount == 4)
             {
-                MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
-                MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
-                MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
-                MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+                MinX = FrustumPlaneIntersectionPoints[0].x;
+                MaxX = FrustumPlaneIntersectionPoints[0].x;
+                MinY = FrustumPlaneIntersectionPoints[0].y;
+                MaxY = FrustumPlaneIntersectionPoints[0].y;
+                for(int i = 0; i < 4; i++)
+                {
+                    MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
+                    MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
+                    MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
+                    MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+                }
+            }
+            else
+            {
+                MinX = FrustumCorners[0].x;
+                MaxX = FrustumCorners[0].x;
+                MinY = FrustumCorners[0].y;
+                MaxY = FrustumCorners[0].y;
+                for(int i = 0; i < 8; i++)
+                {
+                    MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
+                    MaxX = AK_Max(FrustumCorners[i].x, MaxX);
+                    MinY = AK_Min(FrustumCorners[i].y, MinY);
+                    MaxY = AK_Max(FrustumCorners[i].y, MaxY);
+                }
             }
             
             DrawGrid(DevContext, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
