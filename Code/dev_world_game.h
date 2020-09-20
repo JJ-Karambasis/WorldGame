@@ -54,7 +54,7 @@ struct dev_input
 {
     union
     {
-        button Buttons[8];
+        button Buttons[9];
         struct
         {
             button ToggleDevState;
@@ -65,6 +65,7 @@ struct dev_input
             button E;
             button R;            
             button Delete;
+            button Ctl;
         };
     };
     
@@ -241,6 +242,7 @@ struct dev_context
     dev_mesh TriangleArrowMesh;
     dev_mesh TriangleCircleMesh;
     dev_mesh TriangleScaleMesh;
+    dev_mesh TriangleTorusMesh;
     
     ak_array<debug_primitive> DebugPrimitives;
     

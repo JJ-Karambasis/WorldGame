@@ -63,6 +63,16 @@ void CreateDevTriangleCircleMesh(dev_context* DevContext, ak_u16 CircleSampleCou
     DevContext->TriangleCircleMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);        
 }
 
+void CreateDevTriangleTorusMesh(dev_context* DevContext, ak_u16 CircleSampleCount, ak_f32 Width)
+{
+    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleTorus(DevContext->DevStorage, 1.0f, Width, CircleSampleCount);        
+    DevContext->TriangleTorusMesh.IndexCount = MeshGenerationResult.IndexCount;
+    DevContext->TriangleTorusMesh.Indices = MeshGenerationResult.Indices;
+    DevContext->TriangleTorusMesh.VertexCount = MeshGenerationResult.VertexCount;
+    DevContext->TriangleTorusMesh.Vertices = MeshGenerationResult.Vertices;
+    DevContext->TriangleTorusMesh.MeshID = AllocateMesh(DevContext->Graphics, &MeshGenerationResult);        
+}
+
 void CreateDevLineBoxMesh(dev_context* DevContext)
 {
     ak_arena* GlobalArena = AK_GetGlobalArena();
@@ -666,7 +676,7 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
-        Gizmo.Mesh = &DevContext->TriangleCircleMesh;
+        Gizmo.Mesh = &DevContext->TriangleTorusMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
         Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_X;
@@ -680,11 +690,25 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         gizmo Gizmo;
-        Gizmo.Mesh = &DevContext->TriangleCircleMesh;
+        Gizmo.Mesh = &DevContext->TriangleTorusMesh;
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
         Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Y;
         DevContext->Gizmo[1] =  Gizmo;
+    }
+
+    {
+        ak_v3f X, Y, Z;
+        Z = AK_ZAxis();
+        AK_Basis(Z, &X, &Y);
+        
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        gizmo Gizmo;
+        Gizmo.Mesh = &DevContext->TriangleTorusMesh;
+        Gizmo.Transform = AK_SQT(Transform);
+        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
+        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Z;
+        DevContext->Gizmo[2] =  Gizmo;
     }
     
     {
@@ -703,20 +727,6 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
         gizmo Gizmo;
         Gizmo.Mesh = nullptr;
         DevContext->Gizmo[5] =  Gizmo;
-    }
-
-    {
-        ak_v3f X, Y, Z;
-        Z = AK_ZAxis();
-        AK_Basis(Z, &X, &Y);
-        
-        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
-        gizmo Gizmo;
-        Gizmo.Mesh = &DevContext->TriangleCircleMesh;
-        Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
-        Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_Z;
-        DevContext->Gizmo[2] =  Gizmo;
     }
 }
 
@@ -1415,6 +1425,7 @@ void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, gr
         CreateDevPlaneMesh(DevContext, 0.4f, 0.4f);
         CreateDevTriangleCircleMesh(DevContext, 60, 0.05f);
         CreateDevTriangleScaleMesh(DevContext, 60, 0.02f, 0.85f, 0.1f);
+        CreateDevTriangleTorusMesh(DevContext, 20, 0.03f);
         
         DevContext->EntityRotations[0] = AK_CreateArray<ak_v3f>(Game->EntityStorage[0].Capacity);
         DevContext->EntityRotations[1] = AK_CreateArray<ak_v3f>(Game->EntityStorage[1].Capacity);
