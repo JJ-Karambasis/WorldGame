@@ -157,15 +157,11 @@ GetSimulation(game* Game, entity_id ID)
     return Simulation;
 }
 
-#if DEVELOPER_BUILD
-#define GAME_INITIALIZE(name) game* name(ak_arena* TempStorage, input* Input, audio_output* AudioOutput, ak_string AssetPath, void* DevContext)
+
+#define GAME_INITIALIZE(name) game* name(ak_arena* TempStorage, input* Input, audio_output* AudioOutput, ak_string AssetPath)
 #define GAME_FIXED_TICK(name) void name(game* Game, void* DevContext)
 #define GAME_TICK(name) void name(game* Game, void* DevContext)
-#else
-#define GAME_INITIALIZE(name) game* name(input* Input, audio_output* AudioOutput, ak_string AssetPath, error_stream* ErrorStream)
-#define GAME_FIXED_TICK(name) void name(game* Game)
-#define GAME_TICK(name) void name(game* Game)
-#endif
+
 typedef GAME_INITIALIZE(game_initialize);
 typedef GAME_FIXED_TICK(game_fixed_tick);
 typedef GAME_TICK(game_tick);
@@ -197,5 +193,5 @@ GAME_OUTPUT_SOUND_SAMPLES(Game_OutputSoundSamplesStub)
 {    
 }
 
-#include "dev_world_game.h"
+#include "dev_tools/dev_tools.h"
 #endif

@@ -14,7 +14,10 @@
 #define GIZMO_PLANE_DISTANCE 0.4f
 
 global struct dev_context* __Internal_Dev_Context__;
-#define SET_DEVELOPER_CONTEXT() __Internal_Dev_Context__ = (dev_context*)DevContext
+#define Dev_SetDeveloperContext(context) __Internal_Dev_Context__ = (dev_context*)context
+#define Dev_GetDeveloperContext() (dev_context*)__Internal_Dev_Context__
+#define Dev_ShouldPlayGame() (((dev_context*)__Internal_Dev_Context__)->PlayGame)
+
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxGJKIterations = AK_Max(__Internal_Dev_Context__->GameInformation.MaxGJKIterations, Iterations))
 #define DEVELOPER_MAX_WALKING_TRIANGLE()
 #define DEVELOPER_MAX_TIME_ITERATIONS(Iterations) (__Internal_Dev_Context__->GameInformation.MaxTimeIterations = AK_Max(__Internal_Dev_Context__->GameInformation.MaxTimeIterations, Iterations))
@@ -23,7 +26,8 @@ global struct dev_context* __Internal_Dev_Context__;
 #define DEBUG_DRAW_EDGE(position0, position1, color) DebugDrawEdge(__Internal_Dev_Context__, position0, position1, color)
 #define DEBUG_DRAW_QUAD(center, normal, dimensions, color) DebugDrawQuad(__Internal_Dev_Context__, center, normal, dimensions, color)
 #define DEBUG_LOG(format, ...) DebugLog(__Internal_Dev_Context__, format, __VA_ARGS__)
-#define IN_EDIT_MODE() (((dev_context*)DevContext)->EditMode)
+
+#define IN_EDIT_MODE() (((dev_context*)DevContext)->PlayGame)
 
 #include "imgui/imgui.h"
 #include "camera.h"
@@ -202,9 +206,12 @@ struct entity_spawner
 struct dev_context
 {
     struct game* Game;
-    graphics* Graphics;
-    
+    graphics* Graphics;    
     ak_arena* DevStorage;
+    
+    ak_bool PlayGame;
+    
+    
     ak_bool InDevelopmentMode;    
     ak_bool UseDevCamera;        
     ak_bool DrawOtherWorld;
@@ -230,8 +237,7 @@ struct dev_context
     ak_u32 ImGuiMeshCount;
     ak_i64 ImGuiMeshes[MAX_IMGUI_MESHES];    
     
-    dev_capsule_mesh LineCapsuleMesh;        
-    
+    dev_capsule_mesh LineCapsuleMesh;            
     dev_mesh PlaneMesh;
     dev_mesh LineBoxMesh;
     dev_mesh LineSphereMesh;    
@@ -319,7 +325,7 @@ GetMeshFromDevMesh(dev_mesh DevMesh)
     mesh Mesh;
     Mesh.Vertices = DevMesh.Vertices;
     Mesh.Indices = DevMesh.Indices;
-
+    
     return Mesh;
 }
 
@@ -331,11 +337,14 @@ GetMeshInfoFromDevMesh(dev_mesh DevMesh)
     MeshInfo.Header.IndexCount = DevMesh.IndexCount;
     MeshInfo.Header.IsIndexFormat32 = false;
     MeshInfo.Header.IsSkeletalMesh = false;
-
+    
     return MeshInfo;
 }
 
 #else
+#define Dev_SetDeveloperContext(context) 
+#define Dev_GetDeveloperContext() NULL
+#define Dev_ShouldPlayGame() true
 
 #define SET_DEVELOPER_CONTEXT(context)
 #define DEVELOPER_MAX_GJK_ITERATIONS(Iterations)
@@ -347,6 +356,7 @@ GetMeshInfoFromDevMesh(dev_mesh DevMesh)
 #define DEBUG_DRAW_DIRECTION_VECTOR(origin, direction, color)
 #define DEBUG_DRAW_QUAD(center, normal, dimensions, color)
 #define IN_EDIT_MODE() false
+#define DEVELOPER_SHOULD_PLAY_GAME() true
 
 #endif
 

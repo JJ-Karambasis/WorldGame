@@ -650,6 +650,19 @@ void DevelopmentEntitySpawner(dev_context* DevContext)
     Separator();    
 }
 
+void DevelopmentImGuiUpdate(dev_imgui* ImGui)
+{        
+#if SHOW_IMGUI_DEMO_WINDOW
+    //IMPORTANT(EVERYONE): If you need help figuring out how to use ImGui you can always switch this to 1 and look at the imgui demo window
+    //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start    
+    local ak_bool demo_window;
+    ShowDemoWindow((bool*)&demo_window);
+#endif
+    
+    
+    
+}
+
 void DevelopmentImGuiUpdate(dev_context* DevContext)
 {
     graphics* Graphics = DevContext->Graphics;
@@ -657,20 +670,18 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     
     NewFrame();
     
-    //IMPORTANT(EVERYONE): If you need help figuring out how to use ImGui you can always switch this to 1 and look at the imgui demo window
-    //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start
-#if SHOW_IMGUI_DEMO_WINDOW
-    local bool demo_window;
-    ShowDemoWindow(&demo_window);
-#endif
-    
     SetNextWindowPos(ImVec2(0, 0));
     //SetNextWindowSize(ImVec2((ak_f32)Graphics->RenderDim.x/3.0f, (ak_f32)Graphics->RenderDim.y));    
     
     local bool open = true;
-    Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize);    
+    Begin("Developer Tools", &open, ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize);        
+    Text("FPS: %f", 1.0f/Game->dt);
     
-    Text("FPS: %f", 1.0f/Game->dt);        
+    ak_char* PlayText = DevContext->PlayGame ? "Stop" : "Play";
+    if(Button(PlayText))
+    {
+        DevContext->PlayGame = !DevContext->PlayGame;
+    }
     
     if(Checkbox("Debug Camera", (bool*)&DevContext->UseDevCamera))
     {
@@ -692,7 +703,7 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
     
     if(!DevContext->EditMode)
     {        
-        DevelopmentFramePlayback(DevContext, &DevContext->FramePlayback);    
+        //DevelopmentFramePlayback(DevContext, &DevContext->FramePlayback);    
     }
     
     //const char* ShadingTypes[] = {"Normal Shading", "Wireframe Shading", "Wireframe on Normal Shading"};
@@ -889,8 +900,9 @@ void DevelopmentImGuiUpdate(dev_context* DevContext)
 
 void DevelopmentImGuiRender(dev_context* DevContext)
 {
-    graphics* Graphics = DevContext->Graphics;
+    graphics* Graphics = DevContext->Graphics;    
     
+    PushSRGBRenderBufferWrites(Graphics, true);
     PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);        
     PushDepth(Graphics, false);        
@@ -941,4 +953,5 @@ void DevelopmentImGuiRender(dev_context* DevContext)
     PushBlend(Graphics, false);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     PushDepth(Graphics, true);            
+    PushSRGBRenderBufferWrites(Graphics, false);
 }

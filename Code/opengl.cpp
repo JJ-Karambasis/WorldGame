@@ -873,7 +873,7 @@ ak_bool BindShadowMapFBO(GLuint FBO, GLuint TextureArray, ak_u32* Counter)
 extern "C"
 AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
 {
-    SET_DEVELOPER_CONTEXT();
+    Dev_SetDeveloperContext(DevContext);
         
     opengl_context* OpenGL = (opengl_context*)Graphics;            
     AK_SetGlobalArena(OpenGL->TempStorage);
@@ -1481,6 +1481,21 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                   CopyToOutput->DstOffset.x+CopyToOutput->DstResolution.w, CopyToOutput->DstOffset.y+CopyToOutput->DstResolution.h, 
                                   GL_COLOR_BUFFER_BIT, GL_LINEAR);
                 
+            } break;
+            
+            case PUSH_COMMAND_COPY_TO_RENDER_BUFFER:
+            {
+                push_command_copy_to_render_buffer* CopyToRenderBuffer = (push_command_copy_to_render_buffer*)Command;
+                opengl_render_buffer* SrcBuffer = (opengl_render_buffer*)CopyToRenderBuffer->SrcRenderBuffer;                
+                
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, SrcBuffer->Framebuffer);
+                
+                ak_v2i DstOffset = CopyToRenderBuffer->DstOffset;
+                ak_v2i DstResolution = CopyToRenderBuffer->DstResolution;
+                
+                glBlitFramebuffer(0, 0, SrcBuffer->Resolution.w, SrcBuffer->Resolution.h, 
+                                  DstOffset.x, DstOffset.y, DstOffset.x+DstResolution.w, DstOffset.y+DstResolution.h, 
+                                  GL_COLOR_BUFFER_BIT, GL_LINEAR);                
             } break;
             
             AK_INVALID_DEFAULT_CASE;                        

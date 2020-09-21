@@ -101,14 +101,11 @@ broad_phase_pair_list simulation::AllocatePairList(ak_u32 Capacity)
 }
 
 broad_phase_pair_list simulation::GetAllPairs()
-{    
-#define PAIR_CHECK_COUNT 1024    
-    struct collision_pair_check
-    {
-        ak_u64 ID;
-        ak_bool Collided;
-    } CollisionPairChecks[PAIR_CHECK_COUNT] = {};
+{   
+    if(!CollisionMap.Slots)
+        CollisionMap = AK_CreateHashMap<ak_pair<ak_u32>, ak_bool>(8191);    
     
+#define PAIR_CHECK_COUNT 1024        
     broad_phase_pair_list Result = AllocatePairList(PAIR_CHECK_COUNT);
     
     AK_ForEach(RigidBody, &RigidBodyStorage)
@@ -497,13 +494,7 @@ CONSTRAINT_CALLBACK(LockConstraint)
 
 simulation CreateSimulation()
 {
-    simulation Simulation = {};
-    Simulation.CollisionVolumeStorage = AK_CreatePool<collision_volume>();    
-    Simulation.SimEntityStorage = AK_CreatePool<sim_entity>();    
-    Simulation.RigidBodyStorage = AK_CreatePool<rigid_body>();    
-    Simulation.ContactStorage = AK_CreatePool<contact_constraint>();
-    Simulation.ManifoldStorage = AK_CreatePool<manifold>();    
-    Simulation.CollisionMap = AK_CreateHashMap<ak_pair<ak_u32>, ak_bool>(8191);
-    
+    simulation Simulation = {};                    
+    Simulation.CollisionMap = AK_CreateHashMap<ak_pair<ak_u32>, ak_bool>(8191);    
     return Simulation;
 }

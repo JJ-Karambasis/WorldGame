@@ -7,29 +7,46 @@
 
 #include "graphics.cpp"
 
+#define DEV_TOOLS_IMPLEMENTATION
+#include "dev_tools/dev_tools.h"
+
 #if DEVELOPER_BUILD
-#include "dev_world_game.cpp"
+PLATFORM_INIT_IMGUI(Platform_InitImGui);
+PLATFORM_DEVELOPMENT_UPDATE(Platform_DevUpdate);
+
 ak_bool Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam);
 void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* Keyboard);
 void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
-#define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
-#define DEVELOPMENT_HANDLE_MOUSE(RawMouse) Win32_HandleDevMouse((dev_context*)Global_DevPointer, RawMouse)
-#define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) Win32_HandleDevKeyboard((dev_context*)Global_DevPointer, RawKeyboard)
-#define DEVELOPMENT_TICK(Game, Graphics, GraphicsObjects, RenderInterpolate) DevelopmentTick((dev_context*)Global_DevPointer, Game, Graphics, GraphicsObjects, RenderInterpolate)
-#define DEVELOPMENT_RECORD() DevelopmentRecord((dev_context*)Global_DevPointer)
+#define Dev_Initialize(Game, Graphics, PlatformWindow) DevContext_Initialize(Game, Graphics, PlatformWindow, Platform_InitImGui, Platform_DevUpdate)
+#define Dev_Tick() DevContext_Tick()
+#define Dev_WindowProc(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
+#define Dev_HandleMouse(RawMouse) Win32_HandleDevMouse(Dev_GetDeveloperContext(), RawMouse)
+#define Dev_HandleKeyboard(RawKeyboard) Win32_HandleDevKeyboard(Dev_GetDeveloperContext(), RawKeyboard)
+#define Dev_RecordFrame() DevelopmentRecord(Dev_GetDeveloperContext())
 #else
-#define DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam) false
-#define DEVELOPMENT_HANDLE_MOUSE(RawMouse) 
-#define DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard) 
-#define DEVELOPMENT_TICK(Game, Graphics)
-#define DEVELOPMENT_RECORD(Game)
+#define Dev_Initialize(Game, Graphics, PlatformData)
+#define Dev_Tick()
+#define Dev_WindowProc(Window, Message, WParam, LParam) false
+#define Dev_HandleMouse(RawMouse) 
+#define Dev_HandleKeyboard(RawKeyboard) 
+#define Dev_RecordFrame() 
 #endif
+
+#define BindKey(key, action) case key: { if((RawKeyboard->Flags == RI_KEY_MAKE) || (RawKeyboard->Message == WM_KEYDOWN) || (RawKeyboard->Message == WM_SYSKEYDOWN)) { action.IsDown = true; } else if((RawKeyboard->Flags == RI_KEY_BREAK) || (RawKeyboard->Message == WM_KEYUP) || (RawKeyboard->Message == WM_SYSKEYUP)) { action.IsDown = false; action.WasDown = true; } } break
+#define HR_Release(iunknown) \
+do \
+{ \
+    if(iunknown) \
+    { \
+        iunknown->Release(); \
+        iunknown = NULL; \
+    } \
+} while(0)
 
 global ak_string Global_EXEFilePath;
 global ak_arena* Global_PlatformArena;
 global win32_game_code Global_GameCode;
 global ak_bool Global_Running;
-global void* Global_DevPointer;
 
 //TODO(JJ): This lock can probably be moved out into some developer code macros since it is only used for hot reloading (for the audio thread)
 global ak_lock Global_Lock;
@@ -39,7 +56,7 @@ Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     LRESULT Result = 0;
     
-    if(DEVELOPMENT_WINDOW_PROC(Window, Message, WParam, LParam))
+    if(Dev_WindowProc(Window, Message, WParam, LParam))
         return Result;
     
     switch(Message)
@@ -214,7 +231,7 @@ win32_audio_output Win32_InitDSound(HWND Window, ak_uaddr BufferLength)
         //TODO(JJ): Diagnostic and error logging
         return {};
     }
-        
+    
     if(FAILED(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY)))
     {
         //TODO(JJ): Diagnostic and error logging 
@@ -422,7 +439,8 @@ Win32_AudioThread(void* Paramter)
 }
 
 void Win32_ProcessMessages(input* Input)
-{    
+{
+    
     MSG Message;
     while(PeekMessage(&Message, NULL, 0, 0, PM_REMOVE))
     {
@@ -452,7 +470,7 @@ void Win32_ProcessMessages(input* Input)
                     case RIM_TYPEMOUSE:
                     {
                         RAWMOUSE* RawMouse = &RawInput->data.mouse;                                                        
-                        DEVELOPMENT_HANDLE_MOUSE(RawMouse);                            
+                        Dev_HandleMouse(RawMouse);                            
                     } break;
                     
                     case RIM_TYPEKEYBOARD:
@@ -468,15 +486,15 @@ void Win32_ProcessMessages(input* Input)
                         
                         switch(RawKeyboard->VKey)
                         {
-                            BIND_KEY('W', Input->MoveForward);
-                            BIND_KEY('S', Input->MoveBackward);
-                            BIND_KEY('A', Input->MoveLeft);
-                            BIND_KEY('D', Input->MoveRight);                            
-                            BIND_KEY('Q', Input->SwitchWorld);                                
-                            BIND_KEY(VK_SPACE, Input->Action);
+                            BindKey('W', Input->MoveForward);
+                            BindKey('S', Input->MoveBackward);
+                            BindKey('A', Input->MoveLeft);
+                            BindKey('D', Input->MoveRight);                            
+                            BindKey('Q', Input->SwitchWorld);                                
+                            BindKey(VK_SPACE, Input->Action);
                         }
                         
-                        DEVELOPMENT_HANDLE_KEYBOARD(RawKeyboard);                            
+                        Dev_HandleKeyboard(RawKeyboard);                            
                     } break;
                 }
                 
@@ -576,15 +594,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         Instance
     };
     
-#if DEVELOPER_BUILD
-    dev_context _DevContext_ = {};
-    dev_context* DevContext = &_DevContext_;
-    DevContext->InDevelopmentMode = true;
-    DevContext->PlatformData = PlatformData;        
-    Global_DevPointer = DevContext;
-#endif        
-    
-    game* Game = Global_GameCode.Initialize(AK_GetGlobalArena(), &Input, &AudioOutput, AssetFilePath, Global_DevPointer);                                                
+    game* Game = Global_GameCode.Initialize(AK_GetGlobalArena(), &Input, &AudioOutput, AssetFilePath);                                                
     CloseHandle(CreateThread(NULL, 0, Win32_AudioThread, Game, 0, NULL));    
     
     graphics* Graphics = GraphicsCode.InitGraphics(Game->TempStorage, PlatformData);
@@ -594,6 +604,8 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         AK_Assert(false, "Failed to initialize the graphics");
         return-1;
     }
+    
+    Dev_Initialize(Game, Graphics, PlatformData[0]);    
     
     Global_Running = true;
     
@@ -640,16 +652,19 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         //DEVELOPMENT_PLAY_FRAME(Game);
         
         while(Accumulator >= Game->dtFixed)
-        {                        
-            AK_MemoryCopy(Game->PrevTransforms[0].Entries, Game->CurrentTransforms[0].Entries, sizeof(ak_sqtf)*Game->EntityStorage[0].Capacity);
-            AK_MemoryCopy(Game->PrevTransforms[1].Entries, Game->CurrentTransforms[1].Entries, sizeof(ak_sqtf)*Game->EntityStorage[1].Capacity);
+        {   
+            AK_Assert(Game->PrevTransforms[0].Size == Game->CurrentTransforms[0].Size, "Prev Entries and Current Entries size do not match for World A");
+            AK_Assert(Game->PrevTransforms[1].Size == Game->CurrentTransforms[1].Size, "Prev Entries and Current Entries size do not match for World B");
+            
+            AK_CopyArray(Game->PrevTransforms[0].Entries, Game->CurrentTransforms[0].Entries, Game->CurrentTransforms[0].Size);
+            AK_CopyArray(Game->PrevTransforms[1].Entries, Game->CurrentTransforms[1].Entries, Game->CurrentTransforms[1].Size);
             Game->PrevCameras[0] = Game->CurrentCameras[0];
             Game->PrevCameras[1] = Game->CurrentCameras[1];
             
-            if(!IN_EDIT_MODE())
+            if(Dev_ShouldPlayGame())
             {                
-                DEVELOPMENT_RECORD();                
-                Global_GameCode.FixedTick(Game, DevContext);                                
+                //Dev_RecordFrame();
+                Global_GameCode.FixedTick(Game, Dev_GetDeveloperContext());                                
             }
             
             if(Game->NoInterpolation)
@@ -664,23 +679,25 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(Input.Buttons); ButtonIndex++)        
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
         
-        Win32_ProcessMessages(&Input);
-        Global_GameCode.Tick(Game, DevContext);                                                
-        
+        Win32_ProcessMessages(&Input);        
         Game->dt = FrameTime;                
         Graphics->RenderDim = Win32_GetWindowDim(Window);
         
-        ak_f32 tRenderInterpolate = Accumulator / Game->dtFixed;        
-        graphics_state GraphicsState = GetGraphicsState(Game, Game->CurrentWorldIndex, tRenderInterpolate);
-        
-        if(NOT_IN_DEVELOPMENT_MODE())
+        if(Dev_ShouldPlayGame())
         {
+            Global_GameCode.Tick(Game, Dev_GetDeveloperContext());                                                
+            
+            ak_f32 tRenderInterpolate = Accumulator / Game->dtFixed;        
+            graphics_state GraphicsState = GetGraphicsState(Game, Game->CurrentWorldIndex, tRenderInterpolate);
+            
             Global_GameCode.Render(Game, Graphics, &GraphicsState);
         }
         
-        DEVELOPMENT_TICK(Game, Graphics, &GraphicsState, tRenderInterpolate);                                
+        Dev_Tick();
         
-        GraphicsCode.ExecuteRenderCommands(Graphics, Global_DevPointer);
+        //DEVELOPMENT_TICK(Game, Graphics, &GraphicsState, tRenderInterpolate);                                
+        
+        GraphicsCode.ExecuteRenderCommands(Graphics, Dev_GetDeveloperContext());
         
         GlobalArena->EndTemp(&TempArena);
         AK_Assert(GlobalArena->TemporaryArenas == 0, "There are still temporary arena's being used in the frame");
@@ -708,46 +725,38 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 }
 
 #if DEVELOPER_BUILD
-void Platform_InitImGui(void* PlatformData)
-{    
-    IMGUI_CHECKVERSION();
-    ImGuiContext* Context = CreateContext();
-    StyleColorsDark();
-    
-    ImGuiIO& IO = GetIO();
-    IO.BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
-    IO.BackendPlatformName = "world_ga me_win32_platform";
-    IO.ImeWindowHandle = (HWND)PlatformData;
-    IO.KeyMap[ImGuiKey_Tab] = VK_TAB;
-    IO.KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
-    IO.KeyMap[ImGuiKey_RightArrow] = VK_RIGHT;
-    IO.KeyMap[ImGuiKey_UpArrow] = VK_UP;
-    IO.KeyMap[ImGuiKey_DownArrow] = VK_DOWN;
-    IO.KeyMap[ImGuiKey_PageUp] = VK_PRIOR;
-    IO.KeyMap[ImGuiKey_PageDown] = VK_NEXT;
-    IO.KeyMap[ImGuiKey_Home] = VK_HOME;
-    IO.KeyMap[ImGuiKey_End] = VK_END;
-    IO.KeyMap[ImGuiKey_Insert] = VK_INSERT;
-    IO.KeyMap[ImGuiKey_Delete] = VK_DELETE;
-    IO.KeyMap[ImGuiKey_Backspace] = VK_BACK;
-    IO.KeyMap[ImGuiKey_Space] = VK_SPACE;
-    IO.KeyMap[ImGuiKey_Enter] = VK_RETURN;
-    IO.KeyMap[ImGuiKey_Escape] = VK_ESCAPE;
-    IO.KeyMap[ImGuiKey_KeyPadEnter] = VK_RETURN;
-    IO.KeyMap[ImGuiKey_A] = 'A';
-    IO.KeyMap[ImGuiKey_C] = 'C';
-    IO.KeyMap[ImGuiKey_V] = 'V';
-    IO.KeyMap[ImGuiKey_X] = 'X';
-    IO.KeyMap[ImGuiKey_Y] = 'Y';
-    IO.KeyMap[ImGuiKey_Z] = 'Z';    
+PLATFORM_INIT_IMGUI(Platform_InitImGui)
+{        
+    IO->BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
+    IO->BackendPlatformName = "world_game_win32_platform";
+    IO->ImeWindowHandle = (HWND)PlatformWindow;
+    IO->KeyMap[ImGuiKey_Tab] = VK_TAB;
+    IO->KeyMap[ImGuiKey_LeftArrow] = VK_LEFT;
+    IO->KeyMap[ImGuiKey_RightArrow] = VK_RIGHT;
+    IO->KeyMap[ImGuiKey_UpArrow] = VK_UP;
+    IO->KeyMap[ImGuiKey_DownArrow] = VK_DOWN;
+    IO->KeyMap[ImGuiKey_PageUp] = VK_PRIOR;
+    IO->KeyMap[ImGuiKey_PageDown] = VK_NEXT;
+    IO->KeyMap[ImGuiKey_Home] = VK_HOME;
+    IO->KeyMap[ImGuiKey_End] = VK_END;
+    IO->KeyMap[ImGuiKey_Insert] = VK_INSERT;
+    IO->KeyMap[ImGuiKey_Delete] = VK_DELETE;
+    IO->KeyMap[ImGuiKey_Backspace] = VK_BACK;
+    IO->KeyMap[ImGuiKey_Space] = VK_SPACE;
+    IO->KeyMap[ImGuiKey_Enter] = VK_RETURN;
+    IO->KeyMap[ImGuiKey_Escape] = VK_ESCAPE;
+    IO->KeyMap[ImGuiKey_KeyPadEnter] = VK_RETURN;
+    IO->KeyMap[ImGuiKey_A] = 'A';
+    IO->KeyMap[ImGuiKey_C] = 'C';
+    IO->KeyMap[ImGuiKey_V] = 'V';
+    IO->KeyMap[ImGuiKey_X] = 'X';
+    IO->KeyMap[ImGuiKey_Y] = 'Y';
+    IO->KeyMap[ImGuiKey_Z] = 'Z';    
 }
 
-void Platform_DevUpdate(void* PlatformData, ak_v2i RenderDim, ak_f32 dt, dev_context* DevContext)
+PLATFORM_DEVELOPMENT_UPDATE(Platform_DevUpdate)
 {
-    HWND Window = (HWND)PlatformData;
-    
-    ImGuiIO* IO = &GetIO();
-    
+    HWND Window = (HWND)IO->ImeWindowHandle;    
     IO->DisplaySize = ImVec2((ak_f32)RenderDim.w, (ak_f32)RenderDim.h);
     IO->DeltaTime = dt;
     IO->KeyCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -769,7 +778,7 @@ void Platform_DevUpdate(void* PlatformData, ak_v2i RenderDim, ak_f32 dt, dev_con
             if(GetCursorPos(&MousePosition) && ScreenToClient(Window, &MousePosition))
             {                
                 IO->MousePos = ImVec2((ak_f32)MousePosition.x, (ak_f32)MousePosition.y);                
-                DevContext->Input.MouseCoordinates = AK_V2((ak_i32)MousePosition.x, (ak_i32)MousePosition.y);
+                DevInput->MouseCoordinates = AK_V2((ak_i32)MousePosition.x, (ak_i32)MousePosition.y);
             }
         }
     }      
@@ -885,24 +894,23 @@ ak_bool Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LPa
 
 void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* RawKeyboard)
 {   
-    dev_input* Input = &DevContext->Input;
+    dev_input* Input = &DevContext->DevInput;
     
     switch(RawKeyboard->VKey)
     {
-        BIND_KEY(VK_F5, Input->ToggleDevState);
-        BIND_KEY(VK_MENU, Input->Alt);  
-        BIND_KEY('W', Input->W);
-        BIND_KEY('E', Input->E);
-        BIND_KEY('R', Input->R);      
-        BIND_KEY(VK_DELETE, Input->Delete);
-        BIND_KEY(VK_CONTROL, Input->Ctl);
+        BindKey(VK_F5, Input->ToggleDevState);
+        BindKey(VK_MENU, Input->Alt);  
+        BindKey('W', Input->W);
+        BindKey('E', Input->E);
+        BindKey('R', Input->R);      
+        BindKey(VK_DELETE, Input->Delete);
+        BindKey(VK_CONTROL, Input->Ctl);
     }       
 }
 
 void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
 {
-    dev_input* Input = &DevContext->Input;
-    
+    dev_input* Input = &DevContext->DevInput;    
     Input->MouseDelta = AK_V2((ak_i32)RawMouse->lLastX, (ak_i32)RawMouse->lLastY);
     
     switch(RawMouse->usButtonFlags)

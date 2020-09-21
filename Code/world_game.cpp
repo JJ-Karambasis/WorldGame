@@ -38,8 +38,6 @@ void LoadTestLevel(game* Game)
         Game->PrevTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
         Game->CurrentTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
         
-        Game->Simulations[WorldIndex] = CreateSimulation();
-        
         ak_v3f P0 = AK_V3<ak_f32>() + AK_ZAxis()*PLAYER_RADIUS;
         capsule PlayerCapsule = CreateCapsule(P0, P0+AK_ZAxis()*PLAYER_HEIGHT, PLAYER_RADIUS);        
         entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, AK_V3(0.0f, 0.0f, 0.1f), AK_IdentityQuat<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
@@ -76,9 +74,7 @@ void LoadTestLevel(game* Game)
 
 extern "C"
 AK_EXPORT GAME_INITIALIZE(Initialize)
-{
-    SET_DEVELOPER_CONTEXT();
-    
+{        
     ak_arena* GameStorage = AK_CreateArena(AK_Megabyte(32));            
     assets* Assets = InitAssets(GameStorage, AssetPath);
     if(!Assets)
@@ -95,9 +91,8 @@ AK_EXPORT GAME_INITIALIZE(Initialize)
     
     Game->Input       = Input;
     Game->AudioOutput = AudioOutput;
-    Game->Assets      = Assets;    
+    Game->Assets      = Assets;        
     
-    //TODO(JJ): Load world/entity data at runtime    
     LoadTestLevel(Game);
     
     return Game;
@@ -228,6 +223,8 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
 extern "C"
 AK_EXPORT GAME_FIXED_TICK(FixedTick)
 {   
+    Dev_SetDeveloperContext(DevContext);
+    
     ak_high_res_clock Start = AK_WallClock();    
     AK_SetGlobalArena(Game->TempStorage);
     
@@ -414,7 +411,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
 extern "C"
 AK_EXPORT GAME_TICK(Tick)
 {   
-    SET_DEVELOPER_CONTEXT();
+    Dev_SetDeveloperContext(DevContext);
     
     AK_SetGlobalArena(Game->TempStorage);
     ak_f32 dt = Game->dt;
@@ -585,7 +582,9 @@ AK_EXPORT GAME_RENDER(Render)
     UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);        
     view_settings ViewSettings = GetViewSettings(&GraphicsState->Camera);
     PushWorldShadingCommands(Graphics, Game->RenderBuffer, &ViewSettings, Game->Assets, GraphicsState->GraphicsObjects);
+#if !DEVELOPER_BUILD
     PushCopyToOutput(Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);
+#endif
 }
 
 #define AK_COMMON_IMPLEMENTATION

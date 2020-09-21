@@ -89,7 +89,7 @@ struct margin_convex_hull_support
     
     ak_v3f Support(ak_v3f D)
     {
-        if(AK_SqrMagnitude(D) < AK_Square(FLT_EPSILON))
+        if(AK_SqrMagnitude(D) < AK_Square(AK_EPSILON32))
             D = AK_V3f(-1, -1, -1);
         D = AK_Normalize(D);
         ak_v3f Result = ConvexHullSupportPoint(Hull, Transform, D);

@@ -1431,6 +1431,103 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
     }
 }
 
+void DevelopmentInitialize(game* Game, graphics* Graphics, void** PlatformData)
+{
+    ak_arena* DevStorage = AK_CreateArena(AK_Megabyte(1));
+    dev_context* DevContext = DevStorage->Push<dev_context>();
+    
+    DevContext->DevStorage = DevStorage;
+    DevContext->LogStorage = AK_CreateArena(AK_Megabyte(1));
+    DevContext->Game = Game;
+    DevContext->Graphics = Graphics;
+    DevContext->PlatformData = PlatformData;
+    
+    CreateDevLineCapsuleMesh(DevContext, 1.0f, 60);
+    CreateDevLineBoxMesh(DevContext);
+    CreateDevLineSphereMesh(DevContext, 60);
+    CreateDevTriangleBoxMesh(DevContext);
+    CreateDevTriangleSphereMesh(DevContext);
+    CreateDevTriangleCylinderMesh(DevContext, 60);
+    CreateDevTriangleConeMesh(DevContext, 60);
+    CreateDevTriangleArrowMesh(DevContext, 60, 0.02f, 0.85f, 0.035f, 0.15f);
+    CreateDevPlaneMesh(DevContext, 0.4f, 0.4f);
+    CreateDevTriangleCircleMesh(DevContext, 60, 0.05f);
+    CreateDevTriangleScaleMesh(DevContext, 60, 0.02f, 0.85f, 0.1f);
+    CreateDevTriangleTorusMesh(DevContext, 20, 0.03f);
+    
+    DevelopmentImGuiInit(DevContext);        
+    
+    __Internal_Dev_Context__ = DevContext;
+}
+
+void DevelopmentUpdateCamera(camera* Camera, dev_input* Input, ak_f32 dt)
+{    
+    if(IsDown(Input->Alt))
+    {                                    
+        if(IsDown(Input->LMB))
+        {
+            Camera->AngularVelocity.x += (Input->MouseDelta.y*dt*CAMERA_ANGULAR_ACCELERATION);
+            Camera->AngularVelocity.y += (Input->MouseDelta.x*dt*CAMERA_ANGULAR_ACCELERATION);                                        
+        }
+        
+        if(IsDown(Input->MMB))
+        {
+            Camera->Velocity.x += (Input->MouseDelta.x*dt*CAMERA_LINEAR_ACCELERATION);
+            Camera->Velocity.y += (Input->MouseDelta.y*dt*CAMERA_LINEAR_ACCELERATION);                                        
+        }
+        
+        if(AK_Abs(Input->Scroll) > 0.0f)            
+            Camera->Velocity.z -= Input->Scroll*dt*CAMERA_SCROLL_ACCELERATION;                                            
+    }            
+    
+    Camera->AngularVelocity *= (1.0f / (1.0f+dt*CAMERA_ANGULAR_DAMPING));            
+    ak_v3f Eulers = (Camera->AngularVelocity*dt);            
+    
+    ak_quatf Orientation = AK_Normalize(AK_RotQuat(Camera->Orientation.XAxis, Eulers.roll)*AK_RotQuat(Camera->Orientation.YAxis, Eulers.pitch));
+    Camera->Orientation *= AK_QuatToMatrix(Orientation);
+    
+    Camera->Velocity.xy *= (1.0f /  (1.0f+dt*CAMERA_LINEAR_DAMPING));            
+    ak_v2f Vel = Camera->Velocity.xy*dt;
+    ak_v3f Delta = Vel.x*Camera->Orientation.XAxis - Vel.y*Camera->Orientation.YAxis;
+    
+    Camera->FocalPoint += Delta;
+    Camera->Position += Delta;
+    
+    Camera->Velocity.z *= (1.0f/ (1.0f+dt*CAMERA_SCROLL_DAMPING));            
+    Camera->Distance += Camera->Velocity.z*dt;            
+    
+    if(Camera->Distance < CAMERA_MIN_DISTANCE)
+        Camera->Distance = CAMERA_MIN_DISTANCE;
+    
+    Camera->Position = Camera->FocalPoint + (Camera->Orientation.ZAxis*Camera->Distance);
+}
+
+void DevelopmentTick()
+{
+    dev_context* DevContext = Dev_GetDeveloperContext();
+    game* Game = DevContext->Game;
+    graphics* Graphics = DevContext->Graphics;
+    dev_input* Input = &DevContext->Input;
+    
+    ak_f32 dt = Game->dt;
+    
+    Platform_DevUpdate(DevContext->PlatformData[0], Graphics->RenderDim, dt, DevContext);            
+    DevelopmentImGuiUpdate(DevContext);        
+    
+    if(!DevContext->PlayGame)
+    {
+        DevelopmentUpdateCamera(&DevContext->Cameras[Game->CurrentWorldIndex], Input, dt);        
+        
+    }
+    
+    DevelopmentImGuiRender(DevContext);      
+    
+    Input->MouseDelta = {};
+    Input->Scroll = 0.0f;
+    for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(Input->Buttons); ButtonIndex++)
+        Input->Buttons[ButtonIndex].WasDown = Input->Buttons[ButtonIndex].IsDown;    
+}
+
 void DevelopmentTick(dev_context* DevContext, game* Game, graphics* Graphics, graphics_state* GraphicsState, ak_f32 tRenderInterpolate)
 {
     DevContext->Game = Game;

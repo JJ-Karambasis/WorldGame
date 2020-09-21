@@ -180,7 +180,7 @@ ak_bool ClosestPointFromPointToTetrahedron(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f 
     if(!IsPointOutsideABC && !IsPointOutsideACD && !IsPointOutsideADB && !IsPointOutsideBDC)
         return false;
     
-    ak_f32 BestSqrDistance = FLT_MAX;
+    ak_f32 BestSqrDistance = AK_MAX32;
     if(IsPointOutsideABC)
     {
         ClosestPointFromPointToTriangle(P, A, B, C, &TempBarycentric);
@@ -532,7 +532,7 @@ gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
             break;
         }
         
-        if((PrevSqrDistance - SqrDistance) <= (FLT_EPSILON*PrevSqrDistance))
+        if((PrevSqrDistance - SqrDistance) <= (AK_EPSILON32*PrevSqrDistance))
         {
             Status = GJK_DISTANCE_STATUS_NOT_GETTING_CLOSER_2;
             break;
@@ -550,8 +550,6 @@ gjk_distance GJKDistance(typeA* ObjectA, typeB* ObjectB)
     Result.Simplex        = Simplex;
     Result.V              = V;
     Result.SquareDistance = AK_SqrMagnitude(V);
-    
-    DEVELOPER_MAX_GJK_ITERATIONS(Iterations);
     
     return Result;    
 }
@@ -861,8 +859,7 @@ ak_bool GJKIntersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
     
     ak_u64 Iterations = 0;
     for(;;)
-    {
-        DEVELOPER_MAX_GJK_ITERATIONS(Iterations);
+    {        
         Iterations++;                        
         Support = GetSupport2(ObjectA, ObjectB, V);
         

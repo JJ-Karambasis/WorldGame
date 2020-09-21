@@ -300,6 +300,27 @@ void PushCopyToOutput(graphics* Graphics, graphics_render_buffer* RenderBuffer, 
     PushCommand(Graphics, PushCommandCopyToOutput);
 }
 
+void PushCopyToOutput(graphics* Graphics, graphics_render_buffer* RenderBuffer, ak_v2i DstOffset)
+{
+    PushCopyToOutput(Graphics, RenderBuffer, DstOffset, RenderBuffer->Resolution);
+}
+
+void PushCopyToOutput(graphics* Graphics, graphics_render_buffer* RenderBuffer)
+{
+    PushCopyToOutput(Graphics, RenderBuffer, AK_V2<ak_i32>());
+}
+
+void PushCopyToRenderBuffer(graphics* Graphics, graphics_render_buffer* SrcRenderBuffer, ak_v2i DstOffset, ak_v2i DstResolution)
+{
+    push_command_copy_to_render_buffer* PushCommandCopyToRenderBuffer = AllocateCommand(push_command_copy_to_render_buffer);
+    PushCommandCopyToRenderBuffer->Type = PUSH_COMMAND_COPY_TO_RENDER_BUFFER;
+    PushCommandCopyToRenderBuffer->SrcRenderBuffer = SrcRenderBuffer;    
+    PushCommandCopyToRenderBuffer->DstOffset = DstOffset;
+    PushCommandCopyToRenderBuffer->DstResolution = DstResolution;
+    
+    PushCommand(Graphics, PushCommandCopyToRenderBuffer);
+}
+
 void PushViewportAndScissor(graphics* Graphics, ak_i32 X, ak_i32 Y, ak_i32 Width, ak_i32 Height)
 {
     PushViewport(Graphics, X, Y, Width, Height);
@@ -544,7 +565,7 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
     PushLightBuffer(Graphics, &LightBuffer);            
-        
+    
     AK_ForEach(Object, &GraphicsObjects)            
     {
         AK_Assert(Object->MeshID != INVALID_MESH_ID, "Cannot draw an invalid mesh");            

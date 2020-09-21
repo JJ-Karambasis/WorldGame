@@ -31,7 +31,8 @@ enum push_command_type
     PUSH_COMMAND_DRAW_UNLIT_SKELETON_MESH,
     PUSH_COMMAND_DRAW_LINE_MESH,
     PUSH_COMMAND_DRAW_IMGUI_UI,            
-    PUSH_COMMAND_COPY_TO_OUTPUT
+    PUSH_COMMAND_COPY_TO_OUTPUT,
+    PUSH_COMMAND_COPY_TO_RENDER_BUFFER
 };
 
 struct push_command
@@ -168,6 +169,13 @@ struct push_command_draw_imgui_ui : public push_command
 struct push_command_copy_to_output: public push_command
 {
     graphics_render_buffer* RenderBuffer;
+    ak_v2i DstOffset;
+    ak_v2i DstResolution;
+};
+
+struct push_command_copy_to_render_buffer : public push_command
+{
+    graphics_render_buffer* SrcRenderBuffer;    
     ak_v2i DstOffset;
     ak_v2i DstResolution;
 };
