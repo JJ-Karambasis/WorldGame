@@ -262,6 +262,22 @@ void DevContext_CreatePlaneMesh(dev_context* DevContext, ak_f32 Width, ak_f32 He
     DevContext->TrianglePlaneMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
 }
 
+dev_entity* DevContext_GetEntity(dev_context* Context, world_id WorldID)
+{
+    return Context->InitialEntityStorage[WorldID.WorldIndex].Get(WorldID.ID);
+}
+
+dev_point_light* DevContext_GetPointLight(dev_context* Context, world_id WorldID)
+{
+    return Context->InitialPointLights[WorldID.WorldIndex].Get(WorldID.ID);
+}
+
+void DevContext_UpdateObjectOrientation(ak_quatf* Orientation, ak_v3f* OldEuler, ak_v3f NewEuler)
+{
+    *OldEuler = NewEuler;
+    *Orientation = AK_EulerToQuat(NewEuler.roll, NewEuler.pitch, NewEuler.yaw);
+}
+
 ak_v3f DevContext_GetSelectedObjectPosition(dev_context* Context, dev_selected_object* SelectedObject)
 {
     AK_Assert(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE, "There is no selected object. Cannot retrieve position");
@@ -442,6 +458,11 @@ void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow,
     DevContext->InitialPlayerCapsules[1] = DevContext->InitialPlayerCapsules[0] = CreateCapsule(AK_V3<ak_f32>(), PLAYER_HEIGHT, PLAYER_RADIUS),     
     DevContext->DevCameras[0].Target = DevContext->InitialPlayerCapsules[0].GetBottom();
     DevContext->DevCameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));        
+    
+    dev_gizmo_state* GizmoState = &DevContext->GizmoState;
+    GizmoState->GridDistance = 1.0f;
+    GizmoState->ScaleSnap = 1.0f;
+    GizmoState->RotationAngleSnap = 5.0f;
     
     __Internal_Dev_Context__ = DevContext;
 }

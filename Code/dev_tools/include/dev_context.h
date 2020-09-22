@@ -88,7 +88,12 @@ struct dev_selected_object
     {
         capsule* PlayerCapsule;
         world_id PointLightID;
-        world_id EntityID;
+        
+        struct
+        {
+            world_id EntityID;
+            material_context MaterialContext;
+        };
     };
 };
 
@@ -124,6 +129,7 @@ struct dev_gizmo_state
     ak_f32 GridDistance;
     ak_f32 ScaleSnap;
     ak_f32 RotationAngleSnap;
+    ak_bool ShouldSnap;
 };
 
 struct dev_context
@@ -155,6 +161,7 @@ struct dev_context
     capsule InitialPlayerCapsules[2];
     ak_pool<dev_entity> InitialEntityStorage[2];    
     ak_pool<dev_point_light> InitialPointLights[2];    
+    ak_array<ak_v3f> InitialRotations[2];
     
     dev_selected_object SelectedObject;
     dev_gizmo_state GizmoState;

@@ -35,7 +35,7 @@ dev_selected_object DevRay_CastToAllSelectables(dev_context* DevContext, ray Ray
             {
                 tBest = IntersectionResult.t;
                 Result.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
-                Result.EntityID = Entity->ID;
+                Result.EntityID = Entity->ID;                
             }
         }
     }
@@ -63,6 +63,12 @@ dev_selected_object DevRay_CastToAllSelectables(dev_context* DevContext, ray Ray
             Result.Type = DEV_SELECTED_OBJECT_TYPE_PLAYER_CAPSULE;
             Result.PlayerCapsule = &DevContext->InitialPlayerCapsules[WorldIndex];
         }
+    }        
+    
+    if(Result.Type == DEV_SELECTED_OBJECT_TYPE_ENTITY)
+    {
+        material Material = DevContext->InitialEntityStorage[Result.EntityID.WorldIndex].Get(Result.EntityID.ID)->Material;
+        Result.MaterialContext = DevUI_ContextFromMaterial(&Material);
     }
     
     return Result;
