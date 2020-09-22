@@ -910,8 +910,7 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* RawKeyboard)
 
 void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
 {
-    dev_input* Input = &DevContext->DevInput;    
-    Input->MouseDelta = AK_V2((ak_i32)RawMouse->lLastX, (ak_i32)RawMouse->lLastY);
+    dev_input* Input = &DevContext->DevInput;        
     
     switch(RawMouse->usButtonFlags)
     {

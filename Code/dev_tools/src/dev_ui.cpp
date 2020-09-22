@@ -107,6 +107,15 @@ void DevUI_ClearSpawner(entity_spawner* Spawner)
     Spawner->Mass = 1.0f;
 }
 
+void DevUI_ClearSpawner(light_spawner* Spawner)
+{
+    Spawner->Translation = {};
+    Spawner->Radius = 1.0f;
+    Spawner->WorldIndex = 0;
+    Spawner->Intensity = 1.0f;
+    Spawner->Color = AK_White3();    
+}
+
 const ak_char* DevUI_GetEntityType(entity_type Type)
 {
 #define ENUM_TYPE(type) case type: return #type
@@ -158,12 +167,22 @@ ak_fixed_array<const ak_char*> DevUI_GetAllTextureInfoNames(assets* Assets)
     return Result;
 }
 
-void DevUI_WorldIndexTool(ak_u32* WorldIndex, const ak_char** WorldIndexList, ak_u32 WorldIndexCount)
+void DevUI_DragFloatTool(ak_u32 Hash, const ak_char* Name, ak_f32 ItemWidth, ak_f32* Data, ak_f32 Speed, ak_f32 Min, ak_f32 Max)
+{
+    AlignTextToFramePadding();
+    Text(Name);
+    SameLine();
+    PushItemWidth(ItemWidth);
+    DragFloat(Hash, "", Data, Speed, Min, Max);
+    PopItemWidth();
+}
+
+void DevUI_WorldIndexTool(ak_u32 Hash, ak_u32* WorldIndex, const ak_char** WorldIndexList, ak_u32 WorldIndexCount)
 {
     AlignTextToFramePadding();
     Text("World Index");
     SameLine();
-    Combo(AK_HashFunction("World Index"), "", (int*)WorldIndex, WorldIndexList, WorldIndexCount);    
+    Combo(Hash, "", (int*)WorldIndex, WorldIndexList, WorldIndexCount);    
 }
 
 void DevUI_MeshTool(assets* Assets, mesh_asset_id* MeshID)
@@ -175,12 +194,9 @@ void DevUI_MeshTool(assets* Assets, mesh_asset_id* MeshID)
     Combo(AK_HashFunction("Mesh"), "", (int*)MeshID, MeshNames.Data, MeshNames.Size);
 }
 
-void DevUI_MassTool(ak_f32* Mass)
+void DevUI_MassTool(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Mass)
 {
-    AlignTextToFramePadding();
-    Text("Mass");                    
-    SameLine();
-    DragFloat(AK_HashFunction("Mass"), "", Mass, 0.01f, 1.0f, 10000.0f);
+    DevUI_DragFloatTool(Hash, "Mass", ItemWidth, Mass, 0.01f, 1.0f, 10000.0f);    
 }
 
 void DevUI_MaterialTool(assets* Assets, material* Material)
@@ -238,13 +254,8 @@ void DevUI_MaterialTool(assets* Assets, material* Material)
                 Combo(AK_HashFunction("Specular Texture"), "", (int*)&Specular->SpecularID, TextureNames.Data, TextureNames.Size);
             }
             else
-            {
-                AlignTextToFramePadding();
-                Text("Value");
-                SameLine();
-                PushItemWidth(60);
-                DragFloat(AK_HashFunction("Specular Color"), "", &Specular->Specular, 0.01f, 0.0f, 1.0f); SameLine();                                
-                PopItemWidth();
+            {                
+                DevUI_DragFloatTool(AK_HashFunction("Specular Color"), "Value", 60, &Specular->Specular, 0.01f, 0.0f, 1.0f); SameLine();                                
                 
                 ak_v3f SpecularDisplay = AK_V3(Specular->Specular, Specular->Specular, Specular->Specular);
                 ColorEdit3("", (ak_f32*)&SpecularDisplay, ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoPicker);                                                                
@@ -307,20 +318,17 @@ void DevUI_ScaleTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Scale)
 
 void DevUI_RadiusTool(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Radius)
 {
-    Text("Radius");
-    SameLine();
-    PushItemWidth(ItemWidth);
-    DragFloat(Hash, "", Radius, 0.01f, 0.0f, 100.0f);
-    PopItemWidth();
+    DevUI_DragFloatTool(Hash, "Radius", ItemWidth, Radius, 0.01f, 0.0f, 100.0f);    
 }
 
 void DevUI_RestitutionTool(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Restitution)
 {
-    Text("Restitution");
-    SameLine();
-    PushItemWidth(ItemWidth);
-    DragFloat(Hash, "", Restitution, 0.001f, 0.0f, 1.0f);
-    PopItemWidth();
+    DevUI_DragFloatTool(Hash, "Restitution", ItemWidth, Restitution, 0.001f, 0.0f, 1.0f);    
+}
+
+void DevUI_IntensityTool(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Intensity)
+{
+    DevUI_DragFloatTool(Hash, "Intensity", ItemWidth, Intensity, 0.01f, 1.0f, 100.0f);
 }
 
 ak_bool DevUI_ValidateMaterial(material* Material)
@@ -344,7 +352,8 @@ ak_bool DevUI_ValidateMaterial(material* Material)
     return true;
 }
 
-void DevUI_EntitySpawner(game* Game, entity_spawner* Spawner)
+void DevUI_EntitySpawner(ak_pool<dev_entity>* DevEntityStorage, assets* Assets, dev_selected_object* SelectedObject, 
+                         entity_spawner* Spawner, ak_u32 CurrentWorldIndex)
 {    
     if(!Spawner->Init)
     {
@@ -400,11 +409,11 @@ void DevUI_EntitySpawner(game* Game, entity_spawner* Spawner)
             
             Separator();                    
             const ak_char* WorldIndexList[] = {"World A", "World B", "Both"}; 
-            DevUI_WorldIndexTool(&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));                    
+            DevUI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));                    
             Separator();                    
-            DevUI_MeshTool(Game->Assets, &Spawner->MeshID);                    
+            DevUI_MeshTool(Assets, &Spawner->MeshID);                    
             Separator();                    
-            DevUI_MaterialTool(Game->Assets, &Spawner->Material);
+            DevUI_MaterialTool(Assets, &Spawner->Material);
             Separator();
             
             if(Button(AK_HashFunction("Create Entity Button"), "Create"))
@@ -412,14 +421,26 @@ void DevUI_EntitySpawner(game* Game, entity_spawner* Spawner)
                 if(DevUI_ValidateMaterial(&Spawner->Material))                        
                 {                    
                     if(Spawner->WorldIndex == 2)
-                    {
-                        CreateDualStaticEntity(Game, Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle),
-                                               Spawner->MeshID, Spawner->Material);                        
+                    {                        
+                        SelectedObject->Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
+                        world_id A = DevContext_CreateDevEntity(DevEntityStorage, ENTITY_TYPE_STATIC, 0, Spawner->Translation, Spawner->Scale, 
+                                                                AK_RotQuat(Spawner->Axis, Spawner->Angle), Spawner->MeshID, Spawner->Material);
+                        world_id B = DevContext_CreateDevEntity(DevEntityStorage, ENTITY_TYPE_STATIC, 1, Spawner->Translation, Spawner->Scale, 
+                                                                AK_RotQuat(Spawner->Axis, Spawner->Angle), Spawner->MeshID, Spawner->Material);                        
+                        if(CurrentWorldIndex == 0)
+                            SelectedObject->EntityID = A;
+                        else
+                            SelectedObject->EntityID = B;                        
                     }
                     else
-                    {                            
-                        CreateStaticEntity(Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle), 
-                                           Spawner->MeshID, Spawner->Material);                        
+                    {                           
+                        world_id EntityID = DevContext_CreateDevEntity(DevEntityStorage, ENTITY_TYPE_STATIC, Spawner->WorldIndex, Spawner->Translation, Spawner->Scale, 
+                                                                       AK_RotQuat(Spawner->Axis, Spawner->Angle), Spawner->MeshID, Spawner->Material);                        
+                        if(Spawner->WorldIndex == CurrentWorldIndex)
+                        {
+                            SelectedObject->Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
+                            SelectedObject->EntityID = EntityID;
+                        }
                     }                    
                 }
             }
@@ -433,22 +454,25 @@ void DevUI_EntitySpawner(game* Game, entity_spawner* Spawner)
             DevUI_RestitutionTool(AK_HashFunction("Restitution Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Restitution);
             Separator();
             const ak_char* WorldIndexList[] = {"World A", "World B"};
-            DevUI_WorldIndexTool(&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));                    
+            DevUI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));                    
             Separator();
-            DevUI_MassTool(&Spawner->Mass);
+            DevUI_MassTool(AK_HashFunction("Entity Mass"), TRANSFORM_ITEM_WIDTH, &Spawner->Mass);
             Separator();
-            DevUI_MaterialTool(Game->Assets, &Spawner->Material);
+            DevUI_MaterialTool(Assets, &Spawner->Material);
             Separator();                    
             
             if(Button(AK_HashFunction("Create Entity Button"), "Create"))
             {
                 if(DevUI_ValidateMaterial(&Spawner->Material))                        
-                {                    
+                {              
+#if 0 
                     entity_id ID = CreateSphereRigidBody(Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius, 
                                                          Spawner->Mass, Spawner->Restitution, Spawner->Material);                    
+#endif
                 }
             }
         } break;
+        
         
         case ENTITY_TYPE_PUSHABLE:
         {
@@ -456,17 +480,18 @@ void DevUI_EntitySpawner(game* Game, entity_spawner* Spawner)
             DevUI_RadiusTool(AK_HashFunction("Radius Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Radius);
             Separator();
             const ak_char* WorldIndexList[] = {"World A", "World B", "Both", "Linked"};
-            DevUI_WorldIndexTool(&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+            DevUI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
             Separator();
-            DevUI_MassTool(&Spawner->Mass);
+            DevUI_MassTool(AK_HashFunction("Entity Mass"), TRANSFORM_ITEM_WIDTH, &Spawner->Mass);
             Separator();
-            DevUI_MaterialTool(Game->Assets, &Spawner->Material);
+            DevUI_MaterialTool(Assets, &Spawner->Material);
             Separator();
             
             if(Button(AK_HashFunction("Create Entity Button"), "Create"))
             {
                 if(DevUI_ValidateMaterial(&Spawner->Material))
                 {
+#if 0 
                     if(Spawner->WorldIndex == 2)
                     {
                         entity_id A = CreatePushableBox(Game, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);
@@ -480,7 +505,8 @@ void DevUI_EntitySpawner(game* Game, entity_spawner* Spawner)
                     {
                         entity_id ID = CreatePushableBox(Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);                        
                     }                    
-                }
+#endif
+                }                
             }
         } break;
         
@@ -488,9 +514,70 @@ void DevUI_EntitySpawner(game* Game, entity_spawner* Spawner)
     }        
 }
 
-void DevUI_Update(dev_ui* UI, game* Game)
-{    
-    NewFrame();
+void DevUI_LightSpawner(ak_pool<point_light>* InitialPointLights, dev_selected_object* SelectedObject, light_spawner* Spawner, ak_u32 CurrentWorldIndex)
+{        
+    if(!Spawner->Init)
+    {
+        DevUI_ClearSpawner(Spawner);
+        Spawner->Init = true;
+    }
+    
+    const ak_f32 TRANSFORM_ITEM_WIDTH = 80.0f;            
+    DevUI_TranslationTool(AK_HashFunction("Translation Light Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Translation);
+    Separator();
+    const ak_char* WorldIndexList[] = {"World A", "World B", "Both"}; 
+    DevUI_WorldIndexTool(AK_HashFunction("Light World Index"), &Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+    Separator();
+    DevUI_RadiusTool(AK_HashFunction("Light Radius"), TRANSFORM_ITEM_WIDTH, &Spawner->Radius);
+    Separator();               
+    DevUI_IntensityTool(AK_HashFunction("Light Intensity"), TRANSFORM_ITEM_WIDTH, &Spawner->Intensity);            
+    Separator();
+    
+    Text("Color");            
+    SameLine();            
+    ColorEdit3(AK_HashFunction("Light Color"), "", (ak_f32*)&Spawner->Color, ImGuiColorEditFlags_RGB);            
+    
+    if(Button(AK_HashFunction("Create Point Light Button"), "Create"))
+    {
+        point_light PointLight = {};
+        PointLight.On = true;
+        PointLight.Position = Spawner->Translation;
+        PointLight.Radius = Spawner->Radius;
+        PointLight.Color = Spawner->Color;
+        PointLight.Intensity = Spawner->Intensity;
+        
+        if(Spawner->WorldIndex == 2)
+        {
+            world_id A = DevContext_CreatePointLight(InitialPointLights, 0, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
+            world_id B = DevContext_CreatePointLight(InitialPointLights, 1, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
+            
+            SelectedObject->Type = DEV_SELECTED_OBJECT_POINT_LIGHT;
+            if(CurrentWorldIndex == 0)
+            {
+                SelectedObject->PointLightID = A;
+            }
+            else
+            {
+                SelectedObject->PointLightID = B;
+            }
+        }
+        else
+        {
+            world_id PointLightID = DevContext_CreatePointLight(InitialPointLights, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);            
+            if(CurrentWorldIndex == Spawner->WorldIndex)
+            {
+                SelectedObject->Type = DEV_SELECTED_OBJECT_POINT_LIGHT;
+                SelectedObject->PointLightID = PointLightID;
+            }
+        }
+    }
+}
+
+void DevUI_Update(dev_context* DevContext, dev_ui* UI)
+{   
+    game* Game = DevContext->Game;
+    
+    NewFrame();        
 #if SHOW_IMGUI_DEMO_WINDOW
     //IMPORTANT(EVERYONE): If you need help figuring out how to use ImGui you can always switch this to 1 and look at the imgui demo window
     //for some functionality that you are trying to create. It doesn't have everything but it's probably a good start    
@@ -530,24 +617,24 @@ void DevUI_Update(dev_ui* UI, game* Game)
             SameLine();
             Combo(AK_HashFunction("ViewModes"), "", (int*)&UI->ViewModeType, ViewModeTypes, AK_Count(ViewModeTypes));
             
-            dev_ui_transform_state* TransformState = &UI->TransformState;
+            dev_gizmo_state* GizmoState = &DevContext->GizmoState;            
             
             const char* TransformTypes[] = {"Translate", "Scale", "Rotate"};
             AlignTextToFramePadding();
             Text("Object Transform Mode");
             SameLine();
-            Combo(AK_HashFunction("Object Transform Mode"), "", (int*)&TransformState->TransformMode, TransformTypes, AK_Count(TransformTypes));
+            Combo(AK_HashFunction("Object Transform Mode"), "", (int*)&GizmoState->TransformMode, TransformTypes, AK_Count(TransformTypes));
             
-            switch(TransformState->TransformMode)
+            switch(GizmoState->TransformMode)
             {
-                case GIZMO_MOVEMENT_TYPE_TRANSLATE: 
+                case DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE: 
                 { 
-                    DragFloat("GridSize", &TransformState->GridDistance, 0.1f, 0.1f, 10); 
-                    AK_Clamp(TransformState->GridDistance, 0.1f, 10.0f);  
+                    DragFloat("GridSize", &GizmoState->GridDistance, 0.1f, 0.1f, 10); 
+                    AK_Clamp(GizmoState->GridDistance, 0.1f, 10.0f);  
                 } break;
                 
-                case GIZMO_MOVEMENT_TYPE_SCALE: { DragFloat("Scale Snap", &TransformState->ScaleSnap, 0.1f, 0.1f, 10.0f); } break;
-                case GIZMO_MOVEMENT_TYPE_ROTATE: { DragFloat("Rotate Angle Snap", &TransformState->RotationAngleSnap, 0.1f, 0.1f, 180.0f); } break;
+                case DEV_GIZMO_MOVEMENT_TYPE_SCALE: { DragFloat("Scale Snap", &GizmoState->ScaleSnap, 0.1f, 0.1f, 10.0f); } break;
+                case DEV_GIZMO_MOVEMENT_TYPE_ROTATE: { DragFloat("Rotate Angle Snap", &GizmoState->RotationAngleSnap, 0.1f, 0.1f, 180.0f); } break;
             }                                    
         }
         
@@ -578,7 +665,15 @@ void DevUI_Update(dev_ui* UI, game* Game)
         SetNextWindowPos(ImVec2(0, DevToolsWindowHeight));
         if(Begin("Entity Spawner", (bool*)&UI->EntitySpawnerOpen, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            DevUI_EntitySpawner(Game, &UI->Spawner);
+            DevUI_EntitySpawner(DevContext->InitialEntityStorage, Game->Assets, &DevContext->SelectedObject, &UI->EntitySpawner, Game->CurrentWorldIndex);
+        }
+        ak_f32 EntitySpawnerHeight = GetWindowHeight();
+        End();                
+        
+        SetNextWindowPos(ImVec2(0, DevToolsWindowHeight+EntitySpawnerHeight));
+        if(Begin("Light Spawner", (bool*)&UI->LightSpawnerOpen, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            DevUI_LightSpawner(DevContext->InitialPointLights, &DevContext->SelectedObject, &UI->LightSpawner, Game->CurrentWorldIndex);            
         }
         End();
     }
@@ -586,7 +681,7 @@ void DevUI_Update(dev_ui* UI, game* Game)
     Render();
 }
 
-void DevUI_Render(graphics* Graphics, game* Game, dev_ui* UI)
+void DevUI_Render(graphics* Graphics, dev_ui* UI, graphics_render_buffer* MergeRenderBuffer)
 {   
     UpdateRenderBuffer(&UI->UIRenderBuffer, Graphics, Graphics->RenderDim);
     
@@ -594,8 +689,8 @@ void DevUI_Render(graphics* Graphics, game* Game, dev_ui* UI)
     PushProjection(Graphics, AK_Orthographic(0.0f, (ak_f32)UI->UIRenderBuffer->Resolution.w, 0.0f, (ak_f32)UI->UIRenderBuffer->Resolution.h, -1.0f, 1.0f));
     
     PushClearColor(Graphics, AK_Black4());    
-    if(Game->RenderBuffer && UI->PlayGame)
-        PushCopyToRenderBuffer(Graphics, Game->RenderBuffer, AK_V2<ak_i32>(), UI->UIRenderBuffer->Resolution);        
+    PushCopyToRenderBuffer(Graphics, MergeRenderBuffer, AK_V2<ak_i32>(), UI->UIRenderBuffer->Resolution);
+    
     PushSRGBRenderBufferWrites(Graphics, true);
     PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);        

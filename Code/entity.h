@@ -12,6 +12,21 @@ enum entity_type
     ENTITY_TYPE_COUNT
 };
 
+struct world_id
+{
+    ak_u64 ID;
+    ak_u32 WorldIndex;    
+    
+    
+    inline ak_bool IsValid()
+    {
+        ak_bool Result = (ID != 0) && ((WorldIndex == 0) || (WorldIndex == 1));
+        return Result;
+    }
+};
+
+
+//TODO(JJ): Get rid of this
 struct entity_id
 {
     ak_u64 ID;
@@ -23,6 +38,10 @@ struct entity_id
         return Result;
     }
 };
+
+inline world_id MakeWorldID(ak_u64 ID, ak_u32 WorldIndex) { world_id Result = {ID, WorldIndex}; return Result; }
+inline world_id InvalidWorldID() { return MakeWorldID(0, (ak_u32)-1); }
+inline ak_bool AreEqualIDs(world_id A, world_id B) { return (A.ID == B.ID) && (A.WorldIndex == B.WorldIndex); }
 
 struct dual_entity_id
 {
@@ -50,6 +69,15 @@ struct entity
     void* UserData;            
     
     collision_event_function* OnCollision;
+};
+
+struct point_light
+{
+    ak_v3f Position; 
+    ak_f32 Radius;
+    ak_color3f Color;
+    ak_f32 Intensity;
+    ak_bool On;
 };
 
 enum player_state

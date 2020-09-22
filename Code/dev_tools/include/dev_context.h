@@ -1,6 +1,8 @@
 #ifndef DEV_CONTEXT_H
 #define DEV_CONTEXT_H
 
+#define DEV_GIZMO_PLANE_DISTANCE 0.4f
+
 struct dev_input
 {
     union
@@ -20,7 +22,7 @@ struct dev_input
         };
     };
     
-    ak_v2i MouseDelta;
+    ak_v2i LastMouseCoordinates;
     ak_v2i MouseCoordinates;
     ak_f32 Scroll;
 };
@@ -49,6 +51,75 @@ struct dev_capsule_mesh
     ak_u32 BodyIndexCount;    
 };
 
+struct dev_entity
+{
+    entity_type Type;
+    world_id ID;
+    world_id LinkID;
+    ak_sqtf Transform;
+    mesh_asset_id MeshID;
+    material Material;
+};
+
+struct dev_camera
+{    
+    ak_v3f   Target;
+    ak_v3f   SphericalCoordinates;    
+};
+
+enum dev_selected_object_type
+{
+    DEV_SELECTED_OBJECT_TYPE_NONE,
+    DEV_SELECTED_OBJECT_TYPE_ENTITY,
+    DEV_SELECTED_OBJECT_TYPE_PLAYER_CAPSULE,
+    DEV_SELECTED_OBJECT_POINT_LIGHT
+};
+
+struct dev_selected_object
+{
+    dev_selected_object_type Type;
+    union
+    {
+        capsule* PlayerCapsule;
+        world_id PointLightID;
+        world_id EntityID;
+    };
+};
+
+enum dev_gizmo_movement_type
+{
+    DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE,
+    DEV_GIZMO_MOVEMENT_TYPE_SCALE,
+    DEV_GIZMO_MOVEMENT_TYPE_ROTATE
+};
+
+enum dev_gizmo_movement_direction
+{
+    DEV_GIZMO_MOVEMENT_DIRECTION_X,
+    DEV_GIZMO_MOVEMENT_DIRECTION_Y,
+    DEV_GIZMO_MOVEMENT_DIRECTION_Z,
+    DEV_GIZMO_MOVEMENT_DIRECTION_XY,
+    DEV_GIZMO_MOVEMENT_DIRECTION_XZ,
+    DEV_GIZMO_MOVEMENT_DIRECTION_YZ
+};
+
+struct dev_gizmo
+{
+    dev_mesh* Mesh;
+    ak_sqtf Transform;
+    ak_v3f IntersectionPlane;
+    dev_gizmo_movement_direction MovementDirection;
+};
+
+struct dev_gizmo_state
+{
+    dev_gizmo_movement_type TransformMode;
+    dev_gizmo Gizmos[6];    
+    ak_f32 GridDistance;
+    ak_f32 ScaleSnap;
+    ak_f32 RotationAngleSnap;
+};
+
 struct dev_context
 {
     ak_arena* DevStorage;
@@ -71,7 +142,16 @@ struct dev_context
     dev_mesh         TriangleCircleMesh;
     dev_mesh         TriangleScaleMesh;
     dev_mesh         TriangleTorusMesh;    
-    dev_mesh         TrianglePlaneMesh;
+    dev_mesh         TrianglePlaneMesh;    
+    
+    graphics_render_buffer* DevRenderBuffer;
+    dev_camera DevCameras[2];
+    capsule InitialPlayerCapsules[2];
+    ak_pool<dev_entity> InitialEntityStorage[2];    
+    ak_pool<point_light> InitialPointLights[2];    
+    
+    dev_selected_object SelectedObject;
+    dev_gizmo_state GizmoState;
 };
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);

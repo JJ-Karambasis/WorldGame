@@ -486,23 +486,21 @@ graphics_material ConvertToGraphicsMaterial(assets* Assets, graphics* Graphics, 
     return GraphicsMaterial;
 }
 
-void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, view_settings* Camera, assets* Assets, graphics_object_list GraphicsObjects)
+void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* RenderBuffer, 
+                              view_settings* Camera, assets* Assets, 
+                              ak_fixed_array<graphics_object>* GraphicsObjects, 
+                              ak_fixed_array<point_light>* PointLights)
 {    
     graphics_light_buffer LightBuffer = {};
-    LightBuffer.DirectionalLightCount = 0;        
-    LightBuffer.DirectionalLights[0] = CreateDirectionalLight(AK_V3(0.0f, 0.0f, 4.0f), AK_White3(), 1.0f, AK_Normalize(AK_V3(0.0f, 0.3f, -0.6f)), 
-                                                              -5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 7.5f);
     
-    LightBuffer.PointLightCount = 9;
-    LightBuffer.PointLights[0] = CreatePointLight(AK_White3(), 5.0f, AK_V3(-1.0f,  1.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[1] = CreatePointLight(AK_Red3(),   2.0f, AK_V3(-4.0f,  4.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[2] = CreatePointLight(AK_Green3(), 2.0f, AK_V3(-4.0f, -4.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[3] = CreatePointLight(AK_Blue3(),  2.0f, AK_V3( 0.0f,  0.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[4] = CreatePointLight(AK_Red3(),   2.0f, AK_V3( 0.0f,  4.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[5] = CreatePointLight(AK_Green3(), 2.0f, AK_V3( 0.0f, -4.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[6] = CreatePointLight(AK_Blue3(),  2.0f, AK_V3( 4.0f,  0.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[7] = CreatePointLight(AK_Red3(),   2.0f, AK_V3( 4.0f,  4.0f, 3.0f), 10.0f);
-    LightBuffer.PointLights[8] = CreatePointLight(AK_Green3(), 2.0f, AK_V3( 4.0f, -4.0f, 3.0f), 10.0f);    
+    AK_ForEach(PointLight, PointLights)
+    {
+        if(PointLight->On)
+        {
+            LightBuffer.PointLights[LightBuffer.PointLightCount++] = 
+                CreatePointLight(PointLight->Color, PointLight->Intensity, PointLight->Position, PointLight->Radius);
+        }
+    }
     
     PushDepth(Graphics, true);
     PushSRGBRenderBufferWrites(Graphics, false);
@@ -517,7 +515,7 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
         PushShadowMap(Graphics);
         PushClearDepth(Graphics, 1.0f);
         
-        AK_ForEach(Object, &GraphicsObjects)            
+        AK_ForEach(Object, GraphicsObjects)            
         {
             AK_Assert(Object->MeshID != INVALID_MESH_ID, "Cannot draw an invalid mesh");            
             
@@ -549,7 +547,7 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
             PushOmniShadowMap(Graphics, PointLight->Radius);
             PushClearDepth(Graphics, 1.0f);
             
-            AK_ForEach(Object, &GraphicsObjects)            
+            AK_ForEach(Object, GraphicsObjects)            
             {
                 AK_Assert(Object->MeshID != INVALID_MESH_ID, "Cannot draw an invalid mesh");            
                 
@@ -566,7 +564,7 @@ void PushWorldShadingCommands(graphics* Graphics, graphics_render_buffer* Render
     
     PushLightBuffer(Graphics, &LightBuffer);            
     
-    AK_ForEach(Object, &GraphicsObjects)            
+    AK_ForEach(Object, GraphicsObjects)            
     {
         AK_Assert(Object->MeshID != INVALID_MESH_ID, "Cannot draw an invalid mesh");            
         

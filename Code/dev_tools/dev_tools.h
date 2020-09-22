@@ -31,6 +31,8 @@ typedef PLATFORM_DEVELOPMENT_UPDATE(platform_development_update);
 
 #if DEVELOPER_BUILD
 using namespace ImGui;
+#include "src/dev_draw.cpp"
+#include "src/dev_ray.cpp"
 #include "src/dev_context.cpp"
 #include "src/dev_ui.cpp"
 #endif

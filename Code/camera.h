@@ -1,7 +1,7 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
-#define CAMERA_FIELD_OF_VIEW PI*0.3f
+#define CAMERA_FIELD_OF_VIEW AK_PI*0.3f
 #define CAMERA_ZNEAR 0.01f
 #define CAMERA_ZFAR 500.0f
 

@@ -29,6 +29,7 @@ struct capsule
     
     inline ak_f32 GetHeight() { return AK_Magnitude(P1-P0); }
     inline ak_v3f GetCenter() { return P0 + (P1-P0)*0.5f; }
+    inline ak_v3f GetBottom() { return P0 - AK_Normalize(P1-P0)*Radius; }
 };
 
 struct collision_volume
