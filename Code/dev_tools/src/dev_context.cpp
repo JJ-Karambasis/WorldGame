@@ -17,16 +17,17 @@ world_id DevContext_CreateDevEntity(ak_pool<dev_entity>* EntityStorage, entity_t
     return Result;    
 }
 
-void DevContext_DeletePointLight(ak_pool<point_light>* PointLightStorage, world_id ID)
+void DevContext_DeletePointLight(ak_pool<dev_point_light>* PointLightStorage, world_id ID)
 {
     PointLightStorage[ID.WorldIndex].Free(ID.ID);
 }
 
-world_id DevContext_CreatePointLight(ak_pool<point_light>* PointLightStorage, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Radius,
+world_id DevContext_CreatePointLight(ak_pool<dev_point_light>* PointLightStorage, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Radius,
                                      ak_color3f Color, ak_f32 Intensity)
 {
     world_id Result = MakeWorldID(PointLightStorage[WorldIndex].Allocate(), WorldIndex);
-    point_light* PointLight = PointLightStorage[WorldIndex].Get(Result.ID);
+    dev_point_light* PointLight = PointLightStorage[WorldIndex].Get(Result.ID);
+    PointLight->ID = Result;
     PointLight->On = true;
     PointLight->Position = Position;
     PointLight->Radius = Radius;
@@ -267,7 +268,8 @@ ak_v3f DevContext_GetSelectedObjectPosition(dev_context* Context, dev_selected_o
     switch(SelectedObject->Type)
     {
         case DEV_SELECTED_OBJECT_TYPE_ENTITY: return Context->InitialEntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID)->Transform.Translation;        
-        case DEV_SELECTED_OBJECT_POINT_LIGHT: return Context->InitialPointLights[SelectedObject->PointLightID.WorldIndex].Get(SelectedObject->PointLightID.ID)->Position;
+        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT: return Context->InitialPointLights[SelectedObject->PointLightID.WorldIndex].Get(SelectedObject->PointLightID.ID)->Position;
+        case DEV_SELECTED_OBJECT_TYPE_PLAYER_CAPSULE: return SelectedObject->PlayerCapsule->GetBottom();
         
         AK_INVALID_DEFAULT_CASE;
     }
@@ -525,7 +527,7 @@ void DevContext_Tick()
                     Context->SelectedObject = {};
                 } break;
                 
-                case DEV_SELECTED_OBJECT_POINT_LIGHT:
+                case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                 {
                     DevContext_DeletePointLight(Context->InitialPointLights, Context->SelectedObject.PointLightID);
                     Context->SelectedObject = {};
@@ -562,7 +564,7 @@ void DevContext_Tick()
     
     AK_ForEach(PointLight, &PointLightList)
     {
-        DevDraw_Sphere(Context, PointLight->Position, 0.1f, AK_Yellow3());
+        DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());
     }
     
     PushDepth(Graphics, false);

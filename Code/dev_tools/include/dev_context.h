@@ -2,6 +2,7 @@
 #define DEV_CONTEXT_H
 
 #define DEV_GIZMO_PLANE_DISTANCE 0.4f
+#define DEV_POINT_LIGHT_RADIUS 0.1f
 
 struct dev_input
 {
@@ -61,6 +62,11 @@ struct dev_entity
     material Material;
 };
 
+struct dev_point_light : public point_light
+{
+    world_id ID;
+};
+
 struct dev_camera
 {    
     ak_v3f   Target;
@@ -72,7 +78,7 @@ enum dev_selected_object_type
     DEV_SELECTED_OBJECT_TYPE_NONE,
     DEV_SELECTED_OBJECT_TYPE_ENTITY,
     DEV_SELECTED_OBJECT_TYPE_PLAYER_CAPSULE,
-    DEV_SELECTED_OBJECT_POINT_LIGHT
+    DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT
 };
 
 struct dev_selected_object
@@ -148,7 +154,7 @@ struct dev_context
     dev_camera DevCameras[2];
     capsule InitialPlayerCapsules[2];
     ak_pool<dev_entity> InitialEntityStorage[2];    
-    ak_pool<point_light> InitialPointLights[2];    
+    ak_pool<dev_point_light> InitialPointLights[2];    
     
     dev_selected_object SelectedObject;
     dev_gizmo_state GizmoState;

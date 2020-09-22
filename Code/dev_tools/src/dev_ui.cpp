@@ -514,7 +514,7 @@ void DevUI_EntitySpawner(ak_pool<dev_entity>* DevEntityStorage, assets* Assets, 
     }        
 }
 
-void DevUI_LightSpawner(ak_pool<point_light>* InitialPointLights, dev_selected_object* SelectedObject, light_spawner* Spawner, ak_u32 CurrentWorldIndex)
+void DevUI_LightSpawner(ak_pool<dev_point_light>* InitialPointLights, dev_selected_object* SelectedObject, light_spawner* Spawner, ak_u32 CurrentWorldIndex)
 {        
     if(!Spawner->Init)
     {
@@ -551,7 +551,7 @@ void DevUI_LightSpawner(ak_pool<point_light>* InitialPointLights, dev_selected_o
             world_id A = DevContext_CreatePointLight(InitialPointLights, 0, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
             world_id B = DevContext_CreatePointLight(InitialPointLights, 1, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
             
-            SelectedObject->Type = DEV_SELECTED_OBJECT_POINT_LIGHT;
+            SelectedObject->Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
             if(CurrentWorldIndex == 0)
             {
                 SelectedObject->PointLightID = A;
@@ -566,7 +566,7 @@ void DevUI_LightSpawner(ak_pool<point_light>* InitialPointLights, dev_selected_o
             world_id PointLightID = DevContext_CreatePointLight(InitialPointLights, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);            
             if(CurrentWorldIndex == Spawner->WorldIndex)
             {
-                SelectedObject->Type = DEV_SELECTED_OBJECT_POINT_LIGHT;
+                SelectedObject->Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
                 SelectedObject->PointLightID = PointLightID;
             }
         }

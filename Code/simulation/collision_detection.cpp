@@ -9,11 +9,11 @@ struct ray
     ak_v3f Direction;
 };
 
-ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, sphere* Sphere)
+ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, ak_v3f CenterP, ak_f32 Radius)
 {
-    ak_v3f CO = Origin-Sphere->CenterP;
+    ak_v3f CO = Origin-CenterP;
     ak_f32 A = AK_Dot(CO, Direction);
-    ak_f32 B = AK_SqrMagnitude(CO) - AK_Square(Sphere->Radius);
+    ak_f32 B = AK_SqrMagnitude(CO) - AK_Square(Radius);
     
     if(A > 0 && B > 0) return INFINITY;
     ak_f32 Discr = AK_Square(A) - B;
@@ -24,10 +24,15 @@ ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, sphere* Sphere)
     return Result;
 }
 
-ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, capsule* Capsule)
+ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, sphere* Sphere)
 {
-    ak_v3f AB = Capsule->P1-Capsule->P0;
-    ak_v3f AO = Origin - Capsule->P0;
+    return RaySphereIntersection(Origin, Direction, Sphere->CenterP, Sphere->Radius);
+}
+
+ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, ak_v3f P0, ak_v3f P1, ak_f32 Radius)
+{
+    ak_v3f AB = P1-P0;
+    ak_v3f AO = Origin - P0;
     
     ak_f32 RayCapsuleProjection = AK_Dot(AB, Direction);
     ak_f32 LineSegmentCapsuleProjection = AK_Dot(AB, AO);
@@ -41,15 +46,12 @@ ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, capsule* Capsule)
     
     ak_f32 a = AK_SqrMagnitude(Q);
     ak_f32 b = 2.0f * AK_Dot(Q, R);
-    ak_f32 c = AK_SqrMagnitude(R) - AK_Square(Capsule->Radius);
+    ak_f32 c = AK_SqrMagnitude(R) - AK_Square(Radius);
     
     if(AK_EqualZeroEps(a))
-    {
-        sphere SphereA = CreateSphere(Capsule->P0, Capsule->Radius);
-        sphere SphereB = CreateSphere(Capsule->P1, Capsule->Radius);
-        
-        ak_f32 tA = RaySphereIntersection(Origin, Direction, &SphereA);
-        ak_f32 tB = RaySphereIntersection(Origin, Direction, &SphereB);
+    {        
+        ak_f32 tA = RaySphereIntersection(Origin, Direction, P0, Radius);
+        ak_f32 tB = RaySphereIntersection(Origin, Direction, P1, Radius);
         
         if(tA == INFINITY || tB == INFINITY)
             return INFINITY;
@@ -65,19 +67,17 @@ ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, capsule* Capsule)
     if(QEqu.Roots[0] < 0 && QEqu.Roots[1] < 0)
         return INFINITY;
     
-    ak_f32 tMin = AK_Min(AK_Min(QEqu.Roots[0], 0.0f), 
-                         AK_Min(QEqu.Roots[1], 0.0f));
+    ak_f32 tMin = AK_Min(QEqu.Roots[0], QEqu.Roots[1]);
+    tMin = AK_Max(tMin, 0.0f);
     
     ak_f32 t0 = tMin*m + n;
     if(t0 < 0)
-    {
-        sphere Sphere = CreateSphere(Capsule->P0, Capsule->Radius);
-        return RaySphereIntersection(Origin, Direction, &Sphere);
+    {        
+        return RaySphereIntersection(Origin, Direction, P0, Radius);
     }
     else if(t0 > 1)
-    {
-        sphere Sphere = CreateSphere(Capsule->P1, Capsule->Radius);
-        return RaySphereIntersection(Origin, Direction, &Sphere);
+    {        
+        return RaySphereIntersection(Origin, Direction, P1, Radius);
     }
     else
     {
@@ -85,6 +85,10 @@ ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, capsule* Capsule)
     }        
 }
 
+ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, capsule* Capsule)
+{
+    return RayCapsuleIntersection(Origin, Direction, Capsule->P0, Capsule->P1, Capsule->Radius);
+}
 
 ak_bool RayTriangleIntersection(ak_v3f RayOrigin, ak_v3f RayDirection, ak_v3f P0, ak_v3f P1, ak_v3f P2, ak_f32* t, ak_f32* u, ak_f32* v)
 {    

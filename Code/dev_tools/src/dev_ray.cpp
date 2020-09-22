@@ -40,5 +40,30 @@ dev_selected_object DevRay_CastToAllSelectables(dev_context* DevContext, ray Ray
         }
     }
     
+    AK_ForEach(PointLight, &DevContext->InitialPointLights[WorldIndex])
+    {
+        ak_f32 t = RaySphereIntersection(Ray.Origin, Ray.Direction, PointLight->Position, DEV_POINT_LIGHT_RADIUS);
+        if(t != INFINITY)
+        {
+            if((tBest > t) && (t > ZNear))
+            {
+                tBest = t;
+                Result.Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
+                Result.PointLightID = PointLight->ID;
+            }
+        }
+    }
+    
+    ak_f32 tCapsule = RayCapsuleIntersection(Ray.Origin, Ray.Direction, &DevContext->InitialPlayerCapsules[WorldIndex]);
+    if(tCapsule != INFINITY)
+    {
+        if((tBest > tCapsule) && (tCapsule > ZNear))
+        {
+            tBest = tCapsule;
+            Result.Type = DEV_SELECTED_OBJECT_TYPE_PLAYER_CAPSULE;
+            Result.PlayerCapsule = &DevContext->InitialPlayerCapsules[WorldIndex];
+        }
+    }
+    
     return Result;
 }
