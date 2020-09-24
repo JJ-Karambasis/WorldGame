@@ -26,32 +26,15 @@ struct world_id
 };
 
 
-//TODO(JJ): Get rid of this
-struct entity_id
-{
-    ak_u64 ID;
-    ak_u32 WorldIndex;    
-    
-    inline ak_bool IsValid()
-    {
-        ak_bool Result = (ID != 0) && ((WorldIndex == 0) || (WorldIndex == 1));
-        return Result;
-    }
-};
-
 inline world_id MakeWorldID(ak_u64 ID, ak_u32 WorldIndex) { world_id Result = {ID, WorldIndex}; return Result; }
 inline world_id InvalidWorldID() { return MakeWorldID(0, (ak_u32)-1); }
 inline ak_bool AreEqualIDs(world_id A, world_id B) { return (A.ID == B.ID) && (A.WorldIndex == B.WorldIndex); }
 
-struct dual_entity_id
+struct dual_world_id
 {
-    entity_id EntityA;
-    entity_id EntityB;    
+    world_id EntityA;
+    world_id EntityB;    
 };
-
-inline entity_id MakeEntityID(ak_u64 ID, ak_u32 WorldIndex) { entity_id Result = {ID, WorldIndex}; return Result; }
-inline entity_id InvalidEntityID() { return MakeEntityID(0, (ak_u32)-1); }
-inline ak_bool AreEqualIDs(entity_id A, entity_id B) { return (A.ID == B.ID) && (A.WorldIndex == B.WorldIndex); }
 
 struct entity;
 
@@ -61,23 +44,13 @@ typedef COLLISION_EVENT(collision_event_function);
 struct entity
 {    
     entity_type Type;    
-    entity_id ID;
-    entity_id LinkID;         
-    sim_entity_id SimEntityID;    
-    mesh_asset_id MeshID;
-    material Material;                
+    world_id ID;
+    world_id LinkID;         
+    sim_entity_id SimEntityID;                 
+    ak_u64 GraphicsEntityID;    
     void* UserData;            
     
     collision_event_function* OnCollision;
-};
-
-struct point_light
-{
-    ak_v3f Position; 
-    ak_f32 Radius;
-    ak_color3f Color;
-    ak_f32 Intensity;
-    ak_bool On;
 };
 
 enum player_state
@@ -90,7 +63,7 @@ enum player_state
 struct pushing_object
 {
     ak_u64 ID;
-    entity_id PlayerID;
+    world_id PlayerID;
     ak_v2f Direction;
 };
 

@@ -212,8 +212,7 @@ typedef EXECUTE_RENDER_COMMANDS(execute_render_commands);
 typedef INVALIDATE_SHADERS(invalidate_shaders);
 
 struct graphics
-{       
-    ak_v2i RenderDim;
+{           
     push_command_list CommandList;    
     void** PlatformData;                                        
     

@@ -18,7 +18,6 @@ struct game;
 #include "graphics.h"
 #include "assets/assets.h"
 #include "audio.h"
-#include "camera.h"
 #include "animation.h"
 
 struct jumping_quad
@@ -29,6 +28,7 @@ struct jumping_quad
 };
 
 #include "simulation/simulation.h"
+#include "graphics_state.h"
 #include "entity.h"
 #include "world_loader.h"
 
@@ -47,7 +47,7 @@ struct block_puzzle
     ak_u32 GoalRectCount;
     ak_u32 BlockEntityCount;
     goal_rect* GoalRects;    
-    entity_id* BlockEntities;                
+    world_id* BlockEntities;                
     
     ak_bool IsComplete;
     
@@ -69,79 +69,24 @@ struct game
     
     //This stuff is probably going to be our level data    
     entity_storage EntityStorage[2];    
-    ak_array<ak_sqtf> PrevTransforms[2];
-    ak_array<ak_sqtf> CurrentTransforms[2];    
-    game_camera PrevCameras[2];
-    game_camera CurrentCameras[2];    
+    ak_array<ak_sqtf> OldTransforms[2];
+    ak_array<ak_sqtf> NewTransforms[2];    
+    camera PrevCameras[2];    
+    camera CurrentCameras[2];    
     jumping_quad JumpingQuads[2];                
     //////////////////////////////////////////////////
     
     simulation Simulations[2];
+    graphics_state GraphicsStates[2];
     
+    ak_v2i Resolution;
     ak_f32 dt;
     ak_f32 dtFixed;    
     
     assets* Assets;
     audio_output* AudioOutput;
-    input* Input;              
-    graphics_render_buffer* RenderBuffer;            
-    
-    ak_bool NoInterpolation;
+    input* Input;                          
 };
-
-struct graphics_object
-{
-    ak_m4f WorldTransform;    
-    mesh_asset_id MeshID;    
-    material Material;
-    
-    ak_u32 JointCount;
-    ak_m4f* JointTransforms;        
-};
-
-struct graphics_object_list
-{
-    graphics_object* Objects;
-    ak_u32 Count;
-};
-
-struct graphics_state
-{
-    graphics_object_list GraphicsObjects;
-    game_camera Camera;
-};
-
-struct graphics_object_list_iter
-{
-    graphics_object_list* List;
-    ak_u32 CurrentIndex;
-    
-    inline graphics_object* First()
-    {
-        if(List->Count == 0)
-            return NULL;    
-        
-        graphics_object* Result = List->Objects + CurrentIndex++;        
-        return Result;
-    }
-    
-    inline graphics_object* Next()
-    {
-        if(CurrentIndex >= List->Count)
-            return NULL;
-        
-        graphics_object* Result = List->Objects + CurrentIndex++;
-        return Result;
-    }
-};
-
-inline graphics_object_list_iter 
-AK_BeginIter(graphics_object_list* List)
-{
-    graphics_object_list_iter Iter = {};
-    Iter.List = List;
-    return Iter;
-}
 
 inline simulation*
 GetSimulation(game* Game, ak_u32 WorldIndex)
@@ -151,10 +96,24 @@ GetSimulation(game* Game, ak_u32 WorldIndex)
 }
 
 inline simulation*
-GetSimulation(game* Game, entity_id ID)
+GetSimulation(game* Game, world_id ID)
 {
     simulation* Simulation = GetSimulation(Game, ID.WorldIndex);
     return Simulation;
+}
+
+inline graphics_state*
+GetGraphicsState(game* Game, ak_u32 WorldIndex)
+{
+    graphics_state* GraphicsState = Game->GraphicsStates + WorldIndex;
+    return GraphicsState;
+}
+
+inline graphics_state*
+GetGraphicsState(game* Game, world_id ID)
+{
+    graphics_state* GraphicsState = GetGraphicsState(Game, ID.WorldIndex);
+    return GraphicsState;
 }
 
 
@@ -166,7 +125,7 @@ typedef GAME_INITIALIZE(game_initialize);
 typedef GAME_FIXED_TICK(game_fixed_tick);
 typedef GAME_TICK(game_tick);
 
-#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, graphics_state* GraphicsState)
+#define GAME_RENDER(name) void name(game* Game, graphics_state* GraphicsState)
 typedef GAME_RENDER(game_render);
 
 #define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, samples* Samples)

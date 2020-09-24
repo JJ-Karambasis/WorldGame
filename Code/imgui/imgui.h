@@ -580,7 +580,7 @@ namespace ImGui
     IMGUI_API void          EndTooltip();
     IMGUI_API void          SetTooltip(const char* fmt, ...) IM_FMTARGS(1);                     // set a text-only tooltip, typically use with ImGui::IsItemHovered(). override any previous call to SetTooltip().
     IMGUI_API void          SetTooltipV(const char* fmt, va_list args) IM_FMTLIST(1);
-
+ 
     // Popups, Modals
     // The properties of popups windows are:
     // - They block normal mouse hovering detection outside them. (*)

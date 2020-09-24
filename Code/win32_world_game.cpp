@@ -3,9 +3,8 @@
 #include "audio.cpp"
 #include "animation.cpp"
 #include "simulation/simulation.cpp"
+#include "graphics_state.cpp"
 #include "entity.cpp"
-
-#include "graphics.cpp"
 
 #define DEV_TOOLS_IMPLEMENTATION
 #include "dev_tools/dev_tools.h"
@@ -19,6 +18,7 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* Keyboard);
 void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define Dev_Initialize(Game, Graphics, PlatformWindow) DevContext_Initialize(Game, Graphics, PlatformWindow, Platform_InitImGui, Platform_DevUpdate)
 #define Dev_Tick() DevContext_Tick()
+#define Dev_Render() DevContext_Render()
 #define Dev_WindowProc(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
 #define Dev_HandleMouse(RawMouse) Win32_HandleDevMouse(Dev_GetDeveloperContext(), RawMouse)
 #define Dev_HandleKeyboard(RawKeyboard) Win32_HandleDevKeyboard(Dev_GetDeveloperContext(), RawKeyboard)
@@ -26,6 +26,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #else
 #define Dev_Initialize(Game, Graphics, PlatformData)
 #define Dev_Tick()
+#define Dev_Render() 
 #define Dev_WindowProc(Window, Message, WParam, LParam) false
 #define Dev_HandleMouse(RawMouse) 
 #define Dev_HandleKeyboard(RawKeyboard) 
@@ -653,11 +654,11 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         while(Accumulator >= Game->dtFixed)
         {   
-            AK_Assert(Game->PrevTransforms[0].Size == Game->CurrentTransforms[0].Size, "Prev Entries and Current Entries size do not match for World A");
-            AK_Assert(Game->PrevTransforms[1].Size == Game->CurrentTransforms[1].Size, "Prev Entries and Current Entries size do not match for World B");
+            AK_Assert(Game->OldTransforms[0].Size == Game->NewTransforms[0].Size, "Old Entries and New Entries size do not match for World A");
+            AK_Assert(Game->OldTransforms[1].Size == Game->NewTransforms[1].Size, "Old Entries and New Entries size do not match for World B");
             
-            AK_CopyArray(Game->PrevTransforms[0].Entries, Game->CurrentTransforms[0].Entries, Game->CurrentTransforms[0].Size);
-            AK_CopyArray(Game->PrevTransforms[1].Entries, Game->CurrentTransforms[1].Entries, Game->CurrentTransforms[1].Size);
+            AK_CopyArray(Game->OldTransforms[0].Entries, Game->NewTransforms[0].Entries, Game->NewTransforms[0].Size);
+            AK_CopyArray(Game->OldTransforms[1].Entries, Game->NewTransforms[1].Entries, Game->NewTransforms[1].Size);
             Game->PrevCameras[0] = Game->CurrentCameras[0];
             Game->PrevCameras[1] = Game->CurrentCameras[1];
             
@@ -665,12 +666,6 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             {                
                 //Dev_RecordFrame();
                 Global_GameCode.FixedTick(Game, Dev_GetDeveloperContext());                                
-            }
-            
-            if(Game->NoInterpolation)
-            {
-                Accumulator = Game->dtFixed;
-                break;
             }
             
             Accumulator -= Game->dtFixed;
@@ -681,19 +676,10 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         Win32_ProcessMessages(&Input);        
         Game->dt = FrameTime;                
-        Graphics->RenderDim = Win32_GetWindowDim(Window);
-        
-        if(Dev_ShouldPlayGame())
-        {
-            Global_GameCode.Tick(Game, Dev_GetDeveloperContext());                                                
-            
-            ak_f32 tRenderInterpolate = Accumulator / Game->dtFixed;        
-            graphics_state GraphicsState = GetGraphicsState(Game, Game->CurrentWorldIndex, tRenderInterpolate);
-            
-            Global_GameCode.Render(Game, Graphics, &GraphicsState);
-        }
+        Game->Resolution = Win32_GetWindowDim(Window);
         
         Dev_Tick();
+        Dev_Render();
         
         //DEVELOPMENT_TICK(Game, Graphics, &GraphicsState, tRenderInterpolate);                                
         

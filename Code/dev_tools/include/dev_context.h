@@ -3,6 +3,7 @@
 
 #define DEV_GIZMO_PLANE_DISTANCE 0.4f
 #define DEV_POINT_LIGHT_RADIUS 0.1f
+#define DEV_CAMERA_MIN_DISTANCE 0.1f
 
 struct dev_input
 {
@@ -52,32 +53,10 @@ struct dev_capsule_mesh
     ak_u32 BodyIndexCount;    
 };
 
-struct dev_entity
-{
-    entity_type Type;
-    world_id ID;
-    world_id LinkID;
-    ak_sqtf Transform;
-    mesh_asset_id MeshID;
-    material Material;
-};
-
-struct dev_point_light : public point_light
-{
-    world_id ID;
-};
-
-struct dev_camera
-{    
-    ak_v3f   Target;
-    ak_v3f   SphericalCoordinates;    
-};
-
 enum dev_selected_object_type
 {
     DEV_SELECTED_OBJECT_TYPE_NONE,
-    DEV_SELECTED_OBJECT_TYPE_ENTITY,
-    DEV_SELECTED_OBJECT_TYPE_PLAYER_CAPSULE,
+    DEV_SELECTED_OBJECT_TYPE_ENTITY,    
     DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT
 };
 
@@ -85,8 +64,7 @@ struct dev_selected_object
 {
     dev_selected_object_type Type;
     union
-    {
-        capsule* PlayerCapsule;
+    {        
         world_id PointLightID;
         
         struct
@@ -122,22 +100,37 @@ struct dev_gizmo
     dev_gizmo_movement_direction MovementDirection;
 };
 
+struct gizmo_intersection_result
+{
+    ak_bool Hit;
+    dev_gizmo* Gizmo;
+    ak_v3f HitMousePosition;
+};
+
 struct dev_gizmo_state
 {
     dev_gizmo_movement_type TransformMode;
     dev_gizmo Gizmos[6];    
+    gizmo_intersection_result GizmoHit;
     ak_f32 GridDistance;
     ak_f32 ScaleSnap;
     ak_f32 RotationAngleSnap;
     ak_bool ShouldSnap;
 };
 
+struct dev_transform
+{
+    ak_v3f Translation;    
+    ak_v3f Scale;    
+    ak_v3f Euler;
+};
+
 struct dev_context
 {
-    ak_arena* DevStorage;
+    ak_arena* DevStorage;        
+    void* PlatformWindow;
     game* Game;
     graphics* Graphics;
-    void* PlatformWindow;
     platform_development_update* PlatformUpdate;
     
     dev_input DevInput;
@@ -156,12 +149,8 @@ struct dev_context
     dev_mesh         TriangleTorusMesh;    
     dev_mesh         TrianglePlaneMesh;    
     
-    graphics_render_buffer* DevRenderBuffer;
-    dev_camera DevCameras[2];
-    capsule InitialPlayerCapsules[2];
-    ak_pool<dev_entity> InitialEntityStorage[2];    
-    ak_pool<dev_point_light> InitialPointLights[2];    
-    ak_array<ak_v3f> InitialRotations[2];
+    camera Cameras[2];    
+    ak_array<dev_transform> InitialTransforms[2];
     
     dev_selected_object SelectedObject;
     dev_gizmo_state GizmoState;
@@ -169,5 +158,6 @@ struct dev_context
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);
 void DevContext_DebugLog(const ak_char* Format, ...);
-
+mesh_info DevContext_GetMeshInfoFromDevMesh(dev_mesh* DevMesh);
+mesh DevContext_GetMeshFromDevMesh(dev_mesh* DevMesh);
 #endif

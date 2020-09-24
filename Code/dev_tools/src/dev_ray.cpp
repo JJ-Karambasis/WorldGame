@@ -17,58 +17,112 @@ ray DevRay_GetRayFromMouse(ak_v2i MouseCoordinates, view_settings* ViewSettings,
     return Result;    
 }
 
-dev_selected_object DevRay_CastToAllSelectables(dev_context* DevContext, ray Ray, ak_u32 WorldIndex, ak_f32 ZNear)
-{
-    dev_selected_object Result = {};    
-    ak_f32 tBest = INFINITY;
-    AK_ForEach(Entity, &DevContext->InitialEntityStorage[WorldIndex])
+world_id DevRay_CastToAllEntities(ak_f32* t, assets* Assets, graphics_state* GraphicsState, ak_u32 WorldIndex, ray Ray, ak_f32 ZNear)
+{    
+    world_id HitEntityID = InvalidWorldID();
+    AK_ForEach(Entity, &GraphicsState[WorldIndex].GraphicsEntityStorage)
     {
-        mesh_info* MeshInfo = GetMeshInfo(DevContext->Game->Assets, Entity->MeshID);
-        mesh* Mesh = GetMesh(DevContext->Game->Assets, Entity->MeshID);
+        mesh_info* MeshInfo = GetMeshInfo(Assets, Entity->MeshID);
+        mesh* Mesh = GetMesh(Assets, Entity->MeshID);
         if(!Mesh)
-            Mesh = LoadMesh(DevContext->Game->Assets, Entity->MeshID);
+            Mesh = LoadMesh(Assets, Entity->MeshID);
         
         ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(Ray.Origin, Ray.Direction, Mesh, MeshInfo, Entity->Transform);
         if(IntersectionResult.FoundCollision)
         {
-            if((tBest > IntersectionResult.t) && (IntersectionResult.t > ZNear))
+            if((*t > IntersectionResult.t) && (IntersectionResult.t > ZNear))
             {
-                tBest = IntersectionResult.t;
-                Result.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
-                Result.EntityID = Entity->ID;                
+                *t = IntersectionResult.t;  
+                HitEntityID = MakeWorldID(Entity->ID, WorldIndex);                
+            }
+        }
+    }    
+    return HitEntityID;
+}
+
+world_id DevRay_CastToAllPointLights(ak_f32* t, graphics_state* GraphicsState, ak_u32 WorldIndex, ray Ray, ak_f32 ZNear)
+{
+    world_id HitLightID = InvalidWorldID();
+    AK_ForEach(PointLight, &GraphicsState[WorldIndex].PointLightStorage)
+    {
+        ak_f32 tHit = RaySphereIntersection(Ray.Origin, Ray.Direction, PointLight->Position, DEV_POINT_LIGHT_RADIUS);
+        if(tHit != INFINITY)
+        {
+            if((*t > tHit) && (tHit > ZNear))
+            {
+                *t = tHit;
+                HitLightID = MakeWorldID(PointLight->ID, WorldIndex);                
             }
         }
     }
     
-    AK_ForEach(PointLight, &DevContext->InitialPointLights[WorldIndex])
+    return HitLightID;
+}
+
+dev_selected_object DevRay_CastToAllSelectables(dev_context* DevContext, ray Ray, ak_u32 WorldIndex, ak_f32 ZNear)
+{
+    game* Game = DevContext->Game;
+    
+    dev_selected_object Result = {};    
+    ak_f32 tBest = INFINITY;
+    
+    world_id EntityID = DevRay_CastToAllEntities(&tBest, Game->Assets, Game->GraphicsStates, WorldIndex, Ray, ZNear);
+    if(EntityID.IsValid())
     {
-        ak_f32 t = RaySphereIntersection(Ray.Origin, Ray.Direction, PointLight->Position, DEV_POINT_LIGHT_RADIUS);
-        if(t != INFINITY)
-        {
-            if((tBest > t) && (t > ZNear))
-            {
-                tBest = t;
-                Result.Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
-                Result.PointLightID = PointLight->ID;
-            }
-        }
+        Result.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
+        Result.EntityID = EntityID;
     }
     
-    ak_f32 tCapsule = RayCapsuleIntersection(Ray.Origin, Ray.Direction, &DevContext->InitialPlayerCapsules[WorldIndex]);
-    if(tCapsule != INFINITY)
+    world_id LightID = DevRay_CastToAllPointLights(&tBest, Game->GraphicsStates, WorldIndex, Ray, ZNear);
+    if(LightID.IsValid())
     {
-        if((tBest > tCapsule) && (tCapsule > ZNear))
-        {
-            tBest = tCapsule;
-            Result.Type = DEV_SELECTED_OBJECT_TYPE_PLAYER_CAPSULE;
-            Result.PlayerCapsule = &DevContext->InitialPlayerCapsules[WorldIndex];
-        }
+        Result.Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
+        Result.PointLightID = LightID;
     }        
     
     if(Result.Type == DEV_SELECTED_OBJECT_TYPE_ENTITY)
     {
-        material Material = DevContext->InitialEntityStorage[Result.EntityID.WorldIndex].Get(Result.EntityID.ID)->Material;
+        entity* Entity = GetEntity(DevContext->Game, Result.EntityID);            
+        graphics_state* GraphicsState = GetGraphicsState(DevContext->Game, Result.EntityID);        
+        material Material = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID)->Material;
         Result.MaterialContext = DevUI_ContextFromMaterial(&Material);
+    }
+    
+    return Result;
+}
+
+gizmo_intersection_result DevRay_CastToGizmos(dev_context* Context, dev_gizmo_state* GizmoState, ray Ray, ak_f32 ZNear)
+{
+    gizmo_intersection_result Result = {};
+    if(Context->SelectedObject.Type == DEV_SELECTED_OBJECT_TYPE_NONE)
+        return Result;
+    
+    if(GizmoState->GizmoHit.Hit)
+        return GizmoState->GizmoHit;
+    
+    ak_f32 tBest = INFINITY;    
+    
+    ak_u32 GizmoCount = (GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) ? 3 : 6;
+    for(ak_u32 GizmoIndex = 0; GizmoIndex < GizmoCount; GizmoIndex++)
+    {
+        dev_mesh* DevMesh = GizmoState->Gizmos[GizmoIndex].Mesh;
+        if(DevMesh != NULL)
+        {
+            mesh_info MeshInfo = DevContext_GetMeshInfoFromDevMesh(DevMesh);
+            mesh Mesh = DevContext_GetMeshFromDevMesh(DevMesh);
+            
+            ray_mesh_intersection_result IntersectionResult = RayMeshIntersection(Ray.Origin, Ray.Direction, &Mesh, &MeshInfo, GizmoState->Gizmos[GizmoIndex].Transform, true, false);
+            if(IntersectionResult.FoundCollision)
+            {               
+                if((tBest > IntersectionResult.t) && (IntersectionResult.t > ZNear))
+                {
+                    tBest = IntersectionResult.t;
+                    Result.Gizmo = &GizmoState->Gizmos[GizmoIndex];
+                    Result.HitMousePosition = Ray.Origin + (tBest*Ray.Direction);
+                    Result.Hit = true;                    
+                }
+            }
+        }
     }
     
     return Result;

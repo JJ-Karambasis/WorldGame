@@ -1,16 +1,6 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
-#define CAMERA_FIELD_OF_VIEW AK_PI*0.3f
-#define CAMERA_ZNEAR 0.01f
-#define CAMERA_ZFAR 500.0f
-
-struct camera_transform
-{
-    ak_v3f Translation;
-    ak_m3f Orientation;
-};
-
 struct game_camera
 {
     //TODO(JJ): We will probably need to convert the game camera orientation to a quaternion instead of spherical coordinates
@@ -23,16 +13,6 @@ struct game_camera
     ak_f32 FieldOfView;
     ak_f32 ZNear;
     ak_f32 ZFar;
-};
-
-struct camera
-{
-    ak_v3f Velocity;
-    ak_v3f Position;    
-    ak_v3f FocalPoint;
-    ak_m3f Orientation;
-    ak_v3f AngularVelocity;
-    ak_f32 Distance;
 };
 
 inline camera_transform
@@ -54,6 +34,17 @@ GetViewSettings(game_camera* Camera)
     Result.FieldOfView = Camera->FieldOfView;
     Result.ZNear = Camera->ZNear;
     Result.ZFar = Camera->ZFar;
+    return Result;
+}
+
+inline ak_v3f* 
+GetFrustumCorners(view_settings* ViewSettings, ak_v2i RenderDim)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_v3f* Result = GlobalArena->PushArray<ak_v3f>(8);
+    ak_m4f Perspective = AK_Perspective(ViewSettings->FieldOfView, AK_SafeRatio(RenderDim.w, RenderDim.h), ViewSettings->ZNear, ViewSettings->ZFar);    
+    AK_GetFrustumCorners(Result, Perspective);
+    AK_TransformPoints(Result, 8, AK_TransformM4(ViewSettings->Position, ViewSettings->Orientation));    
     return Result;
 }
 

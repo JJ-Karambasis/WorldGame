@@ -3,13 +3,13 @@
 #include "audio.cpp"
 #include "animation.cpp"
 #include "simulation/simulation.cpp"
+#include "graphics_state.cpp"
 #include "entity.cpp"
 //#include "player.cpp"
-#include "graphics.cpp"
 
 PUZZLE_COMPLETE_CALLBACK(DespawnWallCompleteCallback)
 {
-    entity_id* IDs = (entity_id*)UserData;
+    world_id* IDs = (world_id*)UserData;
     
     FreeEntity(Game, IDs[0]);
     FreeEntity(Game, IDs[1]);
@@ -35,15 +35,15 @@ void LoadTestLevel(game* Game)
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {           
         Game->EntityStorage[WorldIndex] = AK_CreatePool<entity>(512);                
-        Game->PrevTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
-        Game->CurrentTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
+        Game->OldTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
+        Game->NewTransforms[WorldIndex] = AK_CreateArray<ak_sqtf>(Game->EntityStorage[WorldIndex].Capacity);
         
         ak_v3f P0 = AK_V3<ak_f32>() + AK_ZAxis()*PLAYER_RADIUS;
         capsule PlayerCapsule = CreateCapsule(P0, P0+AK_ZAxis()*PLAYER_HEIGHT, PLAYER_RADIUS);        
-        entity_id PlayerID = CreatePlayerEntity(Game, WorldIndex, AK_V3(0.0f, 0.0f, 0.1f), AK_IdentityQuat<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
+        world_id PlayerID = CreatePlayerEntity(Game, WorldIndex, AK_V3(0.0f, 0.0f, 0.1f), AK_IdentityQuat<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
         
-        game_camera* Camera = Game->CurrentCameras + WorldIndex;        
-        Camera->Target = GetEntityPosition(Game, PlayerID);        
+        camera* Camera = Game->CurrentCameras + WorldIndex;        
+        Camera->Target = GetEntityPositionNew(Game, PlayerID);        
         Camera->SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(-90.0f), AK_ToRadians(35.0f));        
         Camera->FieldOfView = AK_ToRadians(65.0f);                        
         Camera->ZNear = CAMERA_ZNEAR;
@@ -92,8 +92,6 @@ AK_EXPORT GAME_INITIALIZE(Initialize)
     Game->Input       = Input;
     Game->AudioOutput = AudioOutput;
     Game->Assets      = Assets;        
-    
-    LoadTestLevel(Game);
     
     return Game;
 }
@@ -236,7 +234,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {
             entity* Entity = GetUserData(RigidBody, entity);
-            RigidBody->Transform = *GetEntityTransform(Game, Entity->ID);
+            RigidBody->Transform = *GetEntityTransformNew(Game, Entity->ID);
             
             switch(Entity->Type)
             {
@@ -402,7 +400,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
         simulation* Simulation = GetSimulation(Game, WorldIndex);            
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {        
-            ak_sqtf* SQT = GetEntityTransform(Game, GetUserData(RigidBody, entity)->ID);        
+            ak_sqtf* SQT = GetEntityTransformNew(Game, GetUserData(RigidBody, entity)->ID);        
             *SQT = RigidBody->Transform;        
         }                
     }
@@ -469,7 +467,7 @@ AK_EXPORT GAME_TICK(Tick)
                         {
                             case PLAYER_STATE_NONE:
                             {            
-                                ak_v3f Position = GetEntityPosition(Game, Entity->ID);                               
+                                ak_v3f Position = GetEntityPositionNew(Game, Entity->ID);                               
                                 for(ak_u32 JumpingQuadIndex = 0; JumpingQuadIndex < AK_Count(Game->JumpingQuads); JumpingQuadIndex++)
                                 {
                                     jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
@@ -539,7 +537,7 @@ AK_EXPORT GAME_TICK(Tick)
                             else
                             {
                                 Player->State = PLAYER_STATE_NONE;
-                                PushingObject->PlayerID = InvalidEntityID();
+                                PushingObject->PlayerID = InvalidWorldID();
                                 Simulation->GetSimEntity(PlayerEntity->SimEntityID)->ToRigidBody()->Velocity = RigidBody->Velocity;
                                 RigidBody->Velocity = {};
                                 if(Entity->LinkID.IsValid())
@@ -578,12 +576,14 @@ AK_EXPORT GAME_TICK(Tick)
 extern "C"
 AK_EXPORT GAME_RENDER(Render)
 {
+#if 0 
     AK_SetGlobalArena(Game->TempStorage);
     UpdateRenderBuffer(&Game->RenderBuffer, Graphics, Graphics->RenderDim);        
     view_settings ViewSettings = GetViewSettings(&GraphicsState->Camera);
     PushWorldShadingCommands(Graphics, Game->RenderBuffer, &ViewSettings, Game->Assets, GraphicsState->GraphicsObjects);
 #if !DEVELOPER_BUILD
     PushCopyToOutput(Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);
+#endif
 #endif
 }
 

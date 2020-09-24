@@ -32,6 +32,25 @@ void DevDraw_Sphere(dev_context* Context, sphere* Sphere, ak_color3f Color)
     DevDraw_Sphere(Context, Sphere->CenterP, Sphere->Radius, Color);
 }
 
+
+void DevDraw_OrientedBox(dev_context* DevContext, ak_v3f P, ak_v3f Dim, ak_v3f XAxis, ak_v3f YAxis, ak_v3f ZAxis, ak_color3f Color)
+{
+    ak_m4f Model = AK_TransformM4(P, AK_M3(XAxis, YAxis, ZAxis), Dim);
+    PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleBoxMesh.IndexCount, 0, 0);
+}
+
+void DevDraw_Edge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Color)
+{
+    ak_v3f ZAxis = P1-P0;
+    ak_f32 ZLength = AK_Magnitude(ZAxis);
+    ZAxis /= ZLength;
+    
+    ak_v3f XAxis, YAxis;
+    AK_Basis(ZAxis, &XAxis, &YAxis);
+    DevDraw_OrientedBox(DevContext, P0, AK_V3(0.025f, 0.025f, ZLength), XAxis, YAxis, ZAxis, Color);
+}
+
+
 ak_color3f DevDraw_GetGizmoColor(dev_gizmo Gizmo)
 {
     switch(Gizmo.MovementDirection)
@@ -105,4 +124,42 @@ void DevDraw_GizmoState(dev_context* Context, dev_gizmo_state* GizmoState, ak_v3
     
     
     DevDraw_Sphere(Context, Position, 0.04f, AK_White3());    
+}
+
+void DevDraw_Grid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color)
+{
+    for(ak_f32 x = 0; x <= xRightBound; x+= DevContext->GizmoState.GridDistance)
+    {
+        if(x != 0)
+        {
+            DevDraw_Edge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), Color);
+        }
+    }
+    
+    for(ak_f32 x = 0; x >= xLeftBound; x-=DevContext->GizmoState.GridDistance)
+    {
+        if(x != 0)
+        {
+            DevDraw_Edge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), Color);
+        }
+    }
+    
+    for(ak_f32 y = 0; y <= yBottomBound; y+=DevContext->GizmoState.GridDistance)
+    {
+        if(y != 0)
+        {
+            DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), Color);
+        }
+    }
+    
+    for(ak_f32 y = 0; y >= yTopBound; y-=DevContext->GizmoState.GridDistance)
+    {
+        if(y != 0)
+        {
+            DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), Color);
+        }
+    }
+    
+    DevDraw_Edge(DevContext, AK_V3f(0.0f, (ak_f32)yTopBound, 0.0f), AK_V3f(0.0f, (ak_f32)yBottomBound, 0.0f), AK_Green3());
+    DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, 0.0f, 0.0f), AK_V3f((ak_f32)xRightBound, 0.0f, 0.0f), AK_Red3());
 }

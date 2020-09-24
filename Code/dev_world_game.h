@@ -30,10 +30,10 @@ global struct dev_context* __Internal_Dev_Context__;
 #define IN_EDIT_MODE() (((dev_context*)DevContext)->PlayGame)
 
 #include "imgui/imgui.h"
-#include "camera.h"
 #include "input.h"
 #include "assets/assets.h"
 #include "simulation/simulation.h"
+#include "graphics_state.h"
 #include "entity.h"
 #include "dev_frame_recording.h"
 
@@ -259,7 +259,7 @@ struct dev_context
     
     void** PlatformData;
     ak_bool Initialized;
-    entity_id SelectedObjectID;    
+    world_id SelectedObjectID;    
     ak_v3f InspectRay;
     ak_char DebugMessage[100];
     

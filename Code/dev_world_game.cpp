@@ -1185,33 +1185,33 @@ ak_v3f DevelopmentGetGizmoPointDiff(dev_context* DevContext, graphics_state* Gra
     }
 
     if(IsDown(DevContext->Input.Ctl))
+    {
+        for(int i = 0; i < 3; i++)
         {
-            for(int i = 0; i < 3; i++)
+            if(AK_Abs(Result[i]) < SnapTo && Result[i] != 0 )
             {
-                if(AK_Abs(Result[i]) < SnapTo && Result[i] != 0 )
+                if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
                 {
-                    if(DevContext->TransformationMode != GIZMO_MOVEMENT_TYPE_ROTATE)
-                    {
-                        NewPoint[i] = DevContext->GizmoHit.HitMousePosition[i];
-                        Result[i] = 0.0f;
-                    }
-                    else
-                    {
-                        NewPoint = DevContext->GizmoHit.HitMousePosition;
-                        Result = AK_V3f(0.0f, 0.0f, 0.0f);
-                    }
+                    NewPoint[i] = DevContext->GizmoHit.HitMousePosition[i];
+                    Result[i] = 0.0f;
                 }
-                else if(Result[i] < 0)
+                else
                 {
-                    Result[i] = -1 * SnapTo;
-                }
-                else if(Result[i] > 0)
-                {
-                    Result[i] = SnapTo;
+                    NewPoint = DevContext->GizmoHit.HitMousePosition;
+                    Result = AK_V3f(0.0f, 0.0f, 0.0f);
                 }
             }
+            else if(Result[i] < 0)
+            {
+                Result[i] = -1 * SnapTo;
+            }
+            else if(Result[i] > 0)
+            {
+                Result[i] = SnapTo;
+            }
         }
-
+    }
+    
     DevContext->GizmoHit.HitMousePosition = NewPoint;
     return Result;
 }
@@ -1352,10 +1352,7 @@ void DevelopmentRender(dev_context* DevContext, graphics_state* GraphicsState, a
     
     if(DevContext->DrawGrid)
     {
-        ak_m4f Perspective = AK_Perspective(ViewSettings.FieldOfView, AK_SafeRatio(Graphics->RenderDim.w, Graphics->RenderDim.h), ViewSettings.ZNear, ViewSettings.ZFar);
-        ak_v3f FrustumCorners[8];
-        AK_GetFrustumCorners(FrustumCorners, Perspective);
-        AK_TransformPoints(FrustumCorners, 8, AK_TransformM4(ViewSettings.Position, ViewSettings.Orientation));
+        ak_v3f* FrustumCorners = GetFrustumCorners(&ViewSettings);
 
         ak_v3f FrustumPlaneIntersectionPoints[4];
         ak_i8 IntersectedCount = 0;

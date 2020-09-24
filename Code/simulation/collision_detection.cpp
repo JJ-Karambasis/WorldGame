@@ -159,7 +159,7 @@ ak_bool RayTriangleIntersectionNoCull(ak_v3f RayOrigin, ak_v3f RayDirection, ak_
     return true;
 }
 
-ray_mesh_intersection_result RayMeshIntersection(ak_v3f RayOrigin, ak_v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, ak_sqtf MeshTransform, ak_bool IsDevMesh = false, ak_bool TestCull = true)
+ray_mesh_intersection_result RayMeshIntersection(ak_v3f RayOrigin, ak_v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, ak_m4f MeshTransform, ak_bool IsDevMesh = false, ak_bool TestCull = true)
 {
     ray_mesh_intersection_result Result = {};    
     
@@ -228,9 +228,9 @@ ray_mesh_intersection_result RayMeshIntersection(ak_v3f RayOrigin, ak_v3f RayDir
             Vertex3 = TVertex3.P;
         }
         
-        Vertex1 = AK_Transform(Vertex1, MeshTransform);
-        Vertex2 = AK_Transform(Vertex2, MeshTransform);
-        Vertex3 = AK_Transform(Vertex3, MeshTransform);
+        Vertex1 = AK_TransformPoint(Vertex1, MeshTransform);
+        Vertex2 = AK_TransformPoint(Vertex2, MeshTransform);
+        Vertex3 = AK_TransformPoint(Vertex3, MeshTransform);
         
         ak_f32 t, u, v;
         ak_bool IntersectionFound = false;
@@ -242,7 +242,7 @@ ray_mesh_intersection_result RayMeshIntersection(ak_v3f RayOrigin, ak_v3f RayDir
         {
             IntersectionFound = RayTriangleIntersectionNoCull(RayOrigin, RayDirection, Vertex1, Vertex2, Vertex3, &t, &u, &v);
         }
-
+        
         if(IntersectionFound)
         {
             if(!Result.FoundCollision || (t < Result.t))
@@ -258,26 +258,21 @@ ray_mesh_intersection_result RayMeshIntersection(ak_v3f RayOrigin, ak_v3f RayDir
     return Result;
 }
 
-
-ray_mesh_intersection_result RayPlaneIntersection(ak_v3f PlaneNormal, ak_v3f PlanePoint, ray RayCast)
+ray_mesh_intersection_result RayMeshIntersection(ak_v3f RayOrigin, ak_v3f RayDirection, mesh* Mesh, mesh_info* MeshInfo, ak_sqtf MeshTransform, ak_bool IsDevMesh = false, ak_bool TestCull = true)
 {
-    ray_mesh_intersection_result Result = {};
-    ak_f32 denom = AK_Dot(PlaneNormal, RayCast.Direction);
-    if(AK_EqualZeroEps(denom))
-    {
-        return Result;
-    }
+    return RayMeshIntersection(RayOrigin, RayDirection, Mesh, MeshInfo, AK_TransformM4(MeshTransform), IsDevMesh, TestCull);
+}
+
+
+ak_f32 RayPlaneIntersection(ak_v3f PlaneNormal, ak_v3f PlanePoint, ak_v3f Origin, ak_v3f Direction)
+{    
+    ak_f32 Denom = AK_Dot(PlaneNormal, Direction);
+    if(AK_EqualZeroEps(Denom)) return INFINITY;    
     
-    ak_f32 t = AK_Dot(PlanePoint - RayCast.Origin, PlaneNormal) / denom;
-    if(t <= 0)
-    {
-        return Result;
-    }
+    ak_f32 t = AK_Dot(PlanePoint - Origin, PlaneNormal) / Denom;
+    if(t <= 0) return INFINITY;    
     
-    Result.FoundCollision = true;
-    Result.t = t;
-    
-    return Result;
+    return t;
 }
 
 ak_f32 LineSegmentSphereIntersection(ak_v3f* LineSegment, sphere* Sphere)

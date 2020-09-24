@@ -23,7 +23,7 @@ struct frame_info
 
 struct recording_entity_header
 {
-    entity_id ID;    
+    world_id ID;    
     ak_sqtf Transform;
     ak_v3f Velocity;
     ak_v3f Acceleration;
