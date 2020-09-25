@@ -417,6 +417,188 @@ void DevContext_AddToDevTransform(dev_context* DevContext, world_id EntityID)
     DevTransform->Euler = AK_QuatToEuler(Transform->Orientation);    
 }
 
+void DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_bool SaveNewWorld)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    if(!SaveNewWorld)
+        SaveNewWorld = AK_StringIsNullOrEmpty(LoadedWorld->LoadedWorldFile);
+    
+    if(SaveNewWorld)
+    {
+        ak_string LoadedWorldFile = AK_SaveFileDialog("world", GlobalArena);
+        if(!AK_StringIsNullOrEmpty(LoadedWorldFile))
+        {            
+            ak_file_handle* FileHandle = AK_OpenFile(LoadedWorldFile, AK_FILE_ATTRIBUTES_WRITE);
+            if(!FileHandle)
+            {                
+                GlobalArena->EndTemp(&TempArena);
+                AK_MessageBoxOk("FileIO Error", AK_FormatString(GlobalArena, "Failed to open world file at location %s, message: %s\n", 
+                                                                LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data));
+                return;
+            }
+            
+            game* Game = DevContext->Game;
+            ak_hash_map<ak_u64, ak_u32> EntityMap[2] = {};
+            
+            world_file_header FileHeader = {};
+            AK_MemoryCopy(FileHeader.Signature, WORLD_FILE_SIGNATURE, sizeof(WORLD_FILE_SIGNATURE));
+            FileHeader.MajorVersion = WORLD_FILE_MAJOR_VERSION;
+            FileHeader.MinorVersion = WORLD_FILE_MINOR_VERSION;
+            FileHeader.EntityCountWorldA = Game->EntityStorage[0].Size;
+            FileHeader.EntityCountWorldB = Game->EntityStorage[1].Size;
+            FileHeader.PointLightCountWorldA = Game->GraphicsStates[0].PointLightStorage.Size;
+            FileHeader.PointLightCountWorldB = Game->GraphicsStates[1].PointLightStorage.Size;
+            
+            file_entity* WorldFileEntities[2];
+            WorldFileEntities[0] = GlobalArena->PushArray<file_entity>(FileHeader.EntityCountWorldA);
+            WorldFileEntities[1] = GlobalArena->PushArray<file_entity>(FileHeader.EntityCountWorldB);
+            
+            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+            {       
+                ak_u32 EntityIndex = 0;
+                file_entity* FileEntities = WorldFileEntities[WorldIndex];                                
+                AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
+                {
+                    file_entity* FileEntity = FileEntities + EntityIndex++;
+                    FileEntity->Type = Entity->Type;
+                    FileEntity->Transform = *GetEntityTransformNew(Game, Entity->ID);                    
+                    
+                    graphics_entity* GraphicsEntity = Game->GraphicsStates[WorldIndex].GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                    mesh_info* MeshInfo = GetMeshInfo(Game->Assets, GraphicsEntity->MeshID);
+                    
+                    FileEntity->Material = GraphicsEntity->Material;
+                    FileEntity->MeshID = GraphicsEntity->MeshID;
+                    
+                    if((Entity->Type == ENTITY_TYPE_PLAYER) || (Entity->Type == ENTITY_TYPE_PUSHABLE))
+                    {
+                        rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                        FileEntity->Mass = 1.0f/RigidBody->InvMass;                        
+                    }
+                    
+                    if(Entity->Type == ENTITY_TYPE_RIGID_BODY)
+                    {
+                        rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                        FileEntity->Mass = 1.0f/RigidBody->InvMass;
+                        FileEntity->Restitution = RigidBody->Restitution;
+                    }                        
+                        
+                    
+                    EntityMap[WorldIndex].Insert(Entity->ID.ID, EntityIndex);                    
+                }                
+                
+                AK_Assert(EntityIndex == Game->EntityStorage[WorldIndex].Size, "Size of entity pool and file entity count do not match. This is a programming error");
+            }
+            
+            
+            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+            {       
+                ak_u32 EntityIndex = 0;
+                file_entity* FileEntities = WorldFileEntities[WorldIndex];                                
+                AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
+                {
+                    file_entity* FileEntity = FileEntities + EntityIndex++;
+                    FileEntity->LinkIndex = (ak_u32)-1;
+                    if(Entity->LinkID.IsValid())
+                    {
+                        ak_u32* Index = EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
+                        AK_Assert(Index, "Cannot not index for LinkID. This is a programming error (probably)");
+                        FileEntity->LinkIndex = *Index;
+                    }
+                }                   
+            }    
+            
+            AK_WriteFile(FileHandle, &FileHeader, sizeof(FileHeader));
+            
+            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+            {                       
+                file_entity* FileEntities = WorldFileEntities[WorldIndex];                                
+                for(ak_u32 EntityIndex = 0; EntityIndex < Game->EntityStorage[WorldIndex].Size; EntityIndex++)
+                {
+                    file_entity* FileEntity = FileEntities + EntityIndex;
+                    AK_WriteFile(FileHandle, &FileEntity->Type, sizeof(entity_type));
+                    AK_WriteFile(FileHandle, &FileEntity->LinkIndex, sizeof(ak_u32));
+                    AK_WriteFile(FileHandle, &FileEntity->Transform, sizeof(ak_sqtf));
+                    
+                    material* Material  = &FileEntity->Material;
+                    AK_WriteFile(FileHandle, &Material->Diffuse.IsTexture, sizeof(ak_bool));
+                    if(Material->Diffuse.IsTexture)
+                    {
+                        texture_info* TextureInfo = GetTextureInfo(Game->Assets, Material->Diffuse.DiffuseID);                        
+                        AK_WriteFile(FileHandle, &TextureInfo->Header.NameLength, sizeof(ak_u32));
+                        AK_WriteFile(FileHandle, TextureInfo->Name, sizeof(ak_char)*TextureInfo->Header.NameLength);                        
+                    }
+                    else
+                    {
+                        AK_WriteFile(FileHandle, &Material->Diffuse.Diffuse, sizeof(ak_color3f));
+                    }
+                    
+                    AK_WriteFile(FileHandle, &Material->Specular.InUse, sizeof(ak_bool));
+                    AK_WriteFile(FileHandle, &Material->Specular.IsTexture, sizeof(ak_bool));
+                    if(Material->Specular.IsTexture)
+                    {
+                        texture_info* TextureInfo = GetTextureInfo(Game->Assets, Material->Specular.SpecularID);                        
+                        AK_WriteFile(FileHandle, &TextureInfo->Header.NameLength, sizeof(ak_u32));
+                        AK_WriteFile(FileHandle, TextureInfo->Name, sizeof(ak_char)*TextureInfo->Header.NameLength);                        
+                    }
+                    else
+                    {
+                        AK_WriteFile(FileHandle, &Material->Specular.Specular, sizeof(ak_f32));
+                    }
+                    AK_WriteFile(FileHandle, &Material->Specular.Shininess, sizeof(ak_i32));
+                    
+                    AK_WriteFile(FileHandle, &Material->Normal.InUse, sizeof(ak_bool));
+                    
+                    if(Material->Normal.InUse)
+                    {
+                        texture_info* TextureInfo = GetTextureInfo(Game->Assets, Material->Normal.NormalID);                        
+                        AK_WriteFile(FileHandle, &TextureInfo->Header.NameLength, sizeof(ak_u32));
+                        AK_WriteFile(FileHandle, TextureInfo->Name, sizeof(ak_char)*TextureInfo->Header.NameLength);
+                    }                    
+                    else
+                    {
+                        ak_u32 NameLength = 0;
+                        AK_WriteFile(FileHandle, &NameLength, sizeof(ak_u32));
+                    }
+
+                    mesh_info* MeshInfo = GetMeshInfo(Game->Assets, FileEntity->MeshID);
+                    AK_WriteFile(FileHandle, &MeshInfo->Header.NameLength, sizeof(ak_u32));
+                    AK_WriteFile(FileHandle, MeshInfo->Name, sizeof(ak_char)*MeshInfo->Header.NameLength);
+                    
+                    if((FileEntity->Type == ENTITY_TYPE_PLAYER) || (FileEntity->Type == ENTITY_TYPE_PUSHABLE))
+                    {
+                        AK_WriteFile(FileHandle, &FileEntity->Mass, sizeof(ak_f32));
+                    }
+                    
+                    if(FileEntity->Type == ENTITY_TYPE_RIGID_BODY)
+                    {
+                        AK_WriteFile(FileHandle, &FileEntity->Mass, sizeof(ak_f32));
+                        AK_WriteFile(FileHandle, &FileEntity->Restitution, sizeof(ak_f32));
+                    }
+                }
+            }
+            
+            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+            {
+                graphics_state* GraphicsState = Game->GraphicsStates + WorldIndex;
+                AK_ForEach(PointLight, &GraphicsState->PointLightStorage)
+                {
+                    AK_WriteFile(FileHandle, &PointLight->Position, sizeof(point_light)-sizeof(ak_u64));
+                }
+            }
+            
+            AK_CloseFile(FileHandle);
+            
+            AK_Free(LoadedWorld->LoadedWorldFile.Data);            
+            LoadedWorld->LoadedWorldFile.Data = (ak_char*)AK_Allocate(sizeof(ak_char)*(LoadedWorldFile.Length+1));
+            LoadedWorld->LoadedWorldFile.Data[LoadedWorldFile.Length] = 0;
+            AK_CopyArray(LoadedWorld->LoadedWorldFile.Data, LoadedWorldFile.Data, LoadedWorldFile.Length);                
+        }
+    }
+    
+    GlobalArena->EndTemp(&TempArena);
+}
+
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate)
 {
     ak_arena* DevStorage = AK_CreateArena(AK_Megabyte(1));
@@ -443,12 +625,19 @@ void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow,
     
     DevUI_Initialize(&DevContext->DevUI, Graphics, PlatformWindow, InitImGui);        
     
+    material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
     capsule PlayerCapsule = CreateCapsule(AK_V3<ak_f32>(), PLAYER_HEIGHT, PLAYER_RADIUS);
-    world_id PlayerA = CreatePlayerEntity(DevContext->Game, 0, AK_V3<ak_f32>(), AK_IdentityQuat<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
-    world_id PlayerB = CreatePlayerEntity(DevContext->Game, 1, AK_V3<ak_f32>(), AK_IdentityQuat<ak_f32>(), 65, Global_PlayerMaterial, &PlayerCapsule);
+    world_id PlayerA = CreatePlayerEntity(DevContext->Game, 0, AK_V3<ak_f32>(), AK_IdentityQuat<ak_f32>(), 65, PlayerMaterial, &PlayerCapsule);
+    world_id PlayerB = CreatePlayerEntity(DevContext->Game, 1, AK_V3<ak_f32>(), AK_IdentityQuat<ak_f32>(), 65, PlayerMaterial, &PlayerCapsule);
+    
+    material DefaultFloorMaterial = { CreateDiffuse(AK_White3()) };    
+    dual_world_id DefaultFloor = CreateDualStaticEntity(DevContext->Game, AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),  
+                                                        MESH_ASSET_ID_BOX, DefaultFloorMaterial);
     
     DevContext_AddToDevTransform(DevContext, PlayerA);
     DevContext_AddToDevTransform(DevContext, PlayerB);
+    DevContext_AddToDevTransform(DevContext, DefaultFloor.EntityA);
+    DevContext_AddToDevTransform(DevContext, DefaultFloor.EntityB);
         
     DevContext->Cameras[0].Target = AK_V3<ak_f32>();
     DevContext->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));        
@@ -469,281 +658,276 @@ void DevContext_Tick()
     dev_input* DevInput = &Context->DevInput;
     ak_f32 dt = Game->dt;
     
-    graphics_state* CurrentGraphicsState = GetGraphicsState(Game, Game->CurrentWorldIndex);
+    ak_v2i Resolution = Game->Resolution;    
+    Context->PlatformUpdate(&GetIO(), DevInput, Resolution, dt);        
     
-    UpdateRenderBuffer(Graphics, &CurrentGraphicsState->RenderBuffer, Game->Resolution);    
-    Context->PlatformUpdate(&GetIO(), DevInput, CurrentGraphicsState->RenderBuffer->Resolution, dt);        
-    
-    camera* DevCamera = &Context->Cameras[Game->CurrentWorldIndex];        
-    
-    ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;
-    
-    ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;
-    
-    ak_f32 Roll = 0;
-    ak_f32 Pitch = 0;        
-    
-    ak_v2f PanDelta = AK_V2<ak_f32>();
-    ak_f32 Scroll = 0;
-    
-    if(IsDown(DevInput->Alt))
+    if(!Context->DevUI.PlayGame)
     {
-        if(IsDown(DevInput->LMB))
+        camera* DevCamera = &Context->Cameras[Game->CurrentWorldIndex];            
+        ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;    
+        ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;
+        
+        ak_f32 Roll = 0;
+        ak_f32 Pitch = 0;        
+        
+        ak_v2f PanDelta = AK_V2<ak_f32>();
+        ak_f32 Scroll = 0;
+        
+        if(IsDown(DevInput->Ctrl))
         {
-            SphericalCoordinates->inclination += MouseDelta.y*1e-3f;
-            SphericalCoordinates->azimuth += MouseDelta.x*1e-3f;
-            
-            ak_f32 InclindationDegree = AK_ToDegree(SphericalCoordinates->inclination);
-            if(InclindationDegree < -180.0f)
+            if(IsDown(DevInput->S)) DevContext_SaveWorld(Context, &Context->LoadedWorld, false);            
+        }
+        
+        if(IsDown(DevInput->Alt))
+        {
+            if(IsDown(DevInput->S)) DevContext_SaveWorld(Context, &Context->LoadedWorld, true);
+        }
+        
+        if(IsDown(DevInput->Alt))
+        {
+            if(IsDown(DevInput->LMB))
             {
-                ak_f32 Diff = InclindationDegree + 180.0f;
-                InclindationDegree = 180.0f - Diff;
-                InclindationDegree = AK_Min(180.0f, InclindationDegree);
-                SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                SphericalCoordinates->inclination += MouseDelta.y*1e-3f;
+                SphericalCoordinates->azimuth += MouseDelta.x*1e-3f;
+                
+                ak_f32 InclindationDegree = AK_ToDegree(SphericalCoordinates->inclination);
+                if(InclindationDegree < -180.0f)
+                {
+                    ak_f32 Diff = InclindationDegree + 180.0f;
+                    InclindationDegree = 180.0f - Diff;
+                    InclindationDegree = AK_Min(180.0f, InclindationDegree);
+                    SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                }
+                else if(InclindationDegree > 180.0f)
+                {
+                    ak_f32 Diff = InclindationDegree - 180.0f;
+                    InclindationDegree = -180.0f + Diff;
+                    InclindationDegree = AK_Min(-180.0f, InclindationDegree);
+                    SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                }            
             }
-            else if(InclindationDegree > 180.0f)
+            
+            if(IsDown(DevInput->MMB))        
+                PanDelta += AK_V2f(MouseDelta)*1e-3f;        
+            
+            if(AK_Abs(DevInput->Scroll) > 0)        
             {
-                ak_f32 Diff = InclindationDegree - 180.0f;
-                InclindationDegree = -180.0f + Diff;
-                InclindationDegree = AK_Min(-180.0f, InclindationDegree);
-                SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
-            }            
-        }
+                SphericalCoordinates->radius -= DevInput->Scroll*0.5f;                    
+                if(SphericalCoordinates->radius < DEV_CAMERA_MIN_DISTANCE)
+                    SphericalCoordinates->radius = DEV_CAMERA_MIN_DISTANCE;
+            }
+        }    
         
-        if(IsDown(DevInput->MMB))        
-            PanDelta += AK_V2f(MouseDelta)*1e-3f;        
+        view_settings ViewSettings = GetViewSettings(DevCamera);    
+        DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);
         
-        if(AK_Abs(DevInput->Scroll) > 0)        
-        {
-            SphericalCoordinates->radius -= DevInput->Scroll*0.5f;                    
-            if(SphericalCoordinates->radius < DEV_CAMERA_MIN_DISTANCE)
-                SphericalCoordinates->radius = DEV_CAMERA_MIN_DISTANCE;
-        }
-    }    
-    
-    view_settings ViewSettings = {};
-    ak_v3f Up = AK_ZAxis();        
-    ak_f32 Degree = AK_ToDegree(SphericalCoordinates->inclination);                    
-    if(Degree > 0)
-        Up = -AK_ZAxis();    
-    if(Degree < -180.0f)
-        Up = -AK_YAxis();
-    if(AK_EqualZeroEps(Degree))
-        Up = AK_YAxis(); 
-    if(AK_EqualEps(AK_Abs(Degree), 180.0f))
-        Up = -AK_YAxis();        
-    
-    ViewSettings.Position = DevCamera->Target + AK_SphericalToCartesian(*SphericalCoordinates);            
-    ViewSettings.Orientation = AK_OrientAt(ViewSettings.Position, DevCamera->Target, Up);       
-    
-    ViewSettings.ZNear = 0.01f;
-    ViewSettings.ZFar = 1000.0f;
-    ViewSettings.FieldOfView = AK_PI*0.3f;
-    
-    DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);
-    
-    ray RayCast = DevRay_GetRayFromMouse(DevInput->MouseCoordinates, &ViewSettings, CurrentGraphicsState->RenderBuffer->Resolution);                                         
-    dev_gizmo_state* GizmoState = &Context->GizmoState;
-    if(!IsDown(DevInput->Alt) && !GetIO().WantCaptureMouse)
-    {        
-        if(IsPressed(DevInput->LMB))
-        {            
-            gizmo_intersection_result GizmoHit = DevRay_CastToGizmos(Context, GizmoState, RayCast, ViewSettings.ZNear);
-            if(!GizmoHit.Hit)
-            {
+        ray RayCast = DevRay_GetRayFromMouse(DevInput->MouseCoordinates, &ViewSettings, Resolution);                                         
+        dev_gizmo_state* GizmoState = &Context->GizmoState;
+        if(!IsDown(DevInput->Alt) && !GetIO().WantCaptureMouse)
+        {        
+            if(IsPressed(DevInput->LMB))
+            {            
+                gizmo_intersection_result GizmoHit = DevRay_CastToGizmos(Context, GizmoState, RayCast, ViewSettings.ZNear);
+                if(!GizmoHit.Hit)
+                {
+                    GizmoState->GizmoHit = {};
+                    Context->SelectedObject = DevRay_CastToAllSelectables(Context, RayCast, 0, ViewSettings.ZNear);            
+                }
+                else
+                {
+                    GizmoState->GizmoHit = GizmoHit;
+                }
+            }
+            
+            if(IsReleased(DevInput->LMB))
+            {            
                 GizmoState->GizmoHit = {};
-                Context->SelectedObject = DevRay_CastToAllSelectables(Context, RayCast, 0, ViewSettings.ZNear);            
-            }
-            else
-            {
-                GizmoState->GizmoHit = GizmoHit;
             }
         }
         
-        if(IsReleased(DevInput->LMB))
-        {            
-            GizmoState->GizmoHit = {};
-        }
-    }
-    
-    dev_selected_object* SelectedObject = &Context->SelectedObject;            
-    if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE)
-    {
-        if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_ENTITY)
-        {   
-            GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE;
-        }
-        else
+        dev_selected_object* SelectedObject = &Context->SelectedObject;            
+        if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE)
         {
-            if(IsPressed(DevInput->W)) GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE;                                    
-            if(IsPressed(DevInput->E)) GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_SCALE;                                    
-            if(IsPressed(DevInput->R)) GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_ROTATE;                         
-        }
-    }
-    
-    if(GizmoState->GizmoHit.Hit)
-    {
-        ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(Context, SelectedObject);        
-        
-        gizmo_intersection_result* GizmoHit = &GizmoState->GizmoHit;
-        ak_f32 t = RayPlaneIntersection(GizmoHit->Gizmo->IntersectionPlane, GizmoHit->HitMousePosition, RayCast.Origin, RayCast.Direction);        
-        if(t != INFINITY)
-        {            
-            ak_v3f PointDiff = AK_V3<ak_f32>();
-            ak_v3f NewPoint = RayCast.Origin + (RayCast.Direction*t);
-            if(GizmoState->TransformMode != DEV_GIZMO_MOVEMENT_TYPE_ROTATE)
-            {
-                switch(GizmoHit->Gizmo->MovementDirection)
-                {
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_X:
-                    {
-                        PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, 0.0f);
-                    } break;
-                    
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
-                    {
-                        PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
-                    } break;
-                    
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
-                    {
-                        PointDiff = AK_V3(0.0f, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
-                    } break;
-                    
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_XY:
-                    {
-                        PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
-                    } break;
-                    
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_XZ:
-                    {
-                        PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
-                    } break;
-                    
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_YZ:
-                    {
-                        PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, GizmoHit->HitMousePosition.z - NewPoint.z);
-                    } break;                    
-                }
+            if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_ENTITY)
+            {   
+                GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE;
             }
             else
             {
-                ak_v3f DirectionToOld = GizmoHit->HitMousePosition - SelectedObjectPosition;
-                ak_v3f DirectionToNew = NewPoint - SelectedObjectPosition;
-                ak_f32 AngleDiff = AK_ATan2(AK_Dot(AK_Cross(DirectionToNew, DirectionToOld), 
-                                                   GizmoHit->Gizmo->IntersectionPlane), 
-                                            AK_Dot(DirectionToOld, DirectionToNew));
-                
-                
-                switch(GizmoHit->Gizmo->MovementDirection)
-                {
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_X:
-                    {
-                        PointDiff = AK_V3(AngleDiff, 0.0f, 0.0f);
-                    } break;
-                    
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
-                    {
-                        PointDiff = AK_V3(0.0f, AngleDiff, 0.0f);
-                    } break;
-                    
-                    case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
-                    {
-                        PointDiff = AK_V3(0.0f, 0.0f, AngleDiff);
-                    } break;
-                    
-                    AK_INVALID_DEFAULT_CASE;
-                }                
+                if(IsPressed(DevInput->W)) GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE;                                    
+                if(IsPressed(DevInput->E)) GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_SCALE;                                    
+                if(IsPressed(DevInput->R)) GizmoState->TransformMode = DEV_GIZMO_MOVEMENT_TYPE_ROTATE;                         
             }
+        }
+        
+        if(GizmoState->GizmoHit.Hit)
+        {
+            ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(Context, SelectedObject);        
             
-            if(GizmoState->ShouldSnap)
-            {    
-                ak_f32 Snap;
-                if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) Snap = GizmoState->ScaleSnap;                
-                else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) Snap = AK_ToRadians(GizmoState->RotationAngleSnap);                                    
-                else Snap = GizmoState->GridDistance;
-                
-                for(ak_u32 PlaneIndex = 0; PlaneIndex < 3; PlaneIndex++)
-                {           
-                    if((AK_Abs(PointDiff[PlaneIndex]) < Snap) && (PointDiff[PlaneIndex] != 0))
+            gizmo_intersection_result* GizmoHit = &GizmoState->GizmoHit;
+            ak_f32 t = RayPlaneIntersection(GizmoHit->Gizmo->IntersectionPlane, GizmoHit->HitMousePosition, RayCast.Origin, RayCast.Direction);        
+            if(t != INFINITY)
+            {            
+                ak_v3f PointDiff = AK_V3<ak_f32>();
+                ak_v3f NewPoint = RayCast.Origin + (RayCast.Direction*t);
+                if(GizmoState->TransformMode != DEV_GIZMO_MOVEMENT_TYPE_ROTATE)
+                {
+                    switch(GizmoHit->Gizmo->MovementDirection)
                     {
-                        if(GizmoState->TransformMode != DEV_GIZMO_MOVEMENT_TYPE_ROTATE)
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_X:
                         {
-                            NewPoint[PlaneIndex] = GizmoHit->HitMousePosition[PlaneIndex];
-                            PointDiff[PlaneIndex] = 0.0f;
-                        }
-                        else
+                            PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, 0.0f);
+                        } break;
+                        
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
                         {
-                            NewPoint = GizmoHit->HitMousePosition;
-                            PointDiff = AK_V3<ak_f32>();
-                        }
+                            PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
+                        } break;
+                        
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
+                        {
+                            PointDiff = AK_V3(0.0f, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
+                        } break;
+                        
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_XY:
+                        {
+                            PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
+                        } break;
+                        
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_XZ:
+                        {
+                            PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
+                        } break;
+                        
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_YZ:
+                        {
+                            PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, GizmoHit->HitMousePosition.z - NewPoint.z);
+                        } break;                    
                     }
-                    else if(PointDiff[PlaneIndex] < 0) PointDiff[PlaneIndex] = -Snap;
-                    else if(PointDiff[PlaneIndex] > 0) PointDiff[PlaneIndex] = Snap;
                 }
+                else
+                {
+                    ak_v3f DirectionToOld = GizmoHit->HitMousePosition - SelectedObjectPosition;
+                    ak_v3f DirectionToNew = NewPoint - SelectedObjectPosition;
+                    ak_f32 AngleDiff = AK_ATan2(AK_Dot(AK_Cross(DirectionToNew, DirectionToOld), 
+                                                       GizmoHit->Gizmo->IntersectionPlane), 
+                                                AK_Dot(DirectionToOld, DirectionToNew));
+                    
+                    
+                    switch(GizmoHit->Gizmo->MovementDirection)
+                    {
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_X:
+                        {
+                            PointDiff = AK_V3(AngleDiff, 0.0f, 0.0f);
+                        } break;
+                        
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
+                        {
+                            PointDiff = AK_V3(0.0f, AngleDiff, 0.0f);
+                        } break;
+                        
+                        case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
+                        {
+                            PointDiff = AK_V3(0.0f, 0.0f, AngleDiff);
+                        } break;
+                        
+                        AK_INVALID_DEFAULT_CASE;
+                    }                
+                }
+                
+                if(GizmoState->ShouldSnap)
+                {    
+                    ak_f32 Snap;
+                    if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) Snap = GizmoState->ScaleSnap;                
+                    else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) Snap = AK_ToRadians(GizmoState->RotationAngleSnap);                                    
+                    else Snap = GizmoState->GridDistance;
+                    
+                    for(ak_u32 PlaneIndex = 0; PlaneIndex < 3; PlaneIndex++)
+                    {           
+                        if((AK_Abs(PointDiff[PlaneIndex]) < Snap) && (PointDiff[PlaneIndex] != 0))
+                        {
+                            if(GizmoState->TransformMode != DEV_GIZMO_MOVEMENT_TYPE_ROTATE)
+                            {
+                                NewPoint[PlaneIndex] = GizmoHit->HitMousePosition[PlaneIndex];
+                                PointDiff[PlaneIndex] = 0.0f;
+                            }
+                            else
+                            {
+                                NewPoint = GizmoHit->HitMousePosition;
+                                PointDiff = AK_V3<ak_f32>();
+                            }
+                        }
+                        else if(PointDiff[PlaneIndex] < 0) PointDiff[PlaneIndex] = -Snap;
+                        else if(PointDiff[PlaneIndex] > 0) PointDiff[PlaneIndex] = Snap;
+                    }
+                }
+                
+                GizmoHit->HitMousePosition = NewPoint;
+                
+                switch(SelectedObject->Type)
+                {
+                    case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+                    {   
+                        entity* Entity = GetEntity(Game, SelectedObject->EntityID);
+                        ak_u32 Index = AK_PoolIndex(SelectedObject->EntityID.ID);                                        
+                        ak_array<dev_transform>* DevTransforms = &Context->InitialTransforms[SelectedObject->EntityID.WorldIndex];                    
+                        if(DevTransforms->Size < (Index+1))
+                            DevTransforms->Resize(Index+1);
+                        
+                        dev_transform* DevTransform = DevTransforms->Get(Index);                    
+                        if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE) DevTransform->Translation -= PointDiff;
+                        else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) DevTransform->Euler -= PointDiff;
+                        else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) DevTransform->Scale -= PointDiff;
+                        
+                        ak_sqtf* Transform = GetEntityTransformNew(Game, SelectedObject->EntityID);
+                        Transform->Translation = DevTransform->Translation;
+                        Transform->Scale = DevTransform->Scale;
+                        Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
+                        
+                        *GetEntityTransformOld(Game, SelectedObject->EntityID) = *Transform;
+                        
+                        sim_entity* SimEntity = GetSimEntity(Game, SelectedObject->EntityID);
+                        SimEntity->Transform = *Transform;                    
+                        
+                        graphics_state* GraphicsState = &Game->GraphicsStates[SelectedObject->EntityID.WorldIndex];
+                        graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                        GraphicsEntity->Transform = AK_TransformM4(*Transform);
+                    } break;
+                    
+                    case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+                    {
+                        AK_Assert(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE, "Only valid transform mode for point lights is translation. This is a programming error");
+                        graphics_state* GraphicsState = GetGraphicsState(Context->Game, SelectedObject->EntityID);
+                        point_light* PointLight = GraphicsState->PointLightStorage.Get(SelectedObject->EntityID.ID);                            
+                        PointLight->Position -= PointDiff;
+                    } break;                
+                }            
             }
-            
-            GizmoHit->HitMousePosition = NewPoint;
-            
-            switch(SelectedObject->Type)
-            {
-                case DEV_SELECTED_OBJECT_TYPE_ENTITY:
-                {   
-                    entity* Entity = GetEntity(Game, SelectedObject->EntityID);
-                    ak_u32 Index = AK_PoolIndex(SelectedObject->EntityID.ID);                                        
-                    ak_array<dev_transform>* DevTransforms = &Context->InitialTransforms[SelectedObject->EntityID.WorldIndex];                    
-                    if(DevTransforms->Size < (Index+1))
-                        DevTransforms->Resize(Index+1);
-                    
-                    dev_transform* DevTransform = DevTransforms->Get(Index);                    
-                    if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE) DevTransform->Translation -= PointDiff;
-                    else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) DevTransform->Euler -= PointDiff;
-                    else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) DevTransform->Scale -= PointDiff;
-                    
-                    ak_sqtf* Transform = GetEntityTransformNew(Game, SelectedObject->EntityID);
-                    Transform->Translation = DevTransform->Translation;
-                    Transform->Scale = DevTransform->Scale;
-                    Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
-                    
-                    *GetEntityTransformOld(Game, SelectedObject->EntityID) = *Transform;
-                    
-                    sim_entity* SimEntity = GetSimEntity(Game, SelectedObject->EntityID);
-                    SimEntity->Transform = *Transform;                    
-                    
-                    graphics_state* GraphicsState = &Game->GraphicsStates[SelectedObject->EntityID.WorldIndex];
-                    graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
-                    GraphicsEntity->Transform = AK_TransformM4(*Transform);
-                } break;
-                
-                case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
-                {
-                    AK_Assert(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE, "Only valid transform mode for point lights is translation. This is a programming error");
-                    graphics_state* GraphicsState = GetGraphicsState(Context->Game, SelectedObject->EntityID);
-                    point_light* PointLight = GraphicsState->PointLightStorage.Get(SelectedObject->EntityID.ID);                            
-                    PointLight->Position -= PointDiff;
-                } break;                
-            }            
         }
-    }
-    
-    if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE)
-    {
-        if(IsPressed(DevInput->Delete))
+        
+        if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE)
         {
-            switch(SelectedObject->Type)
+            if(IsPressed(DevInput->Delete))
             {
-                case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+                switch(SelectedObject->Type)
                 {
-                    FreeEntity(Game, SelectedObject->EntityID);                    
-                    *SelectedObject = {};
-                } break;
-                
-                case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
-                {
-                    graphics_state* GraphicsState = GetGraphicsState(Game, SelectedObject->PointLightID.WorldIndex);
-                    GraphicsState->GraphicsEntityStorage.Free(SelectedObject->PointLightID.ID);                    
-                    *SelectedObject = {};
-                } break;                                
+                    case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+                    {
+                        entity* Entity = GetEntity(Game, SelectedObject->EntityID);
+                        if(Entity->Type != ENTITY_TYPE_PLAYER)
+                        {
+                            FreeEntity(Game, SelectedObject->EntityID);                    
+                            *SelectedObject = {};
+                        }
+                    } break;
+                    
+                    case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+                    {
+                        graphics_state* GraphicsState = GetGraphicsState(Game, SelectedObject->PointLightID.WorldIndex);
+                        GraphicsState->GraphicsEntityStorage.Free(SelectedObject->PointLightID.ID);                    
+                        *SelectedObject = {};
+                    } break;                                
+                }
             }
         }
     }
@@ -764,109 +948,113 @@ void DevContext_Render()
     graphics* Graphics = Context->Graphics;        
     
     graphics_state* CurrentGraphicsState = Game->GraphicsStates + Game->CurrentWorldIndex;
-    camera* Camera = Context->Cameras + Game->CurrentWorldIndex;
-    
-    view_settings ViewSettings = GetViewSettings(Camera);
-    
-    graphics_light_buffer LightBuffer = GetLightBuffer(CurrentGraphicsState);
-    ShadowPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
-    
-    PushDepth(Graphics, true);
-    PushSRGBRenderBufferWrites(Graphics, true);
-    PushRenderBufferViewportScissorAndView(Graphics, CurrentGraphicsState->RenderBuffer, &ViewSettings);    
-    PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
-    PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
-    
-    EntityPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);        
-    AK_ForEach(PointLight, &CurrentGraphicsState->PointLightStorage)    
-        DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());    
+    if(!Context->DevUI.PlayGame)
+    {        
+        UpdateRenderBuffer(Graphics, &CurrentGraphicsState->RenderBuffer, Game->Resolution);
         
-    ak_v3f* FrustumCorners = GetFrustumCorners(&ViewSettings, CurrentGraphicsState->RenderBuffer->Resolution);
-    
-    ak_v3f FrustumPlaneIntersectionPoints[4];
-    ak_i8 IntersectedCount = 0;
-    for(int i = 0; i < 4; i++)
-    {
-        ray FrustumRay = {};
-        FrustumRay.Origin = FrustumCorners[i];
-        FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
-        ak_f32 Distance = RayPlaneIntersection(AK_V3f(0, 0, 1), AK_V3f(0,0,0), FrustumRay.Origin, FrustumRay.Direction);
-        if(Distance != INFINITY)
+        camera* Camera = Context->Cameras + Game->CurrentWorldIndex;
+        
+        view_settings ViewSettings = GetViewSettings(Camera);
+        
+        graphics_light_buffer LightBuffer = GetLightBuffer(CurrentGraphicsState);
+        ShadowPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
+        
+        PushDepth(Graphics, true);
+        PushSRGBRenderBufferWrites(Graphics, true);
+        PushRenderBufferViewportScissorAndView(Graphics, CurrentGraphicsState->RenderBuffer, &ViewSettings);    
+        PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
+        PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
+        
+        EntityPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);        
+        AK_ForEach(PointLight, &CurrentGraphicsState->PointLightStorage)    
+            DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());    
+        
+        ak_v3f* FrustumCorners = GetFrustumCorners(&ViewSettings, CurrentGraphicsState->RenderBuffer->Resolution);
+        
+        ak_v3f FrustumPlaneIntersectionPoints[4];
+        ak_i8 IntersectedCount = 0;
+        for(int i = 0; i < 4; i++)
         {
-            IntersectedCount++;            
-            Distance = AK_Min(Distance, ViewSettings.ZFar);
-            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
-        }
-        else
-        {            
-            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
-        }
-    }
-    
-    if(IntersectedCount != 0)
-    {
-        //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
-        ak_f32 MinX;
-        ak_f32 MaxX;
-        ak_f32 MinY;
-        ak_f32 MaxY;
-        if(IntersectedCount == 4)
-        {
-            MinX = FrustumPlaneIntersectionPoints[0].x;
-            MaxX = FrustumPlaneIntersectionPoints[0].x;
-            MinY = FrustumPlaneIntersectionPoints[0].y;
-            MaxY = FrustumPlaneIntersectionPoints[0].y;
-            for(int i = 0; i < 4; i++)
+            ray FrustumRay = {};
+            FrustumRay.Origin = FrustumCorners[i];
+            FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
+            ak_f32 Distance = RayPlaneIntersection(AK_V3f(0, 0, 1), AK_V3f(0,0,0), FrustumRay.Origin, FrustumRay.Direction);
+            if(Distance != INFINITY)
             {
-                MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
-                MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
-                MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
-                MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+                IntersectedCount++;            
+                Distance = AK_Min(Distance, ViewSettings.ZFar);
+                FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
             }
-        }
-        else
-        {
-            MinX = FrustumCorners[0].x;
-            MaxX = FrustumCorners[0].x;
-            MinY = FrustumCorners[0].y;
-            MaxY = FrustumCorners[0].y;
-            for(int i = 0; i < 8; i++)
-            {
-                MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
-                MaxX = AK_Max(FrustumCorners[i].x, MaxX);
-                MinY = AK_Min(FrustumCorners[i].y, MinY);
-                MaxY = AK_Max(FrustumCorners[i].y, MaxY);
+            else
+            {            
+                FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
             }
         }
         
-        DevDraw_Grid(Context, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
-    }
-    
-    PushDepth(Graphics, false);        
-    if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
-    {
-        dev_gizmo_state* GizmoState = &Context->GizmoState;
-        ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(Context, &Context->SelectedObject);
-        
-        switch(GizmoState->TransformMode)
+        if(IntersectedCount != 0)
         {
-            case DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE:
-            case DEV_GIZMO_MOVEMENT_TYPE_SCALE:
+            //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
+            ak_f32 MinX;
+            ak_f32 MaxX;
+            ak_f32 MinY;
+            ak_f32 MaxY;
+            if(IntersectedCount == 4)
             {
-                dev_mesh* GizmoMesh = (GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) ? &Context->TriangleScaleMesh : &Context->TriangleArrowMesh;
-                DevContext_PopulateNonRotationGizmos(GizmoState, GizmoMesh, &Context->TrianglePlaneMesh, SelectedObjectPosition);                
-            } break;
+                MinX = FrustumPlaneIntersectionPoints[0].x;
+                MaxX = FrustumPlaneIntersectionPoints[0].x;
+                MinY = FrustumPlaneIntersectionPoints[0].y;
+                MaxY = FrustumPlaneIntersectionPoints[0].y;
+                for(int i = 0; i < 4; i++)
+                {
+                    MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
+                    MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
+                    MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
+                    MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+                }
+            }
+            else
+            {
+                MinX = FrustumCorners[0].x;
+                MaxX = FrustumCorners[0].x;
+                MinY = FrustumCorners[0].y;
+                MaxY = FrustumCorners[0].y;
+                for(int i = 0; i < 8; i++)
+                {
+                    MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
+                    MaxX = AK_Max(FrustumCorners[i].x, MaxX);
+                    MinY = AK_Min(FrustumCorners[i].y, MinY);
+                    MaxY = AK_Max(FrustumCorners[i].y, MaxY);
+                }
+            }
             
-            case DEV_GIZMO_MOVEMENT_TYPE_ROTATE:
-            {
-                DevContext_PopulateRotationGizmos(GizmoState, &Context->TriangleTorusMesh, SelectedObjectPosition);
-            } break;
+            DevDraw_Grid(Context, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
         }
         
-        DevDraw_GizmoState(Context, GizmoState, SelectedObjectPosition);
+        PushDepth(Graphics, false);        
+        if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
+        {
+            dev_gizmo_state* GizmoState = &Context->GizmoState;
+            ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(Context, &Context->SelectedObject);
+            
+            switch(GizmoState->TransformMode)
+            {
+                case DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE:
+                case DEV_GIZMO_MOVEMENT_TYPE_SCALE:
+                {
+                    dev_mesh* GizmoMesh = (GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) ? &Context->TriangleScaleMesh : &Context->TriangleArrowMesh;
+                    DevContext_PopulateNonRotationGizmos(GizmoState, GizmoMesh, &Context->TrianglePlaneMesh, SelectedObjectPosition);                
+                } break;
+                
+                case DEV_GIZMO_MOVEMENT_TYPE_ROTATE:
+                {
+                    DevContext_PopulateRotationGizmos(GizmoState, &Context->TriangleTorusMesh, SelectedObjectPosition);
+                } break;
+            }
+            
+            DevDraw_GizmoState(Context, GizmoState, SelectedObjectPosition);
+        }        
+        PushDepth(Graphics, true);    
     }
-    
-    PushDepth(Graphics, true);    
     
     DevUI_Render(Graphics, &Context->DevUI, CurrentGraphicsState->RenderBuffer);    
     

@@ -659,8 +659,8 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             
             AK_CopyArray(Game->OldTransforms[0].Entries, Game->NewTransforms[0].Entries, Game->NewTransforms[0].Size);
             AK_CopyArray(Game->OldTransforms[1].Entries, Game->NewTransforms[1].Entries, Game->NewTransforms[1].Size);
-            Game->PrevCameras[0] = Game->CurrentCameras[0];
-            Game->PrevCameras[1] = Game->CurrentCameras[1];
+            Game->OldCameras[0] = Game->NewCameras[0];
+            Game->OldCameras[1] = Game->NewCameras[1];
             
             if(Dev_ShouldPlayGame())
             {                
@@ -674,11 +674,22 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(Input.Buttons); ButtonIndex++)        
             Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
         
-        Win32_ProcessMessages(&Input);        
+        Win32_ProcessMessages(&Input);
+        
+        if(Dev_ShouldPlayGame())
+            Global_GameCode.Tick(Game, Dev_GetDeveloperContext());
+        
         Game->dt = FrameTime;                
         Game->Resolution = Win32_GetWindowDim(Window);
         
         Dev_Tick();
+        
+        if(Dev_ShouldPlayGame())
+        {
+            ak_f32 tInterpolated = Accumulator / Game->dtFixed;
+            Global_GameCode.Render(Game, Graphics, tInterpolated);
+        }
+        
         Dev_Render();
         
         //DEVELOPMENT_TICK(Game, Graphics, &GraphicsState, tRenderInterpolate);                                
@@ -889,8 +900,9 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* RawKeyboard)
         BindKey('W', Input->W);
         BindKey('E', Input->E);
         BindKey('R', Input->R);      
+        BindKey('S', Input->S);
         BindKey(VK_DELETE, Input->Delete);
-        BindKey(VK_CONTROL, Input->Ctl);
+        BindKey(VK_CONTROL, Input->Ctrl);
     }       
 }
 

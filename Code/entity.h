@@ -72,9 +72,10 @@ struct player
     player_state State;        
 };
 
-COLLISION_EVENT(OnPlayerCollision);
+#define UserDataToIndex(data) ((ak_u32)(AK_SafeAddrToU32((ak_uaddr)(data))))
+#define IndexToUserData(index) ((void*)(ak_uaddr)(index))
 
-#define GetUserData(Entity, type) ((type*)Entity->UserData)
+COLLISION_EVENT(OnPlayerCollision);
 
 COLLISION_EVENT(OnCollisionStub) { }
 

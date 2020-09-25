@@ -1,6 +1,6 @@
 #include "graphics_push_commands.cpp"
 
-ak_u64 CreateGraphicsEntity(graphics_state* GraphicsState, mesh_asset_id MeshID, material Material, ak_sqtf Transform)
+ak_u64 CreateGraphicsEntity(graphics_state* GraphicsState, mesh_asset_id MeshID, material Material, ak_sqtf Transform, void* UserData)
 {
     ak_u64 Result = GraphicsState->GraphicsEntityStorage.Allocate();
     graphics_entity* Entity = GraphicsState->GraphicsEntityStorage.Get(Result);
@@ -8,6 +8,7 @@ ak_u64 CreateGraphicsEntity(graphics_state* GraphicsState, mesh_asset_id MeshID,
     Entity->MeshID = MeshID;
     Entity->Material = Material;
     Entity->Transform = AK_TransformM4(Transform);
+    Entity->UserData = UserData;
     return Result;
 }
 
@@ -99,6 +100,14 @@ void InterpolateState(game* Game, ak_u32 WorldIndex, ak_f32 t)
         InterpState.Scale = NewState.Scale;        
         GraphicsEntity->Transform = AK_TransformM4(InterpState);
     }
+    
+    camera* OldCamera = &Game->OldCameras[WorldIndex];
+    camera* NewCamera = &Game->NewCameras[WorldIndex];
+    
+    camera* InterpCamera = &GraphicsState->Camera;
+    InterpCamera->Target = AK_Lerp(OldCamera->Target, t, NewCamera->Target);
+    //TODO(JJ): Interpolate spherical coordinates    
+    InterpCamera->SphericalCoordinates = NewCamera->SphericalCoordinates;
 }
 graphics_mesh_id LoadGraphicsMesh(assets* Assets, graphics* Graphics, mesh_asset_id ID)
 {

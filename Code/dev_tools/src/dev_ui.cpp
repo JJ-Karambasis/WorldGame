@@ -675,7 +675,7 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
             DevTransform->Translation = Translation;
             DevTransform->Scale       = Scale;
             DevTransform->Euler       = Rotation;
-                        
+            
             ak_sqtf* Transform = GetEntityTransformNew(Game, SelectedObject->EntityID);
             Transform->Translation = DevTransform->Translation;
             Transform->Scale = DevTransform->Scale;                        
@@ -721,10 +721,32 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
     local ak_bool demo_window;
     ShowDemoWindow((bool*)&demo_window);
 #endif    
+    ak_f32 MenuHeight = 0;   
     
-    SetNextWindowPos(ImVec2(0, 0));
-    if(Begin("Dev Tools", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if(!UI->PlayGame)
     {
+        if(BeginMainMenuBar())
+        {
+            if(BeginMenu("Menu"))
+            {   
+                if(MenuItem("Load World", "CTRL+L"))
+                {
+                }
+                
+                if(MenuItem("Save World", "CTRL+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, false);                                
+                if(MenuItem("Save World As", "ALT+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, true);                                
+                
+                ImGui::EndMenu();
+            }
+            
+            MenuHeight = GetWindowHeight();
+            EndMainMenuBar();
+        }
+    }
+    
+    SetNextWindowPos(ImVec2(0, MenuHeight));
+    if(Begin("Dev Tools", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    {                
         Text("FPS: %f", 1.0f/Game->dt);
         
         ak_bool PrevPlayGame = UI->PlayGame;
@@ -737,12 +759,45 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
             if(UI->PlayGame)
             {
                 //NOTE(EVERYONE): Just started playing
-                Dev_DebugLog("Just started playing");
+                
             }
             else
-            {
+            {                                
                 //NOTE(EVERYONE): Just stopped playing
-                Dev_DebugLog("Just stopped playing");
+                for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+                {
+                    camera* DevCamera = &DevContext->Cameras[WorldIndex];                    
+                    
+                    entity_storage*   EntityStorage = &Game->EntityStorage[WorldIndex];
+                    ak_array<ak_sqtf>* OldTransforms = &Game->OldTransforms[WorldIndex];
+                    ak_array<ak_sqtf>* NewTransforms = &Game->NewTransforms[WorldIndex];                    
+                    graphics_entity_storage* GraphicsEntityStorage = &Game->GraphicsStates[WorldIndex].GraphicsEntityStorage;
+                    simulation* Simulation = &Game->Simulations[WorldIndex];
+                    
+                    ak_array<dev_transform>* InitialTransforms = &DevContext->InitialTransforms[WorldIndex];
+                    AK_ForEach(Entity, EntityStorage)
+                    {                        
+                        ak_u32 Index = AK_PoolIndex(Entity->ID.ID);
+                        graphics_entity* GraphicsEntity = GraphicsEntityStorage->Get(Entity->GraphicsEntityID);
+                        sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
+                        
+                        ak_sqtf* NewTransform = NewTransforms->Get(Index);
+                        dev_transform* InitialTransform = InitialTransforms->Get(Index);
+                        NewTransform->Translation = InitialTransform->Translation;
+                        NewTransform->Scale = InitialTransform->Scale;
+                        NewTransform->Orientation = AK_EulerToQuat(InitialTransform->Euler);
+                        
+                        *OldTransforms->Get(Index) = *NewTransform;
+                        GraphicsEntity->Transform = AK_TransformM4(*NewTransform);
+                        SimEntity->Transform = *NewTransform;                        
+                        
+                        if(Entity->Type == ENTITY_TYPE_PLAYER)
+                        {
+                            DevCamera->Target = NewTransform->Translation;
+                            DevCamera->SphericalCoordinates.radius = 6.0f;
+                        }
+                    }
+                }                
             }
         }
         
@@ -806,7 +861,7 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
     
     if(!UI->PlayGame)
     {
-        SetNextWindowPos(ImVec2(0, DevToolsWindowHeight));
+        SetNextWindowPos(ImVec2(0, DevToolsWindowHeight+MenuHeight));
         if(Begin("Spawners", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
             if(BeginTabBar("Spawner Tabs"))

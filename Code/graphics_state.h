@@ -33,11 +33,7 @@ struct camera_transform
 struct camera
 {
     ak_v3f Target;
-    ak_v3f SphericalCoordinates;
-    
-    ak_f32 FieldOfView;
-    ak_f32 ZNear;
-    ak_f32 ZFar;
+    ak_v3f SphericalCoordinates;    
 };
 
 typedef ak_pool<graphics_entity> graphics_entity_storage;

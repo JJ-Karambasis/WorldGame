@@ -92,7 +92,7 @@ typedef ak_pool<manifold> manifold_storage;
 typedef ak_pool<contact_constraint> contact_storage;
 typedef ak_pool<constraint> constraint_storage;
 
-#define BROAD_PHASE_PAIR_FILTER_FUNC(name) ak_bool name(broad_phase_pair* Pair)
+#define BROAD_PHASE_PAIR_FILTER_FUNC(name) ak_bool name(broad_phase_pair* Pair, void* UserData)
 typedef BROAD_PHASE_PAIR_FILTER_FUNC(broad_phase_pair_filter_func);
 
 struct simulation
@@ -117,7 +117,7 @@ struct simulation
     broad_phase_pair_list GetAllPairs();
     broad_phase_pair_list GetAllPairs(rigid_body* RigidBody);
     broad_phase_pair_list GetSimEntityOnlyPairs(rigid_body* RigidBody);
-    broad_phase_pair_list FilterPairs(broad_phase_pair_list Pairs, broad_phase_pair_filter_func* FilterFunc);
+    broad_phase_pair_list FilterPairs(broad_phase_pair_list Pairs, broad_phase_pair_filter_func* FilterFunc, void* UserData = NULL);
     
     void Integrate(ak_f32 dt);
     void AddContactConstraints(rigid_body* RigidBodyA, rigid_body* RigidBodyB, contact_list Contacts);

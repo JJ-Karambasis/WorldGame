@@ -9,18 +9,19 @@ struct dev_input
 {
     union
     {
-        button Buttons[9];
+        button Buttons[10];
         struct
         {
-            button ToggleDevState;
-            button Alt;
+            button ToggleDevState;            
             button LMB;
             button MMB;
             button W;
             button E;
-            button R;            
+            button R;  
+            button S;
             button Delete;
-            button Ctl;
+            button Ctrl;
+            button Alt;
         };
     };
     
@@ -125,6 +126,11 @@ struct dev_transform
     ak_v3f Euler;
 };
 
+struct dev_loaded_world
+{
+    ak_string LoadedWorldFile;    
+};
+
 struct dev_context
 {
     ak_arena* DevStorage;        
@@ -154,6 +160,7 @@ struct dev_context
     
     dev_selected_object SelectedObject;
     dev_gizmo_state GizmoState;
+    dev_loaded_world LoadedWorld;
 };
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);

@@ -7,6 +7,7 @@
 #define AK_DEVELOPER_BUILD
 #endif
 
+
 #include <ak_common.h>
 
 #define PLAYER_RADIUS 0.35f
@@ -30,7 +31,7 @@ struct jumping_quad
 #include "simulation/simulation.h"
 #include "graphics_state.h"
 #include "entity.h"
-#include "world_loader.h"
+#include "world_file.h"
 
 struct goal_rect
 {
@@ -71,8 +72,8 @@ struct game
     entity_storage EntityStorage[2];    
     ak_array<ak_sqtf> OldTransforms[2];
     ak_array<ak_sqtf> NewTransforms[2];    
-    camera PrevCameras[2];    
-    camera CurrentCameras[2];    
+    camera OldCameras[2];    
+    camera NewCameras[2];    
     jumping_quad JumpingQuads[2];                
     //////////////////////////////////////////////////
     
@@ -120,12 +121,11 @@ GetGraphicsState(game* Game, world_id ID)
 #define GAME_INITIALIZE(name) game* name(ak_arena* TempStorage, input* Input, audio_output* AudioOutput, ak_string AssetPath)
 #define GAME_FIXED_TICK(name) void name(game* Game, void* DevContext)
 #define GAME_TICK(name) void name(game* Game, void* DevContext)
+#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, ak_f32 tInterpolate)
 
 typedef GAME_INITIALIZE(game_initialize);
 typedef GAME_FIXED_TICK(game_fixed_tick);
 typedef GAME_TICK(game_tick);
-
-#define GAME_RENDER(name) void name(game* Game, graphics_state* GraphicsState)
 typedef GAME_RENDER(game_render);
 
 #define GAME_OUTPUT_SOUND_SAMPLES(name) void name(game* Game, samples* Samples)

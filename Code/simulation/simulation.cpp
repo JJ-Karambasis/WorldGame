@@ -149,13 +149,13 @@ broad_phase_pair_list simulation::GetSimEntityOnlyPairs(rigid_body* RigidBody)
     return Result;
 }
 
-broad_phase_pair_list simulation::FilterPairs(broad_phase_pair_list Pairs, broad_phase_pair_filter_func* FilterFunc)
+broad_phase_pair_list simulation::FilterPairs(broad_phase_pair_list Pairs, broad_phase_pair_filter_func* FilterFunc, void* UserData)
 {
     broad_phase_pair_list Result = AllocatePairList(Pairs.Count);
     for(ak_u32 PairIndex = 0; PairIndex < Pairs.Count; PairIndex++)
     {
         broad_phase_pair* Pair = Pairs.Ptr + PairIndex;
-        if(FilterFunc(Pair))
+        if(FilterFunc(Pair, UserData))
             Result.AddPair(Pair->SimEntityA, Pair->SimEntityB, Pair->AVolumeID, Pair->BVolumeID);
     }    
     return Result;

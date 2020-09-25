@@ -72,23 +72,23 @@ void FreeEntity(game* Game, world_id ID)
     Game->EntityStorage[ID.WorldIndex].Free(ID.ID);    
 }
 
-ak_u64 CreatePushingObject(game* Game)
+ak_u32 CreatePushingObject(game* Game)
 {
     ak_u64 Result = Game->PushingObjectStorage.Allocate();
     pushing_object* PushingObject = Game->PushingObjectStorage.Get(Result);
     PushingObject->ID = Result;
-    return Result;
+    return AK_PoolIndex(Result);
 }
 
-void DeletePushingObject(game* Game, ak_u64 ID)
+void DeletePushingObject(game* Game, ak_u32 Index)
 {
-    Game->PushingObjectStorage.Free(ID);
+    Game->PushingObjectStorage.Free(Game->PushingObjectStorage.IDs[Index]);
 }
 
 pushing_object* GetPushingObject(game* Game, entity* Entity)
 {
     AK_Assert(Entity->Type == ENTITY_TYPE_PUSHABLE, "Cannot get a pushing object of an entity that is not a pushing object");
-    return Game->PushingObjectStorage.Get((ak_u64)Entity->UserData);
+    return Game->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
 }
 
 world_id
@@ -104,15 +104,15 @@ CreateEntity(game* Game, entity_type Type, sim_entity_type SimType, ak_u32 World
     world_id Result = MakeWorldID(EntityStorage->Allocate(), WorldIndex);    
     entity* Entity = EntityStorage->Get(Result.ID);
     
+    ak_u32 Index = AK_PoolIndex(Result.ID);
     Entity->Type = Type;    
     Entity->ID = Result;
     Entity->SimEntityID = Simulation->CreateSimEntity(SimType);        
     Entity->LinkID = InvalidWorldID();    
     
     ak_sqtf Transform = AK_SQT(Position, Orientation, Scale);
-    Entity->GraphicsEntityID = CreateGraphicsEntity(GraphicsState, MeshID, Material, Transform);
+    Entity->GraphicsEntityID = CreateGraphicsEntity(GraphicsState, MeshID, Material, Transform, IndexToUserData(Index));
     
-    ak_u32 Index = AK_PoolIndex(Result.ID);
     if(Game->OldTransforms[WorldIndex].Size < (Index+1))
     {
         Game->OldTransforms[WorldIndex].Resize(Index+1);
@@ -123,7 +123,7 @@ CreateEntity(game* Game, entity_type Type, sim_entity_type SimType, ak_u32 World
     Game->NewTransforms[WorldIndex][Index] = Transform;        
     
     sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
-    SimEntity->UserData = Entity;
+    SimEntity->UserData = IndexToUserData(Index);
     
     SimEntity->Transform = Transform;        
     if((MeshID != INVALID_MESH_ID) && !NoMeshColliders)
@@ -211,7 +211,7 @@ CreatePushableBox(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensi
     world_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, 
                                     Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, Material, false);        
     entity* Entity = GetEntity(Game, Result);
-    Entity->UserData = (void*)CreatePushingObject(Game);
+    Entity->UserData = IndexToUserData(CreatePushingObject(Game));
     
     simulation* Simulation = GetSimulation(Game, WorldIndex);                
     rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
@@ -263,7 +263,7 @@ inline ak_bool CanBePushed(ak_v2f MoveDirection, ak_v2f ObjectDirection)
 
 COLLISION_EVENT(OnPlayerCollision)
 {
-    player* Player = GetUserData(Entity, player);
+    player* Player = (player*)Entity->UserData;
     simulation* Simulation = GetSimulation(Game, Entity->ID);        
     
     switch(Player->State)
