@@ -470,28 +470,33 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 if(Spawner->WorldIndex == 2)
                 {                        
                     DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;                    
-                    dual_world_id IDs = CreateDualStaticEntity(Game, Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle), 
-                                                               Spawner->MeshID, Material);
+                    world_id AID = CreateStaticEntity(&Game->World, Game->Assets, 0, 
+                                                      Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle), 
+                                                      Spawner->MeshID, Material);
+                    world_id BID = CreateStaticEntity(&Game->World, Game->Assets, 1, 
+                                                      Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle), 
+                                                      Spawner->MeshID, Material);
                     
-                    DevContext_AddToDevTransform(DevContext, IDs.EntityA);
-                    DevContext_AddToDevTransform(DevContext, IDs.EntityB);
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, AID);
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, BID);
                     
-                    if(CurrentWorldIndex == IDs.EntityA.WorldIndex)
+                    if(CurrentWorldIndex == AID.WorldIndex)
                     {
-                        DevContext->SelectedObject.EntityID = IDs.EntityA;
+                        DevContext->SelectedObject.EntityID = AID;
                         DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&Material);
                     }
                     else
                     {
-                        DevContext->SelectedObject.EntityID = IDs.EntityB;                        
+                        DevContext->SelectedObject.EntityID = BID;                        
                         DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&Material);
                     }
                 }
                 else
                 {                           
-                    world_id EntityID = CreateStaticEntity(Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Scale, 
-                                                           AK_RotQuat(Spawner->Axis, Spawner->Angle), Spawner->MeshID, Material);                                            
-                    DevContext_AddToDevTransform(DevContext, EntityID);
+                    world_id EntityID = CreateStaticEntity(&Game->World, Game->Assets, Spawner->WorldIndex, 
+                                                           Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle), 
+                                                           Spawner->MeshID, Material);                                            
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
                     
                     if(EntityID.WorldIndex == CurrentWorldIndex)
                     {
@@ -603,10 +608,10 @@ void DevUI_LightSpawner(dev_context* DevContext, light_spawner* Spawner, ak_u32 
         
         if(Spawner->WorldIndex == 2)
         {
-            graphics_state* GraphicsStateA = &DevContext->Game->GraphicsStates[0];
-            graphics_state* GraphicsStateB = &DevContext->Game->GraphicsStates[1];
-            ak_u64 AID = CreatePointLight(GraphicsStateA, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
-            ak_u64 BID = CreatePointLight(GraphicsStateB, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
+            graphics_state* GraphicsStateA = &DevContext->Game->World.GraphicsStates[0];
+            graphics_state* GraphicsStateB = &DevContext->Game->World.GraphicsStates[1];
+            ak_u64 AID = CreatePointLight(GraphicsStateA, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity, true);
+            ak_u64 BID = CreatePointLight(GraphicsStateB, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity, true);
             
             DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
             if(CurrentWorldIndex == 0)
@@ -620,8 +625,8 @@ void DevUI_LightSpawner(dev_context* DevContext, light_spawner* Spawner, ak_u32 
         }
         else
         {
-            graphics_state* GraphicsState = &DevContext->Game->GraphicsStates[Spawner->WorldIndex];
-            ak_u64 ID = CreatePointLight(GraphicsState, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);            
+            graphics_state* GraphicsState = &DevContext->Game->World.GraphicsStates[Spawner->WorldIndex];
+            ak_u64 ID = CreatePointLight(GraphicsState, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity, true);            
             if(CurrentWorldIndex == Spawner->WorldIndex)
             {
                 DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
@@ -634,6 +639,7 @@ void DevUI_LightSpawner(dev_context* DevContext, light_spawner* Spawner, ak_u32 
 void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
 {
     game* Game = DevContext->Game;
+    world* World = &Game->World;
     
     const ak_f32 TRANSFORM_ITEM_WIDTH = 80.0f;            
     switch(SelectedObject->Type)
@@ -676,17 +682,17 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
             DevTransform->Scale       = Scale;
             DevTransform->Euler       = Rotation;
             
-            ak_sqtf* Transform = GetEntityTransformNew(Game, SelectedObject->EntityID);
+            ak_sqtf* Transform = &World->NewTransforms[SelectedObject->EntityID.WorldIndex][Index];
             Transform->Translation = DevTransform->Translation;
             Transform->Scale = DevTransform->Scale;                        
             Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
             
-            *GetEntityTransformOld(Game, SelectedObject->EntityID) = *Transform;
+            World->OldTransforms[SelectedObject->EntityID.WorldIndex][Index] = *Transform;
             
             sim_entity* SimEntity = GetSimEntity(Game, SelectedObject->EntityID);
             SimEntity->Transform = *Transform;                    
             
-            graphics_state* GraphicsState = &Game->GraphicsStates[SelectedObject->EntityID.WorldIndex];
+            graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->EntityID.WorldIndex];
             graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
             GraphicsEntity->Transform = AK_TransformM4(*Transform);
             
@@ -695,7 +701,7 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
         
         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
         {
-            graphics_state* GraphicsState = &Game->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
+            graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
             point_light* PointLight = GetPointLight(GraphicsState, SelectedObject->PointLightID.ID);
             
             DevUI_TranslationTool(AK_HashFunction("Edit Point Light Translation"), TRANSFORM_ITEM_WIDTH, &PointLight->Position);
@@ -729,10 +735,7 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
         {
             if(BeginMenu("Menu"))
             {   
-                if(MenuItem("Load World", "CTRL+L"))
-                {
-                }
-                
+                if(MenuItem("Load World", "CTRL+L")) DevContext_LoadWorld(DevContext, &DevContext->LoadedWorld);                                 
                 if(MenuItem("Save World", "CTRL+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, false);                                
                 if(MenuItem("Save World As", "ALT+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, true);                                
                 
@@ -768,11 +771,11 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
                 {
                     camera* DevCamera = &DevContext->Cameras[WorldIndex];                    
                     
-                    entity_storage*   EntityStorage = &Game->EntityStorage[WorldIndex];
-                    ak_array<ak_sqtf>* OldTransforms = &Game->OldTransforms[WorldIndex];
-                    ak_array<ak_sqtf>* NewTransforms = &Game->NewTransforms[WorldIndex];                    
-                    graphics_entity_storage* GraphicsEntityStorage = &Game->GraphicsStates[WorldIndex].GraphicsEntityStorage;
-                    simulation* Simulation = &Game->Simulations[WorldIndex];
+                    entity_storage*   EntityStorage = &Game->World.EntityStorage[WorldIndex];
+                    ak_array<ak_sqtf>* OldTransforms = &Game->World.OldTransforms[WorldIndex];
+                    ak_array<ak_sqtf>* NewTransforms = &Game->World.NewTransforms[WorldIndex];                    
+                    graphics_entity_storage* GraphicsEntityStorage = &Game->World.GraphicsStates[WorldIndex].GraphicsEntityStorage;
+                    simulation* Simulation = &Game->World.Simulations[WorldIndex];
                     
                     ak_array<dev_transform>* InitialTransforms = &DevContext->InitialTransforms[WorldIndex];
                     AK_ForEach(Entity, EntityStorage)

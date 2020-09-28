@@ -59,21 +59,19 @@ world_id DevRay_CastToAllPointLights(ak_f32* t, graphics_state* GraphicsState, a
     return HitLightID;
 }
 
-dev_selected_object DevRay_CastToAllSelectables(dev_context* DevContext, ray Ray, ak_u32 WorldIndex, ak_f32 ZNear)
-{
-    game* Game = DevContext->Game;
-    
+dev_selected_object DevRay_CastToAllSelectables(world* World, assets* Assets, ray Ray, ak_u32 WorldIndex, ak_f32 ZNear)
+{    
     dev_selected_object Result = {};    
     ak_f32 tBest = INFINITY;
     
-    world_id EntityID = DevRay_CastToAllEntities(&tBest, Game->Assets, Game->GraphicsStates, WorldIndex, Ray, ZNear);
+    world_id EntityID = DevRay_CastToAllEntities(&tBest, Assets, World->GraphicsStates, WorldIndex, Ray, ZNear);
     if(EntityID.IsValid())
     {
         Result.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
         Result.EntityID = EntityID;
     }
     
-    world_id LightID = DevRay_CastToAllPointLights(&tBest, Game->GraphicsStates, WorldIndex, Ray, ZNear);
+    world_id LightID = DevRay_CastToAllPointLights(&tBest, World->GraphicsStates, WorldIndex, Ray, ZNear);
     if(LightID.IsValid())
     {
         Result.Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
@@ -82,8 +80,8 @@ dev_selected_object DevRay_CastToAllSelectables(dev_context* DevContext, ray Ray
     
     if(Result.Type == DEV_SELECTED_OBJECT_TYPE_ENTITY)
     {
-        entity* Entity = GetEntity(DevContext->Game, Result.EntityID);            
-        graphics_state* GraphicsState = GetGraphicsState(DevContext->Game, Result.EntityID);        
+        entity* Entity = World->EntityStorage[Result.EntityID.WorldIndex].Get(Result.EntityID.ID);
+        graphics_state* GraphicsState = &World->GraphicsStates[Result.EntityID.WorldIndex];
         material Material = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID)->Material;
         Result.MaterialContext = DevUI_ContextFromMaterial(&Material);
     }

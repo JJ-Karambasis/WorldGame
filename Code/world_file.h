@@ -12,10 +12,8 @@ struct world_file_header
     ak_char Signature[AK_Count(WORLD_FILE_SIGNATURE)];
     ak_u16 MajorVersion;
     ak_u16 MinorVersion;
-    ak_u32 EntityCountWorldA;    
-    ak_u32 EntityCountWorldB;
-    ak_u32 PointLightCountWorldA;
-    ak_u32 PointLightCountWorldB;
+    ak_u32 EntityCounts[2];        
+    ak_u32 PointLightCounts[2];    
 };
 
 #pragma pack(pop)

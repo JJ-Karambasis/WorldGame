@@ -50,11 +50,11 @@ AK_EXPORT GAME_INITIALIZE(Initialize)
     Game->AudioOutput = AudioOutput;
     Game->Assets      = Assets;        
     
-    Game->NewCameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
-    Game->NewCameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
+    Game->World.NewCameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
+    Game->World.NewCameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
     
-    Game->OldCameras[0] = Game->NewCameras[0];
-    Game->OldCameras[1] = Game->NewCameras[1];
+    Game->World.OldCameras[0] = Game->World.NewCameras[0];
+    Game->World.OldCameras[1] = Game->World.NewCameras[1];
     
     
     return Game;
@@ -62,8 +62,9 @@ AK_EXPORT GAME_INITIALIZE(Initialize)
 
 void AddRigidBodyContacts(game* Game, ak_u32 WorldIndex, rigid_body* RigidBody, sim_entity* SimEntity, contact_list ContactList)
 {
-    simulation* Simulation = &Game->Simulations[WorldIndex];
-    entity* Entity = Game->EntityStorage[WorldIndex].GetByIndex(UserDataToIndex(SimEntity->UserData));
+    world* World = &Game->World;
+    simulation* Simulation = &World->Simulations[WorldIndex];
+    entity* Entity = World->EntityStorage[WorldIndex].GetByIndex(UserDataToIndex(SimEntity->UserData));
     switch(Entity->Type)
     {
         case ENTITY_TYPE_PLAYER:
@@ -182,14 +183,15 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
     
     ak_f32 dt = Game->dtFixed;
     
+    world* World = &Game->World;
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-    {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);    
+    {        
+        simulation* Simulation = &World->Simulations[WorldIndex];
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {
             ak_u32 EntityIndex = UserDataToIndex(RigidBody->UserData);
-            entity* Entity = Game->EntityStorage[WorldIndex].GetByIndex(EntityIndex);            
-            RigidBody->Transform = Game->NewTransforms[WorldIndex][EntityIndex];
+            entity* Entity = World->EntityStorage[WorldIndex].GetByIndex(EntityIndex);            
+            RigidBody->Transform = World->NewTransforms[WorldIndex][EntityIndex];
             
             switch(Entity->Type)
             {
@@ -241,7 +243,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);    
+        simulation* Simulation = &World->Simulations[WorldIndex];
         broad_phase_pair_list PairList = Simulation->GetAllPairs();
         for(ak_u32 PairIndex = 0; PairIndex < PairList.Count; PairIndex++)
         {
@@ -250,8 +252,8 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
             ak_u32 EntityIndexA = UserDataToIndex(Pair->SimEntityA->UserData);
             ak_u32 EntityIndexB = UserDataToIndex(Pair->SimEntityB->UserData);
             
-            entity_type TypeA = Game->EntityStorage[WorldIndex].GetByIndex(EntityIndexA)->Type;
-            entity_type TypeB = Game->EntityStorage[WorldIndex].GetByIndex(EntityIndexB)->Type;
+            entity_type TypeA = World->EntityStorage[WorldIndex].GetByIndex(EntityIndexA)->Type;
+            entity_type TypeB = World->EntityStorage[WorldIndex].GetByIndex(EntityIndexB)->Type;
             
             if((TypeA == ENTITY_TYPE_RIGID_BODY) ||
                (TypeB == ENTITY_TYPE_RIGID_BODY))
@@ -275,19 +277,19 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);    
+        simulation* Simulation = &World->Simulations[WorldIndex];
         Simulation->Integrate(dt);    
         Simulation->SolveConstraints(30, dt);
     }    
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);    
+        simulation* Simulation = &World->Simulations[WorldIndex];
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {
             ak_u32 EntityIndex = UserDataToIndex(RigidBody->UserData);
             
-            entity* Entity = Game->EntityStorage[WorldIndex].GetByIndex(EntityIndex);
+            entity* Entity = World->EntityStorage[WorldIndex].GetByIndex(EntityIndex);
             switch(Entity->Type)
             {
                 case ENTITY_TYPE_PLAYER:
@@ -296,7 +298,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                     
                     HandleSlidingCollisions(Simulation, RigidBody);
                     
-                    Game->NewCameras[WorldIndex].Target = RigidBody->Transform.Translation;                   
+                    World->NewCameras[WorldIndex].Target = RigidBody->Transform.Translation;                   
                 } break;
                 
                 case ENTITY_TYPE_PUSHABLE:
@@ -311,7 +313,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                         sim_entity* PlayerRigidBody = Simulation->GetSimEntity(PlayerEntity->SimEntityID);
                         
                         PlayerRigidBody->Transform.Translation.xy += (RigidBody->Transform.Translation.xy-StartPosition.xy);                                                                    
-                        Game->NewCameras[WorldIndex].Target = PlayerRigidBody->Transform.Translation;
+                        World->NewCameras[WorldIndex].Target = PlayerRigidBody->Transform.Translation;
                     }                    
                 } break;
                 
@@ -340,7 +342,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);            
+        simulation* Simulation = &World->Simulations[WorldIndex];
         for(ak_u32 CollisionEventIndex = 0; CollisionEventIndex < Simulation->CollisionEvents.Count; CollisionEventIndex++)
         {
             collision_event* Event = &Simulation->CollisionEvents.Ptr[CollisionEventIndex];
@@ -348,8 +350,8 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
             ak_u32 EntityIndexA = UserDataToIndex(Event->SimEntityA->UserData);
             ak_u32 EntityIndexB = UserDataToIndex(Event->SimEntityB->UserData);
             
-            entity* EntityA = Game->EntityStorage[WorldIndex].GetByIndex(EntityIndexA);
-            entity* EntityB = Game->EntityStorage[WorldIndex].GetByIndex(EntityIndexB);
+            entity* EntityA = World->EntityStorage[WorldIndex].GetByIndex(EntityIndexA);
+            entity* EntityB = World->EntityStorage[WorldIndex].GetByIndex(EntityIndexB);
             
             if(EntityA->OnCollision) EntityA->OnCollision(Game, EntityA, EntityB,  Event->Normal);
             if(EntityB->OnCollision) EntityB->OnCollision(Game, EntityB, EntityA, -Event->Normal);
@@ -360,9 +362,9 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);            
+        simulation* Simulation = &World->Simulations[WorldIndex];
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)        
-            Game->NewTransforms[WorldIndex][UserDataToIndex(RigidBody->UserData)] = RigidBody->Transform;                        
+            World->NewTransforms[WorldIndex][UserDataToIndex(RigidBody->UserData)] = RigidBody->Transform;                        
     }
 }
 
@@ -396,9 +398,10 @@ AK_EXPORT GAME_TICK(Tick)
         Game->CurrentWorldIndex = !Game->CurrentWorldIndex;
     
     
+    world* World = &Game->World;
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);    
+        simulation* Simulation = &World->Simulations[WorldIndex];
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {   
             RigidBody->MoveDelta = {};
@@ -411,10 +414,10 @@ AK_EXPORT GAME_TICK(Tick)
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = GetSimulation(Game, WorldIndex);    
+        simulation* Simulation = &World->Simulations[WorldIndex];
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
         {               
-            entity* Entity = Game->EntityStorage[WorldIndex].GetByIndex(UserDataToIndex(RigidBody->UserData));
+            entity* Entity = World->EntityStorage[WorldIndex].GetByIndex(UserDataToIndex(RigidBody->UserData));
             if(WorldIndex == Game->CurrentWorldIndex)
             {
                 switch(Entity->Type)
@@ -427,7 +430,7 @@ AK_EXPORT GAME_TICK(Tick)
                         {
                             case PLAYER_STATE_NONE:
                             {            
-                                ak_v3f Position = GetEntityPositionNew(Game, Entity->ID);                               
+                                ak_v3f Position = World->NewTransforms[Entity->ID.WorldIndex][AK_PoolIndex(Entity->ID.ID)].Translation;
                                 for(ak_u32 JumpingQuadIndex = 0; JumpingQuadIndex < AK_Count(Game->JumpingQuads); JumpingQuadIndex++)
                                 {
                                     jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
@@ -536,8 +539,8 @@ AK_EXPORT GAME_TICK(Tick)
 extern "C"
 AK_EXPORT GAME_RENDER(Render)
 {       
-    InterpolateState(Game, Game->CurrentWorldIndex, tInterpolate);                     
-    graphics_state* GraphicsState = GetGraphicsState(Game, Game->CurrentWorldIndex);    
+    InterpolateState(&Game->World, Game->CurrentWorldIndex, tInterpolate);                     
+    graphics_state* GraphicsState = &Game->World.GraphicsStates[Game->CurrentWorldIndex];
     
     AK_SetGlobalArena(Game->TempStorage);
     UpdateRenderBuffer(Graphics, &GraphicsState->RenderBuffer, Game->Resolution);

@@ -1,5 +1,13 @@
 #include "graphics_push_commands.cpp"
 
+void DeleteGraphicsState(graphics* Graphics, graphics_state* GraphicsState)
+{
+    if(GraphicsState->RenderBuffer)
+        Graphics->FreeRenderBuffer(Graphics, GraphicsState->RenderBuffer);
+    AK_DeletePool(&GraphicsState->GraphicsEntityStorage);
+    AK_DeletePool(&GraphicsState->PointLightStorage);
+}
+
 ak_u64 CreateGraphicsEntity(graphics_state* GraphicsState, mesh_asset_id MeshID, material Material, ak_sqtf Transform, void* UserData)
 {
     ak_u64 Result = GraphicsState->GraphicsEntityStorage.Allocate();
@@ -17,7 +25,7 @@ inline point_light* GetPointLight(graphics_state* GraphicsState, ak_u64 ID)
     return GraphicsState->PointLightStorage.Get(ID);
 }
 
-ak_u64 CreatePointLight(graphics_state* GraphicsState, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity)
+ak_u64 CreatePointLight(graphics_state* GraphicsState, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity, ak_bool On)
 {
     ak_u64 ID = GraphicsState->PointLightStorage.Allocate();
     point_light* PointLight = GraphicsState->PointLightStorage.Get(ID);
@@ -26,7 +34,7 @@ ak_u64 CreatePointLight(graphics_state* GraphicsState, ak_v3f Position, ak_f32 R
     PointLight->Radius = Radius;
     PointLight->Color = Color;
     PointLight->Intensity = Intensity;
-    PointLight->On = true;    
+    PointLight->On = On;    
     return ID;    
 }
 
@@ -79,12 +87,12 @@ void UpdateRenderBuffer(graphics* Graphics, graphics_render_buffer** RenderBuffe
     }
 }
 
-void InterpolateState(game* Game, ak_u32 WorldIndex, ak_f32 t)
+void InterpolateState(world* World, ak_u32 WorldIndex, ak_f32 t)
 {
-    graphics_state* GraphicsState = &Game->GraphicsStates[WorldIndex];
+    graphics_state* GraphicsState = &World->GraphicsStates[WorldIndex];
     
-    ak_sqtf* OldTransforms = Game->OldTransforms[WorldIndex].Entries;
-    ak_sqtf* NewTransform = Game->NewTransforms[WorldIndex].Entries;
+    ak_sqtf* OldTransforms = World->OldTransforms[WorldIndex].Entries;
+    ak_sqtf* NewTransform = World->NewTransforms[WorldIndex].Entries;
     
     AK_ForEach(GraphicsEntity, &GraphicsState->GraphicsEntityStorage)
     {
@@ -101,8 +109,8 @@ void InterpolateState(game* Game, ak_u32 WorldIndex, ak_f32 t)
         GraphicsEntity->Transform = AK_TransformM4(InterpState);
     }
     
-    camera* OldCamera = &Game->OldCameras[WorldIndex];
-    camera* NewCamera = &Game->NewCameras[WorldIndex];
+    camera* OldCamera = &World->OldCameras[WorldIndex];
+    camera* NewCamera = &World->NewCameras[WorldIndex];
     
     camera* InterpCamera = &GraphicsState->Camera;
     InterpCamera->Target = AK_Lerp(OldCamera->Target, t, NewCamera->Target);

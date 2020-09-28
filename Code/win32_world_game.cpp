@@ -654,13 +654,13 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         while(Accumulator >= Game->dtFixed)
         {   
-            AK_Assert(Game->OldTransforms[0].Size == Game->NewTransforms[0].Size, "Old Entries and New Entries size do not match for World A");
-            AK_Assert(Game->OldTransforms[1].Size == Game->NewTransforms[1].Size, "Old Entries and New Entries size do not match for World B");
+            AK_Assert(Game->World.OldTransforms[0].Size == Game->World.NewTransforms[0].Size, "Old Entries and New Entries size do not match for World A");
+            AK_Assert(Game->World.OldTransforms[1].Size == Game->World.NewTransforms[1].Size, "Old Entries and New Entries size do not match for World B");
             
-            AK_CopyArray(Game->OldTransforms[0].Entries, Game->NewTransforms[0].Entries, Game->NewTransforms[0].Size);
-            AK_CopyArray(Game->OldTransforms[1].Entries, Game->NewTransforms[1].Entries, Game->NewTransforms[1].Size);
-            Game->OldCameras[0] = Game->NewCameras[0];
-            Game->OldCameras[1] = Game->NewCameras[1];
+            AK_CopyArray(Game->World.OldTransforms[0].Entries, Game->World.NewTransforms[0].Entries, Game->World.NewTransforms[0].Size);
+            AK_CopyArray(Game->World.OldTransforms[1].Entries, Game->World.NewTransforms[1].Entries, Game->World.NewTransforms[1].Size);
+            Game->World.OldCameras[0] = Game->World.NewCameras[0];
+            Game->World.OldCameras[1] = Game->World.NewCameras[1];
             
             if(Dev_ShouldPlayGame())
             {                

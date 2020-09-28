@@ -12,6 +12,7 @@
 
 #define PLAYER_RADIUS 0.35f
 #define PLAYER_HEIGHT 1.3f
+#define PLAYER_MASS 65.0f
 
 struct game;
 
@@ -59,6 +60,17 @@ struct block_puzzle
 typedef ak_pool<entity> entity_storage;
 typedef ak_pool<pushing_object> pushing_object_storage;
 
+struct world
+{
+    entity_storage EntityStorage[2];    
+    ak_array<ak_sqtf> OldTransforms[2];
+    ak_array<ak_sqtf> NewTransforms[2];    
+    camera OldCameras[2];    
+    camera NewCameras[2];        
+    simulation Simulations[2];
+    graphics_state GraphicsStates[2];    
+};
+
 struct game
 {                    
     ak_arena* GameStorage;    
@@ -68,17 +80,11 @@ struct game
     player Players[2];    
     pushing_object_storage PushingObjectStorage;    
     
-    //This stuff is probably going to be our level data    
-    entity_storage EntityStorage[2];    
-    ak_array<ak_sqtf> OldTransforms[2];
-    ak_array<ak_sqtf> NewTransforms[2];    
-    camera OldCameras[2];    
-    camera NewCameras[2];    
+    world World;
+    
+    //This stuff is probably going to be our level data        
     jumping_quad JumpingQuads[2];                
     //////////////////////////////////////////////////
-    
-    simulation Simulations[2];
-    graphics_state GraphicsStates[2];
     
     ak_v2i Resolution;
     ak_f32 dt;
@@ -88,34 +94,6 @@ struct game
     audio_output* AudioOutput;
     input* Input;                          
 };
-
-inline simulation*
-GetSimulation(game* Game, ak_u32 WorldIndex)
-{
-    simulation* Simulation = Game->Simulations + WorldIndex;
-    return Simulation;
-}
-
-inline simulation*
-GetSimulation(game* Game, world_id ID)
-{
-    simulation* Simulation = GetSimulation(Game, ID.WorldIndex);
-    return Simulation;
-}
-
-inline graphics_state*
-GetGraphicsState(game* Game, ak_u32 WorldIndex)
-{
-    graphics_state* GraphicsState = Game->GraphicsStates + WorldIndex;
-    return GraphicsState;
-}
-
-inline graphics_state*
-GetGraphicsState(game* Game, world_id ID)
-{
-    graphics_state* GraphicsState = GetGraphicsState(Game, ID.WorldIndex);
-    return GraphicsState;
-}
 
 
 #define GAME_INITIALIZE(name) game* name(ak_arena* TempStorage, input* Input, audio_output* AudioOutput, ak_string AssetPath)

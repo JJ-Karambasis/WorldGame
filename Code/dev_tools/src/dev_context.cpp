@@ -248,16 +248,16 @@ void DevContext_UpdateObjectOrientation(ak_quatf* Orientation, ak_v3f* OldEuler,
     *Orientation = AK_EulerToQuat(NewEuler.roll, NewEuler.pitch, NewEuler.yaw);
 }
 
-ak_v3f DevContext_GetSelectedObjectPosition(dev_context* Context, dev_selected_object* SelectedObject)
-{
+ak_v3f DevContext_GetSelectedObjectPosition(world* World, dev_selected_object* SelectedObject)
+{    
     AK_Assert(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE, "There is no selected object. Cannot retrieve position");
     switch(SelectedObject->Type)
     {
         case DEV_SELECTED_OBJECT_TYPE_ENTITY:          
-        return GetEntityPositionNew(Context->Game, SelectedObject->EntityID);            
+        return World->NewTransforms[SelectedObject->EntityID.WorldIndex][AK_PoolIndex(SelectedObject->EntityID.ID)].Translation;            
         
         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:         
-        return Context->Game->GraphicsStates[SelectedObject->PointLightID.WorldIndex].PointLightStorage.Get(SelectedObject->PointLightID.ID)->Position;
+        return World->GraphicsStates[SelectedObject->PointLightID.WorldIndex].PointLightStorage.Get(SelectedObject->PointLightID.ID)->Position;
         
         AK_INVALID_DEFAULT_CASE;
     }
@@ -401,20 +401,254 @@ void DevContext_PopulateRotationGizmos(dev_gizmo_state* GizmoState, dev_mesh* Tr
     GizmoState->Gizmos[5] = {};                
 }
 
-void DevContext_AddToDevTransform(dev_context* DevContext, world_id EntityID)
+void DevContext_AddToDevTransform(ak_array<dev_transform>* DevTransformsArray, world* World, world_id EntityID)
 {    
-    ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[EntityID.WorldIndex];
+    ak_array<dev_transform>* DevTransforms = &DevTransformsArray[EntityID.WorldIndex];
     ak_u32 Index = AK_PoolIndex(EntityID.ID);
     if((Index+1) > DevTransforms->Size)
         DevTransforms->Resize(Index+1);
     
-    dev_transform* DevTransform = DevTransforms->Get(Index);
+    dev_transform* DevTransform = DevTransforms->Get(Index);    
+    ak_sqtf Transform = World->NewTransforms[EntityID.WorldIndex][Index];    
+    DevTransform->Translation = Transform.Translation;
+    DevTransform->Scale = Transform.Scale;
+    DevTransform->Euler = AK_QuatToEuler(Transform.Orientation);    
+}
+
+void DevContext_WriteName(ak_file_handle* FileHandle, ak_char* Name, ak_u32 NameLength)
+{
+    AK_WriteFile(FileHandle, &NameLength, sizeof(NameLength));
+    AK_WriteFile(FileHandle, Name, sizeof(ak_char)*NameLength);                            
+}
+
+void DevContext_WriteMaterial(assets* Assets, ak_file_handle* FileHandle, material* Material)
+{        
+    AK_WriteFile(FileHandle, &Material->Diffuse.IsTexture, sizeof(Material->Diffuse.IsTexture));
+    if(Material->Diffuse.IsTexture)
+    {
+        texture_info* TextureInfo = GetTextureInfo(Assets, Material->Diffuse.DiffuseID);            
+        DevContext_WriteName(FileHandle, TextureInfo->Name, TextureInfo->Header.NameLength);        
+    }
+    else    
+        AK_WriteFile(FileHandle, &Material->Diffuse.Diffuse, sizeof(Material->Diffuse.Diffuse));    
     
-    ak_sqtf* Transform = GetEntityTransformNew(DevContext->Game, EntityID);
+    AK_WriteFile(FileHandle, &Material->Specular.InUse, sizeof(Material->Specular.InUse));    
+    if(Material->Specular.InUse)
+    {
+        AK_WriteFile(FileHandle, &Material->Specular.IsTexture, sizeof(Material->Specular.IsTexture));
+        if(Material->Specular.IsTexture)
+        {
+            texture_info* TextureInfo = GetTextureInfo(Assets, Material->Specular.SpecularID); 
+            DevContext_WriteName(FileHandle, TextureInfo->Name, TextureInfo->Header.NameLength);            
+        }
+        else        
+            AK_WriteFile(FileHandle, &Material->Specular.Specular, sizeof(Material->Specular.Specular));        
+        AK_WriteFile(FileHandle, &Material->Specular.Shininess, sizeof(Material->Specular.Shininess));
+    }
     
-    DevTransform->Translation = Transform->Translation;
-    DevTransform->Scale = Transform->Scale;
-    DevTransform->Euler = AK_QuatToEuler(Transform->Orientation);    
+    AK_WriteFile(FileHandle, &Material->Normal.InUse, sizeof(Material->Normal.InUse));    
+    if(Material->Normal.InUse)
+    {
+        texture_info* TextureInfo = GetTextureInfo(Assets, Material->Normal.NormalID); 
+        DevContext_WriteName(FileHandle, TextureInfo->Name, TextureInfo->Header.NameLength);        
+    }                        
+}
+
+ak_string DevContext_ReadAssetName(ak_stream* Stream, ak_arena* Arena)
+{    
+    ak_string Result;
+    Result.Length = *Stream->Read<ak_u32>();
+    Result.Data = Arena->PushArray<char>(Result.Length+1);
+    Result.Data[Result.Length] = 0;
+    AK_MemoryCopy(Result.Data, Stream->ReadArray<char>(Result.Length), Result.Length);
+    return Result;
+}
+
+ak_bool DevContext_ReadMaterial(ak_stream* Stream, assets* Assets, material* Material)
+{
+    Material->Diffuse.IsTexture = *Stream->Read<ak_bool>();
+    if(Material->Diffuse.IsTexture)
+    {
+        texture_asset_id* ID = Assets->TextureNameMap.Find(DevContext_ReadAssetName(Stream, AK_GetGlobalArena()).Data);
+        if(!ID)
+            return false;        
+        Material->Diffuse.DiffuseID = *ID;
+    }
+    else
+        Material->Diffuse.Diffuse = *Stream->Read<ak_color3f>();
+    
+    Material->Specular.InUse = *Stream->Read<ak_bool>();
+    if(Material->Specular.InUse)
+    {
+        Material->Specular.IsTexture = *Stream->Read<ak_bool>();
+        if(Material->Specular.IsTexture)
+        {
+            texture_asset_id* ID = Assets->TextureNameMap.Find(DevContext_ReadAssetName(Stream, AK_GetGlobalArena()).Data);
+            if(!ID)
+                return false;
+            Material->Specular.SpecularID = *ID;
+        }        
+        else
+            Material->Specular.Specular = *Stream->Read<ak_f32>();        
+        Material->Specular.Shininess = *Stream->Read<ak_i32>();
+    }
+    
+    Material->Normal.InUse = *Stream->Read<ak_bool>();
+    if(Material->Normal.InUse)
+    {
+        texture_asset_id* ID = Assets->TextureNameMap.Find(DevContext_ReadAssetName(Stream, AK_GetGlobalArena()).Data);
+        if(!ID)
+            return false;
+        Material->Normal.NormalID = *ID;
+    }
+    
+    return true;
+}
+
+void DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld)
+{
+#define LoadWorld_Error(message, ...) AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
+GlobalArena->EndTemp(&TempArena); \
+return
+    
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    ak_string LoadedWorldFile = AK_OpenFileDialog("world");
+    if(!AK_StringIsNullOrEmpty(LoadedWorldFile))
+    {
+        game* Game = DevContext->Game;
+        assets* Assets = Game->Assets;
+        ak_buffer WorldBuffer = AK_ReadEntireFile(LoadedWorldFile, GlobalArena);
+        
+        ak_array<dev_transform> DevTransforms[2] = {};
+        world World = {};        
+        
+        if(!WorldBuffer.IsValid())
+        {
+            LoadWorld_Error("Error loading world file %s, message: %s", LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data);            
+        }        
+        
+        ak_stream Stream = AK_CreateStream(WorldBuffer.Data, WorldBuffer.Size);
+        world_file_header* Header = Stream.Read<world_file_header>();
+        if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))
+        {
+            LoadWorld_Error("Error validating world file signature. Is the file %s corrupted?", LoadedWorldFile.Data);            
+        }
+        if((Header->MajorVersion != WORLD_FILE_MAJOR_VERSION) || (Header->MinorVersion != WORLD_FILE_MINOR_VERSION))
+        {
+            LoadWorld_Error("Error validating world file version. Found version %d.%d, must be %d.%d", Header->MajorVersion, Header->MinorVersion, WORLD_FILE_MAJOR_VERSION, WORLD_FILE_MINOR_VERSION);            
+        }                
+        world_id* Entities[2] = {};
+        Entities[0] = GlobalArena->PushArray<world_id>(Header->EntityCounts[0]);
+        Entities[1] = GlobalArena->PushArray<world_id>(Header->EntityCounts[1]);
+        
+        ak_u32* LinkIndexes[2] = {};
+        LinkIndexes[0] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[0]);
+        LinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[1]);
+        
+        Game->Players[0] = {};
+        Game->Players[1] = {};
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            for(ak_u32 EntityIndex = 0; EntityIndex < Header->EntityCounts[WorldIndex]; EntityIndex++)
+            {                
+                entity_type Type = *Stream.Read<entity_type>();    
+                
+                world_id EntityID = InvalidWorldID();
+                switch(Type)
+                {
+                    case ENTITY_TYPE_PLAYER:
+                    {
+                        LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
+                        
+                        ak_v3f Position = *Stream.Read<ak_v3f>();                                                
+                        material Material = {};
+                        if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
+                        {
+                            LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
+                        }
+                        
+                        EntityID = CreatePlayerEntity(&World, Game->Assets, WorldIndex, Position, Material, &Game->Players[WorldIndex]);                                                
+                    } break;
+                    
+                    case ENTITY_TYPE_STATIC:
+                    {
+                        LinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
+                        ak_sqtf Transform = *Stream.Read<ak_sqtf>();
+                        
+                        material Material = {};
+                        if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
+                        {
+                            LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
+                        }
+                        
+                        ak_string MeshName = DevContext_ReadAssetName(&Stream, GlobalArena);
+                        mesh_asset_id* MeshID = DevContext->Game->Assets->MeshNameMap.Find(MeshName.Data);
+                        if(!MeshID)
+                        {
+                            LoadWorld_Error("Could not load the mesh. Could not find asset with name %s", MeshName.Data);
+                        }
+                        
+                        EntityID = CreateStaticEntity(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, 
+                                                      *MeshID, Material);                        
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
+                }
+                
+                Entities[WorldIndex][EntityIndex] = EntityID;
+                DevContext_AddToDevTransform(DevTransforms, &World, EntityID);                        
+            }
+        }
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            ak_u32 EntityIndex = 0;
+            AK_ForEach(Entity, &World.EntityStorage[WorldIndex])
+            {
+                ak_u32 LinkIndex = LinkIndexes[WorldIndex][EntityIndex];
+                if(LinkIndex != (ak_u32)-1)
+                {
+                    world_id LinkEntityID = Entities[!WorldIndex][LinkIndex];
+                    Entity->LinkID = LinkEntityID;
+                }
+            }
+        }
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            for(ak_u32 PointLightIndex = 0; PointLightIndex < Header->PointLightCounts[WorldIndex]; PointLightIndex++)
+            {
+                ak_v3f Position = *Stream.Read<ak_v3f>();
+                ak_f32 Radius = *Stream.Read<ak_f32>();
+                ak_color3f Color = *Stream.Read<ak_color3f>();
+                ak_f32 Intensity = *Stream.Read<ak_f32>();
+                ak_bool On = *Stream.Read<ak_bool>();                
+                CreatePointLight(&World.GraphicsStates[WorldIndex], Position, Radius, Color, Intensity, On);
+            }
+        }
+        
+        DeleteWorld(&Game->World, DevContext->Graphics);
+        AK_DeleteArray(&DevContext->InitialTransforms[0]);
+        AK_DeleteArray(&DevContext->InitialTransforms[1]);
+        
+        
+        
+        Game->World = World;
+        DevContext->InitialTransforms[0] = DevTransforms[0];
+        DevContext->InitialTransforms[1] = DevTransforms[1];
+        
+        Game->World.NewCameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
+        Game->World.NewCameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
+        
+        AK_Free(LoadedWorld->LoadedWorldFile.Data);            
+        LoadedWorld->LoadedWorldFile = LoadedWorldFile;
+        
+        DevContext->SelectedObject = {};
+    }
+#undef LoadWorld_Error
+    GlobalArena->EndTemp(&TempArena);
 }
 
 void DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_bool SaveNewWorld)
@@ -426,161 +660,84 @@ void DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld
     
     if(SaveNewWorld)
     {
-        ak_string LoadedWorldFile = AK_SaveFileDialog("world", GlobalArena);
+        ak_string LoadedWorldFile = AK_SaveFileDialog("world");
         if(!AK_StringIsNullOrEmpty(LoadedWorldFile))
         {            
             ak_file_handle* FileHandle = AK_OpenFile(LoadedWorldFile, AK_FILE_ATTRIBUTES_WRITE);
             if(!FileHandle)
-            {                
+            {              
+                AK_Free(LoadedWorldFile.Data);
                 GlobalArena->EndTemp(&TempArena);
                 AK_MessageBoxOk("FileIO Error", AK_FormatString(GlobalArena, "Failed to open world file at location %s, message: %s\n", 
                                                                 LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data));
                 return;
             }
             
-            game* Game = DevContext->Game;
+            world* World = &DevContext->Game->World;
             ak_hash_map<ak_u64, ak_u32> EntityMap[2] = {};
             
             world_file_header FileHeader = {};
             AK_MemoryCopy(FileHeader.Signature, WORLD_FILE_SIGNATURE, sizeof(WORLD_FILE_SIGNATURE));
             FileHeader.MajorVersion = WORLD_FILE_MAJOR_VERSION;
             FileHeader.MinorVersion = WORLD_FILE_MINOR_VERSION;
-            FileHeader.EntityCountWorldA = Game->EntityStorage[0].Size;
-            FileHeader.EntityCountWorldB = Game->EntityStorage[1].Size;
-            FileHeader.PointLightCountWorldA = Game->GraphicsStates[0].PointLightStorage.Size;
-            FileHeader.PointLightCountWorldB = Game->GraphicsStates[1].PointLightStorage.Size;
-            
-            file_entity* WorldFileEntities[2];
-            WorldFileEntities[0] = GlobalArena->PushArray<file_entity>(FileHeader.EntityCountWorldA);
-            WorldFileEntities[1] = GlobalArena->PushArray<file_entity>(FileHeader.EntityCountWorldB);
+            FileHeader.EntityCounts[0] = World->EntityStorage[0].Size;
+            FileHeader.EntityCounts[1] = World->EntityStorage[1].Size;
+            FileHeader.PointLightCounts[0] = World->GraphicsStates[0].PointLightStorage.Size;
+            FileHeader.PointLightCounts[1] = World->GraphicsStates[1].PointLightStorage.Size;
             
             for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
             {       
-                ak_u32 EntityIndex = 0;
-                file_entity* FileEntities = WorldFileEntities[WorldIndex];                                
-                AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
-                {
-                    file_entity* FileEntity = FileEntities + EntityIndex++;
-                    FileEntity->Type = Entity->Type;
-                    FileEntity->Transform = *GetEntityTransformNew(Game, Entity->ID);                    
-                    
-                    graphics_entity* GraphicsEntity = Game->GraphicsStates[WorldIndex].GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
-                    mesh_info* MeshInfo = GetMeshInfo(Game->Assets, GraphicsEntity->MeshID);
-                    
-                    FileEntity->Material = GraphicsEntity->Material;
-                    FileEntity->MeshID = GraphicsEntity->MeshID;
-                    
-                    if((Entity->Type == ENTITY_TYPE_PLAYER) || (Entity->Type == ENTITY_TYPE_PUSHABLE))
-                    {
-                        rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
-                        FileEntity->Mass = 1.0f/RigidBody->InvMass;                        
-                    }
-                    
-                    if(Entity->Type == ENTITY_TYPE_RIGID_BODY)
-                    {
-                        rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
-                        FileEntity->Mass = 1.0f/RigidBody->InvMass;
-                        FileEntity->Restitution = RigidBody->Restitution;
-                    }                        
-                        
-                    
-                    EntityMap[WorldIndex].Insert(Entity->ID.ID, EntityIndex);                    
-                }                
-                
-                AK_Assert(EntityIndex == Game->EntityStorage[WorldIndex].Size, "Size of entity pool and file entity count do not match. This is a programming error");
+                ak_u32 EntityIndex = 0;                
+                AK_ForEach(Entity, &World->EntityStorage[WorldIndex])
+                {                    
+                    EntityMap[WorldIndex].Insert(Entity->ID.ID, EntityIndex++);   
+                }
             }
             
+            AK_WriteFile(FileHandle, &FileHeader, sizeof(FileHeader));            
             
             for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
             {       
-                ak_u32 EntityIndex = 0;
-                file_entity* FileEntities = WorldFileEntities[WorldIndex];                                
-                AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
+                ak_u32 EntityIndex = 0;                
+                AK_ForEach(Entity, &World->EntityStorage[WorldIndex])
                 {
-                    file_entity* FileEntity = FileEntities + EntityIndex++;
-                    FileEntity->LinkIndex = (ak_u32)-1;
-                    if(Entity->LinkID.IsValid())
-                    {
-                        ak_u32* Index = EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
-                        AK_Assert(Index, "Cannot not index for LinkID. This is a programming error (probably)");
-                        FileEntity->LinkIndex = *Index;
-                    }
-                }                   
-            }    
-            
-            AK_WriteFile(FileHandle, &FileHeader, sizeof(FileHeader));
-            
-            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-            {                       
-                file_entity* FileEntities = WorldFileEntities[WorldIndex];                                
-                for(ak_u32 EntityIndex = 0; EntityIndex < Game->EntityStorage[WorldIndex].Size; EntityIndex++)
-                {
-                    file_entity* FileEntity = FileEntities + EntityIndex;
-                    AK_WriteFile(FileHandle, &FileEntity->Type, sizeof(entity_type));
-                    AK_WriteFile(FileHandle, &FileEntity->LinkIndex, sizeof(ak_u32));
-                    AK_WriteFile(FileHandle, &FileEntity->Transform, sizeof(ak_sqtf));
+                    AK_WriteFile(FileHandle, &Entity->Type, sizeof(Entity->Type));
                     
-                    material* Material  = &FileEntity->Material;
-                    AK_WriteFile(FileHandle, &Material->Diffuse.IsTexture, sizeof(ak_bool));
-                    if(Material->Diffuse.IsTexture)
-                    {
-                        texture_info* TextureInfo = GetTextureInfo(Game->Assets, Material->Diffuse.DiffuseID);                        
-                        AK_WriteFile(FileHandle, &TextureInfo->Header.NameLength, sizeof(ak_u32));
-                        AK_WriteFile(FileHandle, TextureInfo->Name, sizeof(ak_char)*TextureInfo->Header.NameLength);                        
-                    }
-                    else
-                    {
-                        AK_WriteFile(FileHandle, &Material->Diffuse.Diffuse, sizeof(ak_color3f));
+                    world_id ID = Entity->ID;
+                    graphics_entity* GraphicsEntity = World->GraphicsStates[WorldIndex].GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                    switch(Entity->Type)
+                    {                        
+                        case ENTITY_TYPE_PLAYER:
+                        {   
+                            ak_v3f Position = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)].Translation;
+                            AK_WriteFile(FileHandle, &Position, sizeof(Position));                                                        
+                            DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
+                        } break;
+                        
+                        case ENTITY_TYPE_STATIC:
+                        {
+                            ak_u32 LinkIndex = (ak_u32)-1;
+                            if(Entity->LinkID.IsValid())                            
+                                LinkIndex = *EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
+                            
+                            AK_WriteFile(FileHandle, &LinkIndex, sizeof(LinkIndex));
+                            ak_sqtf Transform = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)];
+                            AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
+                            DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
+                                                        
+                            mesh_info* MeshInfo = GetMeshInfo(DevContext->Game->Assets, GraphicsEntity->MeshID);
+                            DevContext_WriteName(FileHandle, MeshInfo->Name, MeshInfo->Header.NameLength);                            
+                        } break;
+                                                
+                        AK_INVALID_DEFAULT_CASE;
                     }
                     
-                    AK_WriteFile(FileHandle, &Material->Specular.InUse, sizeof(ak_bool));
-                    AK_WriteFile(FileHandle, &Material->Specular.IsTexture, sizeof(ak_bool));
-                    if(Material->Specular.IsTexture)
-                    {
-                        texture_info* TextureInfo = GetTextureInfo(Game->Assets, Material->Specular.SpecularID);                        
-                        AK_WriteFile(FileHandle, &TextureInfo->Header.NameLength, sizeof(ak_u32));
-                        AK_WriteFile(FileHandle, TextureInfo->Name, sizeof(ak_char)*TextureInfo->Header.NameLength);                        
-                    }
-                    else
-                    {
-                        AK_WriteFile(FileHandle, &Material->Specular.Specular, sizeof(ak_f32));
-                    }
-                    AK_WriteFile(FileHandle, &Material->Specular.Shininess, sizeof(ak_i32));
-                    
-                    AK_WriteFile(FileHandle, &Material->Normal.InUse, sizeof(ak_bool));
-                    
-                    if(Material->Normal.InUse)
-                    {
-                        texture_info* TextureInfo = GetTextureInfo(Game->Assets, Material->Normal.NormalID);                        
-                        AK_WriteFile(FileHandle, &TextureInfo->Header.NameLength, sizeof(ak_u32));
-                        AK_WriteFile(FileHandle, TextureInfo->Name, sizeof(ak_char)*TextureInfo->Header.NameLength);
-                    }                    
-                    else
-                    {
-                        ak_u32 NameLength = 0;
-                        AK_WriteFile(FileHandle, &NameLength, sizeof(ak_u32));
-                    }
-
-                    mesh_info* MeshInfo = GetMeshInfo(Game->Assets, FileEntity->MeshID);
-                    AK_WriteFile(FileHandle, &MeshInfo->Header.NameLength, sizeof(ak_u32));
-                    AK_WriteFile(FileHandle, MeshInfo->Name, sizeof(ak_char)*MeshInfo->Header.NameLength);
-                    
-                    if((FileEntity->Type == ENTITY_TYPE_PLAYER) || (FileEntity->Type == ENTITY_TYPE_PUSHABLE))
-                    {
-                        AK_WriteFile(FileHandle, &FileEntity->Mass, sizeof(ak_f32));
-                    }
-                    
-                    if(FileEntity->Type == ENTITY_TYPE_RIGID_BODY)
-                    {
-                        AK_WriteFile(FileHandle, &FileEntity->Mass, sizeof(ak_f32));
-                        AK_WriteFile(FileHandle, &FileEntity->Restitution, sizeof(ak_f32));
-                    }
-                }
+                }                                                
             }
             
             for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
             {
-                graphics_state* GraphicsState = Game->GraphicsStates + WorldIndex;
+                graphics_state* GraphicsState = World->GraphicsStates + WorldIndex;
                 AK_ForEach(PointLight, &GraphicsState->PointLightStorage)
                 {
                     AK_WriteFile(FileHandle, &PointLight->Position, sizeof(point_light)-sizeof(ak_u64));
@@ -590,9 +747,10 @@ void DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld
             AK_CloseFile(FileHandle);
             
             AK_Free(LoadedWorld->LoadedWorldFile.Data);            
-            LoadedWorld->LoadedWorldFile.Data = (ak_char*)AK_Allocate(sizeof(ak_char)*(LoadedWorldFile.Length+1));
-            LoadedWorld->LoadedWorldFile.Data[LoadedWorldFile.Length] = 0;
-            AK_CopyArray(LoadedWorld->LoadedWorldFile.Data, LoadedWorldFile.Data, LoadedWorldFile.Length);                
+            LoadedWorld->LoadedWorldFile = LoadedWorldFile;            
+            
+            AK_DeleteHashMap(&EntityMap[0]);
+            AK_DeleteHashMap(&EntityMap[1]);
         }
     }
     
@@ -625,19 +783,24 @@ void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow,
     
     DevUI_Initialize(&DevContext->DevUI, Graphics, PlatformWindow, InitImGui);        
     
+    
     material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
-    capsule PlayerCapsule = CreateCapsule(AK_V3<ak_f32>(), PLAYER_HEIGHT, PLAYER_RADIUS);
-    world_id PlayerA = CreatePlayerEntity(DevContext->Game, 0, AK_V3<ak_f32>(), AK_IdentityQuat<ak_f32>(), 65, PlayerMaterial, &PlayerCapsule);
-    world_id PlayerB = CreatePlayerEntity(DevContext->Game, 1, AK_V3<ak_f32>(), AK_IdentityQuat<ak_f32>(), 65, PlayerMaterial, &PlayerCapsule);
+    world_id PlayerA = CreatePlayerEntity(&DevContext->Game->World, DevContext->Game->Assets, 0, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[0]);
+    world_id PlayerB = CreatePlayerEntity(&DevContext->Game->World, DevContext->Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]);
     
     material DefaultFloorMaterial = { CreateDiffuse(AK_White3()) };    
-    dual_world_id DefaultFloor = CreateDualStaticEntity(DevContext->Game, AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),  
-                                                        MESH_ASSET_ID_BOX, DefaultFloorMaterial);
+    world_id FloorA = CreateStaticEntity(&DevContext->Game->World, DevContext->Game->Assets, 0, 
+                                         AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
+                                         MESH_ASSET_ID_BOX, DefaultFloorMaterial);
+    world_id FloorB = CreateStaticEntity(&DevContext->Game->World, DevContext->Game->Assets, 1, 
+                                         AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
+                                         MESH_ASSET_ID_BOX, DefaultFloorMaterial);
     
-    DevContext_AddToDevTransform(DevContext, PlayerA);
-    DevContext_AddToDevTransform(DevContext, PlayerB);
-    DevContext_AddToDevTransform(DevContext, DefaultFloor.EntityA);
-    DevContext_AddToDevTransform(DevContext, DefaultFloor.EntityB);
+    
+    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerA);
+    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerB);
+    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorA);
+    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorB);
         
     DevContext->Cameras[0].Target = AK_V3<ak_f32>();
     DevContext->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));        
@@ -665,7 +828,8 @@ void DevContext_Tick()
     {
         camera* DevCamera = &Context->Cameras[Game->CurrentWorldIndex];            
         ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;    
-        ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;
+        ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;        
+        world* World = &Game->World;           
         
         ak_f32 Roll = 0;
         ak_f32 Pitch = 0;        
@@ -731,7 +895,7 @@ void DevContext_Tick()
                 if(!GizmoHit.Hit)
                 {
                     GizmoState->GizmoHit = {};
-                    Context->SelectedObject = DevRay_CastToAllSelectables(Context, RayCast, 0, ViewSettings.ZNear);            
+                    Context->SelectedObject = DevRay_CastToAllSelectables(World, Context->Game->Assets, RayCast, 0, ViewSettings.ZNear);            
                 }
                 else
                 {
@@ -762,7 +926,7 @@ void DevContext_Tick()
         
         if(GizmoState->GizmoHit.Hit)
         {
-            ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(Context, SelectedObject);        
+            ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(World, SelectedObject);        
             
             gizmo_intersection_result* GizmoHit = &GizmoState->GizmoHit;
             ak_f32 t = RayPlaneIntersection(GizmoHit->Gizmo->IntersectionPlane, GizmoHit->HitMousePosition, RayCast.Origin, RayCast.Direction);        
@@ -867,8 +1031,8 @@ void DevContext_Tick()
                 switch(SelectedObject->Type)
                 {
                     case DEV_SELECTED_OBJECT_TYPE_ENTITY:
-                    {   
-                        entity* Entity = GetEntity(Game, SelectedObject->EntityID);
+                    {                           
+                        entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
                         ak_u32 Index = AK_PoolIndex(SelectedObject->EntityID.ID);                                        
                         ak_array<dev_transform>* DevTransforms = &Context->InitialTransforms[SelectedObject->EntityID.WorldIndex];                    
                         if(DevTransforms->Size < (Index+1))
@@ -879,17 +1043,17 @@ void DevContext_Tick()
                         else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) DevTransform->Euler -= PointDiff;
                         else if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) DevTransform->Scale -= PointDiff;
                         
-                        ak_sqtf* Transform = GetEntityTransformNew(Game, SelectedObject->EntityID);
+                        ak_sqtf* Transform = &World->NewTransforms[SelectedObject->EntityID.WorldIndex][Index];
                         Transform->Translation = DevTransform->Translation;
                         Transform->Scale = DevTransform->Scale;
                         Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
                         
-                        *GetEntityTransformOld(Game, SelectedObject->EntityID) = *Transform;
+                        World->OldTransforms[SelectedObject->EntityID.WorldIndex][Index] = *Transform;                        
                         
                         sim_entity* SimEntity = GetSimEntity(Game, SelectedObject->EntityID);
                         SimEntity->Transform = *Transform;                    
                         
-                        graphics_state* GraphicsState = &Game->GraphicsStates[SelectedObject->EntityID.WorldIndex];
+                        graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->EntityID.WorldIndex];
                         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
                         GraphicsEntity->Transform = AK_TransformM4(*Transform);
                     } break;
@@ -897,7 +1061,7 @@ void DevContext_Tick()
                     case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                     {
                         AK_Assert(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE, "Only valid transform mode for point lights is translation. This is a programming error");
-                        graphics_state* GraphicsState = GetGraphicsState(Context->Game, SelectedObject->EntityID);
+                        graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->EntityID.WorldIndex];
                         point_light* PointLight = GraphicsState->PointLightStorage.Get(SelectedObject->EntityID.ID);                            
                         PointLight->Position -= PointDiff;
                     } break;                
@@ -923,7 +1087,7 @@ void DevContext_Tick()
                     
                     case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                     {
-                        graphics_state* GraphicsState = GetGraphicsState(Game, SelectedObject->PointLightID.WorldIndex);
+                        graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
                         GraphicsState->GraphicsEntityStorage.Free(SelectedObject->PointLightID.ID);                    
                         *SelectedObject = {};
                     } break;                                
@@ -946,8 +1110,9 @@ void DevContext_Render()
     dev_context* Context = Dev_GetDeveloperContext();
     game* Game = Context->Game;
     graphics* Graphics = Context->Graphics;        
+    world* World = &Game->World;
     
-    graphics_state* CurrentGraphicsState = Game->GraphicsStates + Game->CurrentWorldIndex;
+    graphics_state* CurrentGraphicsState = World->GraphicsStates + Game->CurrentWorldIndex;
     if(!Context->DevUI.PlayGame)
     {        
         UpdateRenderBuffer(Graphics, &CurrentGraphicsState->RenderBuffer, Game->Resolution);
@@ -1034,7 +1199,7 @@ void DevContext_Render()
         if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
         {
             dev_gizmo_state* GizmoState = &Context->GizmoState;
-            ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(Context, &Context->SelectedObject);
+            ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(World, &Context->SelectedObject);
             
             switch(GizmoState->TransformMode)
             {

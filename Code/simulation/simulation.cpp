@@ -498,3 +498,13 @@ simulation CreateSimulation()
     Simulation.CollisionMap = AK_CreateHashMap<ak_pair<ak_u32>, ak_bool>(8191);    
     return Simulation;
 }
+
+void DeleteSimulation(simulation* Simulation)
+{
+    AK_DeleteHashMap(&Simulation->CollisionMap);
+    AK_DeletePool(&Simulation->ContactStorage);
+    AK_DeletePool(&Simulation->ManifoldStorage);
+    AK_DeletePool(&Simulation->RigidBodyStorage);
+    AK_DeletePool(&Simulation->SimEntityStorage);
+    AK_DeletePool(&Simulation->CollisionVolumeStorage);
+}
