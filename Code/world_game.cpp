@@ -82,7 +82,7 @@ void AddRigidBodyContacts(game* Game, ak_u32 WorldIndex, rigid_body* RigidBody, 
         
         case ENTITY_TYPE_PUSHABLE:
         {
-            pushing_object* PushingObject = GetPushingObject(Game, Entity);
+            pushing_object* PushingObject = GetPushingObject(&Game->World, Entity);
             if(PushingObject->PlayerID.IsValid())
             {
                 Simulation->AddContactConstraints(RigidBody, SimEntity->ToRigidBody(), ContactList);
@@ -220,7 +220,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                 {
                     Simulation->AddConstraint(RigidBody, NULL, LockConstraint);
                     
-                    pushing_object* PushingObject = GetPushingObject(Game, Entity);
+                    pushing_object* PushingObject = GetPushingObject(&Game->World, Entity);
                     if(PushingObject->PlayerID.IsValid())
                     {                                                                           
                         RigidBody->LinearDamping = AK_V3(Global_PlayerDamping, Global_PlayerDamping, 0.0f);
@@ -306,7 +306,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                     ak_v3f StartPosition = RigidBody->Transform.Translation;                                                            
                     HandleSlidingCollisions(Simulation, RigidBody);                                        
                     
-                    pushing_object* PushingObject = GetPushingObject(Game, Entity);
+                    pushing_object* PushingObject = GetPushingObject(&Game->World, Entity);
                     if(PushingObject->PlayerID.IsValid())
                     {
                         entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
@@ -481,7 +481,7 @@ AK_EXPORT GAME_TICK(Tick)
                     
                     case ENTITY_TYPE_PUSHABLE:
                     {
-                        pushing_object* PushingObject = GetPushingObject(Game, Entity);
+                        pushing_object* PushingObject = GetPushingObject(&Game->World, Entity);
                         if(PushingObject->PlayerID.IsValid())
                         {
                             entity* PlayerEntity = GetEntity(Game, PushingObject->PlayerID);
@@ -539,8 +539,8 @@ AK_EXPORT GAME_TICK(Tick)
 extern "C"
 AK_EXPORT GAME_RENDER(Render)
 {       
-    InterpolateState(&Game->World, Game->CurrentWorldIndex, tInterpolate);                     
-    graphics_state* GraphicsState = &Game->World.GraphicsStates[Game->CurrentWorldIndex];
+    InterpolateState(&Game->World, WorldIndex, tInterpolate);                     
+    graphics_state* GraphicsState = &Game->World.GraphicsStates[WorldIndex];
     
     AK_SetGlobalArena(Game->TempStorage);
     UpdateRenderBuffer(Graphics, &GraphicsState->RenderBuffer, Game->Resolution);
@@ -550,13 +550,8 @@ AK_EXPORT GAME_RENDER(Render)
     
     graphics_light_buffer LightBuffer = GetLightBuffer(GraphicsState);
     ShadowPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
-        
-    PushDepth(Graphics, true);
-    PushSRGBRenderBufferWrites(Graphics, true);
-    PushRenderBufferViewportScissorAndView(Graphics, GraphicsState->RenderBuffer, &ViewSettings);    
-    PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
-    PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);    
     
+    StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);
     EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);            
     
 #if !DEVELOPER_BUILD

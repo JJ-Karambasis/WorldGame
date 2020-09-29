@@ -62,6 +62,7 @@ typedef ak_pool<pushing_object> pushing_object_storage;
 
 struct world
 {
+    pushing_object_storage PushingObjectStorage;  
     entity_storage EntityStorage[2];    
     ak_array<ak_sqtf> OldTransforms[2];
     ak_array<ak_sqtf> NewTransforms[2];    
@@ -77,8 +78,7 @@ struct game
     ak_arena* TempStorage;
     
     ak_u32 CurrentWorldIndex;
-    player Players[2];    
-    pushing_object_storage PushingObjectStorage;    
+    player Players[2];          
     
     world World;
     
@@ -99,7 +99,7 @@ struct game
 #define GAME_INITIALIZE(name) game* name(ak_arena* TempStorage, input* Input, audio_output* AudioOutput, ak_string AssetPath)
 #define GAME_FIXED_TICK(name) void name(game* Game, void* DevContext)
 #define GAME_TICK(name) void name(game* Game, void* DevContext)
-#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, ak_f32 tInterpolate)
+#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, ak_f32 tInterpolate, ak_u32 WorldIndex)
 
 typedef GAME_INITIALIZE(game_initialize);
 typedef GAME_FIXED_TICK(game_fixed_tick);

@@ -61,6 +61,7 @@ struct dev_ui
     light_spawner LightSpawner;
     
     ak_bool PlayGame;            
+    ak_bool DrawOtherWorld;
     ak_f32 DetailWidth;
     view_mode_type ViewModeType;
 };

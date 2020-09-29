@@ -242,10 +242,34 @@ void DevContext_CreatePlaneMesh(dev_context* DevContext, ak_f32 Width, ak_f32 He
     DevContext->TrianglePlaneMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
 }
 
+void DevContext_SetEntityAsSelectedObject(dev_selected_object* SelectedObject, world_id ID, material* Material)
+{
+    SelectedObject->Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
+    SelectedObject->EntityID = ID;
+    SelectedObject->MaterialContext = DevUI_ContextFromMaterial(Material);    
+}
+
 void DevContext_UpdateObjectOrientation(ak_quatf* Orientation, ak_v3f* OldEuler, ak_v3f NewEuler)
 {
     *OldEuler = NewEuler;
     *Orientation = AK_EulerToQuat(NewEuler.roll, NewEuler.pitch, NewEuler.yaw);
+}
+
+ak_u32 DevContext_GetSelectedObjectWorldIndex(dev_selected_object* SelectedObject)
+{
+    AK_Assert(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE, "There is no selected object. Cannot retrieve world index");
+    switch(SelectedObject->Type)
+    {
+        case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+        return SelectedObject->EntityID.WorldIndex;
+        
+        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+        return SelectedObject->PointLightID.WorldIndex;
+        
+        AK_INVALID_DEFAULT_CASE;
+    }
+    
+    return (ak_u32)-1;
 }
 
 ak_v3f DevContext_GetSelectedObjectPosition(world* World, dev_selected_object* SelectedObject)
@@ -505,45 +529,44 @@ ak_bool DevContext_ReadMaterial(ak_stream* Stream, assets* Assets, material* Mat
     return true;
 }
 
-#define LoadWorld_Error(message, ...) AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
-GlobalArena->EndTemp(&TempArena); \
-return false
-
+#define LoadWorld_Error(message, ...) do \
+{ \
+    AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
+    GlobalArena->EndTemp(&TempArena); \
+    return false; \
+} while(0)
+                  
 ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_string LoadedWorldFile)
-{
-    game* Game = DevContext->Game;
-    
+                                                            {
+game* Game = DevContext->Game;
+            
     ak_arena* GlobalArena = AK_GetGlobalArena();
-    ak_temp_arena TempArena = GlobalArena->BeginTemp();
-    
+            ak_temp_arena TempArena = GlobalArena->BeginTemp();
+        
     ak_buffer WorldBuffer = AK_ReadEntireFile(LoadedWorldFile, GlobalArena);        
     
     ak_array<dev_transform> DevTransforms[2] = {};
     world World = {};        
     
-    if(!WorldBuffer.IsValid())
-    {
-        LoadWorld_Error("Error loading world file %s, message: %s", LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data);            
-    }        
+    if(!WorldBuffer.IsValid())    
+        LoadWorld_Error("Error loading world file %s, message: %s", LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data);                
     
     ak_stream Stream = AK_CreateStream(WorldBuffer.Data, WorldBuffer.Size);
-    world_file_header* Header = Stream.Read<world_file_header>();
-    if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))
-    {
+            world_file_header* Header = Stream.Read<world_file_header>();
+        if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))    
         LoadWorld_Error("Error validating world file signature. Is the file %s corrupted?", LoadedWorldFile.Data);            
-    }
-    if((Header->MajorVersion != WORLD_FILE_MAJOR_VERSION) || (Header->MinorVersion != WORLD_FILE_MINOR_VERSION))
-    {
+    
+    if((Header->MajorVersion != WORLD_FILE_MAJOR_VERSION) || (Header->MinorVersion != WORLD_FILE_MINOR_VERSION))    
         LoadWorld_Error("Error validating world file version. Found version %d.%d, must be %d.%d", Header->MajorVersion, Header->MinorVersion, WORLD_FILE_MAJOR_VERSION, WORLD_FILE_MINOR_VERSION);            
-    }                
+    
     world_id* Entities[2] = {};
     Entities[0] = GlobalArena->PushArray<world_id>(Header->EntityCounts[0]);
-    Entities[1] = GlobalArena->PushArray<world_id>(Header->EntityCounts[1]);
-    
+            Entities[1] = GlobalArena->PushArray<world_id>(Header->EntityCounts[1]);
+        
     ak_u32* LinkIndexes[2] = {};
     LinkIndexes[0] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[0]);
-    LinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[1]);
-    
+            LinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[1]);
+        
     Game->Players[0] = {};
     Game->Players[1] = {};
     
@@ -552,6 +575,8 @@ ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
         for(ak_u32 EntityIndex = 0; EntityIndex < Header->EntityCounts[WorldIndex]; EntityIndex++)
         {                
             entity_type Type = *Stream.Read<entity_type>();    
+            
+            const ak_char* MaterialNotLoadedError = "Could not load the material. Could not find asset that the material uses";
             
             world_id EntityID = InvalidWorldID();
             switch(Type)
@@ -562,34 +587,53 @@ ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                     
                     ak_v3f Position = *Stream.Read<ak_v3f>();                                                
                     material Material = {};
-                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
-                    {
-                        LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
-                    }
+                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material)) LoadWorld_Error(MaterialNotLoadedError);                                            
                     
                     EntityID = CreatePlayerEntity(&World, Game->Assets, WorldIndex, Position, Material, &Game->Players[WorldIndex]);                                                
                 } break;
                 
                 case ENTITY_TYPE_STATIC:
                 {
+                    LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
+                    ak_sqtf Transform = *Stream.Read<ak_sqtf>();
+                    
+                    material Material = {};
+                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material)) LoadWorld_Error(MaterialNotLoadedError);                    
+                    
+                    ak_string MeshName = DevContext_ReadAssetName(&Stream, GlobalArena);
+                    mesh_asset_id* MeshID = DevContext->Game->Assets->MeshNameMap.Find(MeshName.Data);
+                    if(!MeshID) LoadWorld_Error("Could not load mesh with name %s", MeshName.Data);                    
+                    
+                    EntityID = CreateStaticEntity(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, 
+                                                  *MeshID, Material);                        
+                } break;
+                
+                case ENTITY_TYPE_RIGID_BODY:
+                {
+                    LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
+                    ak_sqtf Transform = *Stream.Read<ak_sqtf>();
+                    
+                    material Material = {};
+                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material)) LoadWorld_Error(MaterialNotLoadedError);                    
+                    
+                    ak_f32 Mass = *Stream.Read<ak_f32>();
+                    ak_f32 Restitution = *Stream.Read<ak_f32>();
+                    ak_f32 Radius = *Stream.Read<ak_f32>();
+                    
+                    EntityID = CreateSphereRigidBody(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, 
+                                                     Radius, Mass, Restitution, Material);                    
+                } break;
+                
+                case ENTITY_TYPE_PUSHABLE:
+                {
                     LinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
                     ak_sqtf Transform = *Stream.Read<ak_sqtf>();
                     
                     material Material = {};
-                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
-                    {
-                        LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
-                    }
+                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material)) LoadWorld_Error(MaterialNotLoadedError);                    
                     
-                    ak_string MeshName = DevContext_ReadAssetName(&Stream, GlobalArena);
-                    mesh_asset_id* MeshID = DevContext->Game->Assets->MeshNameMap.Find(MeshName.Data);
-                    if(!MeshID)
-                    {
-                        LoadWorld_Error("Could not load the mesh. Could not find asset with name %s", MeshName.Data);
-                    }
-                    
-                    EntityID = CreateStaticEntity(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, 
-                                                  *MeshID, Material);                        
+                    ak_f32 Mass = *Stream.Read<ak_f32>();
+                    EntityID = CreatePushableBox(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, Mass, Material);                    
                 } break;
                 
                 AK_INVALID_DEFAULT_CASE;
@@ -611,6 +655,7 @@ ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                 world_id LinkEntityID = Entities[!WorldIndex][LinkIndex];
                 Entity->LinkID = LinkEntityID;
             }
+            EntityIndex++;
         }
     }
     
@@ -630,9 +675,7 @@ ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
     DeleteWorld(&Game->World, DevContext->Graphics);
     AK_DeleteArray(&DevContext->InitialTransforms[0]);
     AK_DeleteArray(&DevContext->InitialTransforms[1]);
-    
-    
-    
+            
     Game->World = World;
     DevContext->InitialTransforms[0] = DevTransforms[0];
     DevContext->InitialTransforms[1] = DevTransforms[1];
@@ -750,9 +793,36 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                     } break;
                     
                     case ENTITY_TYPE_STATIC:
+                    {                        
+                        ak_sqtf Transform = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)];
+                        AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
+                        DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
+                        
+                        mesh_info* MeshInfo = GetMeshInfo(DevContext->Game->Assets, GraphicsEntity->MeshID);
+                        DevContext_WriteName(FileHandle, MeshInfo->Name, MeshInfo->Header.NameLength);                            
+                    } break;
+                    
+                    case ENTITY_TYPE_RIGID_BODY:
+                    {
+                        ak_sqtf Transform = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)];
+                        AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
+                        DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
+                        
+                        rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+                        collision_volume* Volume = World->Simulations[WorldIndex].CollisionVolumeStorage.Get(RigidBody->CollisionVolumeID);
+                        
+                        AK_Assert(Volume->Type == COLLISION_VOLUME_TYPE_SPHERE, "We only support sphere collision volumes on rigid bodies for now");
+                        
+                        ak_f32 Mass = 1.0f/RigidBody->InvMass;
+                        AK_WriteFile(FileHandle, &Mass, sizeof(Mass));
+                        AK_WriteFile(FileHandle, &RigidBody->Restitution, sizeof(RigidBody->Restitution));       
+                        AK_WriteFile(FileHandle, &Volume->Sphere.Radius, sizeof(Volume->Sphere.Radius));                        
+                    } break;
+                    
+                    case ENTITY_TYPE_PUSHABLE:
                     {
                         ak_u32 LinkIndex = (ak_u32)-1;
-                        if(Entity->LinkID.IsValid())                            
+                        if(Entity->LinkID.IsValid())
                             LinkIndex = *EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
                         
                         AK_WriteFile(FileHandle, &LinkIndex, sizeof(LinkIndex));
@@ -760,8 +830,9 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                         AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
                         DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
                         
-                        mesh_info* MeshInfo = GetMeshInfo(DevContext->Game->Assets, GraphicsEntity->MeshID);
-                        DevContext_WriteName(FileHandle, MeshInfo->Name, MeshInfo->Header.NameLength);                            
+                        rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+                        ak_f32 Mass = 1.0f/RigidBody->InvMass;
+                        AK_WriteFile(FileHandle, &Mass, sizeof(Mass));
                     } break;
                     
                     AK_INVALID_DEFAULT_CASE;
@@ -877,7 +948,10 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
     GlobalArena->EndTemp(&TempArena);
     
     DevContext->Cameras[0].Target = AK_V3<ak_f32>();
-    DevContext->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));        
+    DevContext->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));            
+    DevContext->Cameras[1].Target = AK_V3<ak_f32>();
+    DevContext->Cameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));        
+    
     
     dev_gizmo_state* GizmoState = &DevContext->GizmoState;
     GizmoState->GridDistance = 1.0f;
@@ -899,7 +973,13 @@ void DevContext_Tick()
     Context->PlatformUpdate(&GetIO(), DevInput, Resolution, dt);        
     
     if(!Context->DevUI.PlayGame)
-    {
+    {        
+        if(IsPressed(Game->Input->SwitchWorld))
+        {
+            Context->SelectedObject = {};
+            Game->CurrentWorldIndex = !Game->CurrentWorldIndex;                
+        }
+        
         camera* DevCamera = &Context->Cameras[Game->CurrentWorldIndex];            
         ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;    
         ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;        
@@ -970,7 +1050,7 @@ void DevContext_Tick()
                 if(!GizmoHit.Hit)
                 {
                     GizmoState->GizmoHit = {};
-                    Context->SelectedObject = DevRay_CastToAllSelectables(World, Context->Game->Assets, RayCast, 0, ViewSettings.ZNear);            
+                    Context->SelectedObject = DevRay_CastToAllSelectables(World, Context->Game->Assets, RayCast, Game->CurrentWorldIndex, ViewSettings.ZNear);            
                 }
                 else
                 {
@@ -1180,125 +1260,125 @@ void DevContext_Tick()
         DevInput->Buttons[ButtonIndex].WasDown = DevInput->Buttons[ButtonIndex].IsDown;    
 }
 
-void DevContext_Render()
-{
-    dev_context* Context = Dev_GetDeveloperContext();
+void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
+{    
     game* Game = Context->Game;
     graphics* Graphics = Context->Graphics;        
     world* World = &Game->World;
     
-    graphics_state* CurrentGraphicsState = World->GraphicsStates + Game->CurrentWorldIndex;
-    if(!Context->DevUI.PlayGame)
-    {        
-        UpdateRenderBuffer(Graphics, &CurrentGraphicsState->RenderBuffer, Game->Resolution);
+    graphics_state* GraphicsState = &World->GraphicsStates[WorldIndex];
+    
+    UpdateRenderBuffer(Graphics, &GraphicsState->RenderBuffer, Game->Resolution);
+    
+    camera* Camera = Context->Cameras + WorldIndex;
+    
+    view_settings ViewSettings = GetViewSettings(Camera);
+    
+    switch(Context->DevUI.ViewModeType)
+    {
+        case VIEW_MODE_TYPE_LIT:
+        {                
+            graphics_light_buffer LightBuffer = GetLightBuffer(GraphicsState);
+            ShadowPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
+            
+            StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);                
+            EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
+        } break;
         
-        camera* Camera = Context->Cameras + Game->CurrentWorldIndex;
+        case VIEW_MODE_TYPE_UNLIT:
+        {                
+            StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);
+            EntityUnlitPass(Graphics, Game->Assets, &GraphicsState->GraphicsEntityStorage);
+        } break;
         
-        view_settings ViewSettings = GetViewSettings(Camera);
-        
-        switch(Context->DevUI.ViewModeType)
+        case VIEW_MODE_TYPE_WIREFRAME:
         {
-            case VIEW_MODE_TYPE_LIT:
-            {                
-                graphics_light_buffer LightBuffer = GetLightBuffer(CurrentGraphicsState);
-                ShadowPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
-                
-                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);                
-                EntityLitPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
-            } break;
-            
-            case VIEW_MODE_TYPE_UNLIT:
-            {                
-                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);
-                EntityUnlitPass(Graphics, Game->Assets, &CurrentGraphicsState->GraphicsEntityStorage);
-            } break;
-            
-            case VIEW_MODE_TYPE_WIREFRAME:
-            {
-                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);
-                EntityWireframePass(Graphics, Game->Assets, &CurrentGraphicsState->GraphicsEntityStorage);
-            } break;
-            
-            case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
-            {
-                graphics_light_buffer LightBuffer = GetLightBuffer(CurrentGraphicsState);
-                ShadowPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
-                
-                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);                
-                EntityLitPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
-                EntityWireframePass(Graphics, Game->Assets, &CurrentGraphicsState->GraphicsEntityStorage);
-                
-            } break;
-            
-        }                
+            StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);
+            EntityWireframePass(Graphics, Game->Assets, &GraphicsState->GraphicsEntityStorage);
+        } break;
         
-        AK_ForEach(PointLight, &CurrentGraphicsState->PointLightStorage)    
-            DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());    
-        
-        ak_v3f* FrustumCorners = GetFrustumCorners(&ViewSettings, CurrentGraphicsState->RenderBuffer->Resolution);
-        
-        ak_v3f FrustumPlaneIntersectionPoints[4];
-        ak_i8 IntersectedCount = 0;
-        for(int i = 0; i < 4; i++)
+        case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
         {
-            ray FrustumRay = {};
-            FrustumRay.Origin = FrustumCorners[i];
-            FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
-            ak_f32 Distance = RayPlaneIntersection(AK_V3f(0, 0, 1), AK_V3f(0,0,0), FrustumRay.Origin, FrustumRay.Direction);
-            if(Distance != INFINITY)
+            graphics_light_buffer LightBuffer = GetLightBuffer(GraphicsState);
+            ShadowPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
+            
+            StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);                
+            EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
+            EntityWireframePass(Graphics, Game->Assets, &GraphicsState->GraphicsEntityStorage);
+            
+        } break;
+        
+    }                
+    
+    AK_ForEach(PointLight, &GraphicsState->PointLightStorage)    
+        DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());    
+    
+    ak_v3f* FrustumCorners = GetFrustumCorners(&ViewSettings, GraphicsState->RenderBuffer->Resolution);
+    
+    ak_v3f FrustumPlaneIntersectionPoints[4];
+    ak_i8 IntersectedCount = 0;
+    for(int i = 0; i < 4; i++)
+    {
+        ray FrustumRay = {};
+        FrustumRay.Origin = FrustumCorners[i];
+        FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
+        ak_f32 Distance = RayPlaneIntersection(AK_V3f(0, 0, 1), AK_V3f(0,0,0), FrustumRay.Origin, FrustumRay.Direction);
+        if(Distance != INFINITY)
+        {
+            IntersectedCount++;            
+            Distance = AK_Min(Distance, ViewSettings.ZFar);
+            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+        }
+        else
+        {            
+            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+        }
+    }
+    
+    if(IntersectedCount != 0)
+    {
+        //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
+        ak_f32 MinX;
+        ak_f32 MaxX;
+        ak_f32 MinY;
+        ak_f32 MaxY;
+        if(IntersectedCount == 4)
+        {
+            MinX = FrustumPlaneIntersectionPoints[0].x;
+            MaxX = FrustumPlaneIntersectionPoints[0].x;
+            MinY = FrustumPlaneIntersectionPoints[0].y;
+            MaxY = FrustumPlaneIntersectionPoints[0].y;
+            for(int i = 0; i < 4; i++)
             {
-                IntersectedCount++;            
-                Distance = AK_Min(Distance, ViewSettings.ZFar);
-                FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+                MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
+                MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
+                MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
+                MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
             }
-            else
-            {            
-                FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+        }
+        else
+        {
+            MinX = FrustumCorners[0].x;
+            MaxX = FrustumCorners[0].x;
+            MinY = FrustumCorners[0].y;
+            MaxY = FrustumCorners[0].y;
+            for(int i = 0; i < 8; i++)
+            {
+                MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
+                MaxX = AK_Max(FrustumCorners[i].x, MaxX);
+                MinY = AK_Min(FrustumCorners[i].y, MinY);
+                MaxY = AK_Max(FrustumCorners[i].y, MaxY);
             }
         }
         
-        if(IntersectedCount != 0)
-        {
-            //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
-            ak_f32 MinX;
-            ak_f32 MaxX;
-            ak_f32 MinY;
-            ak_f32 MaxY;
-            if(IntersectedCount == 4)
-            {
-                MinX = FrustumPlaneIntersectionPoints[0].x;
-                MaxX = FrustumPlaneIntersectionPoints[0].x;
-                MinY = FrustumPlaneIntersectionPoints[0].y;
-                MaxY = FrustumPlaneIntersectionPoints[0].y;
-                for(int i = 0; i < 4; i++)
-                {
-                    MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
-                    MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
-                    MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
-                    MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
-                }
-            }
-            else
-            {
-                MinX = FrustumCorners[0].x;
-                MaxX = FrustumCorners[0].x;
-                MinY = FrustumCorners[0].y;
-                MaxY = FrustumCorners[0].y;
-                for(int i = 0; i < 8; i++)
-                {
-                    MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
-                    MaxX = AK_Max(FrustumCorners[i].x, MaxX);
-                    MinY = AK_Min(FrustumCorners[i].y, MinY);
-                    MaxY = AK_Max(FrustumCorners[i].y, MaxY);
-                }
-            }
-            
-            DevDraw_Grid(Context, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
-        }
-        
-        PushDepth(Graphics, false);        
-        if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
-        {
+        DevDraw_Grid(Context, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
+    }
+    
+    PushDepth(Graphics, false);        
+    if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
+    {   
+        if(DevContext_GetSelectedObjectWorldIndex(&Context->SelectedObject) == WorldIndex)
+        {                        
             dev_gizmo_state* GizmoState = &Context->GizmoState;
             ak_v3f SelectedObjectPosition = DevContext_GetSelectedObjectPosition(World, &Context->SelectedObject);
             
@@ -1318,10 +1398,36 @@ void DevContext_Render()
             }
             
             DevDraw_GizmoState(Context, GizmoState, SelectedObjectPosition);
-        }        
-        PushDepth(Graphics, true);    
+        }
+    }        
+    PushDepth(Graphics, true);    
+}
+
+void DevContext_Render()
+{
+    dev_context* Context = Dev_GetDeveloperContext();
+    game* Game = Context->Game;
+    graphics* Graphics = Context->Graphics;        
+    world* World = &Game->World;
+    
+    if(!Context->DevUI.PlayGame)
+    {                         
+        DevContext_RenderWorld(Context, Game->CurrentWorldIndex);        
+        if(Context->DevUI.DrawOtherWorld)
+            DevContext_RenderWorld(Context, !Game->CurrentWorldIndex);       
     }
     
+    if(Context->DevUI.DrawOtherWorld)
+    {
+        PushRenderBuffer(Graphics, World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer);
+        
+        ak_v2i CopyResolution = World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer->Resolution / 5;
+        ak_v2i CopyOffset = World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer->Resolution - CopyResolution; 
+        
+        PushCopyToRenderBuffer(Graphics, World->GraphicsStates[!Game->CurrentWorldIndex].RenderBuffer, CopyOffset, CopyResolution);
+    }
+    
+    graphics_state* CurrentGraphicsState = &World->GraphicsStates[Game->CurrentWorldIndex];
     DevUI_Render(Graphics, &Context->DevUI, CurrentGraphicsState->RenderBuffer);    
     
     //PushCopyToOutput(Graphics, Context->DevRenderBuffer);

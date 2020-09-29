@@ -24,6 +24,34 @@ void AddCollisionVolume(game* Game, world_id EntityID, type* Collider)
     GetSimEntity(Game, EntityID)->AddCollisionVolume(GetSimulation(Game, EntityID), Collider);    
 }
 
+void DeleteWorld(world* World, graphics* Graphics)
+{
+    AK_DeletePool(&World->PushingObjectStorage);
+    AK_DeletePool(&World->EntityStorage[0]);
+    AK_DeletePool(&World->EntityStorage[1]);
+    AK_DeleteArray(&World->OldTransforms[0]);
+    AK_DeleteArray(&World->OldTransforms[1]);
+    AK_DeleteArray(&World->NewTransforms[0]);
+    AK_DeleteArray(&World->NewTransforms[1]);
+    DeleteSimulation(&World->Simulations[0]);
+    DeleteSimulation(&World->Simulations[1]);
+    DeleteGraphicsState(Graphics, &World->GraphicsStates[0]);
+    DeleteGraphicsState(Graphics, &World->GraphicsStates[1]);
+}
+
+ak_u32 CreatePushingObject(world* World)
+{
+    ak_u64 Result = World->PushingObjectStorage.Allocate();
+    pushing_object* PushingObject = World->PushingObjectStorage.Get(Result);
+    PushingObject->ID = Result;
+    return AK_PoolIndex(Result);
+}
+
+void DeletePushingObject(world* World, ak_u32 Index)
+{
+    World->PushingObjectStorage.Free(World->PushingObjectStorage.IDs[Index]);
+}
+
 void FreeEntity(game* Game, world_id ID)
 {       
     entity* Entity = Game->World.EntityStorage[ID.WorldIndex].Get(ID.ID);
@@ -41,40 +69,16 @@ void FreeEntity(game* Game, world_id ID)
         LinkEntity->LinkID = InvalidWorldID();
     }
     
+    if(Entity->Type == ENTITY_TYPE_PUSHABLE)
+        DeletePushingObject(&Game->World, UserDataToIndex(Entity->UserData));
+    
     Game->World.EntityStorage[ID.WorldIndex].Free(ID.ID);    
 }
 
-void DeleteWorld(world* World, graphics* Graphics)
-{
-    AK_DeletePool(&World->EntityStorage[0]);
-    AK_DeletePool(&World->EntityStorage[1]);
-    AK_DeleteArray(&World->OldTransforms[0]);
-    AK_DeleteArray(&World->OldTransforms[1]);
-    AK_DeleteArray(&World->NewTransforms[0]);
-    AK_DeleteArray(&World->NewTransforms[1]);
-    DeleteSimulation(&World->Simulations[0]);
-    DeleteSimulation(&World->Simulations[1]);
-    DeleteGraphicsState(Graphics, &World->GraphicsStates[0]);
-    DeleteGraphicsState(Graphics, &World->GraphicsStates[1]);
-}
-
-ak_u32 CreatePushingObject(game* Game)
-{
-    ak_u64 Result = Game->PushingObjectStorage.Allocate();
-    pushing_object* PushingObject = Game->PushingObjectStorage.Get(Result);
-    PushingObject->ID = Result;
-    return AK_PoolIndex(Result);
-}
-
-void DeletePushingObject(game* Game, ak_u32 Index)
-{
-    Game->PushingObjectStorage.Free(Game->PushingObjectStorage.IDs[Index]);
-}
-
-pushing_object* GetPushingObject(game* Game, entity* Entity)
+pushing_object* GetPushingObject(world* World, entity* Entity)
 {
     AK_Assert(Entity->Type == ENTITY_TYPE_PUSHABLE, "Cannot get a pushing object of an entity that is not a pushing object");
-    return Game->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+    return World->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
 }
 
 world_id CreateEntity(world* World, assets* Assets, ak_u32 WorldIndex, 
@@ -145,6 +149,56 @@ world_id CreateStaticEntity(world* World, assets* Assets, ak_u32 WorldIndex, ak_
                             mesh_asset_id Mesh, material Material)
 {
     return CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_STATIC, SIM_ENTITY_TYPE_SIM_ENTITY, Position, Scale, Orientation, Mesh, Material);
+}
+
+world_id CreateSphereRigidBody(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
+                               ak_f32 Radius, ak_f32 Mass, ak_f32 Restitution, material Material)
+{
+    AK_Assert(Mass != 0, "Cannot have zero mass for a rigid body");    
+    world_id Result = CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_RIGID_BODY, SIM_ENTITY_TYPE_RIGID_BODY, Position, Scale*Radius, Orientation, MESH_ASSET_ID_SPHERE, Material);
+    ak_u32 Index = AK_PoolIndex(Result.ID);
+    entity* Entity = World->EntityStorage[WorldIndex].GetByIndex(Index);
+    
+    rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+    
+    sphere Sphere = CreateSphere(AK_V3<ak_f32>(), 1.0f);
+    World->Simulations[WorldIndex].AddCollisionVolume(RigidBody, &Sphere);
+    
+    ak_f32 SphereRadius = Sphere.Radius*World->NewTransforms[WorldIndex][Index].Scale.LargestComp();
+    RigidBody->Restitution = Restitution;
+    RigidBody->InvMass = 1.0f/Mass;
+    RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
+    RigidBody->LocalCenterOfMass = AK_V3<ak_f32>();
+    
+    return Result;
+}
+
+world_id CreateSphereRigidBody(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Radius, ak_f32 Mass, ak_f32 Restitution, 
+                               material Material)
+{
+    return CreateSphereRigidBody(World, Assets, WorldIndex, Position, AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), Radius, Mass, Restitution, Material);
+}
+
+world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
+                           ak_f32 Mass, material Material)
+{
+    AK_Assert(Mass != 0, "Cannot have zero mass for a rigid body");    
+    world_id Result = CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, Position, Scale, Orientation, MESH_ASSET_ID_BOX, Material);    
+    entity* Entity = World->EntityStorage[WorldIndex].Get(Result.ID);    
+    Entity->UserData = IndexToUserData(CreatePushingObject(World));
+    
+    rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+    RigidBody->Restitution = 0;
+    RigidBody->InvMass = 1.0f/Mass;
+    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(AK_V3(1.0f, 1.0f, 1.0f), Mass);
+    RigidBody->LocalCenterOfMass = AK_V3(0.0f, 0.0f, 0.5f);    
+    
+    return Result;
+}
+
+world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material)
+{
+    return CreatePushableBox(World, Assets, WorldIndex, Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), Mass, Material);
 }
 
 #if 0 
@@ -246,7 +300,7 @@ COLLISION_EVENT(OnPlayerCollision)
                 if(CanBePushed(MoveDirection, N))                
                 {                    
                     Player->State = PLAYER_STATE_PUSHING;
-                    pushing_object* PushingObject = GetPushingObject(Game, CollidedEntity);
+                    pushing_object* PushingObject = GetPushingObject(&Game->World, CollidedEntity);
                     PushingObject->PlayerID = Entity->ID;                    
                     PushingObject->Direction = N;
                     

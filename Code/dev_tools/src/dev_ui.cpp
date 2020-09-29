@@ -255,7 +255,8 @@ void DevUI_MaterialTool(assets* Assets, material_context* MaterialContext)
 {    
     ak_fixed_array<const ak_char*> TextureNames = DevUI_GetAllTextureInfoNames(Assets);
     
-    Text("Material");    
+    AlignTextToFramePadding();
+    Text("Material");        
     {        
         AlignTextToFramePadding();
         Text("Diffuse: "); SameLine(); 
@@ -469,7 +470,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 material Material = DevUI_MaterialFromContext(&Spawner->MaterialContext);
                 if(Spawner->WorldIndex == 2)
                 {                        
-                    DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;                    
+                    
                     world_id AID = CreateStaticEntity(&Game->World, Game->Assets, 0, 
                                                       Spawner->Translation, Spawner->Scale, AK_RotQuat(Spawner->Axis, Spawner->Angle), 
                                                       Spawner->MeshID, Material);
@@ -480,16 +481,10 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, AID);
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, BID);
                     
-                    if(CurrentWorldIndex == AID.WorldIndex)
-                    {
-                        DevContext->SelectedObject.EntityID = AID;
-                        DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&Material);
-                    }
-                    else
-                    {
-                        DevContext->SelectedObject.EntityID = BID;                        
-                        DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&Material);
-                    }
+                    if(CurrentWorldIndex == AID.WorldIndex)                    
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, AID, &Material);                                            
+                    else                    
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, BID, &Material);                                            
                 }
                 else
                 {                           
@@ -498,12 +493,8 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                                                            Spawner->MeshID, Material);                                            
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
                     
-                    if(EntityID.WorldIndex == CurrentWorldIndex)
-                    {
-                        DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
-                        DevContext->SelectedObject.EntityID = EntityID;
-                        DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&Material);
-                    }
+                    if(EntityID.WorldIndex == CurrentWorldIndex)                    
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);                                            
                 }                                    
             }
         } break;
@@ -525,11 +516,12 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
             
             if(Button(AK_HashFunction("Create Entity Button"), "Create"))
             {
-#if 0 
-                    entity_id ID = CreateSphereRigidBody(Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius, 
-                                                         Spawner->Mass, Spawner->Restitution, Spawner->Material);                    
-#endif
-                
+                material Material = DevUI_MaterialFromContext(&Spawner->MaterialContext);
+                world_id EntityID = CreateSphereRigidBody(&Game->World, Game->Assets, Spawner->WorldIndex, Spawner->Translation, 
+                                                          Spawner->Radius, Spawner->Mass, Spawner->Restitution, Material);
+                DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
+                if(EntityID.WorldIndex = CurrentWorldIndex)                
+                    DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);                                    
             }
         } break;
         
@@ -549,22 +541,46 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
             
             if(Button(AK_HashFunction("Create Entity Button"), "Create"))
             {
+                material Material = DevUI_MaterialFromContext(&Spawner->MaterialContext);
                 
-#if 0 
                 if(Spawner->WorldIndex == 2)
                 {
-                    entity_id A = CreatePushableBox(Game, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);
-                    entity_id B = CreatePushableBox(Game, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);                        
+                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
+                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
+                    
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, A);
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, B);
+                    if(CurrentWorldIndex == A.WorldIndex)                    
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, A, &Material);                                            
+                    else
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, B, &Material);
                 }
                 else if(Spawner->WorldIndex == 3)
                 {
-                    dual_entity_id IDs = CreateDualPushableBox(Game, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);                        
+                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
+                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
+                    
+                    entity* EntityA = Game->World.EntityStorage[A.WorldIndex].Get(A.ID);
+                    entity* EntityB = Game->World.EntityStorage[B.WorldIndex].Get(B.ID);
+                    
+                    EntityA->LinkID = B;
+                    EntityB->LinkID = A;
+                    
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, A);
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, B);
+                    if(CurrentWorldIndex == A.WorldIndex)                    
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, A, &Material);                                            
+                    else
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, B, &Material);
                 }
                 else
-                {
-                    entity_id ID = CreatePushableBox(Game, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Spawner->Material);                        
+                {       
+                    world_id EntityID = CreatePushableBox(&Game->World, Game->Assets, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);                    
+                    DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
+                    if(CurrentWorldIndex == EntityID.WorldIndex)
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
                 }                    
-#endif            
+                
             }
         } break;
         
@@ -697,6 +713,34 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
             GraphicsEntity->Transform = AK_TransformM4(*Transform);
             
             GraphicsEntity->Material = DevUI_MaterialFromContext(&SelectedObject->MaterialContext);                        
+                                    
+            switch(Entity->Type)
+            {                
+                case ENTITY_TYPE_RIGID_BODY:
+                {
+                    rigid_body* RigidBody = Game->World.Simulations[Entity->ID.WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+                    
+                    ak_f32 Mass = 1.0f/RigidBody->InvMass;
+                    DevUI_MassTool(AK_HashFunction("Edit Mass"), TRANSFORM_ITEM_WIDTH, &Mass);
+                    RigidBody->InvMass = 1.0f/Mass;
+                    
+                    DevUI_RestitutionTool(AK_HashFunction("Edit Restitution"), TRANSFORM_ITEM_WIDTH, &RigidBody->Restitution);
+                    
+                    ak_f32 SphereRadius = 1.0f*Transform->Scale.LargestComp();
+                    RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
+                } break;
+                
+                case ENTITY_TYPE_PUSHABLE:
+                {
+                    rigid_body* RigidBody = Game->World.Simulations[Entity->ID.WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+                    ak_f32 Mass = 1.0f/RigidBody->InvMass;
+                    DevUI_MassTool(AK_HashFunction("Edit Mass"), TRANSFORM_ITEM_WIDTH, &Mass);
+                    RigidBody->InvMass = 1.0f/Mass;
+                    
+                    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(AK_V3(1.0f, 1.0f, 1.0f), Mass);                    
+                } break;
+            }
+            
         } break;
         
         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
@@ -767,6 +811,11 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
         
         ak_char* PlayText = UI->PlayGame ? "Stop" : "Play";
         if(Button(PlayText)) UI->PlayGame = !UI->PlayGame;
+        
+        AlignTextToFramePadding();
+        Text("Draw Other World");                
+        SameLine();
+        Checkbox(AK_HashFunction("Draw Other World"), "", &UI->DrawOtherWorld);
         
         if(PrevPlayGame != UI->PlayGame)
         {
@@ -898,8 +947,12 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
         
         dev_selected_object* SelectedObject = &DevContext->SelectedObject;
         if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE)
-        {                               
-            SetNextWindowPos(ImVec2((ak_f32)Game->Resolution.x-UI->DetailWidth, 0));
+        {   
+            ak_f32 StartY = MenuHeight;
+            if(UI->DrawOtherWorld)
+                StartY = (ak_f32)Game->World.GraphicsStates[Game->CurrentWorldIndex].RenderBuffer->Resolution.y / 5;
+            
+            SetNextWindowPos(ImVec2((ak_f32)Game->Resolution.x-UI->DetailWidth, StartY));
             if(Begin("Details", NULL, ImGuiWindowFlags_AlwaysAutoResize))
             {
                 DevUI_Details(DevContext, SelectedObject);        
