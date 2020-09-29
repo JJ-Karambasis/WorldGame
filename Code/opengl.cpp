@@ -927,11 +927,10 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     opengl_forward_pass ForwardPass = InitForwardPass();        
     
     GLint ModelUniform = -1;
-    
-    push_command_list* CommandList = &Graphics->CommandList;            
-    for(ak_u32 CommandIndex = 0; CommandIndex < CommandList->Count; CommandIndex++)
-    {
-        push_command* Command = CommandList->Ptr[CommandIndex];
+        
+    AK_ForEach(CommandAt, &Graphics->CommandList)
+    {        
+        push_command* Command = *CommandAt;
         switch(Command->Type)
         {   
             case PUSH_COMMAND_SHADOW_MAP:
@@ -1505,7 +1504,7 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
     
-    CommandList->Count = 0;        
+    Graphics->CommandList.Clear();
     
     Platform_SwapBuffers(Graphics->PlatformData[0]);    
 }

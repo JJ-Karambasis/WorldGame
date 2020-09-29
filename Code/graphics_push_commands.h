@@ -180,10 +180,4 @@ struct push_command_copy_to_render_buffer : public push_command
     ak_v2i DstResolution;
 };
 
-struct push_command_list
-{
-    push_command* Ptr[MAX_COMMAND_COUNT];
-    ak_u32 Count;
-};
-
 #endif

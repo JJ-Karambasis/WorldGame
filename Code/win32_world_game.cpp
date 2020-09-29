@@ -14,17 +14,15 @@ PLATFORM_INIT_IMGUI(Platform_InitImGui);
 PLATFORM_DEVELOPMENT_UPDATE(Platform_DevUpdate);
 
 ak_bool Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam);
-void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* Keyboard);
-void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
-#define Dev_Initialize(Game, Graphics, PlatformWindow) DevContext_Initialize(Game, Graphics, PlatformWindow, Platform_InitImGui, Platform_DevUpdate)
+void Win32_HandleDevKeyboard(dev_context* DevContext, MSG Message);
+#define Dev_Initialize(Game, Graphics, ProgramFilePath, PlatformWindow) DevContext_Initialize(Game, Graphics, ProgramFilePath, PlatformWindow, Platform_InitImGui, Platform_DevUpdate)
 #define Dev_Tick() DevContext_Tick()
 #define Dev_Render() DevContext_Render()
 #define Dev_WindowProc(Window, Message, WParam, LParam) Win32_DevWindowProc(Window, Message, WParam, LParam)
-#define Dev_HandleMouse(RawMouse) Win32_HandleDevMouse(Dev_GetDeveloperContext(), RawMouse)
-#define Dev_HandleKeyboard(RawKeyboard) Win32_HandleDevKeyboard(Dev_GetDeveloperContext(), RawKeyboard)
+#define Dev_HandleKeyboard(Message) Win32_HandleDevKeyboard(Dev_GetDeveloperContext(), Message)
 #define Dev_RecordFrame() DevelopmentRecord(Dev_GetDeveloperContext())
 #else
-#define Dev_Initialize(Game, Graphics, PlatformData)
+#define Dev_Initialize(Game, Graphics, ProgramFilePath, PlatformData)
 #define Dev_Tick()
 #define Dev_Render() 
 #define Dev_WindowProc(Window, Message, WParam, LParam) false
@@ -33,7 +31,7 @@ void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* Mouse);
 #define Dev_RecordFrame() 
 #endif
 
-#define BindKey(key, action) case key: { if((RawKeyboard->Flags == RI_KEY_MAKE) || (RawKeyboard->Message == WM_KEYDOWN) || (RawKeyboard->Message == WM_SYSKEYDOWN)) { action.IsDown = true; } else if((RawKeyboard->Flags == RI_KEY_BREAK) || (RawKeyboard->Message == WM_KEYUP) || (RawKeyboard->Message == WM_SYSKEYUP)) { action.IsDown = false; action.WasDown = true; } } break
+#define BindKey(key, action) case key: { action.IsDown = IsDown; action.WasDown = WasDown; } break
 #define HR_Release(iunknown) \
 do \
 { \
@@ -441,10 +439,35 @@ Win32_AudioThread(void* Paramter)
 
 void Win32_ProcessMessages(input* Input)
 {
-    
-    MSG Message;
-    while(PeekMessage(&Message, NULL, 0, 0, PM_REMOVE))
+    MSG Message = {};
+    for(;;)
     {
+        ak_bool GotMessage = false;
+        
+        DWORD SkipMessages[] = 
+        {
+            0x738, 0xFFFFFFFF
+        };
+        
+        DWORD LastMessage = 0;
+        for(ak_u32 SkipIndex = 0;
+            SkipIndex < AK_Count(SkipMessages);
+            ++SkipIndex)
+        {
+            
+            DWORD Skip = SkipMessages[SkipIndex];
+            GotMessage = PeekMessage(&Message, 0, LastMessage, Skip - 1, PM_REMOVE);
+            if(GotMessage)
+            {
+                break;
+            }
+            
+            LastMessage = Skip + 1;
+        }
+        
+        if(!GotMessage)
+            return;
+        
         switch(Message.message)
         {
             case WM_QUIT:
@@ -452,54 +475,37 @@ void Win32_ProcessMessages(input* Input)
                 Global_Running = false;
             } break;
             
-            case WM_INPUT:
+            case WM_SYSKEYDOWN:
+            case WM_KEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_KEYUP:
             {
-                UINT Size;
-                UINT Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
+                DWORD VKCode = (DWORD)Message.wParam;
                 
-                ak_arena* GlobalArena = AK_GetGlobalArena();
-                ak_temp_arena TempArena = GlobalArena->BeginTemp();
-                
-                void* InputData = GlobalArena->Push(Size, AK_ARENA_CLEAR_FLAGS_NOCLEAR, 8);                    
-                Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, InputData, &Size, sizeof(RAWINPUTHEADER));                    
-                
-                RAWINPUT* RawInput = (RAWINPUT*)InputData;
-                RAWINPUTHEADER* RawInputHeader = &RawInput->header;
-                
-                switch(RawInputHeader->dwType)
+                ak_bool WasDown = ((Message.lParam & (1 << 30)) != 0);
+                ak_bool IsDown = ((Message.lParam & (1UL << 31)) == 0);
+                if(WasDown != IsDown)
                 {
-                    case RIM_TYPEMOUSE:
+                    switch(VKCode)
                     {
-                        RAWMOUSE* RawMouse = &RawInput->data.mouse;                                                        
-                        Dev_HandleMouse(RawMouse);                            
-                    } break;
-                    
-                    case RIM_TYPEKEYBOARD:
-                    {
-                        RAWKEYBOARD* RawKeyboard = &RawInput->data.keyboard;                            
-                        ak_bool Quit = ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) && (RawKeyboard->VKey == VK_F4) && (RawKeyboard->Flags == RI_KEY_MAKE);
-                        if(Quit)
-                            PostQuitMessage(0);
-                        
-                        Quit = (RawKeyboard->VKey == VK_ESCAPE) && (RawKeyboard->Flags == RI_KEY_MAKE);
-                        if(Quit)
-                            PostQuitMessage(0);
-                        
-                        switch(RawKeyboard->VKey)
-                        {
-                            BindKey('W', Input->MoveForward);
-                            BindKey('S', Input->MoveBackward);
-                            BindKey('A', Input->MoveLeft);
-                            BindKey('D', Input->MoveRight);                            
-                            BindKey('Q', Input->SwitchWorld);                                
-                            BindKey(VK_SPACE, Input->Action);
-                        }
-                        
-                        Dev_HandleKeyboard(RawKeyboard);                            
-                    } break;
+                        BindKey('W', Input->MoveForward);
+                        BindKey('S', Input->MoveBackward);
+                        BindKey('A', Input->MoveLeft);
+                        BindKey('D', Input->MoveRight);                            
+                        BindKey('Q', Input->SwitchWorld);                                
+                        BindKey(VK_SPACE, Input->Action);
+                    }
                 }
                 
-                GlobalArena->EndTemp(&TempArena);
+                if(((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) && (VKCode == VK_F4) && IsDown)
+                    PostQuitMessage(0);
+                
+                Dev_HandleKeyboard(Message);                            
+            } break;
+            
+            case WM_INITDIALOG:
+            {
+                AK_Assert(false, "");
             } break;
             
             default:
@@ -508,7 +514,7 @@ void Win32_ProcessMessages(input* Input)
                 DispatchMessage(&Message);
             } break;
         }
-    }    
+    }
 }
 
 int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
@@ -527,18 +533,6 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     ak_string OpenGLGraphicsDLLPathName = AK_StringConcat(Global_EXEFilePath, "OpenGL.dll", Global_PlatformArena);
     ak_string OpenGLGraphicsTempDLLPathName = AK_StringConcat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
     ak_string AssetFilePath = AK_StringConcat(Global_EXEFilePath, "WorldGame.assets", Global_PlatformArena);
-    
-    ak_u16 KeyboardUsage = 6;
-    ak_u16 MouseUsage = 2;
-    ak_u16 UsagePage = 1;
-    
-    RAWINPUTDEVICE RawInputDevices[] = 
-    {
-        {UsagePage, KeyboardUsage,  0, NULL},
-        {UsagePage, MouseUsage, 0, NULL}
-    };
-    
-    RegisterRawInputDevices(RawInputDevices, AK_Count(RawInputDevices), sizeof(RAWINPUTDEVICE));
     
     WNDCLASSEX WindowClass = {};
     WindowClass.cbSize = sizeof(WNDCLASSEX);
@@ -606,7 +600,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         return-1;
     }
     
-    Dev_Initialize(Game, Graphics, PlatformData[0]);    
+    Dev_Initialize(Game, Graphics, Global_EXEFilePath, PlatformData[0]);    
     
     Global_Running = true;
     
@@ -723,7 +717,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 
 #if DEVELOPER_BUILD
 PLATFORM_INIT_IMGUI(Platform_InitImGui)
-{        
+{           
     IO->BackendFlags |= (ImGuiBackendFlags_HasMouseCursors|ImGuiBackendFlags_HasSetMousePos);
     IO->BackendPlatformName = "world_game_win32_platform";
     IO->ImeWindowHandle = (HWND)PlatformWindow;
@@ -778,7 +772,27 @@ PLATFORM_DEVELOPMENT_UPDATE(Platform_DevUpdate)
                 DevInput->MouseCoordinates = AK_V2((ak_i32)MousePosition.x, (ak_i32)MousePosition.y);
             }
         }
-    }      
+    }    
+    
+#define Dev_BindMouse(key, action) do \
+    { \
+        ak_bool IsDown = GetKeyState(key) & (1 << 15); \
+        if(IsDown != action.IsDown) \
+        { \
+            if(IsDown == false) \
+            { \
+                action.WasDown = true; \
+                action.IsDown = false; \
+            } \
+            else \
+            { \
+                action.IsDown = true; \
+            } \
+        } \
+    } while(0)
+        
+    Dev_BindMouse(VK_LBUTTON, DevInput->LMB);
+    Dev_BindMouse(VK_MBUTTON, DevInput->MMB);
 }
 
 const global ak_char Global_FrameRecordingPrefix[] = "FrameRecording_";
@@ -889,56 +903,32 @@ ak_bool Win32_DevWindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LPa
     return true;
 }
 
-void Win32_HandleDevKeyboard(dev_context* DevContext, RAWKEYBOARD* RawKeyboard)
+void Win32_HandleDevKeyboard(dev_context* DevContext, MSG Message)
 {   
     dev_input* Input = &DevContext->DevInput;
     
-    switch(RawKeyboard->VKey)
-    {
-        BindKey(VK_F5, Input->ToggleDevState);
-        BindKey(VK_MENU, Input->Alt);  
-        BindKey('W', Input->W);
-        BindKey('E', Input->E);
-        BindKey('R', Input->R);      
-        BindKey('S', Input->S);
-        BindKey(VK_DELETE, Input->Delete);
-        BindKey(VK_CONTROL, Input->Ctrl);
-    }       
-}
-
-void Win32_HandleDevMouse(dev_context* DevContext, RAWMOUSE* RawMouse)
-{
-    dev_input* Input = &DevContext->DevInput;        
+    DWORD VKCode = (DWORD)Message.wParam;    
+    ak_bool WasDown = ((Message.lParam & (1 << 30)) != 0);
+    ak_bool IsDown = ((Message.lParam & (1UL << 31)) == 0);
     
-    switch(RawMouse->usButtonFlags)
+    if(WasDown != IsDown)
     {
-        case RI_MOUSE_LEFT_BUTTON_DOWN:
+        switch(VKCode)
         {
-            Input->LMB.IsDown = true;                                    
-        } break;
+            BindKey(VK_F5, Input->ToggleDevState);
+            BindKey(VK_MENU, Input->Alt);  
+            BindKey('W', Input->W);
+            BindKey('E', Input->E);
+            BindKey('R', Input->R);      
+            BindKey('S', Input->S);
+            BindKey('L', Input->L);
+            BindKey(VK_DELETE, Input->Delete);
+            BindKey(VK_CONTROL, Input->Ctrl);
+        }
+    }
         
-        case RI_MOUSE_LEFT_BUTTON_UP:
-        {
-            Input->LMB.IsDown = false;
-            Input->LMB.WasDown = true;
-        } break;
-        
-        case RI_MOUSE_MIDDLE_BUTTON_DOWN:
-        {
-            Input->MMB.IsDown = true;
-        } break;
-        
-        case RI_MOUSE_MIDDLE_BUTTON_UP:
-        {
-            Input->MMB.IsDown = false;
-            Input->MMB.WasDown = true;
-        } break;
-        
-        case RI_MOUSE_WHEEL:
-        {
-            Input->Scroll = (ak_f32)(ak_i16)RawMouse->usButtonData / (ak_f32)WHEEL_DELTA;
-        } break;
-    }           
+    if((VKCode == VK_ESCAPE) && IsDown)
+        PostQuitMessage(0);    
 }
 
 #endif

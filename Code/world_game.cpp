@@ -557,7 +557,7 @@ AK_EXPORT GAME_RENDER(Render)
     PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);    
     
-    EntityPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);            
+    EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);            
     
 #if !DEVELOPER_BUILD
     PushCopyToOutput(Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);

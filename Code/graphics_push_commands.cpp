@@ -1,9 +1,8 @@
 #define AllocateCommand(type) AK_GetGlobalArena()->Push<type>(AK_ARENA_CLEAR_FLAGS_NOCLEAR)
 
 void PushCommand(graphics* Graphics, push_command* Command)
-{
-    AK_Assert(Graphics->CommandList.Count < MAX_COMMAND_COUNT, "Ran out of commands. Increase the MAX_COMMAND_COUNT");    
-    Graphics->CommandList.Ptr[Graphics->CommandList.Count++] = Command;
+{    
+    Graphics->CommandList.Add(Command);    
 }
 
 void PushCommand(graphics* Graphics, push_command_type Type)

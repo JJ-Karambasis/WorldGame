@@ -505,259 +505,310 @@ ak_bool DevContext_ReadMaterial(ak_stream* Stream, assets* Assets, material* Mat
     return true;
 }
 
-void DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld)
-{
 #define LoadWorld_Error(message, ...) AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
 GlobalArena->EndTemp(&TempArena); \
-return
+return false
+
+ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_string LoadedWorldFile)
+{
+    game* Game = DevContext->Game;
     
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
-    ak_string LoadedWorldFile = AK_OpenFileDialog("world");
-    if(!AK_StringIsNullOrEmpty(LoadedWorldFile))
+    
+    ak_buffer WorldBuffer = AK_ReadEntireFile(LoadedWorldFile, GlobalArena);        
+    
+    ak_array<dev_transform> DevTransforms[2] = {};
+    world World = {};        
+    
+    if(!WorldBuffer.IsValid())
     {
-        game* Game = DevContext->Game;
-        assets* Assets = Game->Assets;
-        ak_buffer WorldBuffer = AK_ReadEntireFile(LoadedWorldFile, GlobalArena);
-        
-        ak_array<dev_transform> DevTransforms[2] = {};
-        world World = {};        
-        
-        if(!WorldBuffer.IsValid())
-        {
-            LoadWorld_Error("Error loading world file %s, message: %s", LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data);            
-        }        
-        
-        ak_stream Stream = AK_CreateStream(WorldBuffer.Data, WorldBuffer.Size);
-        world_file_header* Header = Stream.Read<world_file_header>();
-        if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))
-        {
-            LoadWorld_Error("Error validating world file signature. Is the file %s corrupted?", LoadedWorldFile.Data);            
-        }
-        if((Header->MajorVersion != WORLD_FILE_MAJOR_VERSION) || (Header->MinorVersion != WORLD_FILE_MINOR_VERSION))
-        {
-            LoadWorld_Error("Error validating world file version. Found version %d.%d, must be %d.%d", Header->MajorVersion, Header->MinorVersion, WORLD_FILE_MAJOR_VERSION, WORLD_FILE_MINOR_VERSION);            
-        }                
-        world_id* Entities[2] = {};
-        Entities[0] = GlobalArena->PushArray<world_id>(Header->EntityCounts[0]);
-        Entities[1] = GlobalArena->PushArray<world_id>(Header->EntityCounts[1]);
-        
-        ak_u32* LinkIndexes[2] = {};
-        LinkIndexes[0] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[0]);
-        LinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[1]);
-        
-        Game->Players[0] = {};
-        Game->Players[1] = {};
-        
-        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-        {
-            for(ak_u32 EntityIndex = 0; EntityIndex < Header->EntityCounts[WorldIndex]; EntityIndex++)
-            {                
-                entity_type Type = *Stream.Read<entity_type>();    
-                
-                world_id EntityID = InvalidWorldID();
-                switch(Type)
-                {
-                    case ENTITY_TYPE_PLAYER:
-                    {
-                        LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
-                        
-                        ak_v3f Position = *Stream.Read<ak_v3f>();                                                
-                        material Material = {};
-                        if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
-                        {
-                            LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
-                        }
-                        
-                        EntityID = CreatePlayerEntity(&World, Game->Assets, WorldIndex, Position, Material, &Game->Players[WorldIndex]);                                                
-                    } break;
-                    
-                    case ENTITY_TYPE_STATIC:
-                    {
-                        LinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
-                        ak_sqtf Transform = *Stream.Read<ak_sqtf>();
-                        
-                        material Material = {};
-                        if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
-                        {
-                            LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
-                        }
-                        
-                        ak_string MeshName = DevContext_ReadAssetName(&Stream, GlobalArena);
-                        mesh_asset_id* MeshID = DevContext->Game->Assets->MeshNameMap.Find(MeshName.Data);
-                        if(!MeshID)
-                        {
-                            LoadWorld_Error("Could not load the mesh. Could not find asset with name %s", MeshName.Data);
-                        }
-                        
-                        EntityID = CreateStaticEntity(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, 
-                                                      *MeshID, Material);                        
-                    } break;
-                    
-                    AK_INVALID_DEFAULT_CASE;
-                }
-                
-                Entities[WorldIndex][EntityIndex] = EntityID;
-                DevContext_AddToDevTransform(DevTransforms, &World, EntityID);                        
-            }
-        }
-        
-        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-        {
-            ak_u32 EntityIndex = 0;
-            AK_ForEach(Entity, &World.EntityStorage[WorldIndex])
-            {
-                ak_u32 LinkIndex = LinkIndexes[WorldIndex][EntityIndex];
-                if(LinkIndex != (ak_u32)-1)
-                {
-                    world_id LinkEntityID = Entities[!WorldIndex][LinkIndex];
-                    Entity->LinkID = LinkEntityID;
-                }
-            }
-        }
-        
-        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-        {
-            for(ak_u32 PointLightIndex = 0; PointLightIndex < Header->PointLightCounts[WorldIndex]; PointLightIndex++)
-            {
-                ak_v3f Position = *Stream.Read<ak_v3f>();
-                ak_f32 Radius = *Stream.Read<ak_f32>();
-                ak_color3f Color = *Stream.Read<ak_color3f>();
-                ak_f32 Intensity = *Stream.Read<ak_f32>();
-                ak_bool On = *Stream.Read<ak_bool>();                
-                CreatePointLight(&World.GraphicsStates[WorldIndex], Position, Radius, Color, Intensity, On);
-            }
-        }
-        
-        DeleteWorld(&Game->World, DevContext->Graphics);
-        AK_DeleteArray(&DevContext->InitialTransforms[0]);
-        AK_DeleteArray(&DevContext->InitialTransforms[1]);
-        
-        
-        
-        Game->World = World;
-        DevContext->InitialTransforms[0] = DevTransforms[0];
-        DevContext->InitialTransforms[1] = DevTransforms[1];
-        
-        Game->World.NewCameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
-        Game->World.NewCameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
-        
-        AK_Free(LoadedWorld->LoadedWorldFile.Data);            
-        LoadedWorld->LoadedWorldFile = LoadedWorldFile;
-        
-        DevContext->SelectedObject = {};
+        LoadWorld_Error("Error loading world file %s, message: %s", LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data);            
+    }        
+    
+    ak_stream Stream = AK_CreateStream(WorldBuffer.Data, WorldBuffer.Size);
+    world_file_header* Header = Stream.Read<world_file_header>();
+    if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))
+    {
+        LoadWorld_Error("Error validating world file signature. Is the file %s corrupted?", LoadedWorldFile.Data);            
     }
-#undef LoadWorld_Error
+    if((Header->MajorVersion != WORLD_FILE_MAJOR_VERSION) || (Header->MinorVersion != WORLD_FILE_MINOR_VERSION))
+    {
+        LoadWorld_Error("Error validating world file version. Found version %d.%d, must be %d.%d", Header->MajorVersion, Header->MinorVersion, WORLD_FILE_MAJOR_VERSION, WORLD_FILE_MINOR_VERSION);            
+    }                
+    world_id* Entities[2] = {};
+    Entities[0] = GlobalArena->PushArray<world_id>(Header->EntityCounts[0]);
+    Entities[1] = GlobalArena->PushArray<world_id>(Header->EntityCounts[1]);
+    
+    ak_u32* LinkIndexes[2] = {};
+    LinkIndexes[0] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[0]);
+    LinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[1]);
+    
+    Game->Players[0] = {};
+    Game->Players[1] = {};
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        for(ak_u32 EntityIndex = 0; EntityIndex < Header->EntityCounts[WorldIndex]; EntityIndex++)
+        {                
+            entity_type Type = *Stream.Read<entity_type>();    
+            
+            world_id EntityID = InvalidWorldID();
+            switch(Type)
+            {
+                case ENTITY_TYPE_PLAYER:
+                {
+                    LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
+                    
+                    ak_v3f Position = *Stream.Read<ak_v3f>();                                                
+                    material Material = {};
+                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
+                    {
+                        LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
+                    }
+                    
+                    EntityID = CreatePlayerEntity(&World, Game->Assets, WorldIndex, Position, Material, &Game->Players[WorldIndex]);                                                
+                } break;
+                
+                case ENTITY_TYPE_STATIC:
+                {
+                    LinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
+                    ak_sqtf Transform = *Stream.Read<ak_sqtf>();
+                    
+                    material Material = {};
+                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material))
+                    {
+                        LoadWorld_Error("Could not load the material. Could not find asset that the material uses");                        
+                    }
+                    
+                    ak_string MeshName = DevContext_ReadAssetName(&Stream, GlobalArena);
+                    mesh_asset_id* MeshID = DevContext->Game->Assets->MeshNameMap.Find(MeshName.Data);
+                    if(!MeshID)
+                    {
+                        LoadWorld_Error("Could not load the mesh. Could not find asset with name %s", MeshName.Data);
+                    }
+                    
+                    EntityID = CreateStaticEntity(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, 
+                                                  *MeshID, Material);                        
+                } break;
+                
+                AK_INVALID_DEFAULT_CASE;
+            }
+            
+            Entities[WorldIndex][EntityIndex] = EntityID;
+            DevContext_AddToDevTransform(DevTransforms, &World, EntityID);                        
+        }
+    }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_u32 EntityIndex = 0;
+        AK_ForEach(Entity, &World.EntityStorage[WorldIndex])
+        {
+            ak_u32 LinkIndex = LinkIndexes[WorldIndex][EntityIndex];
+            if(LinkIndex != (ak_u32)-1)
+            {
+                world_id LinkEntityID = Entities[!WorldIndex][LinkIndex];
+                Entity->LinkID = LinkEntityID;
+            }
+        }
+    }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        for(ak_u32 PointLightIndex = 0; PointLightIndex < Header->PointLightCounts[WorldIndex]; PointLightIndex++)
+        {
+            ak_v3f Position = *Stream.Read<ak_v3f>();
+            ak_f32 Radius = *Stream.Read<ak_f32>();
+            ak_color3f Color = *Stream.Read<ak_color3f>();
+            ak_f32 Intensity = *Stream.Read<ak_f32>();
+            ak_bool On = *Stream.Read<ak_bool>();                
+            CreatePointLight(&World.GraphicsStates[WorldIndex], Position, Radius, Color, Intensity, On);
+        }
+    }
+    
+    DeleteWorld(&Game->World, DevContext->Graphics);
+    AK_DeleteArray(&DevContext->InitialTransforms[0]);
+    AK_DeleteArray(&DevContext->InitialTransforms[1]);
+    
+    
+    
+    Game->World = World;
+    DevContext->InitialTransforms[0] = DevTransforms[0];
+    DevContext->InitialTransforms[1] = DevTransforms[1];
+    
+    Game->World.NewCameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
+    Game->World.NewCameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
+    
+    AK_Free(LoadedWorld->LoadedWorldFile.Data);            
+    LoadedWorld->LoadedWorldFile = LoadedWorldFile;
+    
+    DevContext->SelectedObject = {};
+    
     GlobalArena->EndTemp(&TempArena);
+    
+    return true;
 }
 
-void DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_bool SaveNewWorld)
+ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    ak_bool Result = false;
+    
+    DevContext->DevInput = {};
+    ak_string LoadedWorldFile = AK_OpenFileDialog("world");    
+    if(!AK_StringIsNullOrEmpty(LoadedWorldFile))
+    {        
+        Result = DevContext_LoadWorld(DevContext, LoadedWorld, LoadedWorldFile);
+    }
+    GlobalArena->EndTemp(&TempArena);
+    
+    return Result;
+}
+#undef LoadWorld_Error
+
+ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_bool SaveNewWorld)
 {
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     if(!SaveNewWorld)
         SaveNewWorld = AK_StringIsNullOrEmpty(LoadedWorld->LoadedWorldFile);
     
-    if(SaveNewWorld)
+    ak_string LoadedWorldFile = AK_CreateEmptyString();
+    if(SaveNewWorld)        
+    {        
+        DevContext->DevInput = {};
+        LoadedWorldFile = AK_SaveFileDialog("world");        
+    }
+    else
     {
-        ak_string LoadedWorldFile = AK_SaveFileDialog("world");
-        if(!AK_StringIsNullOrEmpty(LoadedWorldFile))
-        {            
-            ak_file_handle* FileHandle = AK_OpenFile(LoadedWorldFile, AK_FILE_ATTRIBUTES_WRITE);
-            if(!FileHandle)
-            {              
-                AK_Free(LoadedWorldFile.Data);
-                GlobalArena->EndTemp(&TempArena);
-                AK_MessageBoxOk("FileIO Error", AK_FormatString(GlobalArena, "Failed to open world file at location %s, message: %s\n", 
-                                                                LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data));
-                return;
-            }
-            
-            world* World = &DevContext->Game->World;
-            ak_hash_map<ak_u64, ak_u32> EntityMap[2] = {};
-            
-            world_file_header FileHeader = {};
-            AK_MemoryCopy(FileHeader.Signature, WORLD_FILE_SIGNATURE, sizeof(WORLD_FILE_SIGNATURE));
-            FileHeader.MajorVersion = WORLD_FILE_MAJOR_VERSION;
-            FileHeader.MinorVersion = WORLD_FILE_MINOR_VERSION;
-            FileHeader.EntityCounts[0] = World->EntityStorage[0].Size;
-            FileHeader.EntityCounts[1] = World->EntityStorage[1].Size;
-            FileHeader.PointLightCounts[0] = World->GraphicsStates[0].PointLightStorage.Size;
-            FileHeader.PointLightCounts[1] = World->GraphicsStates[1].PointLightStorage.Size;
-            
-            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-            {       
-                ak_u32 EntityIndex = 0;                
-                AK_ForEach(Entity, &World->EntityStorage[WorldIndex])
-                {                    
-                    EntityMap[WorldIndex].Insert(Entity->ID.ID, EntityIndex++);   
-                }
-            }
-            
-            AK_WriteFile(FileHandle, &FileHeader, sizeof(FileHeader));            
-            
-            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-            {       
-                ak_u32 EntityIndex = 0;                
-                AK_ForEach(Entity, &World->EntityStorage[WorldIndex])
-                {
-                    AK_WriteFile(FileHandle, &Entity->Type, sizeof(Entity->Type));
-                    
-                    world_id ID = Entity->ID;
-                    graphics_entity* GraphicsEntity = World->GraphicsStates[WorldIndex].GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
-                    switch(Entity->Type)
-                    {                        
-                        case ENTITY_TYPE_PLAYER:
-                        {   
-                            ak_v3f Position = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)].Translation;
-                            AK_WriteFile(FileHandle, &Position, sizeof(Position));                                                        
-                            DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
-                        } break;
-                        
-                        case ENTITY_TYPE_STATIC:
-                        {
-                            ak_u32 LinkIndex = (ak_u32)-1;
-                            if(Entity->LinkID.IsValid())                            
-                                LinkIndex = *EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
-                            
-                            AK_WriteFile(FileHandle, &LinkIndex, sizeof(LinkIndex));
-                            ak_sqtf Transform = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)];
-                            AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
-                            DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
-                                                        
-                            mesh_info* MeshInfo = GetMeshInfo(DevContext->Game->Assets, GraphicsEntity->MeshID);
-                            DevContext_WriteName(FileHandle, MeshInfo->Name, MeshInfo->Header.NameLength);                            
-                        } break;
-                                                
-                        AK_INVALID_DEFAULT_CASE;
-                    }
-                    
-                }                                                
-            }
-            
-            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-            {
-                graphics_state* GraphicsState = World->GraphicsStates + WorldIndex;
-                AK_ForEach(PointLight, &GraphicsState->PointLightStorage)
-                {
-                    AK_WriteFile(FileHandle, &PointLight->Position, sizeof(point_light)-sizeof(ak_u64));
-                }
-            }
-            
-            AK_CloseFile(FileHandle);
-            
-            AK_Free(LoadedWorld->LoadedWorldFile.Data);            
-            LoadedWorld->LoadedWorldFile = LoadedWorldFile;            
-            
-            AK_DeleteHashMap(&EntityMap[0]);
-            AK_DeleteHashMap(&EntityMap[1]);
-        }
+        
+        LoadedWorldFile.Data = (ak_char*)AK_Allocate(sizeof(ak_char)*LoadedWorld->LoadedWorldFile.Length+1);
+        LoadedWorldFile.Length = LoadedWorld->LoadedWorldFile.Length;
+        LoadedWorldFile.Data[LoadedWorldFile.Length] = 0;
+        AK_MemoryCopy(LoadedWorldFile.Data, LoadedWorld->LoadedWorldFile.Data, LoadedWorldFile.Length*sizeof(ak_char));
     }
     
+    if(AK_StringIsNullOrEmpty(LoadedWorldFile))
+    {
+        GlobalArena->EndTemp(&TempArena);
+        return false;
+    }
+    else
+    {
+        ak_file_handle* FileHandle = AK_OpenFile(LoadedWorldFile, AK_FILE_ATTRIBUTES_WRITE);
+        if(!FileHandle)
+        {              
+            AK_Free(LoadedWorldFile.Data);
+            GlobalArena->EndTemp(&TempArena);
+            AK_MessageBoxOk("FileIO Error", AK_FormatString(GlobalArena, "Failed to open world file at location %s, message: %s\n", 
+                                                            LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data));
+            return false;
+        }
+        
+        world* World = &DevContext->Game->World;
+        ak_hash_map<ak_u64, ak_u32> EntityMap[2] = {};
+        
+        world_file_header FileHeader = {};
+        AK_MemoryCopy(FileHeader.Signature, WORLD_FILE_SIGNATURE, sizeof(WORLD_FILE_SIGNATURE));
+        FileHeader.MajorVersion = WORLD_FILE_MAJOR_VERSION;
+        FileHeader.MinorVersion = WORLD_FILE_MINOR_VERSION;
+        FileHeader.EntityCounts[0] = World->EntityStorage[0].Size;
+        FileHeader.EntityCounts[1] = World->EntityStorage[1].Size;
+        FileHeader.PointLightCounts[0] = World->GraphicsStates[0].PointLightStorage.Size;
+        FileHeader.PointLightCounts[1] = World->GraphicsStates[1].PointLightStorage.Size;
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {       
+            ak_u32 EntityIndex = 0;                
+            AK_ForEach(Entity, &World->EntityStorage[WorldIndex])
+            {                    
+                EntityMap[WorldIndex].Insert(Entity->ID.ID, EntityIndex++);   
+            }
+        }
+        
+        AK_WriteFile(FileHandle, &FileHeader, sizeof(FileHeader));            
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {       
+            ak_u32 EntityIndex = 0;                
+            AK_ForEach(Entity, &World->EntityStorage[WorldIndex])
+            {
+                AK_WriteFile(FileHandle, &Entity->Type, sizeof(Entity->Type));
+                
+                world_id ID = Entity->ID;
+                graphics_entity* GraphicsEntity = World->GraphicsStates[WorldIndex].GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                switch(Entity->Type)
+                {                        
+                    case ENTITY_TYPE_PLAYER:
+                    {   
+                        ak_v3f Position = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)].Translation;
+                        AK_WriteFile(FileHandle, &Position, sizeof(Position));                                                        
+                        DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
+                    } break;
+                    
+                    case ENTITY_TYPE_STATIC:
+                    {
+                        ak_u32 LinkIndex = (ak_u32)-1;
+                        if(Entity->LinkID.IsValid())                            
+                            LinkIndex = *EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
+                        
+                        AK_WriteFile(FileHandle, &LinkIndex, sizeof(LinkIndex));
+                        ak_sqtf Transform = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)];
+                        AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
+                        DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
+                        
+                        mesh_info* MeshInfo = GetMeshInfo(DevContext->Game->Assets, GraphicsEntity->MeshID);
+                        DevContext_WriteName(FileHandle, MeshInfo->Name, MeshInfo->Header.NameLength);                            
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
+                }
+                
+            }                                                
+        }
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            graphics_state* GraphicsState = World->GraphicsStates + WorldIndex;
+            AK_ForEach(PointLight, &GraphicsState->PointLightStorage)
+            {
+                AK_WriteFile(FileHandle, &PointLight->Position, sizeof(point_light)-sizeof(ak_u64));
+            }
+        }
+        
+        AK_CloseFile(FileHandle);
+        
+        AK_Free(LoadedWorld->LoadedWorldFile.Data);            
+        LoadedWorld->LoadedWorldFile = LoadedWorldFile;            
+        
+        AK_DeleteHashMap(&EntityMap[0]);
+        AK_DeleteHashMap(&EntityMap[1]);
+    }
+    
+    
     GlobalArena->EndTemp(&TempArena);
+    
+    return true;
 }
 
-void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate)
+void DevContext_SetDefaultWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld)
+{
+    if(!AK_StringIsNullOrEmpty(LoadedWorld->LoadedWorldFile))
+    {
+        AK_WriteEntireFile(DevContext->DefaultWorldFilePathName, LoadedWorld->LoadedWorldFile.Data, LoadedWorld->LoadedWorldFile.Length);
+        
+    }
+    else
+    {
+        if(DevContext_SaveWorld(DevContext, LoadedWorld, true))
+            AK_WriteEntireFile(DevContext->DefaultWorldFilePathName, LoadedWorld->LoadedWorldFile.Data, LoadedWorld->LoadedWorldFile.Length);
+    }
+}
+
+void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFilePath, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate)
 {
     ak_arena* DevStorage = AK_CreateArena(AK_Megabyte(1));
     dev_context* DevContext = DevStorage->Push<dev_context>();
@@ -783,25 +834,48 @@ void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow,
     
     DevUI_Initialize(&DevContext->DevUI, Graphics, PlatformWindow, InitImGui);        
     
+    DevContext->DefaultWorldFilePathName = AK_StringConcat(ProgramFilePath, "DefaultWorld.txt", DevStorage);
     
-    material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
-    world_id PlayerA = CreatePlayerEntity(&DevContext->Game->World, DevContext->Game->Assets, 0, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[0]);
-    world_id PlayerB = CreatePlayerEntity(&DevContext->Game->World, DevContext->Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]);
+    ak_arena* GlobalArena = AK_GetGlobalArena();    
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    material DefaultFloorMaterial = { CreateDiffuse(AK_White3()) };    
-    world_id FloorA = CreateStaticEntity(&DevContext->Game->World, DevContext->Game->Assets, 0, 
-                                         AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
-                                         MESH_ASSET_ID_BOX, DefaultFloorMaterial);
-    world_id FloorB = CreateStaticEntity(&DevContext->Game->World, DevContext->Game->Assets, 1, 
-                                         AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
-                                         MESH_ASSET_ID_BOX, DefaultFloorMaterial);
+    ak_buffer DefaultWorldBuffer = AK_ReadEntireFile(DevContext->DefaultWorldFilePathName, GlobalArena);
+    ak_bool LoadDefaultWorld = DefaultWorldBuffer.IsValid();
+    if(LoadDefaultWorld)
+    {
+        ak_string LoadedWorldFile;
+        LoadedWorldFile.Length = AK_SafeU32(DefaultWorldBuffer.Size);
+        LoadedWorldFile.Data = (ak_char*)AK_Allocate(sizeof(ak_char)*(LoadedWorldFile.Length+1));
+        LoadedWorldFile.Data[LoadedWorldFile.Length] = 0;
+        AK_MemoryCopy(LoadedWorldFile.Data, DefaultWorldBuffer.Data, sizeof(ak_char)*(LoadedWorldFile.Length));
+        LoadDefaultWorld = DevContext_LoadWorld(DevContext, &DevContext->LoadedWorld, LoadedWorldFile);
+    }
     
-    
-    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerA);
-    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerB);
-    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorA);
-    DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorB);
+    if(!LoadDefaultWorld)
+    {                
+        material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
+        world_id PlayerA = CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[0]);
+        world_id PlayerB = CreatePlayerEntity(&Game->World, Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]);
         
+        material DefaultFloorMaterial = { CreateDiffuse(AK_White3()) };    
+        world_id FloorA = CreateStaticEntity(&Game->World, Game->Assets, 0, 
+                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
+                                             MESH_ASSET_ID_BOX, DefaultFloorMaterial);
+        world_id FloorB = CreateStaticEntity(&Game->World, Game->Assets, 1, 
+                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
+                                             MESH_ASSET_ID_BOX, DefaultFloorMaterial);
+        
+        CreatePointLight(&Game->World.GraphicsStates[0], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
+        CreatePointLight(&Game->World.GraphicsStates[1], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
+        
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerA);
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerB);
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorA);
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorB);        
+    }
+    
+    GlobalArena->EndTemp(&TempArena);
+    
     DevContext->Cameras[0].Target = AK_V3<ak_f32>();
     DevContext->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));        
     
@@ -838,12 +912,13 @@ void DevContext_Tick()
         ak_f32 Scroll = 0;
         
         if(IsDown(DevInput->Ctrl))
-        {
+        {            
             if(IsDown(DevInput->S)) DevContext_SaveWorld(Context, &Context->LoadedWorld, false);            
         }
         
         if(IsDown(DevInput->Alt))
         {
+            if(IsDown(DevInput->L)) DevContext_LoadWorld(Context, &Context->LoadedWorld);
             if(IsDown(DevInput->S)) DevContext_SaveWorld(Context, &Context->LoadedWorld, true);
         }
         
@@ -1121,16 +1196,42 @@ void DevContext_Render()
         
         view_settings ViewSettings = GetViewSettings(Camera);
         
-        graphics_light_buffer LightBuffer = GetLightBuffer(CurrentGraphicsState);
-        ShadowPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
+        switch(Context->DevUI.ViewModeType)
+        {
+            case VIEW_MODE_TYPE_LIT:
+            {                
+                graphics_light_buffer LightBuffer = GetLightBuffer(CurrentGraphicsState);
+                ShadowPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
+                
+                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);                
+                EntityLitPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
+            } break;
+            
+            case VIEW_MODE_TYPE_UNLIT:
+            {                
+                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);
+                EntityUnlitPass(Graphics, Game->Assets, &CurrentGraphicsState->GraphicsEntityStorage);
+            } break;
+            
+            case VIEW_MODE_TYPE_WIREFRAME:
+            {
+                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);
+                EntityWireframePass(Graphics, Game->Assets, &CurrentGraphicsState->GraphicsEntityStorage);
+            } break;
+            
+            case VIEW_MODE_TYPE_WIREFRAME_ON_LIT:
+            {
+                graphics_light_buffer LightBuffer = GetLightBuffer(CurrentGraphicsState);
+                ShadowPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
+                
+                StandardEntityCommands(Graphics, CurrentGraphicsState, &ViewSettings);                
+                EntityLitPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);
+                EntityWireframePass(Graphics, Game->Assets, &CurrentGraphicsState->GraphicsEntityStorage);
+                
+            } break;
+            
+        }                
         
-        PushDepth(Graphics, true);
-        PushSRGBRenderBufferWrites(Graphics, true);
-        PushRenderBufferViewportScissorAndView(Graphics, CurrentGraphicsState->RenderBuffer, &ViewSettings);    
-        PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
-        PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
-        
-        EntityPass(Graphics, Game->Assets, &LightBuffer, &CurrentGraphicsState->GraphicsEntityStorage);        
         AK_ForEach(PointLight, &CurrentGraphicsState->PointLightStorage)    
             DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());    
         

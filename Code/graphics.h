@@ -213,7 +213,7 @@ typedef INVALIDATE_SHADERS(invalidate_shaders);
 
 struct graphics
 {           
-    push_command_list CommandList;    
+    ak_array<push_command*> CommandList;    
     void** PlatformData;                                        
     
     allocate_texture* AllocateTexture;
@@ -241,7 +241,7 @@ BIND_GRAPHICS_FUNCTIONS(Graphics_BindGraphicsFunctionsStub)
 
 EXECUTE_RENDER_COMMANDS(Graphics_ExecuteRenderCommandsStub)
 {    
-    Graphics->CommandList.Count = 0;
+    Graphics->CommandList.Clear();    
 }
 
 INVALIDATE_SHADERS(Graphics_InvalidateShadersStub)

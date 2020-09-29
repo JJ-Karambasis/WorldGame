@@ -9,7 +9,7 @@ struct dev_input
 {
     union
     {
-        button Buttons[10];
+        button Buttons[11];
         struct
         {
             button ToggleDevState;            
@@ -19,6 +19,7 @@ struct dev_input
             button E;
             button R;  
             button S;
+            button L;
             button Delete;
             button Ctrl;
             button Alt;
@@ -158,12 +159,14 @@ struct dev_context
     camera Cameras[2];    
     ak_array<dev_transform> InitialTransforms[2];
     
+    ak_string DefaultWorldFilePathName;
+    
     dev_selected_object SelectedObject;
     dev_gizmo_state GizmoState;
     dev_loaded_world LoadedWorld;
 };
 
-void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);
+void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, ak_string ProgramFilePath, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);
 void DevContext_DebugLog(const ak_char* Format, ...);
 mesh_info DevContext_GetMeshInfoFromDevMesh(dev_mesh* DevMesh);
 mesh DevContext_GetMeshFromDevMesh(dev_mesh* DevMesh);

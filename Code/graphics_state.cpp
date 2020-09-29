@@ -324,7 +324,28 @@ void ShadowPass(graphics* Graphics, assets* Assets, graphics_light_buffer* Light
     }                
 }
 
-void EntityPass(graphics* Graphics, assets* Assets, graphics_light_buffer* LightBuffer, graphics_entity_storage* GraphicsEntityStorage)
+void StandardEntityCommands(graphics* Graphics, graphics_state* GraphicsState, view_settings* ViewSettings)
+{    
+    PushDepth(Graphics, true);
+    PushSRGBRenderBufferWrites(Graphics, true);
+    PushRenderBufferViewportScissorAndView(Graphics, GraphicsState->RenderBuffer, ViewSettings);    
+    PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
+    PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);    
+}
+
+void EntityUnlitPass(graphics* Graphics, assets* Assets, graphics_entity_storage* GraphicsEntityStorage)
+{
+    AK_ForEach(GraphicsEntity, GraphicsEntityStorage)            
+    {
+        AK_Assert(GraphicsEntity->MeshID != INVALID_MESH_ID, "Cannot draw an invalid mesh");            
+        
+        graphics_diffuse_material_slot Diffuse = ConvertToGraphicsDiffuse(Assets, Graphics, GraphicsEntity->Material.Diffuse);        
+        graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsEntity->MeshID);            
+        PushDrawUnlitMesh(Graphics, MeshHandle, GraphicsEntity->Transform, Diffuse, GetMeshIndexCount(Assets, GraphicsEntity->MeshID), 0, 0);                        
+    }
+}
+
+void EntityLitPass(graphics* Graphics, assets* Assets, graphics_light_buffer* LightBuffer, graphics_entity_storage* GraphicsEntityStorage)
 {        
     PushLightBuffer(Graphics, LightBuffer);                
     AK_ForEach(GraphicsEntity, GraphicsEntityStorage)            
@@ -337,4 +358,22 @@ void EntityPass(graphics* Graphics, assets* Assets, graphics_light_buffer* Light
         graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsEntity->MeshID);            
         PushDrawMesh(Graphics, MeshHandle, GraphicsEntity->Transform, GetMeshIndexCount(Assets, GraphicsEntity->MeshID), 0, 0);                        
     }
+}
+
+void EntityWireframePass(graphics* Graphics, assets* Assets, graphics_entity_storage* GraphicsEntityStorage)
+{
+    PushWireframe(Graphics, true);
+    PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);        
+    
+    AK_ForEach(GraphicsEntity, GraphicsEntityStorage)            
+    {
+        AK_Assert(GraphicsEntity->MeshID != INVALID_MESH_ID, "Cannot draw an invalid mesh");            
+        
+        graphics_diffuse_material_slot Diffuse = ConvertToGraphicsDiffuse(Assets, Graphics, GraphicsEntity->Material.Diffuse);        
+        graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsEntity->MeshID);            
+        PushDrawUnlitMesh(Graphics, MeshHandle, GraphicsEntity->Transform, Diffuse, GetMeshIndexCount(Assets, GraphicsEntity->MeshID), 0, 0);                        
+    }
+    
+    PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
+    PushWireframe(Graphics, false);
 }

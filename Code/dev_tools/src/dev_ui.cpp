@@ -732,18 +732,29 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
     if(!UI->PlayGame)
     {
         if(BeginMainMenuBar())
-        {
+        {                        
             if(BeginMenu("Menu"))
             {   
                 if(MenuItem("Load World", "CTRL+L")) DevContext_LoadWorld(DevContext, &DevContext->LoadedWorld);                                 
                 if(MenuItem("Save World", "CTRL+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, false);                                
-                if(MenuItem("Save World As", "ALT+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, true);                                
+                if(MenuItem("Save World As", "ALT+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, true);
+                
+                if(AK_StringIsNullOrEmpty(DevContext->LoadedWorld.LoadedWorldFile))
+                    MenuItem("Default World As", NULL, false, false);
+                else
+                {
+                    if(MenuItem("Default World As")) DevContext_SetDefaultWorld(DevContext, &DevContext->LoadedWorld);
+                }
                 
                 ImGui::EndMenu();
             }
             
+            ak_char* LoadedWorldString = AK_StringIsNullOrEmpty(DevContext->LoadedWorld.LoadedWorldFile) ? "None" : DevContext->LoadedWorld.LoadedWorldFile.Data;
+            Text("\tLoaded World: %s", LoadedWorldString);
+            SameLine();
+            
             MenuHeight = GetWindowHeight();
-            EndMainMenuBar();
+            EndMainMenuBar();            
         }
     }
     
