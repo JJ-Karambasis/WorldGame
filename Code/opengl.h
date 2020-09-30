@@ -2,7 +2,6 @@
 #define OPENGL_H
 
 #include "graphics.h"
-#include "dev_world_game.h"
 
 #include "opengl/gl.h"
 #include "opengl/glext.h"

@@ -872,9 +872,7 @@ ak_bool BindShadowMapFBO(GLuint FBO, GLuint TextureArray, ak_u32* Counter)
 
 extern "C"
 AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
-{
-    Dev_SetDeveloperContext(DevContext);
-        
+{            
     opengl_context* OpenGL = (opengl_context*)Graphics;            
     AK_SetGlobalArena(OpenGL->TempStorage);
     

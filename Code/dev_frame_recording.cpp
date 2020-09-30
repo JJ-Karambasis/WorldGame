@@ -115,7 +115,7 @@ void frame_recording::RecordFrame(game* Game)
                     Header->Velocity = RigidBody->Velocity;
                     Header->Acceleration = RigidBody->Acceleration;
                     
-                    pushing_object* PushingObject = (pushing_object*)(Header+1);
+                    pushing_object* PushingObject = (pushing_object*)(Header+1);                    
                     *PushingObject = *GetUserData(Entity, pushing_object);
                     
                     At += PUSHABLE_SIZE;                    

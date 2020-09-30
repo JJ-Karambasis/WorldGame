@@ -205,7 +205,7 @@ typedef INIT_GRAPHICS(init_graphics);
 #define BIND_GRAPHICS_FUNCTIONS(name) ak_bool name(graphics* Graphics)
 typedef BIND_GRAPHICS_FUNCTIONS(bind_graphics_functions);
 
-#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics, void* DevContext)
+#define EXECUTE_RENDER_COMMANDS(name) void name(graphics* Graphics)
 typedef EXECUTE_RENDER_COMMANDS(execute_render_commands);
 
 #define INVALIDATE_SHADERS(name) void name(graphics* Graphics)

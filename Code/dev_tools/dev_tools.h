@@ -32,6 +32,11 @@ typedef PLATFORM_DEVELOPMENT_UPDATE(platform_development_update);
 #ifdef DEV_TOOLS_IMPLEMENTATION
 
 #if DEVELOPER_BUILD
+#include "imgui/imgui.cpp"
+#include "imgui/imgui_draw.cpp"
+#include "imgui/imgui_widgets.cpp"
+#include "imgui/imgui_demo.cpp"
+
 using namespace ImGui;
 #include "src/dev_draw.cpp"
 #include "src/dev_ray.cpp"

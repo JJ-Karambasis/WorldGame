@@ -683,7 +683,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         
         //DEVELOPMENT_TICK(Game, Graphics, &GraphicsState, tRenderInterpolate);                                
         
-        GraphicsCode.ExecuteRenderCommands(Graphics, Dev_GetDeveloperContext());
+        GraphicsCode.ExecuteRenderCommands(Graphics);
         
         GlobalArena->EndTemp(&TempArena);
         AK_Assert(GlobalArena->TemporaryArenas == 0, "There are still temporary arena's being used in the frame");

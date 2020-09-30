@@ -881,7 +881,11 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
             graphics_state* GraphicsState = World->GraphicsStates + WorldIndex;
             AK_ForEach(PointLight, &GraphicsState->PointLightStorage)
             {
-                AK_WriteFile(FileHandle, &PointLight->Position, sizeof(point_light)-sizeof(ak_u64));
+                AK_WriteFile(FileHandle, &PointLight->Position, sizeof(PointLight->Position));
+                AK_WriteFile(FileHandle, &PointLight->Radius, sizeof(PointLight->Radius));
+                AK_WriteFile(FileHandle, &PointLight->Color, sizeof(PointLight->Color));
+                AK_WriteFile(FileHandle, &PointLight->Intensity, sizeof(PointLight->Intensity));
+                AK_WriteFile(FileHandle, &PointLight->On, sizeof(PointLight->On));
             }
         }
         
@@ -955,6 +959,8 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         LoadedWorldFile.Data[LoadedWorldFile.Length] = 0;
         AK_MemoryCopy(LoadedWorldFile.Data, DefaultWorldBuffer.Data, sizeof(ak_char)*(LoadedWorldFile.Length));
         LoadDefaultWorld = DevContext_LoadWorld(DevContext, &DevContext->LoadedWorld, LoadedWorldFile);
+        if(!LoadDefaultWorld)        
+            AK_FileRemove(DevContext->DefaultWorldFilePathName);
     }
     
     if(!LoadDefaultWorld)

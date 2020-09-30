@@ -18,7 +18,7 @@ struct game;
 
 #include "input.h"
 #include "graphics.h"
-#include "assets/assets.h"
+#include <assets.h>
 #include "audio.h"
 #include "animation.h"
 

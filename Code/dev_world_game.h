@@ -169,14 +169,6 @@ struct mesh_convex_hull_gdi
     graphics_mesh_id* Meshes;
 };
 
-enum frame_playback_state
-{
-    FRAME_PLAYBACK_STATE_NONE,
-    FRAME_PLAYBACK_STATE_RECORDING,
-    FRAME_PLAYBACK_STATE_PLAYING,
-    FRAME_PLAYBACK_STATE_INSPECT_FRAMES
-};
-
 struct frame_playback
 {
     ak_u32 MaxRecordingPathLength;

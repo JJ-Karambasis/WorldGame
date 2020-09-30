@@ -1,8 +1,3 @@
-#include "imgui/imgui.cpp"
-#include "imgui/imgui_draw.cpp"
-#include "imgui/imgui_widgets.cpp"
-#include "imgui/imgui_demo.cpp"
-
 graphics_texture_id DevUI_AllocateImGuiFont(graphics* Graphics)
 {    
     ImGuiIO* IO = &GetIO();
@@ -787,7 +782,7 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
         {                        
             if(BeginMenu("Menu"))
             {   
-                if(MenuItem("Load World", "CTRL+L")) DevContext_LoadWorld(DevContext, &DevContext->LoadedWorld);                                 
+                if(MenuItem("Load World", "ALT+L")) DevContext_LoadWorld(DevContext, &DevContext->LoadedWorld);                                 
                 if(MenuItem("Save World", "CTRL+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, false);                                
                 if(MenuItem("Save World As", "ALT+S")) DevContext_SaveWorld(DevContext, &DevContext->LoadedWorld, true);
                 

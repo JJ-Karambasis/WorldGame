@@ -58,17 +58,17 @@ GLuint CompileShader(const GLchar** Code, ak_u32 CodeCount, GLenum Type)
             {
                 case GL_VERTEX_SHADER:
                 {
-                    DEBUG_LOG("Vertex Shader Error: %s", Error);
+                    AK_ConsoleLog("Vertex Shader Error: %s", Error);                    
                 } break;
                 
                 case GL_FRAGMENT_SHADER:
                 {
-                    DEBUG_LOG("Fragment Shader Error: %s", Error);
+                    AK_ConsoleLog("Vertex Shader Error: %s", Error);
                 } break;
                 
                 case GL_GEOMETRY_SHADER:
                 {
-                    DEBUG_LOG("Geometry Shader Error: %s", Error);
+                    AK_ConsoleLog("Vertex Shader Error: %s", Error);
                 } break;
                 
                 AK_INVALID_DEFAULT_CASE;
@@ -117,7 +117,7 @@ GLuint CreateShaderProgram(const GLchar** VSCode, ak_u32 VSCodeCount, const GLch
         Result = 0;
         ak_char ProgramError[4096];
         glGetProgramInfoLog(Program, sizeof(ProgramError), NULL, ProgramError);        
-        DEBUG_LOG("Program Link Error: %s", ProgramError);        
+        AK_ConsoleLog("Program Link Error: %s", ProgramError);        
     }
     
     glDetachShader(Program, VertexShader);

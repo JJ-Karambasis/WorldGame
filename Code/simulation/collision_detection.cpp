@@ -2,13 +2,6 @@
 #include "gjk.cpp"
 #include "epa.cpp"
 
-
-struct ray
-{
-    ak_v3f Origin;
-    ak_v3f Direction;
-};
-
 ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, ak_v3f CenterP, ak_f32 Radius)
 {
     ak_v3f CO = Origin-CenterP;
