@@ -679,7 +679,7 @@ void PopulateCircleGizmos(dev_context* DevContext, ak_v3f Position)
         gizmo Gizmo;
         Gizmo.Mesh = &DevContext->TriangleTorusMesh;
         Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
+        Gizmo.IntersectionPlane = AK_V3f(1, 0, 0);
         Gizmo.MovementDirection = GIZMO_MOVEMENT_DIRECTION_X;
         DevContext->Gizmo[0] =  Gizmo;
     }
