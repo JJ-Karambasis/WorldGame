@@ -62,6 +62,7 @@ struct dev_ui
     
     ak_bool PlayGame;            
     ak_bool DrawOtherWorld;
+    ak_bool DrawCollisionVolumes;
     ak_f32 DetailWidth;
     view_mode_type ViewModeType;
 };

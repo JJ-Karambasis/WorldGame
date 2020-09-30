@@ -242,6 +242,41 @@ void DevContext_CreatePlaneMesh(dev_context* DevContext, ak_f32 Width, ak_f32 He
     DevContext->TrianglePlaneMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
 }
 
+dev_slim_mesh DevContext_CreateConvexHullMesh(dev_context* DevContext, convex_hull* ConvexHull)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
+    dev_slim_mesh Result = {};
+    
+    ak_v3f* Vertices = GlobalArena->PushArray<ak_v3f>(ConvexHull->Header.VertexCount);
+    Result.IndexCount = ConvexHull->Header.FaceCount*3*2;
+    ak_u16* Indices = GlobalArena->PushArray<ak_u16>(Result.IndexCount);
+    
+    for(ak_u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
+        Vertices[VertexIndex] = ConvexHull->Vertices[VertexIndex].V;
+    
+    ak_u32 Index = 0;
+    for(ak_u32 FaceIndex = 0; FaceIndex < ConvexHull->Header.FaceCount; FaceIndex++)
+    {
+        half_face* Face = ConvexHull->Faces + FaceIndex;
+        
+        ak_i32 Edge = Face->Edge;
+        do
+        {
+            Indices[Index++] = (ak_u16)ConvexHull->Edges[Edge].Vertex;
+            Indices[Index++] = (ak_u16)ConvexHull->Edges[ConvexHull->Edges[Edge].EdgePair].Vertex;
+            Edge = ConvexHull->Edges[Edge].NextEdge;
+        } while (Edge != Face->Edge);        
+    }
+    
+    AK_Assert(Index == Result.IndexCount, "Failed to build convex hull indexes properly. This is a programming error");
+    Result.MeshID = DevContext->Graphics->AllocateMesh(DevContext->Graphics, Vertices, sizeof(ak_v3f)*ConvexHull->Header.VertexCount, GRAPHICS_VERTEX_FORMAT_P3,
+                                                       Indices, Result.IndexCount*sizeof(ak_u16), GRAPHICS_INDEX_FORMAT_16_BIT);    
+    GlobalArena->EndTemp(&TempArena);        
+    return Result;
+}
+
 void DevContext_SetEntityAsSelectedObject(dev_selected_object* SelectedObject, world_id ID, material* Material)
 {
     SelectedObject->Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
@@ -1260,18 +1295,85 @@ void DevContext_Tick()
         DevInput->Buttons[ButtonIndex].WasDown = DevInput->Buttons[ButtonIndex].IsDown;    
 }
 
+void DevContext_RenderConvexHulls(dev_context* Context, ak_u32 WorldIndex, view_settings* ViewSettings)
+{
+    graphics* Graphics = Context->Graphics;
+    game* Game = Context->Game;
+    world* World = &Game->World;
+    graphics_state* GraphicsState = &World->GraphicsStates[WorldIndex];
+    simulation* Simulation = &World->Simulations[WorldIndex];
+    
+    PushRenderBufferViewportScissorAndView(Graphics, GraphicsState->RenderBuffer, ViewSettings);
+    PushDepth(Graphics, false);    
+    
+    AK_ForEach(GraphicsEntity, &GraphicsState->GraphicsEntityStorage)
+    {
+        ak_u32 EntityIndex = UserDataToIndex(GraphicsEntity->UserData);                
+        dev_slim_mesh* ConvexHulls = Context->ConvexHullMeshes[GraphicsEntity->MeshID];        
+        if(!ConvexHulls)
+        {
+            mesh_info* MeshInfo = GetMeshInfo(Game->Assets, GraphicsEntity->MeshID);
+            if(MeshInfo->Header.ConvexHullCount > 0)
+            {
+                ConvexHulls = Context->DevStorage->PushArray<dev_slim_mesh>(MeshInfo->Header.ConvexHullCount);
+                for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
+                {
+                    ConvexHulls[ConvexHullIndex] = DevContext_CreateConvexHullMesh(Context, &MeshInfo->ConvexHulls[ConvexHullIndex]);
+                }                
+                Context->ConvexHullMeshes[GraphicsEntity->MeshID] = ConvexHulls;
+            }
+        }
+        
+        entity* Entity = World->EntityStorage[WorldIndex].GetByIndex(EntityIndex);                        
+        sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
+        collision_volume* Volume = Simulation->CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
+        
+        ak_u32 ConvexHullIndex = 0;
+        ak_sqtf Transform = AK_SQT(GraphicsEntity->Transform);
+        while(Volume)
+        {            
+            switch(Volume->Type)
+            {
+                case COLLISION_VOLUME_TYPE_SPHERE:
+                {                    
+                    sphere Sphere = TransformSphere(&Volume->Sphere, Transform);                    
+                    DevDraw_LineEllipsoid(Context, Sphere.CenterP, AK_V3(Sphere.Radius, Sphere.Radius, Sphere.Radius), AK_Blue3());
+                } break;
+                
+                case COLLISION_VOLUME_TYPE_CAPSULE:
+                {
+                    capsule Capsule = TransformCapsule(&Volume->Capsule, Transform);
+                    DevDraw_LineCapsule(Context, Capsule.P0, Capsule.P1, Capsule.Radius, AK_Blue3());                                                
+                } break;
+                
+                case COLLISION_VOLUME_TYPE_CONVEX_HULL:
+                {
+                    ak_sqtf NewTransform = Volume->ConvexHull->Header.Transform*Transform;
+                    ak_m4f Model = AK_TransformM4(NewTransform);
+                    
+                    PushDrawLineMesh(Context->Graphics, ConvexHulls[ConvexHullIndex].MeshID, Model, AK_Blue3(),
+                                     ConvexHulls[ConvexHullIndex].IndexCount, 0, 0);
+                    ConvexHullIndex++;
+                } break;
+            }
+            
+            Volume = Simulation->CollisionVolumeStorage.Get(Volume->NextID);
+        }
+    }
+    PushDepth(Graphics, true);
+}
+
 void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
 {    
     game* Game = Context->Game;
     graphics* Graphics = Context->Graphics;        
     world* World = &Game->World;
     
-    graphics_state* GraphicsState = &World->GraphicsStates[WorldIndex];
-    
+    graphics_state* GraphicsState = &World->GraphicsStates[WorldIndex];        
+        
     UpdateRenderBuffer(Graphics, &GraphicsState->RenderBuffer, Game->Resolution);
     
-    camera* Camera = Context->Cameras + WorldIndex;
-    
+    camera* Camera = Context->Cameras + WorldIndex;    
     view_settings ViewSettings = GetViewSettings(Camera);
     
     switch(Context->DevUI.ViewModeType)
@@ -1399,8 +1501,11 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
             
             DevDraw_GizmoState(Context, GizmoState, SelectedObjectPosition);
         }
-    }        
+    }       
     PushDepth(Graphics, true);    
+    
+    if(Context->DevUI.DrawCollisionVolumes)
+        DevContext_RenderConvexHulls(Context, WorldIndex, &ViewSettings);
 }
 
 void DevContext_Render()
@@ -1408,13 +1513,26 @@ void DevContext_Render()
     dev_context* Context = Dev_GetDeveloperContext();
     game* Game = Context->Game;
     graphics* Graphics = Context->Graphics;        
-    world* World = &Game->World;
+    world* World = &Game->World;        
     
     if(!Context->DevUI.PlayGame)
     {                         
         DevContext_RenderWorld(Context, Game->CurrentWorldIndex);        
         if(Context->DevUI.DrawOtherWorld)
             DevContext_RenderWorld(Context, !Game->CurrentWorldIndex);       
+    }
+    else
+    {
+        if(Context->DevUI.DrawCollisionVolumes)
+        {
+            view_settings ViewSettings = GetViewSettings(&World->GraphicsStates[Game->CurrentWorldIndex].Camera);
+            DevContext_RenderConvexHulls(Context, Game->CurrentWorldIndex, &ViewSettings);
+            if(Context->DevUI.DrawOtherWorld)
+            {
+                ViewSettings = GetViewSettings(&World->GraphicsStates[!Game->CurrentWorldIndex].Camera);
+                DevContext_RenderConvexHulls(Context, !Game->CurrentWorldIndex, &ViewSettings);
+            }                
+        }
     }
     
     if(Context->DevUI.DrawOtherWorld)

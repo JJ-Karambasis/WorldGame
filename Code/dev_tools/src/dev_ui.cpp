@@ -76,6 +76,14 @@ ak_bool Button(ak_u32 ID, const ak_char* ButtonText)
     return Result;
 }
 
+void DevUI_Checkbox(ak_u32 ID, const ak_char* Label, ak_bool* Flag)
+{
+    AlignTextToFramePadding();
+    Text(Label);
+    SameLine();
+    Checkbox(ID, "", Flag);
+}
+
 void DevUI_Initialize(dev_ui* UI, graphics* Graphics, void* PlatformWindow, platform_init_imgui* InitImGui)
 {
     IMGUI_CHECKVERSION();
@@ -812,10 +820,8 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
         ak_char* PlayText = UI->PlayGame ? "Stop" : "Play";
         if(Button(PlayText)) UI->PlayGame = !UI->PlayGame;
         
-        AlignTextToFramePadding();
-        Text("Draw Other World");                
-        SameLine();
-        Checkbox(AK_HashFunction("Draw Other World"), "", &UI->DrawOtherWorld);
+        DevUI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", &UI->DrawOtherWorld);
+        DevUI_Checkbox(AK_HashFunction("Draw Collision Volumes"), "Draw Collision Volumes", &UI->DrawCollisionVolumes);
         
         if(PrevPlayGame != UI->PlayGame)
         {

@@ -143,18 +143,19 @@ struct dev_context
     dev_input DevInput;
     dev_ui DevUI;
     
-    dev_capsule_mesh LineCapsuleMesh;                
-    dev_slim_mesh    LineBoxMesh;
-    dev_slim_mesh    LineSphereMesh;    
-    dev_slim_mesh    TriangleBoxMesh;
-    dev_slim_mesh    TriangleSphereMesh;
-    dev_slim_mesh    TriangleCylinderMesh;
-    dev_slim_mesh    TriangleConeMesh;    
-    dev_mesh         TriangleArrowMesh;
-    dev_mesh         TriangleCircleMesh;
-    dev_mesh         TriangleScaleMesh;
-    dev_mesh         TriangleTorusMesh;    
-    dev_mesh         TrianglePlaneMesh;    
+    dev_capsule_mesh  LineCapsuleMesh;                
+    dev_slim_mesh     LineBoxMesh;
+    dev_slim_mesh     LineSphereMesh;    
+    dev_slim_mesh     TriangleBoxMesh;
+    dev_slim_mesh     TriangleSphereMesh;
+    dev_slim_mesh     TriangleCylinderMesh;
+    dev_slim_mesh     TriangleConeMesh;    
+    dev_mesh          TriangleArrowMesh;
+    dev_mesh          TriangleCircleMesh;
+    dev_mesh          TriangleScaleMesh;
+    dev_mesh          TriangleTorusMesh;    
+    dev_mesh          TrianglePlaneMesh;
+    dev_slim_mesh*    ConvexHullMeshes[MESH_ASSET_COUNT];
     
     camera Cameras[2];    
     ak_array<dev_transform> InitialTransforms[2];
