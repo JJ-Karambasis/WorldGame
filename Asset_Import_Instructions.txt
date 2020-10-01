@@ -4,4 +4,4 @@
 3. Execute the asset builder with all the assets you want to create
 	e.g. Asset_Builder.exe -c W:\data\test.fbx W:\data\test_image.png
 4. Pending any errors. Confirm a WorldGame.assets file was created in the Asset_Builder directory
-5. Rebuild the game and the assets sure be usable in the editor.
+5. Rebuild the game and the assets should be usable in the editor.
