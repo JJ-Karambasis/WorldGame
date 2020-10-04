@@ -922,7 +922,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;  
-    dev_object_edit* LastEdit = DevContext->UndoStack->Pop();
+    dev_object_edit* LastEdit = DevContext->UndoStack.Pop();
 
     if(LastEdit == NULL)
     {
@@ -954,7 +954,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
         Redo.PreviousValue = DevTransform->Scale;
         DevTransform->Scale = LastEdit->PreviousValue;
     }
-        DevContext->RedoStack->Add(Redo);
+        DevContext->RedoStack.Add(Redo);
     
     ak_sqtf* Transform = &World->NewTransforms[LastEdit->EntityID.WorldIndex][Index];
     Transform->Translation = DevTransform->Translation;
@@ -975,7 +975,7 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;  
-    dev_object_edit* LastEdit = DevContext->RedoStack->Pop();
+    dev_object_edit* LastEdit = DevContext->RedoStack.Pop();
 
     if(LastEdit == NULL)
     {
@@ -1007,7 +1007,7 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
         Undo.PreviousValue = DevTransform->Scale;
         DevTransform->Scale = LastEdit->PreviousValue;
     }
-    DevContext->UndoStack->Add(Undo);
+    DevContext->UndoStack.Add(Undo);
     
     ak_sqtf* Transform = &World->NewTransforms[LastEdit->EntityID.WorldIndex][Index];
     Transform->Translation = DevTransform->Translation;
@@ -1234,8 +1234,8 @@ void DevContext_Tick()
                     
                         AK_INVALID_DEFAULT_CASE;
                     }
-                    Context->UndoStack->Add(Edit);
-                    Context->RedoStack->Clear();
+                    Context->UndoStack.Add(Edit);
+                    Context->RedoStack.Clear();
                 }
             }
             

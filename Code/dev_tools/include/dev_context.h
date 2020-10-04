@@ -175,8 +175,8 @@ struct dev_context
     dev_gizmo_state GizmoState;
     dev_loaded_world LoadedWorld;
 
-    ak_array<dev_object_edit> UndoStack[10];
-    ak_array<dev_object_edit> RedoStack[10];
+    ak_array<dev_object_edit> UndoStack;
+    ak_array<dev_object_edit> RedoStack;
 };
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, ak_string ProgramFilePath, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);
