@@ -9,7 +9,7 @@ struct dev_input
 {
     union
     {
-        button Buttons[11];
+        button Buttons[13];
         struct
         {
             button ToggleDevState;            
@@ -20,6 +20,8 @@ struct dev_input
             button R;  
             button S;
             button L;
+            button Z;
+            button Y;
             button Delete;
             button Ctrl;
             button Alt;
@@ -132,6 +134,13 @@ struct dev_loaded_world
     ak_string LoadedWorldFile;    
 };
 
+struct dev_object_edit
+{
+    ak_v3f PreviousValue;
+    dev_gizmo_movement_type EditType;
+    world_id EntityID;
+};
+
 struct dev_context
 {
     ak_arena* DevStorage;        
@@ -165,6 +174,9 @@ struct dev_context
     dev_selected_object SelectedObject;
     dev_gizmo_state GizmoState;
     dev_loaded_world LoadedWorld;
+
+    ak_array<dev_object_edit> UndoStack[10];
+    ak_array<dev_object_edit> RedoStack[10];
 };
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, ak_string ProgramFilePath, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);

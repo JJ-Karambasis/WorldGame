@@ -924,6 +924,8 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, MSG Message)
             BindKey('R', Input->R);      
             BindKey('S', Input->S);
             BindKey('L', Input->L);
+            BindKey('Z', Input->Z);
+            BindKey('Y', Input->Y);
             BindKey(VK_DELETE, Input->Delete);
             BindKey(VK_CONTROL, Input->Ctrl);
         }

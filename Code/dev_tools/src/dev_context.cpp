@@ -918,6 +918,112 @@ void DevContext_SetDefaultWorld(dev_context* DevContext, dev_loaded_world* Loade
     }
 }
 
+void DevContext_UndoLastEdit(dev_context* DevContext)
+{
+    game* Game = DevContext->Game;
+    world* World = &Game->World;  
+    dev_object_edit* LastEdit = DevContext->UndoStack->Pop();
+
+    if(LastEdit == NULL)
+    {
+        return;
+    }
+
+    dev_object_edit Redo;
+    Redo.EntityID = LastEdit->EntityID;
+    Redo.EditType = LastEdit->EditType;
+    entity* Entity = World->EntityStorage[LastEdit->EntityID.WorldIndex].Get(LastEdit->EntityID.ID);
+    ak_u32 Index = AK_PoolIndex(LastEdit->EntityID.ID);                                        
+    ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[LastEdit->EntityID.WorldIndex];                    
+    if(DevTransforms->Size < (Index+1))
+        DevTransforms->Resize(Index+1);
+    
+    dev_transform* DevTransform = DevTransforms->Get(Index);                    
+    if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE) 
+    {
+        Redo.PreviousValue = DevTransform->Translation;
+        DevTransform->Translation = LastEdit->PreviousValue;
+    }
+    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) 
+    {
+        Redo.PreviousValue = DevTransform->Euler;
+        DevTransform->Euler = LastEdit->PreviousValue;
+    }
+    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_SCALE) 
+    {
+        Redo.PreviousValue = DevTransform->Scale;
+        DevTransform->Scale = LastEdit->PreviousValue;
+    }
+        DevContext->RedoStack->Add(Redo);
+    
+    ak_sqtf* Transform = &World->NewTransforms[LastEdit->EntityID.WorldIndex][Index];
+    Transform->Translation = DevTransform->Translation;
+    Transform->Scale = DevTransform->Scale;
+    Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
+    
+    World->OldTransforms[LastEdit->EntityID.WorldIndex][Index] = *Transform;                        
+    
+    sim_entity* SimEntity = GetSimEntity(Game, LastEdit->EntityID);
+    SimEntity->Transform = *Transform;                    
+    
+    graphics_state* GraphicsState = &World->GraphicsStates[LastEdit->EntityID.WorldIndex];
+    graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+    GraphicsEntity->Transform = AK_TransformM4(*Transform);
+}
+
+void DevContext_RedoLastEdit(dev_context* DevContext)
+{
+    game* Game = DevContext->Game;
+    world* World = &Game->World;  
+    dev_object_edit* LastEdit = DevContext->RedoStack->Pop();
+
+    if(LastEdit == NULL)
+    {
+        return;
+    }
+
+    dev_object_edit Undo;
+    Undo.EntityID = LastEdit->EntityID;
+    Undo.EditType = LastEdit->EditType;
+    entity* Entity = World->EntityStorage[LastEdit->EntityID.WorldIndex].Get(LastEdit->EntityID.ID);
+    ak_u32 Index = AK_PoolIndex(LastEdit->EntityID.ID);                                        
+    ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[LastEdit->EntityID.WorldIndex];                    
+    if(DevTransforms->Size < (Index+1))
+        DevTransforms->Resize(Index+1);
+    
+    dev_transform* DevTransform = DevTransforms->Get(Index);                    
+    if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE) 
+    {
+        Undo.PreviousValue = DevTransform->Translation;
+        DevTransform->Translation = LastEdit->PreviousValue;
+    }
+    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) 
+    {
+        Undo.PreviousValue = DevTransform->Euler;
+        DevTransform->Euler = LastEdit->PreviousValue;
+    }
+    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_SCALE) 
+    {
+        Undo.PreviousValue = DevTransform->Scale;
+        DevTransform->Scale = LastEdit->PreviousValue;
+    }
+    DevContext->UndoStack->Add(Undo);
+    
+    ak_sqtf* Transform = &World->NewTransforms[LastEdit->EntityID.WorldIndex][Index];
+    Transform->Translation = DevTransform->Translation;
+    Transform->Scale = DevTransform->Scale;
+    Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
+    
+    World->OldTransforms[LastEdit->EntityID.WorldIndex][Index] = *Transform;                        
+    
+    sim_entity* SimEntity = GetSimEntity(Game, LastEdit->EntityID);
+    SimEntity->Transform = *Transform;                    
+    
+    graphics_state* GraphicsState = &World->GraphicsStates[LastEdit->EntityID.WorldIndex];
+    graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+    GraphicsEntity->Transform = AK_TransformM4(*Transform);
+}
+
 void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFilePath, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate)
 {
     ak_arena* DevStorage = AK_CreateArena(AK_Megabyte(1));
@@ -1096,6 +1202,40 @@ void DevContext_Tick()
                 else
                 {
                     GizmoState->GizmoHit = GizmoHit;
+                    dev_object_edit Edit;
+                    dev_selected_object* SelectedObject = &Context->SelectedObject;  
+                    ak_u32 Index = AK_PoolIndex(SelectedObject->EntityID.ID);                                        
+                    ak_array<dev_transform>* DevTransforms = &Context->InitialTransforms[SelectedObject->EntityID.WorldIndex];                    
+                    if(DevTransforms->Size < (Index+1))
+                        DevTransforms->Resize(Index+1);
+                    
+                    dev_transform* DevTransform = DevTransforms->Get(Index);      
+                    Edit.EditType = GizmoState->TransformMode;
+                    Edit.EntityID = SelectedObject->EntityID;
+                    switch (Edit.EditType)
+                    {
+                        case dev_gizmo_movement_type::DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE:
+                        {
+                            Edit.PreviousValue = DevTransform->Translation;
+                        }
+                        break;
+
+                        case dev_gizmo_movement_type::DEV_GIZMO_MOVEMENT_TYPE_SCALE:
+                        {
+                            Edit.PreviousValue = DevTransform->Scale;
+                        }
+                        break;
+
+                        case dev_gizmo_movement_type::DEV_GIZMO_MOVEMENT_TYPE_ROTATE:
+                        {
+                            Edit.PreviousValue =  DevTransform->Euler;
+                        }
+                        break;
+                    
+                        AK_INVALID_DEFAULT_CASE;
+                    }
+                    Context->UndoStack->Add(Edit);
+                    Context->RedoStack->Clear();
                 }
             }
             
@@ -1289,6 +1429,16 @@ void DevContext_Tick()
                     } break;                                
                 }
             }
+        }
+
+        if(IsDown(DevInput->Ctrl) && IsPressed(DevInput->Z))
+        {
+            DevContext_UndoLastEdit(Context);
+        }
+
+        if(IsDown(DevInput->Ctrl) && IsPressed(DevInput->Y))
+        {
+            DevContext_RedoLastEdit(Context);
         }
     }
     
