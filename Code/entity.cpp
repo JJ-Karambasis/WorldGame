@@ -1,3 +1,8 @@
+ak_bool operator==(world_id Left, world_id Right)
+{
+    return Left.ID == Right.ID && Left.WorldIndex == Right.WorldIndex;
+}
+
 inline entity* 
 GetEntity(game* Game, world_id ID)
 {

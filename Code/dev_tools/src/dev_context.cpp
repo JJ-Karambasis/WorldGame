@@ -918,6 +918,17 @@ void DevContext_SetDefaultWorld(dev_context* DevContext, dev_loaded_world* Loade
     }
 }
 
+void DevContext_UpdateEntityIdsInStack(ak_array<dev_object_edit> Stack, world_id OldEntityID, world_id NewEntityId)
+{
+    AK_ForEach(EditObject, &Stack)
+    {
+        if(EditObject->Entity.ID == OldEntityID)
+        {
+            EditObject->Entity.ID = NewEntityId;
+        }
+    }
+}
+
 void DevContext_UndoLastEdit(dev_context* DevContext)
 {
     game* Game = DevContext->Game;
@@ -929,46 +940,80 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
         return;
     }
 
+    world_id EntityID = LastEdit->Entity.ID;
+    world_id CreatedEntity = {};
+
     dev_object_edit Redo;
-    Redo.EntityID = LastEdit->EntityID;
-    Redo.EditType = LastEdit->EditType;
-    entity* Entity = World->EntityStorage[LastEdit->EntityID.WorldIndex].Get(LastEdit->EntityID.ID);
-    ak_u32 Index = AK_PoolIndex(LastEdit->EntityID.ID);                                        
-    ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[LastEdit->EntityID.WorldIndex];                    
-    if(DevTransforms->Size < (Index+1))
-        DevTransforms->Resize(Index+1);
-    
-    dev_transform* DevTransform = DevTransforms->Get(Index);                    
-    if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE) 
+    Redo.Entity = LastEdit->Entity;
+    Redo.ObjectEditType = LastEdit->ObjectEditType;
+    if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
     {
-        Redo.PreviousValue = DevTransform->Translation;
-        DevTransform->Translation = LastEdit->PreviousValue;
+        entity* Entity = World->EntityStorage[EntityID.WorldIndex].Get(EntityID.ID);
+        ak_u32 Index = AK_PoolIndex(EntityID.ID);                                        
+        ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[EntityID.WorldIndex];                    
+        if(DevTransforms->Size < (Index+1))
+            DevTransforms->Resize(Index+1);
+        
+        dev_transform* DevTransform = DevTransforms->Get(Index);                    
+        Redo.Transform = *DevTransform;
+        *DevTransform = LastEdit->Transform;
+        
+        ak_sqtf* Transform = &World->NewTransforms[EntityID.WorldIndex][Index];
+        Transform->Translation = DevTransform->Translation;
+        Transform->Scale = DevTransform->Scale;
+        Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
+        
+        World->OldTransforms[EntityID.WorldIndex][Index] = *Transform;                        
+        
+        sim_entity* SimEntity = GetSimEntity(Game, EntityID);
+        SimEntity->Transform = *Transform;                    
+        
+        graphics_state* GraphicsState = &World->GraphicsStates[EntityID.WorldIndex];
+        graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+        GraphicsEntity->Transform = AK_TransformM4(*Transform);
     }
-    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) 
+    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
     {
-        Redo.PreviousValue = DevTransform->Euler;
-        DevTransform->Euler = LastEdit->PreviousValue;
+        world_id LinkedEntity = LastEdit->Entity.LinkID;
+        Redo = *LastEdit;
+        switch(LastEdit->Entity.Type)
+        {
+            case ENTITY_TYPE_STATIC:
+            {
+                CreatedEntity = CreateStaticEntity(World, Game->Assets, EntityID.WorldIndex, 
+                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                    LastEdit->MeshID, LastEdit->Material);
+            } break;
+            case ENTITY_TYPE_RIGID_BODY:
+            {
+                CreatedEntity = CreateSphereRigidBody(World, Game->Assets, EntityID.WorldIndex, 
+                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                    1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
+            } break;
+            case ENTITY_TYPE_PUSHABLE:
+            {
+                CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
+                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                    LastEdit->Mass, LastEdit->Material);
+            } break;
+            AK_INVALID_DEFAULT_CASE;
+        }
+        if(LinkedEntity.IsValid())
+        {
+            entity* EntityA = Game->World.EntityStorage[CreatedEntity.WorldIndex].Get(CreatedEntity.ID);
+            entity* EntityB = Game->World.EntityStorage[LinkedEntity.WorldIndex].Get(LinkedEntity.ID);
+            
+            EntityA->LinkID = LinkedEntity;
+            EntityB->LinkID = CreatedEntity;
+        }
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntity);
     }
-    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_SCALE) 
+    DevContext->RedoStack.Add(Redo);
+    if(CreatedEntity.IsValid())
     {
-        Redo.PreviousValue = DevTransform->Scale;
-        DevTransform->Scale = LastEdit->PreviousValue;
+        DevContext_UpdateEntityIdsInStack(DevContext->UndoStack, EntityID, CreatedEntity);
+        DevContext_UpdateEntityIdsInStack(DevContext->RedoStack, EntityID, CreatedEntity);
     }
-        DevContext->RedoStack.Add(Redo);
-    
-    ak_sqtf* Transform = &World->NewTransforms[LastEdit->EntityID.WorldIndex][Index];
-    Transform->Translation = DevTransform->Translation;
-    Transform->Scale = DevTransform->Scale;
-    Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
-    
-    World->OldTransforms[LastEdit->EntityID.WorldIndex][Index] = *Transform;                        
-    
-    sim_entity* SimEntity = GetSimEntity(Game, LastEdit->EntityID);
-    SimEntity->Transform = *Transform;                    
-    
-    graphics_state* GraphicsState = &World->GraphicsStates[LastEdit->EntityID.WorldIndex];
-    graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
-    GraphicsEntity->Transform = AK_TransformM4(*Transform);
 }
 
 void DevContext_RedoLastEdit(dev_context* DevContext)
@@ -983,45 +1028,41 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
     }
 
     dev_object_edit Undo;
-    Undo.EntityID = LastEdit->EntityID;
-    Undo.EditType = LastEdit->EditType;
-    entity* Entity = World->EntityStorage[LastEdit->EntityID.WorldIndex].Get(LastEdit->EntityID.ID);
-    ak_u32 Index = AK_PoolIndex(LastEdit->EntityID.ID);                                        
-    ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[LastEdit->EntityID.WorldIndex];                    
-    if(DevTransforms->Size < (Index+1))
-        DevTransforms->Resize(Index+1);
-    
-    dev_transform* DevTransform = DevTransforms->Get(Index);                    
-    if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE) 
+    Undo.Entity = LastEdit->Entity;
+    Undo.ObjectEditType = LastEdit->ObjectEditType;
+    if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
     {
-        Undo.PreviousValue = DevTransform->Translation;
-        DevTransform->Translation = LastEdit->PreviousValue;
+        entity* Entity = World->EntityStorage[LastEdit->Entity.ID.WorldIndex].Get(LastEdit->Entity.ID.ID);
+        ak_u32 Index = AK_PoolIndex(LastEdit->Entity.ID.ID);                                        
+        ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[LastEdit->Entity.ID.WorldIndex];                    
+        if(DevTransforms->Size < (Index+1))
+            DevTransforms->Resize(Index+1);
+        
+        dev_transform* DevTransform = DevTransforms->Get(Index);                    
+        Undo.Transform = *DevTransform;
+        *DevTransform = LastEdit->Transform;
+        
+        ak_sqtf* Transform = &World->NewTransforms[LastEdit->Entity.ID.WorldIndex][Index];
+        Transform->Translation = DevTransform->Translation;
+        Transform->Scale = DevTransform->Scale;
+        Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
+        
+        World->OldTransforms[LastEdit->Entity.ID.WorldIndex][Index] = *Transform;                        
+        
+        sim_entity* SimEntity = GetSimEntity(Game, LastEdit->Entity.ID);
+        SimEntity->Transform = *Transform;                    
+        
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit->Entity.ID.WorldIndex];
+        graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+        GraphicsEntity->Transform = AK_TransformM4(*Transform);
     }
-    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) 
+    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
     {
-        Undo.PreviousValue = DevTransform->Euler;
-        DevTransform->Euler = LastEdit->PreviousValue;
+        Undo = *LastEdit;
+        FreeEntity(Game, LastEdit->Entity.ID);
     }
-    else if(LastEdit->EditType == DEV_GIZMO_MOVEMENT_TYPE_SCALE) 
-    {
-        Undo.PreviousValue = DevTransform->Scale;
-        DevTransform->Scale = LastEdit->PreviousValue;
-    }
+
     DevContext->UndoStack.Add(Undo);
-    
-    ak_sqtf* Transform = &World->NewTransforms[LastEdit->EntityID.WorldIndex][Index];
-    Transform->Translation = DevTransform->Translation;
-    Transform->Scale = DevTransform->Scale;
-    Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
-    
-    World->OldTransforms[LastEdit->EntityID.WorldIndex][Index] = *Transform;                        
-    
-    sim_entity* SimEntity = GetSimEntity(Game, LastEdit->EntityID);
-    SimEntity->Transform = *Transform;                    
-    
-    graphics_state* GraphicsState = &World->GraphicsStates[LastEdit->EntityID.WorldIndex];
-    graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
-    GraphicsEntity->Transform = AK_TransformM4(*Transform);
 }
 
 void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFilePath, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate)
@@ -1209,31 +1250,11 @@ void DevContext_Tick()
                     if(DevTransforms->Size < (Index+1))
                         DevTransforms->Resize(Index+1);
                     
-                    dev_transform* DevTransform = DevTransforms->Get(Index);      
-                    Edit.EditType = GizmoState->TransformMode;
-                    Edit.EntityID = SelectedObject->EntityID;
-                    switch (Edit.EditType)
-                    {
-                        case dev_gizmo_movement_type::DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE:
-                        {
-                            Edit.PreviousValue = DevTransform->Translation;
-                        }
-                        break;
-
-                        case dev_gizmo_movement_type::DEV_GIZMO_MOVEMENT_TYPE_SCALE:
-                        {
-                            Edit.PreviousValue = DevTransform->Scale;
-                        }
-                        break;
-
-                        case dev_gizmo_movement_type::DEV_GIZMO_MOVEMENT_TYPE_ROTATE:
-                        {
-                            Edit.PreviousValue =  DevTransform->Euler;
-                        }
-                        break;
-                    
-                        AK_INVALID_DEFAULT_CASE;
-                    }
+                    dev_transform* DevTransform = DevTransforms->Get(Index); 
+                    entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                    Edit.Entity = *World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                    Edit.ObjectEditType = DEV_OBJECT_EDIT_TYPE_TRANSFORM;
+                    Edit.Transform = *DevTransform;
                     Context->UndoStack.Add(Edit);
                     Context->RedoStack.Clear();
                 }
@@ -1416,6 +1437,38 @@ void DevContext_Tick()
                         entity* Entity = GetEntity(Game, SelectedObject->EntityID);
                         if(Entity->Type != ENTITY_TYPE_PLAYER)
                         {
+                            dev_object_edit Undo;
+                            ak_array<dev_transform>* DevTransforms = &Context->InitialTransforms[Entity->ID.WorldIndex];
+                            ak_u32 Index = AK_PoolIndex(Entity->ID.ID);  
+                            if(DevTransforms->Size < (Index+1))
+                                DevTransforms->Resize(Index+1);
+                            dev_transform* DevTransform = DevTransforms->Get(Index);   
+                            graphics_state* GraphicsState = &World->GraphicsStates[Entity->ID.WorldIndex];
+                            graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                            Undo.Entity = *Entity;
+                            Undo.Material = GraphicsEntity->Material;
+                            Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_DELETE;
+                            Undo.Transform = *DevTransform;
+                            switch(Entity->Type)
+                            {
+                                case ENTITY_TYPE_STATIC:
+                                {
+                                    Undo.MeshID = GraphicsEntity->MeshID;
+                                } break;
+                                case ENTITY_TYPE_RIGID_BODY:
+                                {
+                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                    Undo.Mass = 1.0f / RigidBody->InvMass;
+                                    Undo.Restitution = RigidBody->Restitution;
+                                } break;
+                                case ENTITY_TYPE_PUSHABLE:
+                                {
+                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                    Undo.Mass = 1.0f / RigidBody->InvMass;
+                                } break;
+                            }
+                            Context->UndoStack.Add(Undo);
+                            Context->RedoStack.Clear();
                             FreeEntity(Game, SelectedObject->EntityID);                    
                             *SelectedObject = {};
                         }

@@ -96,6 +96,13 @@ enum dev_gizmo_movement_direction
     DEV_GIZMO_MOVEMENT_DIRECTION_YZ
 };
 
+enum dev_object_edit_type
+{
+    DEV_OBJECT_EDIT_TYPE_TRANSFORM,
+    DEV_OBJECT_EDIT_TYPE_DELETE,
+    DEV_OBJECT_EDIT_TYPE_CREATE
+};
+
 struct dev_gizmo
 {
     dev_mesh* Mesh;
@@ -136,9 +143,13 @@ struct dev_loaded_world
 
 struct dev_object_edit
 {
-    ak_v3f PreviousValue;
-    dev_gizmo_movement_type EditType;
-    world_id EntityID;
+    dev_object_edit_type ObjectEditType;
+    entity Entity;
+    material Material;
+    dev_transform Transform;
+    mesh_asset_id MeshID;
+    ak_f32 Mass;
+    ak_f32 Restitution;
 };
 
 struct dev_context
