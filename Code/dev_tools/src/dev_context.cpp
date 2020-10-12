@@ -1008,6 +1008,43 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
         }
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntity);
     }
+    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    {
+        entity* Entity = GetEntity(Game, EntityID);
+        ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[Entity->ID.WorldIndex];
+        ak_u32 Index = AK_PoolIndex(Entity->ID.ID);  
+        if(DevTransforms->Size < (Index+1))
+            DevTransforms->Resize(Index+1);
+        dev_transform* DevTransform = DevTransforms->Get(Index);   
+        graphics_state* GraphicsState = &World->GraphicsStates[Entity->ID.WorldIndex];
+        graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+        Redo.Material = GraphicsEntity->Material;
+        Redo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+        Redo.Transform = *DevTransform;
+        switch(Entity->Type)
+        {
+            case ENTITY_TYPE_STATIC:
+            {
+                Redo.MeshID = GraphicsEntity->MeshID;
+            } break;
+            case ENTITY_TYPE_RIGID_BODY:
+            {
+                rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                Redo.Mass = 1.0f / RigidBody->InvMass;
+                Redo.Restitution = RigidBody->Restitution;
+            } break;
+            case ENTITY_TYPE_PUSHABLE:
+            {
+                rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                Redo.Mass = 1.0f / RigidBody->InvMass;
+            } break;
+        }
+        FreeEntity(Game, EntityID);
+        if(DevContext->SelectedObject.EntityID == EntityID)
+        {
+            DevContext->SelectedObject = {};
+        }
+    }
     DevContext->RedoStack.Add(Redo);
     if(CreatedEntity.IsValid())
     {
@@ -1026,6 +1063,9 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
     {
         return;
     }
+
+    world_id EntityID = LastEdit->Entity.ID;
+    world_id CreatedEntity = {};
 
     dev_object_edit Undo;
     Undo.Entity = LastEdit->Entity;
@@ -1061,8 +1101,49 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
         Undo = *LastEdit;
         FreeEntity(Game, LastEdit->Entity.ID);
     }
+    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    {
+        world_id LinkedEntity = LastEdit->Entity.LinkID;
+        Undo = *LastEdit;
+        switch(LastEdit->Entity.Type)
+        {
+            case ENTITY_TYPE_STATIC:
+            {
+                CreatedEntity = CreateStaticEntity(World, Game->Assets, EntityID.WorldIndex, 
+                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                    LastEdit->MeshID, LastEdit->Material);
+            } break;
+            case ENTITY_TYPE_RIGID_BODY:
+            {
+                CreatedEntity = CreateSphereRigidBody(World, Game->Assets, EntityID.WorldIndex, 
+                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                    1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
+            } break;
+            case ENTITY_TYPE_PUSHABLE:
+            {
+                CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
+                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                    LastEdit->Mass, LastEdit->Material);
+            } break;
+            AK_INVALID_DEFAULT_CASE;
+        }
+        if(LinkedEntity.IsValid())
+        {
+            entity* EntityA = Game->World.EntityStorage[CreatedEntity.WorldIndex].Get(CreatedEntity.ID);
+            entity* EntityB = Game->World.EntityStorage[LinkedEntity.WorldIndex].Get(LinkedEntity.ID);
+            
+            EntityA->LinkID = LinkedEntity;
+            EntityB->LinkID = CreatedEntity;
+        }
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntity);
+    }
 
     DevContext->UndoStack.Add(Undo);
+    if(CreatedEntity.IsValid())
+    {
+        DevContext_UpdateEntityIdsInStack(DevContext->UndoStack, EntityID, CreatedEntity);
+        DevContext_UpdateEntityIdsInStack(DevContext->RedoStack, EntityID, CreatedEntity);
+    }
 }
 
 void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFilePath, void* PlatformWindow, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate)

@@ -497,8 +497,14 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
                     
                     if(EntityID.WorldIndex == CurrentWorldIndex)                    
-                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);                                            
-                }                                    
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
+                    dev_object_edit Undo;
+                    Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+                    Undo.Entity.ID = EntityID;
+                    Undo.Entity.Type = ENTITY_TYPE_STATIC;
+                    DevContext->UndoStack.Add(Undo);
+                    DevContext->RedoStack.Clear();
+                }
             }
         } break;
         
@@ -524,7 +530,13 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                                                           Spawner->Radius, Spawner->Mass, Spawner->Restitution, Material);
                 DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
                 if(EntityID.WorldIndex = CurrentWorldIndex)                
-                    DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);                                    
+                    DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
+                dev_object_edit Undo;
+                Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+                Undo.Entity.ID = EntityID;
+                Undo.Entity.Type = ENTITY_TYPE_RIGID_BODY;
+                DevContext->UndoStack.Add(Undo);
+                DevContext->RedoStack.Clear();
             }
         } break;
         
@@ -582,6 +594,12 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
                     if(CurrentWorldIndex == EntityID.WorldIndex)
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
+                    dev_object_edit Undo;
+                    Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+                    Undo.Entity.ID = EntityID;
+                    Undo.Entity.Type = ENTITY_TYPE_PUSHABLE;
+                    DevContext->UndoStack.Add(Undo);
+                    DevContext->RedoStack.Clear();
                 }                    
                 
             }
