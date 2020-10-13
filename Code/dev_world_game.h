@@ -34,7 +34,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #include "assets/assets.h"
 #include "simulation/simulation.h"
 #include "graphics_state.h"
-#include "entity.h"
+#include "world.h"
 #include "dev_frame_recording.h"
 
 enum gizmo_movement_type

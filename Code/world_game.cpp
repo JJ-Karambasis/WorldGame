@@ -4,7 +4,7 @@
 #include "animation.cpp"
 #include "simulation/simulation.cpp"
 #include "graphics_state.cpp"
-#include "entity.cpp"
+#include "world.cpp"
 //#include "player.cpp"
 
 PUZZLE_COMPLETE_CALLBACK(DespawnWallCompleteCallback)
@@ -45,6 +45,13 @@ AK_EXPORT GAME_INITIALIZE(Initialize)
     Game->TempStorage = TempStorage;
     
     AK_SetGlobalArena(Game->TempStorage);
+    
+    ak_mesh_result QuadMeshResult = AK_GenerateTriangleQuad(Game->GameStorage);
+    
+    Game->QuadMesh.VertexCount = QuadMeshResult.VertexCount;
+    Game->QuadMesh.IndexCount = QuadMeshResult.IndexCount;
+    Game->QuadMesh.Vertices = QuadMeshResult.Vertices;
+    Game->QuadMesh.Indices = QuadMeshResult.Indices;
     
     Game->Input       = Input;
     Game->AudioOutput = AudioOutput;
@@ -429,24 +436,28 @@ AK_EXPORT GAME_TICK(Tick)
                         switch(Player->State)
                         {
                             case PLAYER_STATE_NONE:
-                            {            
+                            {                                                                   
+                                AK_ForEach(JumpingQuad, &World->JumpingQuadStorage[WorldIndex])        
+                                    JumpingQuad->Color = AK_Yellow3();        
+                                
+                                
                                 ak_v3f Position = World->NewTransforms[Entity->ID.WorldIndex][AK_PoolIndex(Entity->ID.ID)].Translation;
-                                for(ak_u32 JumpingQuadIndex = 0; JumpingQuadIndex < AK_Count(Game->JumpingQuads); JumpingQuadIndex++)
-                                {
-                                    jumping_quad* JumpingQuad = Game->JumpingQuads + JumpingQuadIndex;
+                                AK_ForEach(JumpingQuad, &World->JumpingQuadStorage[Entity->ID.WorldIndex])
+                                {                                                                        
                                     ak_v2f HalfDim = JumpingQuad->Dimensions*0.5f;
                                     
                                     ak_v2f Min = JumpingQuad->CenterP.xy - HalfDim;
                                     ak_v2f Max = JumpingQuad->CenterP.xy + HalfDim;
-                                    
-                                    ak_color3f QuadColor = AK_Red3();
+                                                                        
                                     if(Position.xy >= Min && Position.xy <= Max)
                                     {
                                         if(AK_Abs(Position.z - JumpingQuad->CenterP.z) < 1e-2f)
                                         {
+                                            jumping_quad* TargetQuad = World->JumpingQuadStorage[JumpingQuad->OtherQuad.WorldIndex].Get(JumpingQuad->OtherQuad.ID);                                                                                        
+                                            JumpingQuad->Color = AK_Green3();                                            
+                                            TargetQuad->Color = AK_Red3();
                                             if(IsPressed(Input->Action))
                                             {
-                                                jumping_quad* TargetQuad = JumpingQuad->OtherQuad;
                                                 
                                                 ak_v2f XDirection = TargetQuad->CenterP.xy-JumpingQuad->CenterP.xy;
                                                 ak_f32 Displacement = AK_Magnitude(XDirection);
@@ -458,10 +469,9 @@ AK_EXPORT GAME_TICK(Tick)
                                                 RigidBody->Velocity.z = InitialVelocity*AK_SQRT2_2;
                                                 
                                                 Player->State = PLAYER_STATE_JUMPING;                                    
-                                                
+                                                                                                
                                                 break;                                                
-                                            }                
-                                            QuadColor = AK_Yellow3();
+                                            }                                                   
                                         }
                                     }       
                                 }            
@@ -553,6 +563,7 @@ AK_EXPORT GAME_RENDER(Render)
     
     StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);
     EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);            
+    JumpingQuadPass(Graphics, &Game->World.JumpingQuadStorage[WorldIndex], &Game->QuadMesh);
     
 #if !DEVELOPER_BUILD
     PushCopyToOutput(Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);

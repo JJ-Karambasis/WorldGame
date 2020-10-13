@@ -4,7 +4,7 @@
 #include "animation.cpp"
 #include "simulation/simulation.cpp"
 #include "graphics_state.cpp"
-#include "entity.cpp"
+#include "world.cpp"
 
 #define DEV_TOOLS_IMPLEMENTATION
 #include "dev_tools/dev_tools.h"
@@ -541,8 +541,8 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         return -1;
     }
     
-    //HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, V2i(1280, 720));
-    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, AK_V2(1920, 1080));
+    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, AK_V2(1280, 720));
+    //HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, AK_V2(1920, 1080));
     if(!Window)   
     {
         //TODO(JJ): Diagnostic and error logging

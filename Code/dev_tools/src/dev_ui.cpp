@@ -171,6 +171,13 @@ void DevUI_ClearSpawner(light_spawner* Spawner)
     Spawner->Color = AK_White3();    
 }
 
+void DevUI_ClearSpawner(jumping_quad_spawner* Spawner)
+{
+    Spawner->Translation[0] = {};
+    Spawner->Translation[1] = {};
+    Spawner->Dimension = AK_V2(1.0f, 1.0f);
+}
+
 const ak_char* DevUI_GetEntityType(entity_type Type)
 {
 #define ENUM_TYPE(type) case type: return #type
@@ -342,9 +349,9 @@ void DevUI_MaterialTool(assets* Assets, material_context* MaterialContext)
     }    
 }
 
-void DevUI_TranslationTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Translation)
+void DevUI_TranslationTool(const ak_char* Label, ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Translation)
 {
-    Text("Translation");
+    Text(Label);
     PushItemWidth(ItemWidth);
     
     DragFloat(Hash+0, "X", &Translation->x, 0.1f, -1000.0f, 1000.0f); SameLine();                                
@@ -354,9 +361,14 @@ void DevUI_TranslationTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Translation)
     PopItemWidth();
 }
 
-void DevUI_ScaleTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Scale)
+void DevUI_TranslationTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Translation)
 {
-    Text("Scale");
+    DevUI_TranslationTool("Translation", Hash, ItemWidth, Translation);                          
+}
+
+void DevUI_ScaleTool(const ak_char* Label, ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Scale)
+{
+    Text(Label);
     PushItemWidth(ItemWidth);
     
     DragFloat(Hash+0, "X", &Scale->x, 0.1f, 0.0f, 100.0f); SameLine();                                
@@ -364,6 +376,27 @@ void DevUI_ScaleTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Scale)
     DragFloat(Hash+2, "Z", &Scale->z, 0.1f, 0.0f, 100.0f);                 
     
     PopItemWidth();
+}
+
+void DevUI_ScaleTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Scale)
+{
+    DevUI_ScaleTool("Scale", Hash, ItemWidth, Scale);
+}
+
+void DevUI_ScaleTool2D(const ak_char* Label, ak_u32 Hash, ak_f32 ItemWidth, ak_v2f* Scale)
+{
+    Text(Label);
+    PushItemWidth(ItemWidth);
+    
+    DragFloat(Hash+0, "X", &Scale->x, 0.1f, 0.0f, 100.0f); SameLine();                                
+    DragFloat(Hash+1, "Y", &Scale->y, 0.1f, 0.0f, 100.0f);     
+    
+    PopItemWidth();
+}
+
+void DevUI_ScaleTool2D(ak_u32 Hash, ak_f32 ItemWidth, ak_v2f* Scale)
+{
+    DevUI_ScaleTool2D("Scale", Hash, ItemWidth, Scale);
 }
 
 void DevUI_RadiusTool(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Radius)
@@ -673,6 +706,49 @@ void DevUI_LightSpawner(dev_context* DevContext, light_spawner* Spawner, ak_u32 
     }
 }
 
+void DevUI_JumpingQuadSpawner(dev_context* DevContext, jumping_quad_spawner* Spawner, ak_u32 CurrentWorldIndex)
+{
+    const ak_f32 TRANSFORM_ITEM_WIDTH = 80.0f;
+    if(!Spawner->Init)
+    {
+        Spawner->Init = true;
+        DevUI_ClearSpawner(Spawner);                
+    }
+    
+    const ak_char* WorldIndexList[] = {"World A", "World B", "Both"};
+    DevUI_WorldIndexTool(AK_HashFunction("Jumping Quad World Index"), &Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+    Separator();
+    DevUI_ScaleTool2D("Dimension", AK_HashFunction("Jumping Quad Dimension"), TRANSFORM_ITEM_WIDTH, &Spawner->Dimension);
+    Separator();
+    DevUI_TranslationTool("Quad 0 Translation", AK_HashFunction("Quad 0 Translation"), TRANSFORM_ITEM_WIDTH, &Spawner->Translation[0]);
+    DevUI_TranslationTool("Quad 1 Translation", AK_HashFunction("Quad 1 Translation"), TRANSFORM_ITEM_WIDTH, &Spawner->Translation[1]);
+    Separator();
+    if(Button(AK_HashFunction("Create Jumping Quads"), "Create"))
+    {
+        if(Spawner->WorldIndex == 2)
+        {
+            dual_world_id AIDs = CreateJumpingQuads(&DevContext->Game->World, 0, Spawner->Translation, Spawner->Dimension);
+            dual_world_id BIDs = CreateJumpingQuads(&DevContext->Game->World, 1, Spawner->Translation, Spawner->Dimension);
+            
+            if(CurrentWorldIndex == AIDs.A.WorldIndex)
+            {
+                
+            }
+            else
+            {
+            }
+        }
+        else
+        {
+            dual_world_id IDs = CreateJumpingQuads(&DevContext->Game->World, Spawner->WorldIndex, Spawner->Translation, Spawner->Dimension);
+            if(CurrentWorldIndex == IDs.A.WorldIndex)
+            {
+            }
+        }                        
+    }
+    
+}
+
 void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
 {
     game* Game = DevContext->Game;
@@ -734,7 +810,7 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
             GraphicsEntity->Transform = AK_TransformM4(*Transform);
             
             GraphicsEntity->Material = DevUI_MaterialFromContext(&SelectedObject->MaterialContext);                        
-                                    
+            
             switch(Entity->Type)
             {                
                 case ENTITY_TYPE_RIGID_BODY:
@@ -959,6 +1035,13 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
                     DevUI_LightSpawner(DevContext, &UI->LightSpawner, Game->CurrentWorldIndex);            
                     EndTabItem();
                 }                            
+                
+                if(BeginTabItem("Jumping Quads"))
+                {
+                    DevUI_JumpingQuadSpawner(DevContext, &UI->JumpingQuadSpawner, Game->CurrentWorldIndex);                                        
+                    EndTabItem();
+                }
+                
                 EndTabBar();
             }
         }

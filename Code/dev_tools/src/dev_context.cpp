@@ -922,7 +922,7 @@ void DevContext_UpdateEntityIdsInStack(ak_array<dev_object_edit> Stack, world_id
 {
     AK_ForEach(EditObject, &Stack)
     {
-        if(EditObject->Entity.ID == OldEntityID)
+        if(AreEqualIDs(EditObject->Entity.ID, OldEntityID))
         {
             EditObject->Entity.ID = NewEntityId;
         }
@@ -1040,7 +1040,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
             } break;
         }
         FreeEntity(Game, EntityID);
-        if(DevContext->SelectedObject.EntityID == EntityID)
+        if(AreEqualIDs(DevContext->SelectedObject.EntityID, EntityID))
         {
             DevContext->SelectedObject = {};
         }
@@ -1700,8 +1700,8 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
             
         } break;
         
-    }                
-    
+    }
+    JumpingQuadPass(Graphics, &World->JumpingQuadStorage[WorldIndex], &Game->QuadMesh);
     AK_ForEach(PointLight, &GraphicsState->PointLightStorage)    
         DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());    
     

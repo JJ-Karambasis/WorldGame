@@ -67,7 +67,7 @@ view_settings GetViewSettings(camera* Camera)
     ViewSettings.Orientation = AK_OrientAt(ViewSettings.Position, Camera->Target, Up);       
     
     ViewSettings.ZNear = 0.01f;
-    ViewSettings.ZFar = 1000.0f;
+    ViewSettings.ZFar = 50.0f;
     ViewSettings.FieldOfView = AK_PI*0.3f;
     return ViewSettings;
 }
@@ -376,4 +376,20 @@ void EntityWireframePass(graphics* Graphics, assets* Assets, graphics_entity_sto
     
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     PushWireframe(Graphics, false);
+}
+
+void JumpingQuadPass(graphics* Graphics, jumping_quad_storage* JumpingQuads, jumping_quad_graphics_mesh* Mesh)
+{
+    if(!Mesh->MeshID )
+    {
+        Mesh->MeshID = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(ak_vertex_p3), GRAPHICS_VERTEX_FORMAT_P3,
+                                              Mesh->Indices, Mesh->IndexCount*sizeof(ak_u16), GRAPHICS_INDEX_FORMAT_16_BIT);    
+    }
+    
+    AK_ForEach(JumpingQuad, JumpingQuads)
+    {
+        graphics_diffuse_material_slot QuadDiffuse = CreateDiffuseMaterialSlot(JumpingQuad->Color);
+        ak_m4f Transform = AK_TransformM4(JumpingQuad->CenterP, AK_IdentityQuat<ak_f32>(), AK_V3(JumpingQuad->Dimensions, 0.0f));
+        PushDrawUnlitMesh(Graphics, Mesh->MeshID, Transform, QuadDiffuse, Mesh->IndexCount, 0, 0);
+    }        
 }

@@ -51,6 +51,14 @@ struct light_spawner
     ak_color3f Color;
 };
 
+struct jumping_quad_spawner
+{
+    ak_bool Init;
+    ak_u32 WorldIndex;
+    ak_v2f Dimension;    
+    ak_v3f Translation[2];    
+};
+
 struct dev_ui
 {
     graphics_render_buffer* UIRenderBuffer;
@@ -59,6 +67,7 @@ struct dev_ui
     ak_array<ak_string> Logs;        
     entity_spawner EntitySpawner;
     light_spawner LightSpawner;
+    jumping_quad_spawner JumpingQuadSpawner;
     
     ak_bool PlayGame;            
     ak_bool DrawOtherWorld;

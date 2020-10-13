@@ -69,13 +69,13 @@ struct dev_selected_object
     dev_selected_object_type Type;
     union
     {        
-        world_id PointLightID;
-        
+        world_id PointLightID;        
         struct
         {
             world_id EntityID;
             material_context MaterialContext;
         };
+        dual_world_id JumpingQuadIDs;
     };
 };
 

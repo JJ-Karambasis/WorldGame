@@ -3,7 +3,7 @@
 
 #define CAMERA_FIELD_OF_VIEW (AK_PI*0.3f)
 #define CAMERA_ZNEAR 0.01f
-#define CAMERA_ZFAR 500.0f
+#define CAMERA_ZFAR 50.0f
 
 struct graphics_entity
 {
@@ -36,6 +36,15 @@ struct camera
     ak_v3f SphericalCoordinates;    
 };
 
+struct jumping_quad_graphics_mesh 
+{
+    ak_u32 VertexCount;
+    ak_u32 IndexCount;
+    ak_vertex_p3* Vertices;
+    ak_u16* Indices;    
+    graphics_mesh_id MeshID;
+};
+
 typedef ak_pool<graphics_entity> graphics_entity_storage;
 typedef ak_pool<point_light> point_light_storage;
 
@@ -44,7 +53,7 @@ struct graphics_state
     graphics_render_buffer* RenderBuffer;                
     camera Camera;
     graphics_entity_storage GraphicsEntityStorage;
-    point_light_storage     PointLightStorage;    
+    point_light_storage     PointLightStorage;                
 };
 
 #endif

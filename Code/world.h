@@ -1,7 +1,8 @@
-#ifndef ENTITY_H
-#define ENTITY_H
+#ifndef WORLD_H
+#define WORLD_H
 
-struct sim_entity_base;
+#define COLLISION_EVENT(name) void name(struct game* Game, struct entity* Entity, entity* CollidedEntity, ak_v3f Normal) 
+typedef COLLISION_EVENT(collision_event_function);
 
 enum entity_type
 {
@@ -25,21 +26,11 @@ struct world_id
     }
 };
 
-
-inline world_id MakeWorldID(ak_u64 ID, ak_u32 WorldIndex) { world_id Result = {ID, WorldIndex}; return Result; }
-inline world_id InvalidWorldID() { return MakeWorldID(0, (ak_u32)-1); }
-inline ak_bool AreEqualIDs(world_id A, world_id B) { return (A.ID == B.ID) && (A.WorldIndex == B.WorldIndex); }
-
 struct dual_world_id
 {
-    world_id EntityA;
-    world_id EntityB;    
+    world_id A;
+    world_id B;    
 };
-
-struct entity;
-
-#define COLLISION_EVENT(name) void name(struct game* Game, entity* Entity, entity* CollidedEntity, ak_v3f Normal) 
-typedef COLLISION_EVENT(collision_event_function);
 
 struct entity
 {    
@@ -72,17 +63,43 @@ struct player
     player_state State;        
 };
 
+struct jumping_quad
+{
+    ak_v3f CenterP;
+    ak_v2f Dimensions; 
+    ak_color3f Color;
+    world_id OtherQuad;    
+};
+
+typedef ak_pool<entity> entity_storage;
+typedef ak_pool<pushing_object> pushing_object_storage;
+typedef ak_pool<jumping_quad> jumping_quad_storage;
+
+struct world
+{
+    pushing_object_storage PushingObjectStorage;  
+    jumping_quad_storage JumpingQuadStorage[2];
+    entity_storage EntityStorage[2];    
+    ak_array<ak_sqtf> OldTransforms[2];
+    ak_array<ak_sqtf> NewTransforms[2];    
+    camera OldCameras[2];    
+    camera NewCameras[2];        
+    simulation Simulations[2];
+    graphics_state GraphicsStates[2];        
+};
+
+inline world_id MakeWorldID(ak_u64 ID, ak_u32 WorldIndex) { world_id Result = {ID, WorldIndex}; return Result; }
+inline world_id InvalidWorldID() { return MakeWorldID(0, (ak_u32)-1); }
+inline ak_bool AreEqualIDs(world_id A, world_id B) { return (A.ID == B.ID) && (A.WorldIndex == B.WorldIndex); }
+
 #define UserDataToIndex(data) ((ak_u32)(AK_SafeAddrToU32((ak_uaddr)(data))))
 #define IndexToUserData(index) ((void*)(ak_uaddr)(index))
 
 COLLISION_EVENT(OnPlayerCollision);
-
 COLLISION_EVENT(OnCollisionStub) { }
 
 global ak_f32 Global_PlayerAcceleration = 20.0f;
 global ak_f32 Global_PlayerDamping = 5.0f;
 global ak_f32 Global_Gravity = 10.0f;
-
-#include "player.h"
 
 #endif

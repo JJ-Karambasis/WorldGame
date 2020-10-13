@@ -1,8 +1,3 @@
-ak_bool operator==(world_id Left, world_id Right)
-{
-    return Left.ID == Right.ID && Left.WorldIndex == Right.WorldIndex;
-}
-
 inline entity* 
 GetEntity(game* Game, world_id ID)
 {
@@ -32,12 +27,14 @@ void AddCollisionVolume(game* Game, world_id EntityID, type* Collider)
 void DeleteWorld(world* World, graphics* Graphics)
 {
     AK_DeletePool(&World->PushingObjectStorage);
+    AK_DeletePool(&World->JumpingQuadStorage[0]);
+    AK_DeletePool(&World->JumpingQuadStorage[1]);
     AK_DeletePool(&World->EntityStorage[0]);
     AK_DeletePool(&World->EntityStorage[1]);
     AK_DeleteArray(&World->OldTransforms[0]);
     AK_DeleteArray(&World->OldTransforms[1]);
     AK_DeleteArray(&World->NewTransforms[0]);
-    AK_DeleteArray(&World->NewTransforms[1]);
+    AK_DeleteArray(&World->NewTransforms[1]);    
     DeleteSimulation(&World->Simulations[0]);
     DeleteSimulation(&World->Simulations[1]);
     DeleteGraphicsState(Graphics, &World->GraphicsStates[0]);
@@ -84,6 +81,33 @@ pushing_object* GetPushingObject(world* World, entity* Entity)
 {
     AK_Assert(Entity->Type == ENTITY_TYPE_PUSHABLE, "Cannot get a pushing object of an entity that is not a pushing object");
     return World->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+}
+
+dual_world_id CreateJumpingQuads(world* World, ak_u32 WorldIndex, ak_v3f* Translations, ak_v2f Dimension)
+{
+    ak_u64 AID = World->JumpingQuadStorage[WorldIndex].Allocate();
+    ak_u64 BID = World->JumpingQuadStorage[WorldIndex].Allocate();
+    
+    world_id A = {AID, WorldIndex};
+    world_id B = {BID, WorldIndex};
+    
+    jumping_quad* JumpingQuadA = World->JumpingQuadStorage[WorldIndex].Get(A.ID);
+    jumping_quad* JumpingQuadB = World->JumpingQuadStorage[WorldIndex].Get(B.ID);
+    
+    JumpingQuadA->Color = AK_RGB(1.0f, 1.0f, 0.0f);
+    JumpingQuadB->Color = AK_RGB(1.0f, 1.0f, 0.0f);
+    
+    JumpingQuadA->OtherQuad = B;
+    JumpingQuadB->OtherQuad = A;
+    
+    JumpingQuadA->CenterP = Translations[0];
+    JumpingQuadB->CenterP = Translations[1];
+    
+    JumpingQuadA->Dimensions = Dimension;
+    JumpingQuadB->Dimensions = Dimension;
+    
+    dual_world_id Result = {A, B};
+    return Result;
 }
 
 world_id CreateEntity(world* World, assets* Assets, ak_u32 WorldIndex, 
@@ -235,7 +259,7 @@ CreatePushableBox(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensi
 {
     AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
     world_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, 
-                                    Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, Material, false);        
+                                   Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, Material, false);        
     entity* Entity = GetEntity(Game, Result);
     Entity->UserData = IndexToUserData(CreatePushingObject(Game));
     
@@ -254,7 +278,7 @@ dual_world_id
 CreateDualPushableBox(game* Game, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material)
 {
     AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
-
+    
     dual_world_id Result;
     Result.EntityA = CreatePushableBox(Game, 0, Position, Dimensions, Mass, Material);
     Result.EntityB = CreatePushableBox(Game, 1, Position, Dimensions, Mass, Material);
@@ -316,4 +340,3 @@ COLLISION_EVENT(OnPlayerCollision)
         } break;
     }                
 }
-#include "player.cpp"

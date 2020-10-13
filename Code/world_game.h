@@ -22,16 +22,9 @@ struct game;
 #include "audio.h"
 #include "animation.h"
 
-struct jumping_quad
-{
-    ak_v3f CenterP;
-    ak_v2f Dimensions;    
-    jumping_quad* OtherQuad;
-};
-
 #include "simulation/simulation.h"
 #include "graphics_state.h"
-#include "entity.h"
+#include "world.h"
 #include "world_file.h"
 
 struct goal_rect
@@ -57,21 +50,6 @@ struct block_puzzle
     puzzle_complete_callback* CompleteCallback;    
 };
 
-typedef ak_pool<entity> entity_storage;
-typedef ak_pool<pushing_object> pushing_object_storage;
-
-struct world
-{
-    pushing_object_storage PushingObjectStorage;  
-    entity_storage EntityStorage[2];    
-    ak_array<ak_sqtf> OldTransforms[2];
-    ak_array<ak_sqtf> NewTransforms[2];    
-    camera OldCameras[2];    
-    camera NewCameras[2];        
-    simulation Simulations[2];
-    graphics_state GraphicsStates[2];    
-};
-
 struct game
 {                    
     ak_arena* GameStorage;    
@@ -82,10 +60,6 @@ struct game
     
     world World;
     
-    //This stuff is probably going to be our level data        
-    jumping_quad JumpingQuads[2];                
-    //////////////////////////////////////////////////
-    
     ak_v2i Resolution;
     ak_f32 dt;
     ak_f32 dtFixed;    
@@ -93,6 +67,8 @@ struct game
     assets* Assets;
     audio_output* AudioOutput;
     input* Input;                          
+    
+    jumping_quad_graphics_mesh QuadMesh;
 };
 
 

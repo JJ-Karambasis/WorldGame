@@ -18,15 +18,4 @@ struct world_file_header
 
 #pragma pack(pop)
 
-struct file_entity
-{
-    entity_type   Type;
-    ak_u32        LinkIndex;
-    ak_sqtf       Transform;
-    material      Material;
-    mesh_asset_id MeshID;    
-    ak_f32 Mass;
-    ak_f32 Restitution;
-};
-
 #endif
