@@ -83,6 +83,18 @@ pushing_object* GetPushingObject(world* World, entity* Entity)
     return World->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
 }
 
+world_id CreateJumpingQuad(world* World, ak_u32 WorldIndex, ak_v3f Translation, ak_v2f Dimension)
+{
+    ak_u64 ID = World->JumpingQuadStorage[WorldIndex].Allocate();
+    world_id Result = {ID, WorldIndex};
+    jumping_quad* Quad = World->JumpingQuadStorage[WorldIndex].Get(ID);
+    Quad->ID = ID;
+    Quad->Color = AK_Yellow3();
+    Quad->CenterP = Translation;
+    Quad->Dimensions = Dimension;
+    return Result;
+}
+
 dual_world_id CreateJumpingQuads(world* World, ak_u32 WorldIndex, ak_v3f* Translations, ak_v2f Dimension)
 {
     ak_u64 AID = World->JumpingQuadStorage[WorldIndex].Allocate();
@@ -94,8 +106,11 @@ dual_world_id CreateJumpingQuads(world* World, ak_u32 WorldIndex, ak_v3f* Transl
     jumping_quad* JumpingQuadA = World->JumpingQuadStorage[WorldIndex].Get(A.ID);
     jumping_quad* JumpingQuadB = World->JumpingQuadStorage[WorldIndex].Get(B.ID);
     
-    JumpingQuadA->Color = AK_RGB(1.0f, 1.0f, 0.0f);
-    JumpingQuadB->Color = AK_RGB(1.0f, 1.0f, 0.0f);
+    JumpingQuadA->ID = A.ID;
+    JumpingQuadB->ID = B.ID;
+    
+    JumpingQuadA->Color = AK_Yellow3();
+    JumpingQuadB->Color = AK_Yellow3();
     
     JumpingQuadA->OtherQuad = B;
     JumpingQuadB->OtherQuad = A;

@@ -65,6 +65,7 @@ struct player
 
 struct jumping_quad
 {
+    ak_u64 ID;
     ak_v3f CenterP;
     ak_v2f Dimensions; 
     ak_color3f Color;

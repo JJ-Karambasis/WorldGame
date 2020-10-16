@@ -596,12 +596,20 @@ game* Game = DevContext->Game;
     
     world_id* Entities[2] = {};
     Entities[0] = GlobalArena->PushArray<world_id>(Header->EntityCounts[0]);
-            Entities[1] = GlobalArena->PushArray<world_id>(Header->EntityCounts[1]);
-        
-    ak_u32* LinkIndexes[2] = {};
-    LinkIndexes[0] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[0]);
-            LinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[1]);
-        
+    Entities[1] = GlobalArena->PushArray<world_id>(Header->EntityCounts[1]);
+    
+    world_id* JumpingQuads[2] = {};
+    JumpingQuads[0] = GlobalArena->PushArray<world_id>(Header->JumpingQuadCounts[0]);
+    JumpingQuads[1] = GlobalArena->PushArray<world_id>(Header->JumpingQuadCounts[1]);
+    
+    ak_u32* EntityLinkIndexes[2] = {};
+    EntityLinkIndexes[0] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[0]);
+    EntityLinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->EntityCounts[1]);
+    
+    ak_u32* QuadLinkIndexes[2] = {};
+    QuadLinkIndexes[0] = GlobalArena->PushArray<ak_u32>(Header->JumpingQuadCounts[0]);
+    QuadLinkIndexes[1] = GlobalArena->PushArray<ak_u32>(Header->JumpingQuadCounts[1]);
+    
     Game->Players[0] = {};
     Game->Players[1] = {};
     
@@ -618,7 +626,7 @@ game* Game = DevContext->Game;
             {
                 case ENTITY_TYPE_PLAYER:
                 {
-                    LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
+                    EntityLinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
                     
                     ak_v3f Position = *Stream.Read<ak_v3f>();                                                
                     material Material = {};
@@ -629,7 +637,7 @@ game* Game = DevContext->Game;
                 
                 case ENTITY_TYPE_STATIC:
                 {
-                    LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
+                    EntityLinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
                     ak_sqtf Transform = *Stream.Read<ak_sqtf>();
                     
                     material Material = {};
@@ -645,7 +653,7 @@ game* Game = DevContext->Game;
                 
                 case ENTITY_TYPE_RIGID_BODY:
                 {
-                    LinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
+                    EntityLinkIndexes[WorldIndex][EntityIndex] = (ak_u32)-1;
                     ak_sqtf Transform = *Stream.Read<ak_sqtf>();
                     
                     material Material = {};
@@ -661,7 +669,7 @@ game* Game = DevContext->Game;
                 
                 case ENTITY_TYPE_PUSHABLE:
                 {
-                    LinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
+                    EntityLinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
                     ak_sqtf Transform = *Stream.Read<ak_sqtf>();
                     
                     material Material = {};
@@ -681,16 +689,40 @@ game* Game = DevContext->Game;
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
+        for(ak_u32 EntityIndex = 0; EntityIndex < Header->JumpingQuadCounts[WorldIndex]; EntityIndex++)
+        { 
+            ak_v3f CenterP = *Stream.Read<ak_v3f>();
+            ak_v2f Dimensions = *Stream.Read<ak_v2f>();
+            QuadLinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();            
+            world_id JumpingQuadID = CreateJumpingQuad(&World, WorldIndex, CenterP, Dimensions);            
+            JumpingQuads[WorldIndex][EntityIndex] = JumpingQuadID;
+        }
+    }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
         ak_u32 EntityIndex = 0;
         AK_ForEach(Entity, &World.EntityStorage[WorldIndex])
         {
-            ak_u32 LinkIndex = LinkIndexes[WorldIndex][EntityIndex];
+            ak_u32 LinkIndex = EntityLinkIndexes[WorldIndex][EntityIndex];
             if(LinkIndex != (ak_u32)-1)
             {
                 world_id LinkEntityID = Entities[!WorldIndex][LinkIndex];
                 Entity->LinkID = LinkEntityID;
             }
             EntityIndex++;
+        }
+    }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_u32 JumpingQuadIndex = 0;
+        AK_ForEach(JumpingQuad, &World.JumpingQuadStorage[WorldIndex])
+        {
+            ak_u32 LinkIndex = QuadLinkIndexes[WorldIndex][JumpingQuadIndex];
+            world_id LinkID = JumpingQuads[WorldIndex][LinkIndex];            
+            JumpingQuad->OtherQuad = LinkID;
+            JumpingQuadIndex++;
         }
     }
     
@@ -788,6 +820,7 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
         
         world* World = &DevContext->Game->World;
         ak_hash_map<ak_u64, ak_u32> EntityMap[2] = {};
+        ak_hash_map<ak_u64, ak_u32> JumpingQuadMap[2] = {};
         
         world_file_header FileHeader = {};
         AK_MemoryCopy(FileHeader.Signature, WORLD_FILE_SIGNATURE, sizeof(WORLD_FILE_SIGNATURE));
@@ -795,6 +828,8 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
         FileHeader.MinorVersion = WORLD_FILE_MINOR_VERSION;
         FileHeader.EntityCounts[0] = World->EntityStorage[0].Size;
         FileHeader.EntityCounts[1] = World->EntityStorage[1].Size;
+        FileHeader.JumpingQuadCounts[0] = World->JumpingQuadStorage[0].Size;
+        FileHeader.JumpingQuadCounts[1] = World->JumpingQuadStorage[1].Size;
         FileHeader.PointLightCounts[0] = World->GraphicsStates[0].PointLightStorage.Size;
         FileHeader.PointLightCounts[1] = World->GraphicsStates[1].PointLightStorage.Size;
         
@@ -804,6 +839,12 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
             AK_ForEach(Entity, &World->EntityStorage[WorldIndex])
             {                    
                 EntityMap[WorldIndex].Insert(Entity->ID.ID, EntityIndex++);   
+            }
+            
+            ak_u32 JumpingQuadIndex = 0;
+            AK_ForEach(JumpingQuad, &World->JumpingQuadStorage[WorldIndex])
+            {
+                JumpingQuadMap[WorldIndex].Insert(JumpingQuad->OtherQuad.ID, JumpingQuadIndex++);
             }
         }
         
@@ -874,6 +915,17 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                 }
                 
             }                                                
+        }
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            AK_ForEach(JumpingQuad, &World->JumpingQuadStorage[WorldIndex])
+            {
+                ak_u32 OtherQuadIndex = *JumpingQuadMap[WorldIndex].Find(JumpingQuad->ID);                
+                AK_WriteFile(FileHandle, &JumpingQuad->CenterP, sizeof(JumpingQuad->CenterP));
+                AK_WriteFile(FileHandle, &JumpingQuad->Dimensions, sizeof(JumpingQuad->Dimensions));
+                AK_WriteFile(FileHandle, &OtherQuadIndex, sizeof(OtherQuadIndex));
+            }
         }
         
         for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
@@ -1212,6 +1264,11 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerB);
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorA);
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorB);        
+        
+        ak_v3f Translations[2] = {AK_V3(-1.5f, 0.0f, 0.001f), AK_V3(1.5f, 0.0f, 0.001f)};        
+        ak_v2f Dimensions = AK_V2(1.0f, 1.0f);
+        CreateJumpingQuads(&Game->World, 0, Translations, Dimensions);
+        CreateJumpingQuads(&Game->World, 1, Translations, Dimensions);
     }
     
     GlobalArena->EndTemp(&TempArena);
@@ -1608,7 +1665,7 @@ void DevContext_RenderConvexHulls(dev_context* Context, ak_u32 WorldIndex, view_
                 ConvexHulls = Context->DevStorage->PushArray<dev_slim_mesh>(MeshInfo->Header.ConvexHullCount);
                 for(ak_u32 ConvexHullIndex = 0; ConvexHullIndex < MeshInfo->Header.ConvexHullCount; ConvexHullIndex++)
                 {
-                    ConvexHulls[ConvexHullIndex] = DevContext_CreateConvexHullMesh(Context, &MeshInfo->ConvexHulls[ConvexHullIndex]);
+                    ConvexHulls[MeshInfo->Header.ConvexHullCount-ConvexHullIndex-1] = DevContext_CreateConvexHullMesh(Context, &MeshInfo->ConvexHulls[ConvexHullIndex]);
                 }                
                 Context->ConvexHullMeshes[GraphicsEntity->MeshID] = ConvexHulls;
             }
@@ -1643,6 +1700,7 @@ void DevContext_RenderConvexHulls(dev_context* Context, ak_u32 WorldIndex, view_
                     
                     PushDrawLineMesh(Context->Graphics, ConvexHulls[ConvexHullIndex].MeshID, Model, AK_Blue3(),
                                      ConvexHulls[ConvexHullIndex].IndexCount, 0, 0);
+                    DevDraw_Point(Context, Model.Translation.xyz, 0.25f, AK_Red3());
                     ConvexHullIndex++;
                 } break;
             }

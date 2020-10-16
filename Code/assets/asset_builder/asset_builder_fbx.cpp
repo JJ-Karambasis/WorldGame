@@ -379,9 +379,23 @@ FBX_GetLocalToParentTransform(FbxNode* Node)
 }
 
 inline ak_v3f
-FBX_GetPivotDelta(ak_v3f Pivot, ak_m4f Transform)
+FBX_GetLocalTranslation(FbxNode* Node)
 {
-    ak_v3f Delta = (Pivot.x*Transform.XAxis.xyz) + (Pivot.y*Transform.YAxis.xyz) + (Pivot.z*Transform.ZAxis.xyz);
+    ak_v3f Result = AK_V3f(Node->EvaluateLocalTranslation());
+    return Result;
+}
+
+inline ak_m4f 
+FBX_GetGlobalTransform(FbxNode* Node)
+{
+    ak_m4f Result = AK_M4f(Node->EvaluateGlobalTransform());
+    return Result;
+}
+
+inline ak_v3f
+FBX_GetPivotDelta(ak_v3f Pivot, ak_m3f Transform)
+{
+    ak_v3f Delta = (Pivot.x*Transform.XAxis) + (Pivot.y*Transform.YAxis) + (Pivot.z*Transform.ZAxis);
     return Delta;
 }
 
@@ -559,11 +573,13 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                 MeshInfo->Name[MeshInfo->Header.NameLength] = 0;
                 
                 ak_v3f MeshPivot = FBX_GetPivot(Node);
-                ak_m4f MeshTransform = FBX_GetLocalToParentTransform(Node);                                
-                ak_v3f MeshDelta = FBX_GetPivotDelta(MeshPivot, MeshTransform);
-                
+                ak_m4f MeshTransform = FBX_GetGlobalTransform(Node);                                
                 ak_m3f MeshModelR = AK_M3(MeshTransform);
-                ak_m3f NormalMeshModelR = AK_Transpose(AK_InvTransformM3(MeshModelR));
+                
+                ak_v3f MeshDelta = FBX_GetPivotDelta(MeshPivot, MeshModelR);
+                                
+                ak_m3f InvMeshModelR = AK_InvTransformM3(MeshModelR);
+                ak_m3f NormalMeshModelR = AK_Transpose(InvMeshModelR);
                 
                 for(ak_u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
                 {                                                            
@@ -606,13 +622,14 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                     FbxNode* ConvexHullNode = MeshContext.ConvexHullNodes[ConvexHullIndex];
                     FbxMesh* ConvexHullMesh = ConvexHullNode->GetMesh();
                     
+                    ak_v3f LocalTranslation = FBX_GetLocalTranslation(ConvexHullNode);
+                    ak_m4f  GlobalTransform = FBX_GetGlobalTransform(ConvexHullNode);
+                    ak_m3f GlobalTransformR = AK_M3(GlobalTransform);
                     ak_v3f ConvexPivot = FBX_GetPivot(ConvexHullNode);
-                    ak_m4f ConvexTransform = FBX_GetLocalToParentTransform(ConvexHullNode);                                
-                    ak_v3f ConvexDelta = FBX_GetPivotDelta(ConvexPivot, ConvexTransform);
                     
-                    ak_m3f ConvexHullModelR = AK_M3(ConvexTransform);                    
-                    
-                    ak_v3f NewLocalToParentT = (ConvexTransform.Translation.xyz - MeshDelta) + ConvexDelta;                    
+                    ak_m3f NormGlobalTransformR = AK_NormalizeM3(GlobalTransformR);                    
+                    ak_v3f ConvexDelta = FBX_GetPivotDelta(ConvexPivot, NormGlobalTransformR);                     
+                    ak_v3f NewLocalToParentT = (LocalTranslation+ConvexDelta) - MeshPivot;                             
                     
                     FbxVector4* ConvexHullVertices = ConvexHullMesh->GetControlPoints();
                     
@@ -627,7 +644,7 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                     
                     for(ak_u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
                     {
-                        ConvexHull->Vertices[VertexIndex].V    = AK_V3f(ConvexHullVertices[VertexIndex].Buffer())*ConvexHullModelR - ConvexPivot;
+                        ConvexHull->Vertices[VertexIndex].V    = AK_V3f(ConvexHullVertices[VertexIndex].Buffer())*GlobalTransformR - ConvexDelta;
                         ConvexHull->Vertices[VertexIndex].Edge = -1;
                     }
                     

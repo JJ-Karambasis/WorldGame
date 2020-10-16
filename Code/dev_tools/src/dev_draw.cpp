@@ -39,6 +39,18 @@ void DevDraw_OrientedBox(dev_context* DevContext, ak_v3f P, ak_v3f Dim, ak_v3f X
     PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleBoxMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), DevContext->TriangleBoxMesh.IndexCount, 0, 0);
 }
 
+
+void DevDraw_Box(dev_context* DevContext, ak_v3f P, ak_v3f Dim, ak_color3f Color)
+{
+    DevDraw_OrientedBox(DevContext, P, Dim, AK_XAxis(), AK_YAxis(), AK_ZAxis(), Color);    
+}
+
+void DevDraw_Point(dev_context* DevContext, ak_v3f P, ak_f32 Thickness, ak_color3f Color)
+{
+    DevDraw_Box(DevContext, P, AK_V3(Thickness, Thickness, Thickness), Color);
+}
+
+
 void DevDraw_LineEllipsoid(dev_context* DevContext, ak_v3f CenterP, ak_v3f Radius, ak_color3f Color)
 {
     ak_m4f Model = AK_TransformM4(CenterP, Radius);
