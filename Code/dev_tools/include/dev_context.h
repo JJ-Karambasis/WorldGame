@@ -76,7 +76,7 @@ struct dev_selected_object
             world_id EntityID;
             material_context MaterialContext;
         };
-        dual_world_id JumpingQuadIDs;
+        world_id JumpingQuadID;
     };
 };
 

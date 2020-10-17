@@ -83,6 +83,13 @@ pushing_object* GetPushingObject(world* World, entity* Entity)
     return World->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
 }
 
+void FreeJumpingQuad(world* World, world_id JumpingQuadID)
+{        
+    jumping_quad* Quad = World->JumpingQuadStorage[JumpingQuadID.WorldIndex].Get(JumpingQuadID.ID);
+    World->JumpingQuadStorage[JumpingQuadID.WorldIndex].Free(Quad->OtherQuad.ID);
+    World->JumpingQuadStorage[JumpingQuadID.WorldIndex].Free(JumpingQuadID.ID);        
+}
+
 world_id CreateJumpingQuad(world* World, ak_u32 WorldIndex, ak_v3f Translation, ak_v2f Dimension)
 {
     ak_u64 ID = World->JumpingQuadStorage[WorldIndex].Allocate();

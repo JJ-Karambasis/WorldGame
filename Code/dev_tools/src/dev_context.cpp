@@ -301,6 +301,9 @@ ak_u32 DevContext_GetSelectedObjectWorldIndex(dev_selected_object* SelectedObjec
         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
         return SelectedObject->PointLightID.WorldIndex;
         
+        case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+        return SelectedObject->JumpingQuadID.WorldIndex;
+        
         AK_INVALID_DEFAULT_CASE;
     }
     
@@ -317,6 +320,9 @@ ak_v3f DevContext_GetSelectedObjectPosition(world* World, dev_selected_object* S
         
         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:         
         return World->GraphicsStates[SelectedObject->PointLightID.WorldIndex].PointLightStorage.Get(SelectedObject->PointLightID.ID)->Position;
+        
+        case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+        return World->JumpingQuadStorage[SelectedObject->JumpingQuadID.WorldIndex].Get(SelectedObject->JumpingQuadID.ID)->CenterP;
         
         AK_INVALID_DEFAULT_CASE;
     }
@@ -1553,6 +1559,13 @@ void DevContext_Tick()
                         GraphicsEntity->Transform = AK_TransformM4(*Transform);
                     } break;
                     
+                    case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+                    {
+                        AK_Assert(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE, "Only valid transform mode for point lights is translation. This is a programming error");
+                        jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->JumpingQuadID.WorldIndex].Get(SelectedObject->JumpingQuadID.ID);                        
+                        JumpingQuad->CenterP -= PointDiff;                        
+                    } break;
+                    
                     case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                     {
                         AK_Assert(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE, "Only valid transform mode for point lights is translation. This is a programming error");
@@ -1562,6 +1575,21 @@ void DevContext_Tick()
                     } break;                
                 }            
             }
+        }
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            AK_ForEach(JumpingQuad, &World->JumpingQuadStorage[WorldIndex])        
+                JumpingQuad->Color = AK_Yellow3();                
+        }
+        
+        if(SelectedObject->Type == DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD)
+        {
+            jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->JumpingQuadID.WorldIndex].Get(SelectedObject->JumpingQuadID.ID);
+            jumping_quad* OtherJumpingQuad = World->JumpingQuadStorage[JumpingQuad->OtherQuad.WorldIndex].Get(JumpingQuad->OtherQuad.ID);
+            
+            JumpingQuad->Color = AK_Green3();
+            OtherJumpingQuad->Color = AK_Red3();
         }
         
         if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE)
@@ -1610,6 +1638,12 @@ void DevContext_Tick()
                             FreeEntity(Game, SelectedObject->EntityID);                    
                             *SelectedObject = {};
                         }
+                    } break;
+                    
+                    case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+                    {
+                        FreeJumpingQuad(World, SelectedObject->JumpingQuadID);
+                        *SelectedObject = {};                        
                     } break;
                     
                     case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:

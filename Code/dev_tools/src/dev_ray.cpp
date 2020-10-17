@@ -17,6 +17,38 @@ ray DevRay_GetRayFromMouse(ak_v2i MouseCoordinates, view_settings* ViewSettings,
     return Result;    
 }
 
+world_id DevRay_CastToAllJumpingQuads(ak_f32* t, jumping_quad_storage* JumpingQuadStorage, ak_u32 WorldIndex, ray Ray, ak_f32 ZNear)
+{
+    world_id HitJumpingQuadID = InvalidWorldID();
+    AK_ForEach(JumpingQuad, &JumpingQuadStorage[WorldIndex])
+    {        
+        ak_v3f P0 = JumpingQuad->CenterP;
+        ak_v3f L0 = Ray.Origin;
+        ak_v3f L = Ray.Direction;
+        
+        if(AK_EqualZeroEps(L.z))
+            continue;
+        
+        ak_f32 d = JumpingQuad->CenterP.z - Ray.Origin.z / L.z;        
+        ak_v3f P = Ray.Origin + Ray.Direction*d;
+        
+        ak_v2f HalfDim = JumpingQuad->Dimensions*0.5f;
+        ak_v2f Max = JumpingQuad->CenterP.xy + HalfDim;
+        ak_v2f Min = JumpingQuad->CenterP.xy - HalfDim;
+        
+        if(P.xy <= Max && P.xy >= Min)
+        {
+            if((*t > (d-1e3f)) && (*t > ZNear))
+            {
+                *t = d;
+                HitJumpingQuadID = MakeWorldID(JumpingQuad->ID, WorldIndex);                
+            }
+        }        
+    }
+    
+    return HitJumpingQuadID;
+}
+
 world_id DevRay_CastToAllEntities(ak_f32* t, assets* Assets, graphics_state* GraphicsState, ak_u32 WorldIndex, ray Ray, ak_f32 ZNear)
 {    
     world_id HitEntityID = InvalidWorldID();
@@ -69,6 +101,13 @@ dev_selected_object DevRay_CastToAllSelectables(world* World, assets* Assets, ra
     {
         Result.Type = DEV_SELECTED_OBJECT_TYPE_ENTITY;
         Result.EntityID = EntityID;
+    }
+    
+    world_id JumpingQuadID = DevRay_CastToAllJumpingQuads(&tBest, World->JumpingQuadStorage, WorldIndex, Ray, ZNear);    
+    if(JumpingQuadID.IsValid())
+    {
+        Result.Type = DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD;        
+        Result.JumpingQuadID = JumpingQuadID;
     }
     
     world_id LightID = DevRay_CastToAllPointLights(&tBest, World->GraphicsStates, WorldIndex, Ray, ZNear);

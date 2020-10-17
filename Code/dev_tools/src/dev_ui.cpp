@@ -730,19 +730,19 @@ void DevUI_JumpingQuadSpawner(dev_context* DevContext, jumping_quad_spawner* Spa
             dual_world_id AIDs = CreateJumpingQuads(&DevContext->Game->World, 0, Spawner->Translation, Spawner->Dimension);
             dual_world_id BIDs = CreateJumpingQuads(&DevContext->Game->World, 1, Spawner->Translation, Spawner->Dimension);
             
-            if(CurrentWorldIndex == AIDs.A.WorldIndex)
-            {
-                
-            }
-            else
-            {
-            }
+            DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD;
+            if(CurrentWorldIndex == AIDs.A.WorldIndex)                
+                DevContext->SelectedObject.JumpingQuadID = AIDs.A;            
+            else            
+                DevContext->SelectedObject.JumpingQuadID = BIDs.A;
         }
         else
         {
             dual_world_id IDs = CreateJumpingQuads(&DevContext->Game->World, Spawner->WorldIndex, Spawner->Translation, Spawner->Dimension);
             if(CurrentWorldIndex == IDs.A.WorldIndex)
             {
+                DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD;
+                DevContext->SelectedObject.JumpingQuadID = IDs.A;
             }
         }                        
     }
@@ -837,6 +837,33 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
                     RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(AK_V3(1.0f, 1.0f, 1.0f), Mass);                    
                 } break;
             }
+            
+        } break;
+        
+        case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+        {
+            jumping_quad* SelectedJumpingQuad = Game->World.JumpingQuadStorage[SelectedObject->JumpingQuadID.WorldIndex].Get(SelectedObject->JumpingQuadID.ID);
+            jumping_quad* OtherJumpingQuad = Game->World.JumpingQuadStorage[SelectedJumpingQuad->OtherQuad.WorldIndex].Get(SelectedJumpingQuad->OtherQuad.ID);
+            
+            jumping_quad* TranslationA;
+            jumping_quad* TranslationB;
+            if(SelectedJumpingQuad->ID < OtherJumpingQuad->ID)
+            {
+                TranslationA = SelectedJumpingQuad;
+                TranslationB = OtherJumpingQuad;
+            }
+            else
+            {
+                TranslationA = OtherJumpingQuad;
+                TranslationB = SelectedJumpingQuad;
+            }
+            
+            AK_Assert(TranslationA->Dimensions == TranslationB->Dimensions, "Dimensions do not synchronize between both jumping quads. Programming error has occurred");
+            
+            DevUI_TranslationTool("Quad 0 Translation", AK_HashFunction("Quad 0 Edit Translation"), TRANSFORM_ITEM_WIDTH, &TranslationA->CenterP);
+            DevUI_TranslationTool("Quad 1 Translation", AK_HashFunction("Quad 1 Edit Translation"), TRANSFORM_ITEM_WIDTH, &TranslationB->CenterP);
+            DevUI_ScaleTool2D("Quad Dimensions", AK_HashFunction("Quad Edit Dimensions"), TRANSFORM_ITEM_WIDTH, &TranslationA->Dimensions);            
+            TranslationB->Dimensions = TranslationA->Dimensions;            
             
         } break;
         
