@@ -46,7 +46,7 @@ AK_EXPORT GAME_INITIALIZE(Initialize)
     
     AK_SetGlobalArena(Game->TempStorage);
     
-    ak_mesh_result QuadMeshResult = AK_GenerateTriangleQuad(Game->GameStorage);
+    ak_mesh_result<ak_vertex_p3> QuadMeshResult = AK_GenerateTriangleQuad(Game->GameStorage);
     
     Game->QuadMesh.VertexCount = QuadMeshResult.VertexCount;
     Game->QuadMesh.IndexCount = QuadMeshResult.IndexCount;

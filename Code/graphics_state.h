@@ -24,12 +24,6 @@ struct point_light
     ak_bool On;
 };
 
-struct camera_transform
-{
-    ak_v3f Translation;
-    ak_m3f Orientation;
-};
-
 struct camera
 {
     ak_v3f Target;

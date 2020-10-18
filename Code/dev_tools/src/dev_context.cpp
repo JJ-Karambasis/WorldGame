@@ -16,7 +16,7 @@ mesh DevContext_GetMeshFromDevMesh(dev_mesh* DevMesh)
     return Mesh;
 }
 
-graphics_mesh_id DevContext_AllocateMesh(graphics* Graphics, ak_mesh_result* Mesh)
+graphics_mesh_id DevContext_AllocateMesh(graphics* Graphics, ak_mesh_result<ak_vertex_p3>* Mesh)
 {
     graphics_mesh_id Result = Graphics->AllocateMesh(Graphics, Mesh->Vertices, Mesh->VertexCount*sizeof(ak_vertex_p3), GRAPHICS_VERTEX_FORMAT_P3, 
                                                      Mesh->Indices, Mesh->IndexCount*sizeof(ak_u16), GRAPHICS_INDEX_FORMAT_16_BIT);
@@ -28,7 +28,7 @@ void DevContext_CreateLineSphereMesh(dev_context* DevContext, ak_u16 CircleSampl
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result MeshGenerationResult = AK_GenerateLineSphere(GlobalArena, 1.0f, CircleSampleCount);        
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateLineSphere(GlobalArena, 1.0f, CircleSampleCount);        
     DevContext->LineSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->LineSphereMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);        
     
@@ -37,7 +37,7 @@ void DevContext_CreateLineSphereMesh(dev_context* DevContext, ak_u16 CircleSampl
 
 void DevContext_CreateTriangleCircleMesh(dev_context* DevContext, ak_u16 CircleSampleCount, ak_f32 Height)
 {
-    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleCircle(DevContext->DevStorage, 1.0f, Height, CircleSampleCount);        
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateTriangleCircle(DevContext->DevStorage, 1.0f, Height, CircleSampleCount);        
     DevContext->TriangleCircleMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleCircleMesh.Indices = MeshGenerationResult.Indices;
     DevContext->TriangleCircleMesh.VertexCount = MeshGenerationResult.VertexCount;
@@ -47,7 +47,7 @@ void DevContext_CreateTriangleCircleMesh(dev_context* DevContext, ak_u16 CircleS
 
 void DevContext_CreateTriangleTorusMesh(dev_context* DevContext, ak_u16 CircleSampleCount, ak_f32 Width)
 {
-    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleTorus(DevContext->DevStorage, 1.0f, Width, CircleSampleCount);        
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateTriangleTorus(DevContext->DevStorage, 1.0f, Width, CircleSampleCount);        
     DevContext->TriangleTorusMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleTorusMesh.Indices = MeshGenerationResult.Indices;
     DevContext->TriangleTorusMesh.VertexCount = MeshGenerationResult.VertexCount;
@@ -60,7 +60,7 @@ void DevContext_CreateLineBoxMesh(dev_context* DevContext)
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result MeshGenerationResult = AK_GenerateLineBox(GlobalArena, AK_V3(1.0f, 1.0f, 1.0f));    
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateLineBox(GlobalArena, AK_V3(1.0f, 1.0f, 1.0f));    
     DevContext->LineBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->LineBoxMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
     
@@ -72,7 +72,7 @@ void DevContext_CreateTriangleBoxMesh(dev_context* DevContext)
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleBox(GlobalArena, AK_V3(1.0f, 1.0f, 1.0f));       
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateTriangleBox(GlobalArena, AK_V3(1.0f, 1.0f, 1.0f));       
     DevContext->TriangleBoxMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleBoxMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);    
     
@@ -84,7 +84,7 @@ void DevContext_CreateTriangleSphereMesh(dev_context* DevContext)
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleSphere(GlobalArena, 1.0f, 2);
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateTriangleSphere(GlobalArena, 1.0f, 2);
     DevContext->TriangleSphereMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleSphereMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
     
@@ -96,7 +96,7 @@ void DevContext_CreateTriangleCylinderMesh(dev_context* DevContext, ak_u16 Circl
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleCylinder(GlobalArena, 1.0f, 1.0f, CircleSampleCount);
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateTriangleCylinder(GlobalArena, 1.0f, 1.0f, CircleSampleCount);
     DevContext->TriangleCylinderMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleCylinderMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
     
@@ -108,7 +108,7 @@ void DevContext_CreateTriangleConeMesh(dev_context* DevContext, ak_u16 CircleSam
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result MeshGenerationResult = AK_GenerateTriangleCone(GlobalArena, 1.0f, 1.0f, CircleSampleCount);
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_GenerateTriangleCone(GlobalArena, 1.0f, 1.0f, CircleSampleCount);
     DevContext->TriangleConeMesh.IndexCount = MeshGenerationResult.IndexCount;
     DevContext->TriangleConeMesh.MeshID = DevContext_AllocateMesh(DevContext->Graphics, &MeshGenerationResult);
     
@@ -120,11 +120,11 @@ void DevContext_CreateTriangleArrowMesh(dev_context* DevContext, ak_u16 CircleSa
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result BodyResult = AK_GenerateTriangleCylinder(GlobalArena, Radius, Height, CircleSampleCount);
-    ak_mesh_result ArrowResult = AK_GenerateTriangleCone(GlobalArena, ArrowRadius, ArrowHeight, CircleSampleCount, AK_V3(0.0f, 0.0f, Height));
+    ak_mesh_result<ak_vertex_p3> BodyResult = AK_GenerateTriangleCylinder(GlobalArena, Radius, Height, CircleSampleCount);
+    ak_mesh_result<ak_vertex_p3> ArrowResult = AK_GenerateTriangleCone(GlobalArena, ArrowRadius, ArrowHeight, CircleSampleCount, AK_V3(0.0f, 0.0f, Height));
     
-    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(DevContext->DevStorage, BodyResult.VertexCount+ArrowResult.VertexCount, 
-                                                                BodyResult.IndexCount+ArrowResult.IndexCount);    
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_AllocateMeshResult<ak_vertex_p3>(DevContext->DevStorage, BodyResult.VertexCount+ArrowResult.VertexCount, 
+                                                                                            BodyResult.IndexCount+ArrowResult.IndexCount);    
     
     ak_uaddr BodyResultVerticesSize = sizeof(ak_vertex_p3)*BodyResult.VertexCount;
     ak_uaddr BodyResultIndicesSize = sizeof(ak_u16)*BodyResult.IndexCount;
@@ -149,11 +149,11 @@ void DevContext_CreateTriangleScaleMesh(dev_context* DevContext, ak_u16 CircleSa
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result BodyResult = AK_GenerateTriangleCylinder(GlobalArena, Radius, Height, CircleSampleCount);
-    ak_mesh_result BoxResult = AK_GenerateTriangleBox(GlobalArena, AK_V3f(CubeSize, CubeSize, CubeSize), AK_V3(0.0f, 0.0f, Height));
+    ak_mesh_result<ak_vertex_p3> BodyResult = AK_GenerateTriangleCylinder(GlobalArena, Radius, Height, CircleSampleCount);
+    ak_mesh_result<ak_vertex_p3> BoxResult = AK_GenerateTriangleBox(GlobalArena, AK_V3f(CubeSize, CubeSize, CubeSize), AK_V3(0.0f, 0.0f, Height));
     
-    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(DevContext->DevStorage, BodyResult.VertexCount+BoxResult.VertexCount, 
-                                                                BodyResult.IndexCount+BoxResult.IndexCount);    
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_AllocateMeshResult<ak_vertex_p3>(DevContext->DevStorage, BodyResult.VertexCount+BoxResult.VertexCount, 
+                                                                                            BodyResult.IndexCount+BoxResult.IndexCount);    
     
     ak_uaddr BodyResultVerticesSize = sizeof(ak_vertex_p3)*BodyResult.VertexCount;
     ak_uaddr BodyResultIndicesSize = sizeof(ak_u16)*BodyResult.IndexCount;
@@ -178,8 +178,8 @@ void DevContext_CreateLineCapsuleMesh(dev_context* DevContext, ak_f32 Radius, ak
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
     
-    ak_mesh_result CapResult = AK_GenerateLineHemisphere(GlobalArena, Radius, CircleSampleCount);    
-    ak_mesh_result BodyResult = AK_AllocateMeshResult(GlobalArena, 8, 8);
+    ak_mesh_result<ak_vertex_p3> CapResult = AK_GenerateLineHemisphere(GlobalArena, Radius, CircleSampleCount);    
+    ak_mesh_result<ak_vertex_p3> BodyResult = AK_AllocateMeshResult<ak_vertex_p3>(GlobalArena, 8, 8);
     
     BodyResult.Vertices[0] = {AK_V3( 1.0f*Radius,  0.0f, -0.5f)};
     BodyResult.Vertices[1] = {AK_V3( 1.0f*Radius,  0.0f,  0.5f)};
@@ -199,8 +199,8 @@ void DevContext_CreateLineCapsuleMesh(dev_context* DevContext, ak_f32 Radius, ak
     BodyResult.Indices[6] = 6;
     BodyResult.Indices[7] = 7;
     
-    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(GlobalArena, CapResult.VertexCount+BodyResult.VertexCount, 
-                                                                CapResult.IndexCount+BodyResult.IndexCount);
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_AllocateMeshResult<ak_vertex_p3>(GlobalArena, CapResult.VertexCount+BodyResult.VertexCount, 
+                                                                                            CapResult.IndexCount+BodyResult.IndexCount);
     
     ak_uaddr CapResultVerticesSize = sizeof(ak_vertex_p3)*CapResult.VertexCount;
     ak_uaddr CapResultIndicesSize = sizeof(ak_u16)*CapResult.IndexCount;
@@ -220,7 +220,7 @@ void DevContext_CreateLineCapsuleMesh(dev_context* DevContext, ak_f32 Radius, ak
 
 void DevContext_CreatePlaneMesh(dev_context* DevContext, ak_f32 Width, ak_f32 Height)
 {         
-    ak_mesh_result MeshGenerationResult = AK_AllocateMeshResult(DevContext->DevStorage, 4, 6);
+    ak_mesh_result<ak_vertex_p3> MeshGenerationResult = AK_AllocateMeshResult<ak_vertex_p3>(DevContext->DevStorage, 4, 6);
     
     MeshGenerationResult.Vertices[0] = {AK_V3(-0.5f*Width,  0.5f*Height, 0.0f)}; //TopLeft
     MeshGenerationResult.Vertices[1] = {AK_V3( 0.5f*Width,  0.5f*Height, 0.0f)}; //TopRight

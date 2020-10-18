@@ -50,27 +50,6 @@ global ak_bool Global_Running;
 //TODO(JJ): This lock can probably be moved out into some developer code macros since it is only used for hot reloading (for the audio thread)
 global ak_lock Global_Lock;
 
-internal LRESULT CALLBACK 
-Win32_WindowProc(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
-{
-    LRESULT Result = 0;
-    
-    switch(Message)
-    {        
-        case WM_CLOSE:
-        {
-            PostQuitMessage(0);
-        } break;
-        
-        default:
-        {
-            Result = DefWindowProc(Window, Message, WParam, LParam);
-        } break;                
-    }
-    
-    return Result;
-}
-
 HWND Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,  
                         ak_v2i WindowDim)
 {    
@@ -528,27 +507,15 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     ak_string OpenGLGraphicsTempDLLPathName = AK_StringConcat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
     ak_string AssetFilePath = AK_StringConcat(Global_EXEFilePath, "WorldGame.assets", Global_PlatformArena);
     
-    WNDCLASSEX WindowClass = {};
-    WindowClass.cbSize = sizeof(WNDCLASSEX);
-    WindowClass.style = CS_VREDRAW|CS_HREDRAW|CS_OWNDC;
-    WindowClass.lpfnWndProc = Win32_WindowProc;
-    WindowClass.hInstance = Instance;
-    WindowClass.lpszClassName = GAME_NAME;    
-    if(!RegisterClassEx(&WindowClass))    
-    {
-        //TODO(JJ): Diagnostic and error logging
-        AK_Assert(false, "Failed to register window class");
-        return -1;
-    }
-    
-    HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, AK_V2(1280, 720));
-    //HWND Window = Win32_CreateWindow(&WindowClass, GAME_NAME, AK_V2(1920, 1080));
-    if(!Window)   
+    ak_window* PlatformWindow = AK_CreateWindow(1280, 720, GAME_NAME);            
+    if(!PlatformWindow)   
     {
         //TODO(JJ): Diagnostic and error logging
         AK_Assert(false, "Failed to create the game window");
         return -1;
     }
+    
+    HWND Window = AK_GetPlatformWindow(PlatformWindow);
     
     ak_u32 SoundBufferSeconds = 2;
     win32_audio_output AudioOutput = Win32_InitDSound(Window, SoundBufferSeconds); 
@@ -667,8 +634,8 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         if(Dev_ShouldPlayGame())
             Global_GameCode.Tick(Game, Dev_GetDeveloperContext());
         
-        Game->dt = FrameTime;                
-        Game->Resolution = Win32_GetWindowDim(Window);
+        Game->dt = FrameTime;
+        AK_GetWindowResolution(PlatformWindow, (ak_u16*)&Game->Resolution.w, (ak_u16*)&Game->Resolution.y);        
         
         Dev_Tick();
         

@@ -14,9 +14,10 @@ IF NOT EXIST ..\data mkdir ..\data
 IF NOT EXIST ..\data\frame_recordings mkdir ..\data\frame_recordings
 
 set COMPILE_PLATFORM=1
-set COMPILE_GRAPHICS=0
+set COMPILE_GRAPHICS=1
 set COMPILE_GAME=1
-set COMPILE_ASSET_BUILDER=0
+set COMPILE_ASSET_BUILDER=1
+set COMPILE_GRAPHICS_POC_RAYTRACE=9
 
 pushd ..\Bin
 del *.pdb > NUL 2> NUL
@@ -36,5 +37,9 @@ if %COMPILE_GRAPHICS% == 1 (
 if %COMPILE_PLATFORM% == 1 (
     %Compiler% %Common% %Warnings% -DSHOW_IMGUI_DEMO_WINDOW=0 -DOS_WINDOWS ..\code\win32_world_game.cpp -link libfbxsdk-mt.lib user32.lib ole32.lib -opt:ref -out:World_Game.exe
 ) 
+
+if %COMPILE_GRAPHICS_POC_RAYTRACE% == 1 (
+    %Compiler% %Common% %Warnings% -O2 -DOS_WINDOWS ..\code\graphics_poc\win32_graphics_ray_trace.cpp -link user32.lib Gdi32.lib -opt:ref -out:RayTrace_POC.exe
+)
 
 popd
