@@ -507,7 +507,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     ak_string OpenGLGraphicsTempDLLPathName = AK_StringConcat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
     ak_string AssetFilePath = AK_StringConcat(Global_EXEFilePath, "WorldGame.assets", Global_PlatformArena);
     
-    ak_window* PlatformWindow = AK_CreateWindow(1280, 720, GAME_NAME);            
+    ak_window* PlatformWindow = AK_CreateWindow(1920, 1080, GAME_NAME);            
     if(!PlatformWindow)   
     {
         //TODO(JJ): Diagnostic and error logging

@@ -187,6 +187,7 @@ const ak_char* DevUI_GetEntityType(entity_type Type)
         ENUM_TYPE(ENTITY_TYPE_PLAYER);
         ENUM_TYPE(ENTITY_TYPE_RIGID_BODY);
         ENUM_TYPE(ENTITY_TYPE_PUSHABLE);
+        ENUM_TYPE(ENTITY_TYPE_BUTTON);
         
         AK_INVALID_DEFAULT_CASE;
     }   

@@ -1263,6 +1263,11 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
                                              AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
                                              MESH_ASSET_ID_BOX, DefaultFloorMaterial);
         
+        material DefaultButtonMaterial = { CreateDiffuse(AK_White3()*0.4f) };
+        world_id ButtonA = CreateButton(&Game->World, Game->Assets, 0, 
+                                        AK_V3(1.0f, -1.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), 
+                                        DefaultButtonMaterial);        
+        
         CreatePointLight(&Game->World.GraphicsStates[0], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
         CreatePointLight(&Game->World.GraphicsStates[1], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
         
@@ -1270,6 +1275,7 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerB);
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorA);
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorB);        
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, ButtonA);
         
         ak_v3f Translations[2] = {AK_V3(-1.5f, 0.0f, 0.001f), AK_V3(1.5f, 0.0f, 0.001f)};        
         ak_v2f Dimensions = AK_V2(1.0f, 1.0f);
@@ -1649,7 +1655,7 @@ void DevContext_Tick()
                     case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                     {
                         graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
-                        GraphicsState->GraphicsEntityStorage.Free(SelectedObject->PointLightID.ID);                    
+                        GraphicsState->PointLightStorage.Free(SelectedObject->PointLightID.ID);                    
                         *SelectedObject = {};
                     } break;                                
                 }

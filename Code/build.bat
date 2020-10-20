@@ -17,7 +17,8 @@ set COMPILE_PLATFORM=1
 set COMPILE_GRAPHICS=1
 set COMPILE_GAME=1
 set COMPILE_ASSET_BUILDER=1
-set COMPILE_GRAPHICS_POC_RAYTRACE=9
+set COMPILE_GRAPHICS_POC_RAYTRACE=0
+set COMPILE_GRAPHICS_ILLUMINATION_POC=0
 
 pushd ..\Bin
 del *.pdb > NUL 2> NUL
@@ -40,6 +41,10 @@ if %COMPILE_PLATFORM% == 1 (
 
 if %COMPILE_GRAPHICS_POC_RAYTRACE% == 1 (
     %Compiler% %Common% %Warnings% -O2 -DOS_WINDOWS ..\code\graphics_poc\win32_graphics_ray_trace.cpp -link user32.lib Gdi32.lib -opt:ref -out:RayTrace_POC.exe
+)
+
+if %COMPILE_GRAPHICS_ILLUMINATION_POC% == 1 (
+    %Compiler% %Common% %Warnings% -DOS_WINDOWS ..\code\graphics_poc\win32_dx12_illumination_poc.cpp -link user32.lib Gdi32.lib -opt:ref -out:Illumination_POC.exe
 )
 
 popd

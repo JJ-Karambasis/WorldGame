@@ -252,6 +252,11 @@ world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v
     return CreatePushableBox(World, Assets, WorldIndex, Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), Mass, Material);
 }
 
+world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, ak_quatf Orientation, material Material)
+{
+    return CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_BUTTON, SIM_ENTITY_TYPE_SIM_ENTITY, Position, Dimensions, Orientation, MESH_ASSET_ID_BUTTON, Material);
+}
+
 #if 0 
 world_id
 CreateSphereRigidBody(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Radius, ak_f32 Mass, ak_f32 Restitution, material Material)
@@ -357,6 +362,14 @@ COLLISION_EVENT(OnPlayerCollision)
                     
                     PlayerRigidBody->Velocity = {};
                 }                     
+            }
+            
+            if(CollidedEntity->Type == ENTITY_TYPE_BUTTON)
+            {
+                if(AK_EqualApprox(Normal, AK_ZAxis(), 1e-3f))
+                {
+                    AK_Assert(false, "Temp");
+                }
             }
             
         } break;

@@ -119,7 +119,7 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
         if(DeltaLength > 0)
         {
             ak_v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
-            broad_phase_pair_list Pairs = Simulation->GetAllPairs(RigidBody);
+            broad_phase_pair_list Pairs = Simulation->GetAllPairs(RigidBody);                        
             continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
             if(ContactTOI.HitEntity)
             {

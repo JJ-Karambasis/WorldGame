@@ -7,36 +7,6 @@ struct bitmap
     ak_u32* Pixels;
 };
 
-struct camera
-{
-    ak_v3f Position;
-    ak_v3f Direction;    
-};
-
-struct mesh
-{
-    ak_u32 VertexCount;
-    ak_vertex_p3_n3* Vertices;
-    
-    ak_u32 IndexCount;
-    ak_u16* Indices;
-};
-
-struct object
-{
-    ak_sqtf     Transform;
-    ak_color4f  Color;
-    mesh*       Mesh;
-};
-
-struct light
-{
-    ak_v3f Position;
-    ak_f32 Radius;
-    ak_color3f Color;
-    ak_f32 Intensity;
-};
-
 struct ray_trace_common_data
 {
     bitmap* Bitmap;
@@ -264,7 +234,6 @@ mesh ToMesh(ak_mesh_result<ak_vertex_p3_n3> MeshResult)
 }
 
 global ak_bool Global_Running;
-
 void Win32_ProcessMessages()
 {
     MSG Message = {};
@@ -419,8 +388,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         
         ak_arena* GlobalArena = AK_GetGlobalArena();
         ak_temp_arena TempArena = GlobalArena->BeginTemp();
-        
-        
+                
         HWND Window = AK_GetPlatformWindow(PlatformWindow);
         HDC DeviceContext = GetDC(Window);
         

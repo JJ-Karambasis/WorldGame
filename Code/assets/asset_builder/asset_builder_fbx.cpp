@@ -369,7 +369,7 @@ FBX_GetPivot(FbxNode* Node)
 {    
     ak_v3f Result = AK_V3f(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
     return Result;
-}
+}\
 
 inline ak_m4f
 FBX_GetLocalToParentTransform(FbxNode* Node)
@@ -392,7 +392,15 @@ FBX_GetGlobalTransform(FbxNode* Node)
     return Result;
 }
 
+inline ak_m4f 
+FBX_GetLocalTransform(FbxNode* Node)
+{
+    ak_m4f Result = AK_M4f(Node->EvaluateLocalTransform());
+    return Result;
+}
+
 inline ak_v3f
+
 FBX_GetPivotDelta(ak_v3f Pivot, ak_m3f Transform)
 {
     ak_v3f Delta = (Pivot.x*Transform.XAxis) + (Pivot.y*Transform.YAxis) + (Pivot.z*Transform.ZAxis);
@@ -572,14 +580,42 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                 AK_MemoryCopy(MeshInfo->Name, MeshName, sizeof(char)*MeshInfo->Header.NameLength);
                 MeshInfo->Name[MeshInfo->Header.NameLength] = 0;
                 
-                ak_v3f MeshPivot = FBX_GetPivot(Node);
-                ak_m4f MeshTransform = FBX_GetGlobalTransform(Node);                                
-                ak_m3f MeshModelR = AK_M3(MeshTransform);
+                ak_v3f MeshLclTranslation = AK_V3f(Node->LclTranslation.Get().Buffer());
+                ak_v3f MeshLclScaling = AK_V3f(Node->LclScaling.Get().Buffer());
+                ak_v3f MeshLclRotation = AK_V3f(Node->LclRotation.Get().Buffer());
+                ak_v3f MeshPreRotation = AK_V3f(Node->GetPreRotation(FbxNode::eSourcePivot).Buffer());
+                ak_v3f MeshPostRotation = AK_V3f(Node->GetPostRotation(FbxNode::eSourcePivot).Buffer());
                 
-                ak_v3f MeshDelta = FBX_GetPivotDelta(MeshPivot, MeshModelR);
-                                
-                ak_m3f InvMeshModelR = AK_InvTransformM3(MeshModelR);
-                ak_m3f NormalMeshModelR = AK_Transpose(InvMeshModelR);
+                ak_v3f MeshRotationOffset = AK_V3f(Node->GetRotationOffset(FbxNode::eSourcePivot).Buffer());
+                ak_v3f MeshRotationPivot = AK_V3f(Node->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
+                
+                ak_v3f MeshScaleOffset = AK_V3f(Node->GetScalingOffset(FbxNode::eSourcePivot).Buffer());                
+                ak_v3f MeshScalePivot = AK_V3f(Node->GetScalingPivot(FbxNode::eSourcePivot).Buffer());
+                
+                ak_m4f MeshT = AK_TransformM4(MeshLclTranslation);
+                ak_m4f MeshRoff = AK_TransformM4(MeshRotationOffset);
+                ak_m4f MeshRp = AK_TransformM4(MeshRotationPivot);
+                ak_m4f MeshIRp = AK_InvTransformM4(MeshRp);
+                ak_m4f MeshRpre = AK_XYZRotM4(AK_V3(AK_ToRadians(MeshPreRotation.x), AK_ToRadians(MeshPreRotation.y), AK_ToRadians(MeshPreRotation.z)));
+                ak_m4f MeshR = AK_XYZRotM4(AK_V3(AK_ToRadians(MeshLclRotation.x), AK_ToRadians(MeshLclRotation.y), AK_ToRadians(MeshLclRotation.z)));
+                ak_m4f MeshRpost = AK_XYZRotM4(AK_V3(AK_ToRadians(MeshPostRotation.x), AK_ToRadians(MeshPostRotation.y), AK_ToRadians(MeshPostRotation.z)));
+                ak_m4f MeshSoff = AK_TransformM4(MeshScaleOffset);
+                ak_m4f MeshSp = AK_TransformM4(MeshScalePivot);                
+                ak_m4f MeshISp = AK_InvTransformM4(MeshSp);
+                ak_m4f MeshS = AK_ScaleM4(MeshLclScaling);
+                
+                ak_v3f MeshLocalPivot = MeshRotationOffset+MeshRotationPivot;
+                
+                ak_m4f MeshTempTransform = MeshISp*MeshS*MeshSp*MeshSoff*MeshIRp*MeshRpost*MeshR*MeshRpre*MeshRp*MeshRoff;                
+                
+                ak_m4f MeshObjectTransform = MeshTempTransform*AK_InvTransformM4(AK_TransformM4(MeshLocalPivot));
+                ak_m3f MeshObjectRotation = AK_M3(MeshObjectTransform);
+                ak_m3f MeshNormalRotation = AK_Transpose(AK_InvTransformM3(MeshObjectRotation));
+                ak_v3f MeshObjectPivot = MeshObjectTransform.Translation.xyz;   
+                
+                ak_m4f MeshGlobalTransform = FBX_GetGlobalTransform(Node);                    
+                MeshGlobalTransform.Translation.xyz -= MeshObjectPivot;
+                
                 
                 for(ak_u32 VertexIndex = 0; VertexIndex < VertexCount; VertexIndex++)
                 {                                                            
@@ -589,8 +625,8 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                         ak_vertex_p3_n3_uv_w* SrcVertex = (ak_vertex_p3_n3_uv_w*)VertexData + VertexIndex;                                                                        
                         
                         *DstVertex = *SrcVertex;                        
-                        DstVertex->P = SrcVertex->P*MeshModelR - MeshPivot;                        
-                        DstVertex->N = AK_Normalize(DstVertex->N*NormalMeshModelR);                        
+                        DstVertex->P = SrcVertex->P*MeshObjectRotation + MeshObjectPivot;                        
+                        DstVertex->N = AK_Normalize(DstVertex->N*MeshNormalRotation);                        
                     }
                     else
                     {
@@ -598,8 +634,8 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                         ak_vertex_p3_n3_uv* SrcVertex = (ak_vertex_p3_n3_uv*)VertexData + VertexIndex;
                         
                         *DstVertex = *SrcVertex;
-                        DstVertex->P = SrcVertex->P*MeshModelR - MeshPivot;                        
-                        DstVertex->N = AK_Normalize(DstVertex->N*NormalMeshModelR);                                       
+                        DstVertex->P = SrcVertex->P*MeshObjectRotation + MeshObjectPivot;                        
+                        DstVertex->N = AK_Normalize(DstVertex->N*MeshNormalRotation);                                       
                     }
                 }
                 
@@ -622,18 +658,45 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                     FbxNode* ConvexHullNode = MeshContext.ConvexHullNodes[ConvexHullIndex];
                     FbxMesh* ConvexHullMesh = ConvexHullNode->GetMesh();
                     
-                    ak_v3f LocalTranslation = FBX_GetLocalTranslation(ConvexHullNode);
-                    ak_m4f  GlobalTransform = FBX_GetGlobalTransform(ConvexHullNode);
-                    ak_m3f GlobalTransformR = AK_M3(GlobalTransform);
-                    ak_v3f ConvexPivot = FBX_GetPivot(ConvexHullNode);
+                    ak_v3f LclTranslation = AK_V3f(ConvexHullNode->LclTranslation.Get().Buffer());
+                    ak_v3f LclScaling = AK_V3f(ConvexHullNode->LclScaling.Get().Buffer());
+                    ak_v3f LclRotation = AK_V3f(ConvexHullNode->LclRotation.Get().Buffer());
+                    ak_v3f PreRotation = AK_V3f(ConvexHullNode->GetPreRotation(FbxNode::eSourcePivot).Buffer());
+                    ak_v3f PostRotation = AK_V3f(ConvexHullNode->GetPostRotation(FbxNode::eSourcePivot).Buffer());
                     
-                    ak_m3f NormGlobalTransformR = AK_NormalizeM3(GlobalTransformR);                    
-                    ak_v3f ConvexDelta = FBX_GetPivotDelta(ConvexPivot, NormGlobalTransformR);                     
-                    ak_v3f NewLocalToParentT = (LocalTranslation+ConvexDelta) - MeshPivot;                             
+                    ak_v3f RotationOffset = AK_V3f(ConvexHullNode->GetRotationOffset(FbxNode::eSourcePivot).Buffer());
+                    ak_v3f RotationPivot = AK_V3f(ConvexHullNode->GetRotationPivot(FbxNode::eSourcePivot).Buffer());
+                    
+                    ak_v3f ScaleOffset = AK_V3f(ConvexHullNode->GetScalingOffset(FbxNode::eSourcePivot).Buffer());                
+                    ak_v3f ScalePivot = AK_V3f(ConvexHullNode->GetScalingPivot(FbxNode::eSourcePivot).Buffer());
+                    
+                    ak_m4f T = AK_TransformM4(LclTranslation);
+                    ak_m4f Roff = AK_TransformM4(RotationOffset);
+                    ak_m4f Rp = AK_TransformM4(RotationPivot);
+                    ak_m4f IRp = AK_InvTransformM4(Rp);
+                    ak_m4f Rpre = AK_XYZRotM4(AK_V3(AK_ToRadians(PreRotation.x), AK_ToRadians(PreRotation.y), AK_ToRadians(PreRotation.z)));
+                    ak_m4f R = AK_XYZRotM4(AK_V3(AK_ToRadians(LclRotation.x), AK_ToRadians(LclRotation.y), AK_ToRadians(LclRotation.z)));
+                    ak_m4f Rpost = AK_XYZRotM4(AK_V3(AK_ToRadians(PostRotation.x), AK_ToRadians(PostRotation.y), AK_ToRadians(PostRotation.z)));
+                    ak_m4f Soff = AK_TransformM4(ScaleOffset);
+                    ak_m4f Sp = AK_TransformM4(ScalePivot);                
+                    ak_m4f ISp = AK_InvTransformM4(Sp);
+                    ak_m4f S = AK_ScaleM4(LclScaling);
+                    
+                    ak_v3f LocalPivot = RotationOffset+RotationPivot;
+                    
+                    ak_m4f TempTransform = ISp*S*Sp*Soff*IRp*Rpost*R*Rpre*Rp*Roff;    
+                    TempTransform *= MeshTempTransform;
+                    ak_m4f ObjectTransform = TempTransform*AK_InvTransformM4(AK_TransformM4(LocalPivot));
+                    ak_m3f ObjectRotation = AK_M3(ObjectTransform);
+                    ak_m3f NormalRotation = AK_Transpose(AK_InvTransformM3(ObjectRotation));
+                    ak_v3f ObjectPivot = ObjectTransform.Translation.xyz;            
+                    
+                    ak_m4f GlobalTransform = FBX_GetGlobalTransform(ConvexHullNode);
+                    GlobalTransform.Translation.xyz -= ObjectPivot;
                     
                     FbxVector4* ConvexHullVertices = ConvexHullMesh->GetControlPoints();
                     
-                    ConvexHull->Header.Transform = AK_SQT(NewLocalToParentT);                    
+                    ConvexHull->Header.Transform = AK_SQT<ak_f32>(GlobalTransform.Translation.xyz-MeshGlobalTransform.Translation.xyz);
                     ConvexHull->Header.VertexCount = ConvexHullMesh->GetControlPointsCount();
                     ConvexHull->Header.EdgeCount = ConvexHullMesh->GetMeshEdgeCount()*2;
                     ConvexHull->Header.FaceCount = ConvexHullMesh->GetPolygonCount();
@@ -644,7 +707,7 @@ void ParseFBX(asset_builder* AssetBuilder, ak_string Path)
                     
                     for(ak_u32 VertexIndex = 0; VertexIndex < ConvexHull->Header.VertexCount; VertexIndex++)
                     {
-                        ConvexHull->Vertices[VertexIndex].V    = AK_V3f(ConvexHullVertices[VertexIndex].Buffer())*GlobalTransformR - ConvexDelta;
+                        ConvexHull->Vertices[VertexIndex].V    = AK_V3f(ConvexHullVertices[VertexIndex].Buffer()) * ObjectRotation + ObjectPivot;
                         ConvexHull->Vertices[VertexIndex].Edge = -1;
                     }
                     
