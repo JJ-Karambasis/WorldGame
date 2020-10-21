@@ -43,6 +43,28 @@ struct light
     ak_f32 Intensity;
 };
 
+struct command_fence
+{
+    ID3D12Fence* Fence;
+    HANDLE Event;
+    ak_u32 Value;
+    
+    void CPUWait()
+    {
+        if(Fence->GetCompletedValue() < Value)
+        {
+            Fence->SetEventOnCompletion(Value, Event);
+            WaitForSingleObject(Event, INFINITE);
+        }
+    }
+    
+    void Signal(ID3D12CommandQueue* CommandQueue)
+    {
+        Value++;
+        CommandQueue->Signal(Fence, Value);
+    }
+};
+
 object CreateObject(ak_v3f Position, ak_quatf Orientation, ak_v3f Scale, mesh* Mesh, ak_color4f Color)
 {
     object Result;
@@ -151,6 +173,44 @@ ID3D12CommandQueue* CreateCommandQueue(ID3D12Device* Device, D3D12_COMMAND_LIST_
     return CommandQueue;
 }
 
+ID3D12CommandAllocator* 
+CreateCommandAllocator(ID3D12Device* Device, D3D12_COMMAND_LIST_TYPE Type)
+{            
+    ID3D12CommandAllocator* CommandAllocator;
+    if(FAILED(Device->CreateCommandAllocator(Type, __uuidof(ID3D12CommandAllocator), (void**)&CommandAllocator))) return NULL;    
+    return CommandAllocator;
+}
+
+ID3D12GraphicsCommandList* 
+CreateCommandList(ID3D12Device* Device, ID3D12CommandAllocator* Allocator, D3D12_COMMAND_LIST_TYPE Type)
+{
+    ID3D12GraphicsCommandList* CommandList;
+    if(FAILED(Device->CreateCommandList(0, Type, Allocator, NULL, __uuidof(ID3D12GraphicsCommandList), (void**)&CommandList))) return NULL;
+    CommandList->Close();
+    return CommandList;
+}
+
+command_fence CreateCommandFence(ID3D12Device* Device)
+{
+    command_fence Result = {};    
+    if(FAILED(Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), (void**)&Result.Fence))) return {};
+    Result.Event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if(!Result.Event) return {};    
+    return Result;
+}
+
+ak_fixed_array<DXGI_MODE_DESC> GetDisplayModes(IDXGIOutput* Output, ak_arena* Arena)
+{    
+    ak_u32 NumModes;
+    if(FAILED(Output->GetDisplayModeList(DXGI_FORMAT_B8G8R8A8_UNORM, 0, &NumModes, NULL))) return {};
+    
+    DXGI_MODE_DESC* DisplayModes = Arena->PushArray<DXGI_MODE_DESC>(NumModes);
+    if(FAILED(Output->GetDisplayModeList(DXGI_FORMAT_B8G8R8A8_UNORM, 0, &NumModes, DisplayModes))) return {};
+    
+    ak_fixed_array<DXGI_MODE_DESC> Result = AK_CreateArray(DisplayModes, NumModes);
+    return Result;
+}
+
 int CALLBACK 
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
 {   
@@ -202,9 +262,50 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     ID3D12Device* Device;
     if(FAILED(D3D12CreateDevice(Adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), (void**)&Device))) { AK_MessageBoxOk("Fatal Error", "Failed to create the D3D12 Device. Qutting"); return -1; }    
     
-    ID3D12CommandQueue* GraphicsQueue = CreateCommandQueue(Device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    if(!GraphicsQueue) {AK_MessageBoxOk("Fatal Error", "Could not create the D3D12 direct command queue"); return -1; }
+    ID3D12CommandQueue* DirectCommandQueue = CreateCommandQueue(Device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    if(!DirectCommandQueue) {AK_MessageBoxOk("Fatal Error", "Could not create the D3D12 direct command queue"); return -1; }
     
+    ID3D12CommandAllocator* DirectCommandAllocator = CreateCommandAllocator(Device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    if(!DirectCommandAllocator) { AK_MessageBoxOk("Fatal Error", "Could not create the D3D12 direct command allocator"); return -1; }
+    
+    ID3D12GraphicsCommandList* DirectCommandList = CreateCommandList(Device, DirectCommandAllocator, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    if(!DirectCommandList) { AK_MessageBoxOk("Fatal Error", "Could not create the D3D12 direct command list"); return -1; }
+    
+    command_fence Fence = CreateCommandFence(Device);
+    if(!Fence.Fence) { AK_MessageBoxOk("Fatal Error", "Create not create the D3D12 command fence"); return -1; }
+    
+    IDXGIOutput* Output;
+    if(FAILED(Adapter->EnumOutputs(0, &Output))) { AK_MessageBoxOk("Fatal Error", "Could not find the display output for the graphics adapter"); return -1; }
+    
+    ak_fixed_array<DXGI_MODE_DESC> DisplayModes = GetDisplayModes(Output, AppArena);
+    if(!DisplayModes.Data)  { AK_MessageBoxOk("Fatal Error", "Could not receive the display modes"); return -1; }
+    
+    DXGI_SWAP_CHAIN_DESC SwapChainDescription = {};
+    SwapChainDescription.BufferCount = 2;    
+    SwapChainDescription.SampleDesc.Count = 1;
+    SwapChainDescription.SampleDesc.Quality = 0;
+    SwapChainDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    SwapChainDescription.OutputWindow = AK_GetPlatformWindow(PlatformWindow);
+    SwapChainDescription.Windowed = TRUE;
+    SwapChainDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;    
+    
+    ak_v2i Resolution = {};
+    AK_GetWindowResolution(PlatformWindow, (ak_u16*)&Resolution.w, (ak_u16*)&Resolution.h);
+    
+    AK_ForEach(Mode, &DisplayModes)
+    {
+        if((Mode->Width == (ak_u32)Resolution.w) && (Mode->Height == (ak_u32)Resolution.h))
+        {
+            SwapChainDescription.BufferDesc = *Mode;
+            break;
+        }
+    }
+    
+    IDXGISwapChain* SwapChain;
+    if(FAILED(Factory->CreateSwapChain(DirectCommandQueue, &SwapChainDescription, &SwapChain))) { AK_MessageBoxOk("Fatal Error", "Failed to create the swap chain"); return -1; }
+    
+    
+                
     Global_Running = true;
     while(Global_Running)
     {

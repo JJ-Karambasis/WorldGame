@@ -43,15 +43,38 @@ void DeleteWorld(world* World, graphics* Graphics)
 
 ak_u32 CreatePushingObject(world* World)
 {
-    ak_u64 Result = World->PushingObjectStorage.Allocate();
-    pushing_object* PushingObject = World->PushingObjectStorage.Get(Result);
-    PushingObject->ID = Result;
+    ak_u64 Result = World->PushingObjectStorage.Allocate();    
     return AK_PoolIndex(Result);
 }
 
 void DeletePushingObject(world* World, ak_u32 Index)
 {
     World->PushingObjectStorage.Free(World->PushingObjectStorage.IDs[Index]);
+}
+
+pushing_object* GetPushingObject(world* World, entity* Entity)
+{
+    AK_Assert(Entity->Type == ENTITY_TYPE_PUSHABLE, "Cannot get a pushing object of an entity that is not a pushing object");
+    return World->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+}
+
+ak_u32 CreateButtonState(world* World, ak_bool IsToggle)
+{
+    ak_u64 Result = World->ButtonStateStorage.Allocate();
+    button_state* ButtonState = World->ButtonStateStorage.Get(Result);
+    ButtonState->IsToggle = IsToggle;
+    return AK_PoolIndex(Result);    
+}
+
+button_state* GetButtonState(world* World, entity* Entity)
+{
+    AK_Assert(Entity->Type == ENTITY_TYPE_BUTTON, "Cannot get a button state of an entity that is not a button");
+    return World->ButtonStateStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+}
+
+void DeleteButtonState(world* World, ak_u32 Index)
+{
+    World->ButtonStateStorage.Free(World->ButtonStateStorage.IDs[Index]);
 }
 
 void FreeEntity(game* Game, world_id ID)
@@ -74,13 +97,10 @@ void FreeEntity(game* Game, world_id ID)
     if(Entity->Type == ENTITY_TYPE_PUSHABLE)
         DeletePushingObject(&Game->World, UserDataToIndex(Entity->UserData));
     
+    if(Entity->Type == ENTITY_TYPE_BUTTON)
+        DeleteButtonState(&Game->World, UserDataToIndex(Entity->UserData));
+    
     Game->World.EntityStorage[ID.WorldIndex].Free(ID.ID);    
-}
-
-pushing_object* GetPushingObject(world* World, entity* Entity)
-{
-    AK_Assert(Entity->Type == ENTITY_TYPE_PUSHABLE, "Cannot get a pushing object of an entity that is not a pushing object");
-    return World->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
 }
 
 void FreeJumpingQuad(world* World, world_id JumpingQuadID)
@@ -252,9 +272,12 @@ world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v
     return CreatePushableBox(World, Assets, WorldIndex, Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), Mass, Material);
 }
 
-world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, ak_quatf Orientation, material Material)
+world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, ak_quatf Orientation, material Material, ak_bool IsToggle)
 {
-    return CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_BUTTON, SIM_ENTITY_TYPE_SIM_ENTITY, Position, Dimensions, Orientation, MESH_ASSET_ID_BUTTON, Material);
+    world_id Result = CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_BUTTON, SIM_ENTITY_TYPE_SIM_ENTITY, Position, Dimensions, Orientation, MESH_ASSET_ID_BUTTON, Material);
+    entity* Entity = World->EntityStorage[WorldIndex].Get(Result.ID);
+    Entity->UserData = IndexToUserData(CreateButtonState(World, IsToggle));            
+    return Result;
 }
 
 #if 0 
@@ -374,4 +397,10 @@ COLLISION_EVENT(OnPlayerCollision)
             
         } break;
     }                
+}
+
+COLLISION_EVENT(OnButtonCollision)
+{
+    button_state* ButtonState = GetButtonState(&Game->World, Entity);
+    ButtonState->Collided = true;
 }

@@ -576,14 +576,14 @@ ak_bool DevContext_ReadMaterial(ak_stream* Stream, assets* Assets, material* Mat
     GlobalArena->EndTemp(&TempArena); \
     return false; \
 } while(0)
-                  
+
 ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_string LoadedWorldFile)
-                                                            {
-game* Game = DevContext->Game;
-            
+{
+    game* Game = DevContext->Game;
+    
     ak_arena* GlobalArena = AK_GetGlobalArena();
-            ak_temp_arena TempArena = GlobalArena->BeginTemp();
-        
+    ak_temp_arena TempArena = GlobalArena->BeginTemp();
+    
     ak_buffer WorldBuffer = AK_ReadEntireFile(LoadedWorldFile, GlobalArena);        
     
     ak_array<dev_transform> DevTransforms[2] = {};
@@ -593,8 +593,8 @@ game* Game = DevContext->Game;
         LoadWorld_Error("Error loading world file %s, message: %s", LoadedWorldFile.Data, AK_PlatformGetErrorMessage().Data);                
     
     ak_stream Stream = AK_CreateStream(WorldBuffer.Data, WorldBuffer.Size);
-            world_file_header* Header = Stream.Read<world_file_header>();
-        if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))    
+    world_file_header* Header = Stream.Read<world_file_header>();
+    if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))    
         LoadWorld_Error("Error validating world file signature. Is the file %s corrupted?", LoadedWorldFile.Data);            
     
     if((Header->MajorVersion != WORLD_FILE_MAJOR_VERSION) || (Header->MinorVersion != WORLD_FILE_MINOR_VERSION))    
@@ -748,7 +748,7 @@ game* Game = DevContext->Game;
     DeleteWorld(&Game->World, DevContext->Graphics);
     AK_DeleteArray(&DevContext->InitialTransforms[0]);
     AK_DeleteArray(&DevContext->InitialTransforms[1]);
-            
+    
     Game->World = World;
     DevContext->InitialTransforms[0] = DevTransforms[0];
     DevContext->InitialTransforms[1] = DevTransforms[1];
@@ -992,15 +992,15 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
     game* Game = DevContext->Game;
     world* World = &Game->World;  
     dev_object_edit* LastEdit = DevContext->UndoStack.Pop();
-
+    
     if(LastEdit == NULL)
     {
         return;
     }
-
+    
     world_id EntityID = LastEdit->Entity.ID;
     world_id CreatedEntity = {};
-
+    
     dev_object_edit Redo;
     Redo.Entity = LastEdit->Entity;
     Redo.ObjectEditType = LastEdit->ObjectEditType;
@@ -1039,20 +1039,20 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
             case ENTITY_TYPE_STATIC:
             {
                 CreatedEntity = CreateStaticEntity(World, Game->Assets, EntityID.WorldIndex, 
-                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                    LastEdit->MeshID, LastEdit->Material);
+                                                   LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                                                   LastEdit->MeshID, LastEdit->Material);
             } break;
             case ENTITY_TYPE_RIGID_BODY:
             {
                 CreatedEntity = CreateSphereRigidBody(World, Game->Assets, EntityID.WorldIndex, 
-                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                    1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
+                                                      LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                                                      1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
             } break;
             case ENTITY_TYPE_PUSHABLE:
             {
                 CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
-                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                    LastEdit->Mass, LastEdit->Material);
+                                                  LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                                                  LastEdit->Mass, LastEdit->Material);
             } break;
             AK_INVALID_DEFAULT_CASE;
         }
@@ -1116,15 +1116,15 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
     game* Game = DevContext->Game;
     world* World = &Game->World;  
     dev_object_edit* LastEdit = DevContext->RedoStack.Pop();
-
+    
     if(LastEdit == NULL)
     {
         return;
     }
-
+    
     world_id EntityID = LastEdit->Entity.ID;
     world_id CreatedEntity = {};
-
+    
     dev_object_edit Undo;
     Undo.Entity = LastEdit->Entity;
     Undo.ObjectEditType = LastEdit->ObjectEditType;
@@ -1168,20 +1168,20 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
             case ENTITY_TYPE_STATIC:
             {
                 CreatedEntity = CreateStaticEntity(World, Game->Assets, EntityID.WorldIndex, 
-                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                    LastEdit->MeshID, LastEdit->Material);
+                                                   LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                                                   LastEdit->MeshID, LastEdit->Material);
             } break;
             case ENTITY_TYPE_RIGID_BODY:
             {
                 CreatedEntity = CreateSphereRigidBody(World, Game->Assets, EntityID.WorldIndex, 
-                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                    1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
+                                                      LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                                                      1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
             } break;
             case ENTITY_TYPE_PUSHABLE:
             {
                 CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
-                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                    LastEdit->Mass, LastEdit->Material);
+                                                  LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
+                                                  LastEdit->Mass, LastEdit->Material);
             } break;
             AK_INVALID_DEFAULT_CASE;
         }
@@ -1195,7 +1195,7 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
         }
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntity);
     }
-
+    
     DevContext->UndoStack.Add(Undo);
     if(CreatedEntity.IsValid())
     {
@@ -1257,16 +1257,22 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         
         material DefaultFloorMaterial = { CreateDiffuse(AK_White3()) };    
         world_id FloorA = CreateStaticEntity(&Game->World, Game->Assets, 0, 
-                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
+                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(15.0f, 15.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
                                              MESH_ASSET_ID_BOX, DefaultFloorMaterial);
         world_id FloorB = CreateStaticEntity(&Game->World, Game->Assets, 1, 
-                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(5.0f, 5.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
+                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(15.0f, 15.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
                                              MESH_ASSET_ID_BOX, DefaultFloorMaterial);
         
         material DefaultButtonMaterial = { CreateDiffuse(AK_White3()*0.4f) };
         world_id ButtonA = CreateButton(&Game->World, Game->Assets, 0, 
                                         AK_V3(1.0f, -1.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), 
-                                        DefaultButtonMaterial);        
+                                        DefaultButtonMaterial, true);        
+        
+        material PushingBlockMaterial = { CreateDiffuse(AK_RGB(0.5f, 0.7f, 0.3f)) };
+        world_id PushingBlockA = CreatePushableBox(&Game->World, Game->Assets, 0, AK_V3(-2.0f, -2.0f, 0.0f), 1.0f, 50.0f, PushingBlockMaterial);
+        
+        material RigidBodyMaterial = { CreateDiffuse(AK_Red3()) };
+        world_id RigidBodyA = CreateSphereRigidBody(&Game->World, Game->Assets, 0, AK_V3(2.0f, 2.0f, 0.5f), 0.5f, 30.0f, 0.3f, RigidBodyMaterial);        
         
         CreatePointLight(&Game->World.GraphicsStates[0], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
         CreatePointLight(&Game->World.GraphicsStates[1], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
@@ -1276,6 +1282,8 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorA);
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorB);        
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, ButtonA);
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PushingBlockA);
+        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, RigidBodyA);
         
         ak_v3f Translations[2] = {AK_V3(-1.5f, 0.0f, 0.001f), AK_V3(1.5f, 0.0f, 0.001f)};        
         ak_v2f Dimensions = AK_V2(1.0f, 1.0f);
@@ -1400,6 +1408,15 @@ void DevContext_Tick()
                     if(DevTransforms->Size < (Index+1))
                         DevTransforms->Resize(Index+1);
                     
+                    GizmoState->OriginalRotation = AK_IdentityM3<ak_f32>();
+                    switch(SelectedObject->Type)
+                    {
+                        case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+                        {      
+                            GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Game->World.NewTransforms[SelectedObject->EntityID.WorldIndex][AK_PoolIndex(SelectedObject->EntityID.ID)].Orientation));
+                        } break;
+                    }
+                    
                     dev_transform* DevTransform = DevTransforms->Get(Index); 
                     entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
                     Edit.Entity = *World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
@@ -1485,21 +1502,29 @@ void DevContext_Tick()
                                                 AK_Dot(DirectionToOld, DirectionToNew));
                     
                     
+                    ak_m3f Orientation = AK_IdentityM3<ak_f32>();
+                    switch(SelectedObject->Type)
+                    {
+                        case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+                        {                                  
+                        } break;
+                    }
+                                        
                     switch(GizmoHit->Gizmo->MovementDirection)
                     {
                         case DEV_GIZMO_MOVEMENT_DIRECTION_X:
                         {
-                            PointDiff = AK_V3(AngleDiff, 0.0f, 0.0f);
+                            PointDiff = AngleDiff*Orientation.XAxis;
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
                         {
-                            PointDiff = AK_V3(0.0f, AngleDiff, 0.0f);
+                            PointDiff = AngleDiff*Orientation.YAxis;
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
                         {
-                            PointDiff = AK_V3(0.0f, 0.0f, AngleDiff);
+                            PointDiff = AngleDiff*Orientation.ZAxis;
                         } break;
                         
                         AK_INVALID_DEFAULT_CASE;
@@ -1553,7 +1578,15 @@ void DevContext_Tick()
                         ak_sqtf* Transform = &World->NewTransforms[SelectedObject->EntityID.WorldIndex][Index];
                         Transform->Translation = DevTransform->Translation;
                         Transform->Scale = DevTransform->Scale;
-                        Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
+                        
+                        if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE)
+                        {                        
+                            ak_quatf XOrientation = AK_RotQuat(GizmoState->OriginalRotation.XAxis, -PointDiff.x);
+                            ak_quatf YOrientation = AK_RotQuat(GizmoState->OriginalRotation.YAxis, -PointDiff.y);
+                            ak_quatf ZOrientation = AK_RotQuat(GizmoState->OriginalRotation.ZAxis, -PointDiff.z);
+                            
+                            Transform->Orientation *= AK_Normalize(XOrientation*YOrientation*ZOrientation);
+                        }
                         
                         World->OldTransforms[SelectedObject->EntityID.WorldIndex][Index] = *Transform;                        
                         
@@ -1562,7 +1595,7 @@ void DevContext_Tick()
                         
                         graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->EntityID.WorldIndex];
                         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
-                        GraphicsEntity->Transform = AK_TransformM4(*Transform);
+                        GraphicsEntity->Transform = AK_TransformM4(*Transform);                        
                     } break;
                     
                     case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
@@ -1739,8 +1772,7 @@ void DevContext_RenderConvexHulls(dev_context* Context, ak_u32 WorldIndex, view_
                     ak_m4f Model = AK_TransformM4(NewTransform);
                     
                     PushDrawLineMesh(Context->Graphics, ConvexHulls[ConvexHullIndex].MeshID, Model, AK_Blue3(),
-                                     ConvexHulls[ConvexHullIndex].IndexCount, 0, 0);
-                    DevDraw_Point(Context, Model.Translation.xyz, 0.25f, AK_Red3());
+                                     ConvexHulls[ConvexHullIndex].IndexCount, 0, 0);                    
                     ConvexHullIndex++;
                 } break;
             }
@@ -1758,7 +1790,7 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
     world* World = &Game->World;
     
     graphics_state* GraphicsState = &World->GraphicsStates[WorldIndex];        
-        
+    
     UpdateRenderBuffer(Graphics, &GraphicsState->RenderBuffer, Game->Resolution);
     
     camera* Camera = Context->Cameras + WorldIndex;    
@@ -1866,7 +1898,7 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
     
     PushDepth(Graphics, false);        
     if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
-    {   
+    {           
         if(DevContext_GetSelectedObjectWorldIndex(&Context->SelectedObject) == WorldIndex)
         {                        
             dev_gizmo_state* GizmoState = &Context->GizmoState;
@@ -1876,9 +1908,10 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
             {
                 case DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE:
                 case DEV_GIZMO_MOVEMENT_TYPE_SCALE:
-                {
+                {                                        
                     dev_mesh* GizmoMesh = (GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) ? &Context->TriangleScaleMesh : &Context->TriangleArrowMesh;
                     DevContext_PopulateNonRotationGizmos(GizmoState, GizmoMesh, &Context->TrianglePlaneMesh, SelectedObjectPosition);                
+                    
                 } break;
                 
                 case DEV_GIZMO_MOVEMENT_TYPE_ROTATE:

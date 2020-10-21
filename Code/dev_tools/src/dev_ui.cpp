@@ -793,15 +793,21 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
             DevUI_MaterialTool(Game->Assets, &SelectedObject->MaterialContext);
             
             DevTransform->Translation = Translation;
-            DevTransform->Scale       = Scale;
+            DevTransform->Scale       = Scale;            
+            ak_v3f PointDiff = Rotation-DevTransform->Euler;            
             DevTransform->Euler       = Rotation;
             
             ak_sqtf* Transform = &World->NewTransforms[SelectedObject->EntityID.WorldIndex][Index];
             Transform->Translation = DevTransform->Translation;
             Transform->Scale = DevTransform->Scale;                        
-            Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
             
-            World->OldTransforms[SelectedObject->EntityID.WorldIndex][Index] = *Transform;
+            ak_m3f OriginalRotation = AK_Transpose(AK_QuatToMatrix(Transform->Orientation));
+            
+            ak_quatf XOrientation = AK_RotQuat(OriginalRotation.XAxis, PointDiff.x);
+            ak_quatf YOrientation = AK_RotQuat(OriginalRotation.YAxis, PointDiff.y);
+            ak_quatf ZOrientation = AK_RotQuat(OriginalRotation.ZAxis, PointDiff.z);
+            
+            Transform->Orientation *= AK_Normalize(XOrientation*YOrientation*ZOrientation);                        
             
             sim_entity* SimEntity = GetSimEntity(Game, SelectedObject->EntityID);
             SimEntity->Transform = *Transform;                    
@@ -981,6 +987,13 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
                         {
                             DevCamera->Target = NewTransform->Translation;
                             DevCamera->SphericalCoordinates.radius = 6.0f;
+                        }
+                        
+                        if(Entity->Type == ENTITY_TYPE_BUTTON)
+                        {
+                            button_state* ButtonState = GetButtonState(&Game->World, Entity);
+                            ButtonState->IsDown = false;
+                            ButtonState->Collided = false;
                         }
                     }
                 }                

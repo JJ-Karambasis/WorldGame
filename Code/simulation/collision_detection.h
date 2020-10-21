@@ -61,6 +61,7 @@ struct continuous_contact
     contact Contact;    
 };
 
+ak_bool EPATest(contact* Contact, convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB);
 ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, sphere* Sphere);
 ak_f32 RayCapsuleIntersection(ak_v3f Origin, ak_v3f Direction, capsule* Capsule);
 ak_bool RayTriangleIntersection(ak_v3f RayOrigin, ak_v3f RayDirection, ak_v3f P0, ak_v3f P1, ak_v3f P2, ak_f32* t, ak_f32* u, ak_f32* v);
@@ -68,8 +69,11 @@ ak_f32 LineSegmentSphereIntersection(ak_v3f* LineSegment, sphere* Sphere);
 ak_f32 LineSegmentCapsuleIntersection(ak_v3f* LineSegment, capsule* Capsule);
 ak_f32 LineSegmentsClosestPoints(ak_v3f* Result, ak_v3f* A, ak_v3f* B);
 ak_v3f PointLineSegmentClosestPoint(ak_v3f P, ak_v3f* LineSegment);
+contact_list GetSphereSphereContacts(sphere* SphereA, sphere* SphereB);
 contact_list GetSphereCapsuleContacts(sphere* Sphere, capsule* Capsule);
 contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform);
+contact_list GetCapsuleCapsuleContacts(capsule* CapsuleA, capsule* CapsuleB);
+contact_list GetCapsuleHullContacts(capsule* Capsule, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform);
 contact GetQuadraticDeepestContact(ak_v3f P0, ak_v3f P1, ak_f32 RadiusA, ak_f32 RadiusB);
 contact GetSphereSphereDeepestContact(sphere* SphereA, sphere* SphereB);
 contact GetSphereCapsuleDeepestContact(sphere* SphereA, capsule* CapsuleB);

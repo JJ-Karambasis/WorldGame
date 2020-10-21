@@ -259,3 +259,142 @@ global ccd_contact_function* CCDContactFunctions[3][3] =
     {CCDCapsuleSphereContact, CCDCapsuleCapsuleContact, CCDCapsuleHullContact},
     {CCDHullSphereContact, CCDHullCapsuleContact, CCDHullHullContact}
 };
+
+#define DEEPEST_CONTACT_FUNCTION(name) ak_bool name(contact* Contact, sim_entity* SimEntityA, sim_entity* SimEntityB, collision_volume* VolumeA, collision_volume* VolumeB)
+typedef DEEPEST_CONTACT_FUNCTION(deepest_contact_function);
+
+DEEPEST_CONTACT_FUNCTION(DeepestSphereSphereContact)
+{
+    sphere SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
+    sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
+    
+    contact_list ContactList = GetSphereSphereContacts(&SphereA, &SphereB);
+    if(ContactList.Count == 1)
+    {
+        *Contact = ContactList.Ptr[0];
+        return true;
+    }    
+    return false;
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestSphereCapsuleContact)
+{
+    sphere  SphereA  = TransformSphere(&VolumeA->Sphere,    SimEntityA->Transform);
+    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+    
+    contact_list ContactList = GetSphereCapsuleContacts(&SphereA, &CapsuleB);
+    if(ContactList.Count == 1)
+    {
+        *Contact = ContactList.Ptr[0];
+        return true;
+    }
+    
+    return false;
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestSphereHullContact)
+{
+    sphere  SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
+    ak_sqtf HullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    
+    contact_list ContactList = GetSphereHullContacts(&SphereA, VolumeB->ConvexHull, HullTransformB);
+    if(ContactList.Count == 1)
+    {
+        *Contact = ContactList.Ptr[0];
+        return true;
+    }    
+    return false;
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestCapsuleSphereContact)
+{
+    if(DeepestSphereCapsuleContact(Contact, SimEntityB, SimEntityA, VolumeB, VolumeA))
+    {
+        Contact->Normal = -Contact->Normal;
+        return true;
+    }    
+    return false;    
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestCapsuleCapsuleContact)
+{
+    capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
+    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+    
+    contact_list ContactList = GetCapsuleCapsuleContacts(&CapsuleA, &CapsuleB);
+    if(ContactList.Count > 0)
+    {
+        *Contact = *ContactList.GetDeepestContact();
+        return true;
+    }    
+    return false;
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestCapsuleHullContact)
+{
+    capsule Capsule = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
+    ak_sqtf HullTransform = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    
+    contact_list ContactList = GetCapsuleHullContacts(&Capsule, VolumeB->ConvexHull, HullTransform);
+    if(ContactList.Count > 0)
+    {
+        *Contact = *ContactList.GetDeepestContact();
+        return true;
+    }
+    
+    return false;
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestHullSphereContact)
+{
+    if(DeepestSphereHullContact(Contact, SimEntityB, SimEntityA, VolumeB, VolumeA))
+    {
+        Contact->Normal = -Contact->Normal;
+        return true;
+    }    
+    return false;
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestHullCapsuleContact)
+{
+    if(DeepestCapsuleHullContact(Contact, SimEntityB, SimEntityA, VolumeB, VolumeA))
+    {
+        Contact->Normal = -Contact->Normal;
+        return true;
+    }
+    
+    return false;
+}
+
+DEEPEST_CONTACT_FUNCTION(DeepestHullHullContact)
+{
+    ak_sqtf HullTransformA = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
+    ak_sqtf HullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    
+    convex_hull_support AGJK = {VolumeA->ConvexHull, HullTransformA};
+    convex_hull_support BGJK = {VolumeB->ConvexHull, HullTransformB};
+    
+    if(GJKIntersected(&AGJK, &BGJK))
+    {        
+        if(!EPATest(Contact, VolumeA->ConvexHull, HullTransformA, VolumeB->ConvexHull, HullTransformB))
+        {
+            gjk_distance DistanceResult = GJKDistance(&AGJK, &BGJK);
+            
+            ak_v3f Witness0, Witness1;
+            DistanceResult.GetClosestPoints(&Witness0, &Witness1);                            
+            Contact->Normal = AK_Normalize(Witness1-Witness0);
+            Contact->Penetration = 0;
+            Contact->Position = Witness0 + ((Witness1-Witness0)*0.5f);            
+        }        
+        return true;
+    }
+    
+    return false;
+}
+
+global deepest_contact_function* DeepestContactFunctions[3][3] = 
+{
+    {DeepestSphereSphereContact, DeepestSphereCapsuleContact, DeepestSphereHullContact},
+    {DeepestCapsuleSphereContact, DeepestCapsuleCapsuleContact, DeepestCapsuleHullContact}, 
+    {DeepestHullSphereContact, DeepestHullCapsuleContact, DeepestHullHullContact}
+};

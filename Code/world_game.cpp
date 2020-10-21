@@ -101,17 +101,29 @@ void AddRigidBodyContacts(game* Game, ak_u32 WorldIndex, rigid_body* RigidBody, 
         } break;
         
         case ENTITY_TYPE_RIGID_BODY:
-        case ENTITY_TYPE_STATIC:
+        case ENTITY_TYPE_STATIC:        
         {
             Simulation->AddContactConstraints(RigidBody, SimEntity->ToRigidBody(), ContactList);            
         } break;
     }
 }
 
-void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
+BROAD_PHASE_PAIR_FILTER_FUNC(FilterCollisions)
+{
+    entity_storage* EntityStorage = (entity_storage*)UserData;
+    entity* EntityB = EntityStorage->GetByIndex(UserDataToIndex(Pair->SimEntityB->UserData));
+    if((EntityB->Type == ENTITY_TYPE_RIGID_BODY) || (EntityB->Type == ENTITY_TYPE_BUTTON))
+        return false;    
+    return true;
+}
+
+void HandleSlidingCollisions(game* Game, ak_u32 WorldIndex, rigid_body* RigidBody)
 {            
     ak_v3f MoveDelta = RigidBody->MoveDelta;
     RigidBody->MoveDelta = AK_V3(MoveDelta.xy);
+    
+    simulation* Simulation = &Game->World.Simulations[WorldIndex];    
+    entity_storage* EntityStorage = &Game->World.EntityStorage[WorldIndex];
     
     for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
     {
@@ -119,7 +131,9 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
         if(DeltaLength > 0)
         {
             ak_v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
-            broad_phase_pair_list Pairs = Simulation->GetAllPairs(RigidBody);                        
+            broad_phase_pair_list AllPairs = Simulation->GetAllPairs(RigidBody);
+            broad_phase_pair_list Pairs = Simulation->FilterPairs(AllPairs, FilterCollisions, EntityStorage);
+            
             continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
             if(ContactTOI.HitEntity)
             {
@@ -152,7 +166,9 @@ void HandleSlidingCollisions(simulation* Simulation, rigid_body* RigidBody)
         if(DeltaLength > 0)
         {
             ak_v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
-            broad_phase_pair_list Pairs = Simulation->GetAllPairs(RigidBody);            
+            broad_phase_pair_list AllPairs = Simulation->GetAllPairs(RigidBody);
+            broad_phase_pair_list Pairs = Simulation->FilterPairs(AllPairs, FilterCollisions, EntityStorage);
+                        
             continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
             if(ContactTOI.HitEntity)
             {
@@ -191,20 +207,23 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
     ak_f32 dt = Game->dtFixed;
     
     world* World = &Game->World;
+    
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-    {        
+    {
         simulation* Simulation = &World->Simulations[WorldIndex];
-        AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
+        entity_storage* EntityStorage = &World->EntityStorage[WorldIndex];
+        AK_ForEach(Entity, EntityStorage)
         {
-            ak_u32 EntityIndex = UserDataToIndex(RigidBody->UserData);
-            entity* Entity = World->EntityStorage[WorldIndex].GetByIndex(EntityIndex);            
-            RigidBody->Transform = World->NewTransforms[WorldIndex][EntityIndex];
+            sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);            
+            SimEntity->Transform = World->NewTransforms[WorldIndex][AK_PoolIndex(Entity->ID.ID)];
             
             switch(Entity->Type)
             {
                 case ENTITY_TYPE_PLAYER:
                 {
                     Entity->OnCollision = OnPlayerCollision;                
+                    rigid_body* RigidBody = SimEntity->ToRigidBody();
+                    
                     Simulation->AddConstraint(RigidBody, NULL, LockConstraint);
                     
                     player* Player = (player*)Entity->UserData;
@@ -220,11 +239,39 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                         {
                             RigidBody->LinearDamping = {};
                         } break;
-                    }                                
+                    }     
+                    
                 } break;
+                
+                case ENTITY_TYPE_BUTTON:
+                {
+                    
+                    button_state* ButtonState = GetButtonState(World, Entity);
+                    if(ButtonState->Collided && !ButtonState->IsDown)
+                    {
+                        ButtonState->IsDown = true;
+                        SimEntity->Transform.Scale.z *= 0.01f;
+                        
+                        collision_volume* CollisionVolume = Simulation->CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
+                        CollisionVolume->ConvexHull->Header.Transform.Scale.z *= 100.0f;
+                    }
+                    
+                    if(!ButtonState->Collided && ButtonState->IsDown && ButtonState->IsToggle)
+                    {
+                        ButtonState->IsDown = false;
+                        SimEntity->Transform.Scale.z *= 100.0f;
+                                                
+                        collision_volume* CollisionVolume = Simulation->CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
+                        CollisionVolume->ConvexHull->Header.Transform.Scale.z *= 0.01f;
+                    }
+                    
+                    ButtonState->Collided = false;                    
+                    Entity->OnCollision = OnButtonCollision;
+                } break;                                
                 
                 case ENTITY_TYPE_PUSHABLE:
                 {
+                    rigid_body* RigidBody = SimEntity->ToRigidBody();
                     Simulation->AddConstraint(RigidBody, NULL, LockConstraint);
                     
                     pushing_object* PushingObject = GetPushingObject(&Game->World, Entity);
@@ -241,12 +288,14 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                 
                 case ENTITY_TYPE_RIGID_BODY:
                 {
+                    rigid_body* RigidBody = SimEntity->ToRigidBody();
                     RigidBody->LinearDamping = AK_V3(4.0f, 4.0f, 0.0f);
                     RigidBody->AngularDamping = AK_V3(1.0f, 1.0f, 1.0f);
-                } break;            
+                } break;
             }
         }
     }
+    
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
@@ -278,6 +327,10 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                         AddRigidBodyContacts(Game, WorldIndex, Pair->SimEntityB->ToRigidBody(), Pair->SimEntityA, ContactList);
                     }                
                 }
+            }            
+            else if((TypeA == ENTITY_TYPE_BUTTON) || (TypeB == ENTITY_TYPE_BUTTON))
+            {
+                Simulation->ComputeDeepestContact(Pair);
             }
         }        
     }
@@ -303,7 +356,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                 {
                     player* Player = (player*)Entity->UserData;
                     
-                    HandleSlidingCollisions(Simulation, RigidBody);
+                    HandleSlidingCollisions(Game, WorldIndex, RigidBody);
                     
                     World->NewCameras[WorldIndex].Target = RigidBody->Transform.Translation;                   
                 } break;
@@ -311,7 +364,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                 case ENTITY_TYPE_PUSHABLE:
                 {           
                     ak_v3f StartPosition = RigidBody->Transform.Translation;                                                            
-                    HandleSlidingCollisions(Simulation, RigidBody);                                        
+                    HandleSlidingCollisions(Game, WorldIndex, RigidBody);                                        
                     
                     pushing_object* PushingObject = GetPushingObject(&Game->World, Entity);
                     if(PushingObject->PlayerID.IsValid())
@@ -364,12 +417,15 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
             if(EntityB->OnCollision) EntityB->OnCollision(Game, EntityB, EntityA, -Event->Normal);
         }
         Simulation->CollisionEvents.Count = 0;
-    }
-    
+    }    
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        simulation* Simulation = &World->Simulations[WorldIndex];
+        simulation* Simulation = &World->Simulations[WorldIndex];        
+        
+        AK_ForEach(SimEntity, &Simulation->SimEntityStorage)
+            World->NewTransforms[WorldIndex][UserDataToIndex(SimEntity->UserData)] = SimEntity->Transform;
+                                             
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)        
             World->NewTransforms[WorldIndex][UserDataToIndex(RigidBody->UserData)] = RigidBody->Transform;                        
     }

@@ -53,8 +53,7 @@ enum player_state
 };
 
 struct pushing_object
-{
-    ak_u64 ID;
+{    
     world_id PlayerID;
     ak_v2f Direction;
 };
@@ -73,12 +72,21 @@ struct jumping_quad
     world_id OtherQuad;    
 };
 
+struct button_state
+{
+    ak_bool IsToggle;    
+    ak_bool Collided;    
+    ak_bool IsDown;    
+};
+
 typedef ak_pool<entity> entity_storage;
 typedef ak_pool<pushing_object> pushing_object_storage;
 typedef ak_pool<jumping_quad> jumping_quad_storage;
+typedef ak_pool<button_state> button_state_storage;
 
 struct world
 {
+    button_state_storage ButtonStateStorage;
     pushing_object_storage PushingObjectStorage;  
     jumping_quad_storage JumpingQuadStorage[2];
     entity_storage EntityStorage[2];    

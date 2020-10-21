@@ -68,6 +68,37 @@ void DevDraw_Edge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Colo
     DevDraw_OrientedBox(DevContext, P0, AK_V3(0.025f, 0.025f, ZLength), XAxis, YAxis, ZAxis, Color);
 }
 
+void DevDraw_Frame(dev_context* DevContext, ak_v3f Position, ak_v3f XAxis = AK_XAxis(), ak_v3f YAxis = AK_YAxis(), ak_v3f ZAxis = AK_ZAxis())
+{            
+    {
+        ak_v3f X, Y, Z;
+        Z = XAxis;
+        AK_Basis(Z, &X, &Y);
+        
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(AK_Red3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);    
+    }
+    
+    {
+        ak_v3f X, Y, Z;
+        Z = YAxis;
+        AK_Basis(Z, &X, &Y);
+        
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(AK_Green3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+    }
+    
+    {
+        ak_v3f X, Y, Z;
+        Z = ZAxis;
+        AK_Basis(Z, &X, &Y);
+        
+        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        PushDrawUnlitMesh(DevContext->Graphics, DevContext->TriangleArrowMesh.MeshID, Transform, CreateDiffuseMaterialSlot(AK_Blue3()), DevContext->TriangleArrowMesh.IndexCount, 0, 0);            
+    }
+    
+    DevDraw_Sphere(DevContext, Position, 0.04f, AK_White3());    
+}
 
 ak_color3f DevDraw_GetGizmoColor(dev_gizmo Gizmo)
 {

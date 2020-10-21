@@ -1,7 +1,3 @@
-#include "support.cpp"
-#include "gjk.cpp"
-#include "epa.cpp"
-
 ak_f32 RaySphereIntersection(ak_v3f Origin, ak_v3f Direction, ak_v3f CenterP, ak_f32 Radius)
 {
     ak_v3f CO = Origin-CenterP;
@@ -386,6 +382,42 @@ ak_v3f PointLineSegmentClosestPoint(ak_v3f P, ak_v3f* LineSegment)
     return Result;
 }
 
+contact_list GetSphereSphereContacts(sphere* SphereA, sphere* SphereB)
+{
+    contact_list Result = {};
+    
+    ak_v3f P0 = SphereA->CenterP;
+    ak_v3f P1 = SphereB->CenterP;
+    
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_SqrMagnitude(Normal);  
+    
+    //TODO(JJ): This assertion is a degenerate case. We probably should support it at some point. Happens when the sphere center point 
+    //is on the capsule line thus a contact normal cannot be computed. Can probably just use an arbitrary normal
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Not Implemented"); 
+    
+    ak_f32 Radius = SphereA->Radius+SphereB->Radius;        
+    if(NormalLength <= AK_Square(Radius))
+    {
+        NormalLength = AK_Sqrt(NormalLength);
+        Normal /= NormalLength;
+        
+        ak_arena* GlobalArena = AK_GetGlobalArena();
+        
+        Result.Count = 1;
+        Result.Ptr = GlobalArena->PushArray<contact>(Result.Count);
+        
+        ak_v3f PointOnSphereA  = P0 + Normal*SphereA->Radius;
+        ak_v3f PointOnSphereB = P1 - Normal*SphereB->Radius;
+        
+        Result.Ptr[0].Normal = Normal;        
+        Result.Ptr[0].Position = PointOnSphereA + ((PointOnSphereB-PointOnSphereA)*0.5f);
+        Result.Ptr[0].Penetration = Radius-NormalLength;
+    }
+    
+    return Result;    
+}
+
 contact_list GetSphereCapsuleContacts(sphere* Sphere, capsule* Capsule)
 {
     contact_list Result = {};
@@ -400,9 +432,8 @@ contact_list GetSphereCapsuleContacts(sphere* Sphere, capsule* Capsule)
     //is on the capsule line thus a contact normal cannot be computed. Can probably just use an arbitrary normal
     AK_Assert(!AK_EqualZeroEps(NormalLength), "Not Implemented"); 
     
-    ak_f32 Radius = Sphere->Radius+Capsule->Radius;    
-    ak_f32 Diff = NormalLength-AK_Square(Radius);
-    if(Diff < 0 || AK_EqualZeroEps(Diff))
+    ak_f32 Radius = Sphere->Radius+Capsule->Radius;        
+    if(NormalLength <= AK_Square(Radius))
     {
         NormalLength = AK_Sqrt(NormalLength);
         Normal /= NormalLength;
@@ -431,15 +462,15 @@ contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, ak_s
     convex_hull_support ConvexHullGJK = {ConvexHull, ConvexHullTransform};        
     gjk_distance Distance = GJKDistance(&PointGJK, &ConvexHullGJK);
     
-    if(Distance.SquareDistance <= AK_Square(Sphere->Radius))
-    {
-        ak_v3f P0, P1;
-        Distance.GetClosestPoints(&P0, &P1);
-        
-        ak_v3f Normal = P1-P0;
-        ak_f32 NormalLength = AK_SqrMagnitude(Normal);
-        AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined from gjk");
-        
+    ak_v3f P0, P1;
+    Distance.GetClosestPoints(&P0, &P1);
+    
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_SqrMagnitude(Normal);
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined from gjk");
+    
+    if(NormalLength <= AK_Square(Sphere->Radius))
+    {        
         NormalLength = AK_Sqrt(NormalLength);
         Normal /= NormalLength;
         
@@ -456,6 +487,79 @@ contact_list GetSphereHullContacts(sphere* Sphere, convex_hull* ConvexHull, ak_s
     
     return Result;
 }
+
+//TODO(JJ): This function is unfinished. There are a couple of degenerate cases we need to handle
+contact_list GetCapsuleCapsuleContacts(capsule* CapsuleA, capsule* CapsuleB)
+{
+    ak_v3f P[2];
+    LineSegmentsClosestPoints(P, CapsuleA->P, CapsuleB->P);
+    
+    ak_v3f P0 = P[0];
+    ak_v3f P1 = P[1];
+    
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_SqrMagnitude(Normal);  
+        
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined from gjk");
+        
+    ak_f32 Radius = CapsuleA->Radius+CapsuleB->Radius;        
+    
+    contact_list Result = {};
+    if(NormalLength <= AK_Square(Radius))
+    {
+        NormalLength = AK_Sqrt(NormalLength);
+        Normal /= NormalLength;
+        
+        ak_arena* GlobalArena = AK_GetGlobalArena();
+        
+        Result.Count = 1;
+        Result.Ptr = GlobalArena->PushArray<contact>(Result.Count);
+        
+        ak_v3f PointOnSphere  = P0 + Normal*CapsuleA->Radius;
+        ak_v3f PointOnCapsule = P1 - Normal*CapsuleB->Radius;
+        
+        Result.Ptr[0].Normal = Normal;        
+        Result.Ptr[0].Position = PointOnSphere + ((PointOnCapsule-PointOnSphere)*0.5f);
+        Result.Ptr[0].Penetration = Radius-NormalLength;
+    }    
+    return Result;
+}
+
+contact_list GetCapsuleHullContacts(capsule* Capsule, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
+{
+    line_segment_support AGJK = {Capsule->P0, Capsule->P1};
+    convex_hull_support  BGJK = {ConvexHull, ConvexHullTransform};    
+    gjk_distance Distance = GJKDistance(&AGJK, &BGJK);
+    
+    ak_v3f P0, P1;
+    Distance.GetClosestPoints(&P0, &P1);                
+    
+    ak_v3f Normal = P1-P0;
+    ak_f32 NormalLength = AK_SqrMagnitude(Normal);  
+    
+    AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined from gjk");
+    
+    ak_f32 Radius = Capsule->Radius;
+    
+    contact_list Result = {};
+    if(NormalLength <= AK_Square(Radius))
+    {        
+        NormalLength = AK_Sqrt(NormalLength);
+        Normal /= NormalLength;
+        
+        ak_arena* GlobalArena = AK_GetGlobalArena();
+        
+        Result.Count = 1;
+        Result.Ptr = GlobalArena->PushArray<contact>(Result.Count);
+        
+        Result.Ptr[0].Position = P1;
+        Result.Ptr[0].Penetration = NormalLength - Radius;        
+        Result.Ptr[0].Normal = Normal;        
+    }
+    
+    return Result;
+}
+
 
 contact GetQuadraticDeepestContact(ak_v3f P0, ak_v3f P1, ak_f32 RadiusA, ak_f32 RadiusB)
 {

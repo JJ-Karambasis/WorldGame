@@ -1,3 +1,7 @@
+#include "support.cpp"
+#include "gjk.cpp"
+#include "epa.cpp"
+
 #include "collision_volume.cpp"
 #include "collision_tables.cpp"
 #include "broad_phase.cpp"
@@ -255,6 +259,26 @@ contact_list simulation::ComputeContacts(broad_phase_pair* Pair)
         AddCollisionEvent(Pair->SimEntityA, Pair->SimEntityB, ContactList.GetDeepestContact()->Normal);            
     
     return ContactList;
+}
+
+contact* simulation::ComputeDeepestContact(broad_phase_pair* Pair)
+{
+    collision_volume* VolumeA = CollisionVolumeStorage.Get(Pair->AVolumeID);
+    collision_volume* VolumeB = CollisionVolumeStorage.Get(Pair->BVolumeID);
+    
+    deepest_contact_function* DeepestContactFunction = DeepestContactFunctions[VolumeA->Type][VolumeB->Type];
+    
+    contact Result;
+    if(DeepestContactFunction(&Result, Pair->SimEntityA, Pair->SimEntityB, VolumeA, VolumeB))
+    {
+        AddCollisionEvent(Pair->SimEntityA, Pair->SimEntityB, Result.Normal);
+        
+        ak_arena* GlobalArena = AK_GetGlobalArena();
+        contact* pResult = GlobalArena->Push<contact>();
+        *pResult = Result;
+        return pResult;
+    }    
+    return NULL;
 }
 
 inline ak_f32 
