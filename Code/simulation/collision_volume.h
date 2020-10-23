@@ -39,7 +39,7 @@ struct collision_volume
     { 
         sphere Sphere;
         capsule Capsule;        
-        convex_hull* ConvexHull;        
+        convex_hull ConvexHull;        
     };    
     
     ak_u64 ID;

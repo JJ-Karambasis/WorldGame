@@ -38,6 +38,12 @@ ak_u64 CreatePointLight(graphics_state* GraphicsState, ak_v3f Position, ak_f32 R
     return ID;    
 }
 
+void CreatePointLights(graphics_state* GraphicsStates, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity, ak_bool On)
+{
+    CreatePointLight(&GraphicsStates[0], Position, Radius, Color, Intensity, On);
+    CreatePointLight(&GraphicsStates[1], Position, Radius, Color, Intensity, On);
+}
+
 inline ak_v3f* 
 GetFrustumCorners(view_settings* ViewSettings, ak_v2i RenderDim)
 {
@@ -392,4 +398,19 @@ void JumpingQuadPass(graphics* Graphics, jumping_quad_storage* JumpingQuads, jum
         ak_m4f Transform = AK_TransformM4(JumpingQuad->CenterP, AK_IdentityQuat<ak_f32>(), AK_V3(JumpingQuad->Dimensions, 0.0f));
         PushDrawUnlitMesh(Graphics, Mesh->MeshID, Transform, QuadDiffuse, Mesh->IndexCount, 0, 0);
     }        
+}
+
+void NormalEntityPass(graphics* Graphics, game* Game, graphics_state* GraphicsState, view_settings* ViewSettings)
+{
+    graphics_light_buffer LightBuffer = GetLightBuffer(GraphicsState);
+    ShadowPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
+    
+    StandardEntityCommands(Graphics, GraphicsState, ViewSettings);
+    EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);            
+}
+
+void NormalEntityPassPlusJumpingQuad(graphics* Graphics, game* Game, graphics_state* GraphicsState, jumping_quad_storage* JumpingQuads, view_settings* ViewSettings)
+{    
+    NormalEntityPass(Graphics, Game, GraphicsState, ViewSettings);
+    JumpingQuadPass(Graphics, JumpingQuads, &Game->QuadMesh);    
 }

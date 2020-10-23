@@ -33,6 +33,37 @@ struct dev_input
     ak_f32 Scroll;
 };
 
+enum dev_render_primitive_type
+{
+    DEV_RENDER_PRIMITIVE_TYPE_POINT,
+    DEV_RENDER_PRIMITIVE_TYPE_SEGMENT
+};
+
+struct dev_render_point
+{
+    ak_v3f P;
+    ak_f32 Size;
+    ak_color3f Color;    
+};
+
+struct dev_render_segment
+{
+    ak_v3f P0;
+    ak_v3f P1;
+    ak_f32 Size;
+    ak_color3f Color;
+};
+
+struct dev_render_primitive
+{
+    dev_render_primitive_type Type;
+    union
+    {
+        dev_render_point Point;
+        dev_render_segment Segment;
+    };
+};
+
 struct dev_mesh
 {    
     graphics_mesh_id MeshID;
@@ -187,13 +218,37 @@ struct dev_context
     dev_selected_object SelectedObject;
     dev_gizmo_state GizmoState;
     dev_loaded_world LoadedWorld;
-
+    
     ak_array<dev_object_edit> UndoStack;
     ak_array<dev_object_edit> RedoStack;
+    
+    ak_array<dev_render_primitive> RenderPrimitives;
 };
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, ak_string ProgramFilePath, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);
 void DevContext_DebugLog(const ak_char* Format, ...);
 mesh_info DevContext_GetMeshInfoFromDevMesh(dev_mesh* DevMesh);
 mesh DevContext_GetMeshFromDevMesh(dev_mesh* DevMesh);
+
+inline void DevContext_AddPoint(dev_context* DevContext, ak_v3f P, ak_f32 Size, ak_color3f Color)
+{
+    dev_render_primitive Primitive = {};
+    Primitive.Type = DEV_RENDER_PRIMITIVE_TYPE_POINT;
+    Primitive.Point.P = P;
+    Primitive.Point.Size = Size;
+    Primitive.Point.Color = Color;
+    DevContext->RenderPrimitives.Add(Primitive);
+}
+
+inline void DevContext_AddSegment(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_f32 Size, ak_color3f Color)
+{
+    dev_render_primitive Primitive = {};
+    Primitive.Type = DEV_RENDER_PRIMITIVE_TYPE_SEGMENT;
+    Primitive.Segment.P0 = P0;
+    Primitive.Segment.P1 = P1;
+    Primitive.Segment.Size = Size;
+    Primitive.Segment.Color = Color;
+    DevContext->RenderPrimitives.Add(Primitive);
+}
+
 #endif

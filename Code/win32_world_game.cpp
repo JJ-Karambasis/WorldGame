@@ -642,7 +642,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
         if(Dev_ShouldPlayGame())
         {
             ak_f32 tInterpolated = Accumulator / Game->dtFixed;
-            Global_GameCode.Render(Game, Graphics, tInterpolated, Game->CurrentWorldIndex);            
+            Global_GameCode.Render(Game, Graphics, tInterpolated, Game->CurrentWorldIndex, Dev_GetDeveloperContext());            
             Dev_DrawOtherWorld(Global_GameCode.Render);
         }
         

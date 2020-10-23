@@ -904,7 +904,8 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
 #endif    
     ak_f32 MenuHeight = 0;   
     
-    if(!UI->PlayGame)
+    play_game_settings* PlayGameSettings = &UI->PlayGameSettings;    
+    if(!UI->PlayGameSettings.PlayGame)
     {
         if(BeginMainMenuBar())
         {                        
@@ -938,20 +939,20 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
     {                
         Text("FPS: %f", 1.0f/Game->dt);
         
-        ak_bool PrevPlayGame = UI->PlayGame;
+        ak_bool PrevPlayGame = PlayGameSettings->PlayGame;
         
-        ak_char* PlayText = UI->PlayGame ? "Stop" : "Play";
-        if(Button(PlayText)) UI->PlayGame = !UI->PlayGame;
+        ak_char* PlayText = PlayGameSettings->PlayGame ? "Stop" : "Play";
+        if(Button(PlayText)) PlayGameSettings->PlayGame = !PlayGameSettings->PlayGame;
         
         DevUI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", &UI->DrawOtherWorld);
         DevUI_Checkbox(AK_HashFunction("Draw Collision Volumes"), "Draw Collision Volumes", &UI->DrawCollisionVolumes);
         
-        if(PrevPlayGame != UI->PlayGame)
+        if(PrevPlayGame != PlayGameSettings->PlayGame)
         {
-            if(UI->PlayGame)
+            if(PlayGameSettings->PlayGame)
             {
                 //NOTE(EVERYONE): Just started playing
-                
+                PlayGameSettings->UseDevCamera = false;
             }
             else
             {                                
@@ -973,7 +974,8 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
                         graphics_entity* GraphicsEntity = GraphicsEntityStorage->Get(Entity->GraphicsEntityID);
                         sim_entity* SimEntity = Simulation->GetSimEntity(Entity->SimEntityID);
                         
-                        ak_sqtf* NewTransform = NewTransforms->Get(Index);
+                        ak_sqtf* NewTransform = NewTransforms->Get(Index);                                                
+                        
                         dev_transform* InitialTransform = InitialTransforms->Get(Index);
                         NewTransform->Translation = InitialTransform->Translation;
                         NewTransform->Scale = InitialTransform->Scale;
@@ -984,23 +986,30 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
                         SimEntity->Transform = *NewTransform;                        
                         
                         if(Entity->Type == ENTITY_TYPE_PLAYER)
-                        {
+                        {                            
                             DevCamera->Target = NewTransform->Translation;
-                            DevCamera->SphericalCoordinates.radius = 6.0f;
+                            DevCamera->SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
                         }
                         
                         if(Entity->Type == ENTITY_TYPE_BUTTON)
                         {
-                            button_state* ButtonState = GetButtonState(&Game->World, Entity);
+                            button_state* ButtonState = GetButtonState(&Game->World, Entity);                                                        
+                            if(ButtonState->IsDown)
+                            {                                
+                                collision_volume* CollisionVolume = Simulation->CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
+                                CollisionVolume->ConvexHull.Header.Transform.Scale.z *= 0.01f;
+                            }
+                            
                             ButtonState->IsDown = false;
-                            ButtonState->Collided = false;
+                            ButtonState->Collided = false;                             
                         }
+                        
                     }
                 }                
             }
         }
         
-        if(!UI->PlayGame)
+        if(!PlayGameSettings->PlayGame)
         {        
             const char* ViewModeTypes[] = {"Lit", "Unlit", "Wireframe", "Wireframe on Lit"};
             AlignTextToFramePadding();
@@ -1035,6 +1044,19 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
             if(GizmoState->RotationAngleSnap < 0.1f)
                 GizmoState->RotationAngleSnap = 0.1f;
         }
+        else
+        {
+            ak_bool UseDevCamera = PlayGameSettings->UseDevCamera;
+            DevUI_Checkbox(AK_HashFunction("Use Dev Camera"), "Use Debug Camera", &PlayGameSettings->UseDevCamera);
+            if(UseDevCamera != PlayGameSettings->UseDevCamera)
+            {
+                if(PlayGameSettings->UseDevCamera)
+                {
+                    DevContext->Cameras[0] = DevContext->Game->World.GraphicsStates[0].Camera;
+                    DevContext->Cameras[1] = DevContext->Game->World.GraphicsStates[1].Camera;
+                }                
+            }
+        }
         
         if(CollapsingHeader("Debug Logs", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -1058,7 +1080,7 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
     ak_f32 DevToolsWindowHeight = GetWindowHeight();
     End();
     
-    if(!UI->PlayGame)
+    if(!PlayGameSettings->PlayGame)
     {
         SetNextWindowPos(ImVec2(0, DevToolsWindowHeight+MenuHeight));
         if(Begin("Spawners", NULL, ImGuiWindowFlags_AlwaysAutoResize))

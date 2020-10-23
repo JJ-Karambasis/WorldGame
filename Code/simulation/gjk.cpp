@@ -10,7 +10,7 @@ struct gjk_vertex
 template <typename typeA, typename typeB>
 gjk_vertex GetSupport(typeA* ObjectA, typeB* ObjectB, ak_v3f V)
 {
-    gjk_vertex Vertex;
+    gjk_vertex Vertex;    
     Vertex.V = V;
     Vertex.A = ObjectA->Support(-V);
     Vertex.B = ObjectB->Support( V);
@@ -893,5 +893,6 @@ ak_bool GJKQuadraticIntersected(typeA* ObjectA, typeB* ObjectB, ak_f32 Radius)
 {
     gjk_distance Distance = GJKDistance(ObjectA, ObjectB);
     ak_bool Result = Distance.SquareDistance <= AK_Square(Radius);
+    
     return Result;
 }

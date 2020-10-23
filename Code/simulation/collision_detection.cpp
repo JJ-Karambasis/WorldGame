@@ -637,7 +637,7 @@ contact GetCapsuleHullDeepestContact(capsule* Capsule, convex_hull* ConvexHull, 
     gjk_distance Distance = GJKDistance(&AGJK, &BGJK);
         
     ak_v3f P0, P1;
-    Distance.GetClosestPoints(&P0, &P1);
+    Distance.GetClosestPoints(&P0, &P1);        
     
     ak_v3f Normal = P1-P0;
     ak_f32 NormalLength = AK_Magnitude(Normal);
@@ -779,7 +779,7 @@ ak_f32 CapsuleHullTOI(capsule* Capsule, ak_v3f DeltaA, convex_hull* Hull, ak_sqt
             return tStart;
         }        
     }
-    
+        
     return INFINITY;    
 }
 
@@ -880,4 +880,64 @@ ak_f32 SphereCapsuleTOI(sphere* Sphere, ak_v3f DeltaA, capsule* Capsule, ak_v3f 
     
     ak_f32 Result = LineSegmentCapsuleIntersection(LineSegment, &LargeCapsule);
     return Result;
+}
+
+ak_bool SphereSphereOverlap(sphere* SphereA, sphere* SphereB)
+{
+    ak_f32 Radius = SphereA->Radius+SphereB->Radius;
+    return AK_SqrMagnitude(SphereB->CenterP-SphereA->CenterP) <= AK_Square(Radius);
+}
+
+ak_bool SphereCapsuleOverlap(sphere* Sphere, capsule* Capsule)
+{
+    ak_v3f P = PointLineSegmentClosestPoint(Sphere->CenterP, Capsule->P);
+    ak_f32 Radius = Sphere->Radius+Capsule->Radius;
+    return AK_SqrMagnitude(Sphere->CenterP-P) <= AK_Square(Radius);
+}
+
+ak_bool SphereHullOverlap(sphere* Sphere, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
+{
+    point_support APoint = {Sphere->CenterP};
+    convex_hull_support BHull = {ConvexHull, ConvexHullTransform};
+    gjk_distance Distance = GJKDistance(&APoint, &BHull);    
+    return Distance.SquareDistance <= AK_Square(Sphere->Radius);        
+}
+
+ak_bool CapsuleSphereOverlap(capsule* Capsule, sphere* Sphere)
+{
+    return SphereCapsuleOverlap(Sphere, Capsule);
+}
+
+ak_bool CapsuleCapsuleOverlap(capsule* CapsuleA, capsule* CapsuleB)
+{
+    ak_v3f CP[2];
+    LineSegmentsClosestPoints(CP, CapsuleA->P, CapsuleB->P);    
+    ak_f32 Radius = CapsuleA->Radius+CapsuleB->Radius;
+    return AK_SqrMagnitude(CP[1]-CP[0]) <= AK_Square(Radius);
+}
+
+ak_bool CapsuleHullOverlap(capsule* Capsule, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
+{
+    line_segment_support ASupport = {Capsule->P[0], Capsule->P[1]};    
+    convex_hull_support BSupport = {ConvexHull, ConvexHullTransform};    
+    gjk_distance Distance = GJKDistance(&ASupport, &BSupport);
+    return Distance.SquareDistance <= AK_Square(Capsule->Radius);
+}
+
+ak_bool HullSphereOverlap(convex_hull* ConvexHull, ak_sqtf ConvexHullTransform, sphere* Sphere)
+{
+    return SphereHullOverlap(Sphere, ConvexHull, ConvexHullTransform);
+}
+
+ak_bool HullCapsuleOverlap(convex_hull* ConvexHull, ak_sqtf ConvexHullTransform, capsule* Capsule)
+{
+    return CapsuleHullOverlap(Capsule, ConvexHull, ConvexHullTransform);
+}
+
+ak_bool HullHullOverlap(convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, 
+                        convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB)
+{
+    convex_hull_support ASupport = {ConvexHullA, ConvexHullTransformA};
+    convex_hull_support BSupport = {ConvexHullB, ConvexHullTransformB};
+    return GJKIntersected(&ASupport, &BSupport);
 }

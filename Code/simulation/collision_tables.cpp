@@ -22,10 +22,10 @@ CCD_FUNCTION(SphereCapsuleCCD)
 CCD_FUNCTION(SphereHullCCD)
 {
     sphere  SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
-    ak_sqtf HullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     ak_v3f  MoveDeltaA = SimEntityA->GetMoveDelta();
     ak_v3f  MoveDeltaB = SimEntityB->GetMoveDelta();
-    return SphereHullTOI(&SphereA, MoveDeltaA, VolumeB->ConvexHull, HullTransformB, MoveDeltaB);    
+    return SphereHullTOI(&SphereA, MoveDeltaA, &VolumeB->ConvexHull, HullTransformB, MoveDeltaB);    
 }
 
 CCD_FUNCTION(CapsuleSphereCCD)
@@ -49,37 +49,37 @@ CCD_FUNCTION(CapsuleCapsuleCCD)
 CCD_FUNCTION(CapsuleHullCCD)
 {
     capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
-    ak_sqtf HullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     ak_v3f MoveDeltaA = SimEntityA->GetMoveDelta();
     ak_v3f MoveDeltaB = SimEntityB->GetMoveDelta();
-    return CapsuleHullTOI(&CapsuleA, MoveDeltaA, VolumeB->ConvexHull, HullTransformB, MoveDeltaB);
+    return CapsuleHullTOI(&CapsuleA, MoveDeltaA, &VolumeB->ConvexHull, HullTransformB, MoveDeltaB);
 }
 
 CCD_FUNCTION(HullSphereCCD)
 {
-    ak_sqtf HullTransformA = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
+    ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
     sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
     ak_v3f MoveDeltaA = SimEntityA->GetMoveDelta();
     ak_v3f MoveDeltaB = SimEntityB->GetMoveDelta();
-    return SphereHullTOI(&SphereB, MoveDeltaB, VolumeA->ConvexHull, HullTransformA, MoveDeltaA);
+    return SphereHullTOI(&SphereB, MoveDeltaB, &VolumeA->ConvexHull, HullTransformA, MoveDeltaA);
 }
 
 CCD_FUNCTION(HullCapsuleCCD)
 {
-    ak_sqtf HullTransformA = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
+    ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
     capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
     ak_v3f MoveDeltaA = SimEntityA->GetMoveDelta();
     ak_v3f MoveDeltaB = SimEntityB->GetMoveDelta();
-    return CapsuleHullTOI(&CapsuleB, MoveDeltaB, VolumeA->ConvexHull, HullTransformA, MoveDeltaA);
+    return CapsuleHullTOI(&CapsuleB, MoveDeltaB, &VolumeA->ConvexHull, HullTransformA, MoveDeltaA);
 }
 
 CCD_FUNCTION(HullHullCCD)
 {
-    ak_sqtf HullTransformA = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
-    ak_sqtf HullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     ak_v3f MoveDeltaA = SimEntityA->GetMoveDelta();
     ak_v3f MoveDeltaB = SimEntityB->GetMoveDelta();
-    return HullHullTOI(VolumeA->ConvexHull, HullTransformA, MoveDeltaA, VolumeB->ConvexHull, HullTransformB, MoveDeltaB);
+    return HullHullTOI(&VolumeA->ConvexHull, HullTransformA, MoveDeltaA, &VolumeB->ConvexHull, HullTransformB, MoveDeltaB);
 }
 
 global ccd_function* CCDFunctions[3][3] = 
@@ -108,8 +108,8 @@ CONTACT_FUNCTION(SphereCapsuleContact)
 CONTACT_FUNCTION(SphereHullContact)
 {
     sphere SphereA   = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
-    ak_sqtf ConvexHullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
-    return GetSphereHullContacts(&SphereA, VolumeB->ConvexHull, ConvexHullTransformB);
+    ak_sqtf ConvexHullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
+    return GetSphereHullContacts(&SphereA, &VolumeB->ConvexHull, ConvexHullTransformB);
 }
 
 CONTACT_FUNCTION(CapsuleSphereContact)
@@ -136,8 +136,8 @@ CONTACT_FUNCTION(CapsuleHullContact)
 CONTACT_FUNCTION(HullSphereContact)
 {
     sphere SphereB   = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
-    ak_sqtf ConvexHullTransformA = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
-    contact_list Contacts = GetSphereHullContacts(&SphereB, VolumeA->ConvexHull, ConvexHullTransformA);
+    ak_sqtf ConvexHullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
+    contact_list Contacts = GetSphereHullContacts(&SphereB, &VolumeA->ConvexHull, ConvexHullTransformA);
     Contacts.FlipNormals();
     return Contacts;
 }
@@ -185,10 +185,10 @@ CCD_CONTACT_FUNCTION(CCDSphereCapsuleContact)
 CCD_CONTACT_FUNCTION(CCDSphereHullContact)
 {
     sphere SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
-    ak_sqtf ConvexHullTransform = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf ConvexHullTransform = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     SphereA.CenterP += SimEntityA->GetMoveDelta()*tHit;
     ConvexHullTransform.Translation += SimEntityB->GetMoveDelta()*tHit;    
-    return GetSphereHullDeepestContact(&SphereA, VolumeB->ConvexHull, ConvexHullTransform);
+    return GetSphereHullDeepestContact(&SphereA, &VolumeB->ConvexHull, ConvexHullTransform);
 }
 
 CCD_CONTACT_FUNCTION(CCDCapsuleSphereContact)
@@ -214,30 +214,30 @@ CCD_CONTACT_FUNCTION(CCDCapsuleCapsuleContact)
 CCD_CONTACT_FUNCTION(CCDCapsuleHullContact)
 {
     capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
-    ak_sqtf ConvexHullTransform = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf ConvexHullTransform = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     TranslateCapsule(&CapsuleA, SimEntityA->GetMoveDelta()*tHit);
     ConvexHullTransform.Translation += SimEntityB->GetMoveDelta()*tHit;    
-    return GetCapsuleHullDeepestContact(&CapsuleA, VolumeB->ConvexHull, ConvexHullTransform);
+    return GetCapsuleHullDeepestContact(&CapsuleA, &VolumeB->ConvexHull, ConvexHullTransform);
 }
 
 CCD_CONTACT_FUNCTION(CCDHullSphereContact)
 {
-    ak_sqtf ConvexHullTransform = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
+    ak_sqtf ConvexHullTransform = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
     sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
     ConvexHullTransform.Translation += SimEntityA->GetMoveDelta()*tHit;
     SphereB.CenterP += SimEntityB->GetMoveDelta()*tHit;
-    contact Contact = GetSphereHullDeepestContact(&SphereB, VolumeA->ConvexHull, ConvexHullTransform);
+    contact Contact = GetSphereHullDeepestContact(&SphereB, &VolumeA->ConvexHull, ConvexHullTransform);
     Contact.Normal = -Contact.Normal;
     return Contact;
 }
 
 CCD_CONTACT_FUNCTION(CCDHullCapsuleContact)
 {
-    ak_sqtf ConvexHullTransform = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
+    ak_sqtf ConvexHullTransform = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
     capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
     ConvexHullTransform.Translation += SimEntityA->GetMoveDelta()*tHit;        
     TranslateCapsule(&CapsuleB, SimEntityB->GetMoveDelta()*tHit);    
-    contact Contact = GetCapsuleHullDeepestContact(&CapsuleB, VolumeA->ConvexHull, ConvexHullTransform);
+    contact Contact = GetCapsuleHullDeepestContact(&CapsuleB, &VolumeA->ConvexHull, ConvexHullTransform);
     Contact.Normal = -Contact.Normal;
     return Contact;
 }
@@ -245,11 +245,11 @@ CCD_CONTACT_FUNCTION(CCDHullCapsuleContact)
 CCD_CONTACT_FUNCTION(CCDHullHullContact)
 {
     
-    ak_sqtf ConvexHullTransformA = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
-    ak_sqtf ConvexHullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf ConvexHullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
+    ak_sqtf ConvexHullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     ConvexHullTransformA.Translation += SimEntityA->GetMoveDelta()*tHit;
     ConvexHullTransformB.Translation += SimEntityB->GetMoveDelta()*tHit;
-    contact Contact = GetHullHullDeepestContact(VolumeA->ConvexHull, ConvexHullTransformA, VolumeB->ConvexHull, ConvexHullTransformB);        
+    contact Contact = GetHullHullDeepestContact(&VolumeA->ConvexHull, ConvexHullTransformA, &VolumeB->ConvexHull, ConvexHullTransformB);        
     return Contact;
 }
 
@@ -295,9 +295,9 @@ DEEPEST_CONTACT_FUNCTION(DeepestSphereCapsuleContact)
 DEEPEST_CONTACT_FUNCTION(DeepestSphereHullContact)
 {
     sphere  SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
-    ak_sqtf HullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     
-    contact_list ContactList = GetSphereHullContacts(&SphereA, VolumeB->ConvexHull, HullTransformB);
+    contact_list ContactList = GetSphereHullContacts(&SphereA, &VolumeB->ConvexHull, HullTransformB);
     if(ContactList.Count == 1)
     {
         *Contact = ContactList.Ptr[0];
@@ -333,9 +333,9 @@ DEEPEST_CONTACT_FUNCTION(DeepestCapsuleCapsuleContact)
 DEEPEST_CONTACT_FUNCTION(DeepestCapsuleHullContact)
 {
     capsule Capsule = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
-    ak_sqtf HullTransform = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf HullTransform = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     
-    contact_list ContactList = GetCapsuleHullContacts(&Capsule, VolumeB->ConvexHull, HullTransform);
+    contact_list ContactList = GetCapsuleHullContacts(&Capsule, &VolumeB->ConvexHull, HullTransform);
     if(ContactList.Count > 0)
     {
         *Contact = *ContactList.GetDeepestContact();
@@ -368,15 +368,15 @@ DEEPEST_CONTACT_FUNCTION(DeepestHullCapsuleContact)
 
 DEEPEST_CONTACT_FUNCTION(DeepestHullHullContact)
 {
-    ak_sqtf HullTransformA = VolumeA->ConvexHull->Header.Transform*SimEntityA->Transform;
-    ak_sqtf HullTransformB = VolumeB->ConvexHull->Header.Transform*SimEntityB->Transform;
+    ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
     
-    convex_hull_support AGJK = {VolumeA->ConvexHull, HullTransformA};
-    convex_hull_support BGJK = {VolumeB->ConvexHull, HullTransformB};
+    convex_hull_support AGJK = {&VolumeA->ConvexHull, HullTransformA};
+    convex_hull_support BGJK = {&VolumeB->ConvexHull, HullTransformB};
     
     if(GJKIntersected(&AGJK, &BGJK))
     {        
-        if(!EPATest(Contact, VolumeA->ConvexHull, HullTransformA, VolumeB->ConvexHull, HullTransformB))
+        if(!EPATest(Contact, &VolumeA->ConvexHull, HullTransformA, &VolumeB->ConvexHull, HullTransformB))
         {
             gjk_distance DistanceResult = GJKDistance(&AGJK, &BGJK);
             
@@ -397,4 +397,77 @@ global deepest_contact_function* DeepestContactFunctions[3][3] =
     {DeepestSphereSphereContact, DeepestSphereCapsuleContact, DeepestSphereHullContact},
     {DeepestCapsuleSphereContact, DeepestCapsuleCapsuleContact, DeepestCapsuleHullContact}, 
     {DeepestHullSphereContact, DeepestHullCapsuleContact, DeepestHullHullContact}
+};
+
+#define INTERSECTION_FUNCTION(name) ak_bool name(sim_entity* SimEntityA, sim_entity* SimEntityB, collision_volume* VolumeA, collision_volume* VolumeB)
+typedef INTERSECTION_FUNCTION(intersection_function);
+
+INTERSECTION_FUNCTION(SphereSphereIntersection)
+{
+    sphere SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
+    sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
+    return SphereSphereOverlap(&SphereA, &SphereB);
+}
+
+INTERSECTION_FUNCTION(SphereCapsuleIntersection)
+{
+    sphere  SphereA  = TransformSphere(&VolumeA->Sphere,    SimEntityA->Transform);
+    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+    return SphereCapsuleOverlap(&SphereA, &CapsuleB);
+}
+
+INTERSECTION_FUNCTION(SphereHullIntersection)
+{
+    sphere  SphereA = TransformSphere(&VolumeA->Sphere, SimEntityA->Transform);
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
+    return SphereHullOverlap(&SphereA, &VolumeB->ConvexHull, HullTransformB);
+}
+
+INTERSECTION_FUNCTION(CapsuleSphereIntersection)
+{
+    capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
+    sphere  SphereB  = TransformSphere(&VolumeB->Sphere,    SimEntityB->Transform);    
+    return CapsuleSphereOverlap(&CapsuleA, &SphereB);
+}
+
+INTERSECTION_FUNCTION(CapsuleCapsuleIntersection)
+{
+    capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
+    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+    return CapsuleCapsuleOverlap(&CapsuleA, &CapsuleB);
+}
+
+INTERSECTION_FUNCTION(CapsuleHullIntersection)
+{
+    capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, SimEntityA->Transform);
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;
+    return CapsuleHullOverlap(&CapsuleA, &VolumeB->ConvexHull, HullTransformB);
+}
+
+INTERSECTION_FUNCTION(HullSphereIntersection)
+{
+    ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
+    sphere SphereB = TransformSphere(&VolumeB->Sphere, SimEntityB->Transform);
+    return HullSphereOverlap(&VolumeA->ConvexHull, HullTransformA, &SphereB);
+}
+
+INTERSECTION_FUNCTION(HullCapsuleIntersection)
+{
+    ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
+    capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, SimEntityB->Transform);
+    return HullCapsuleOverlap(&VolumeA->ConvexHull, HullTransformA, &CapsuleB);
+}
+
+INTERSECTION_FUNCTION(HullHullIntersection)
+{
+    ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*SimEntityA->Transform;
+    ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*SimEntityB->Transform;    
+    return HullHullOverlap(&VolumeA->ConvexHull, HullTransformA, &VolumeB->ConvexHull, HullTransformB);
+}
+
+global intersection_function* IntersectionFunctions[3][3] = 
+{
+    {SphereSphereIntersection, SphereCapsuleIntersection, SphereHullIntersection}, 
+    {CapsuleSphereIntersection, CapsuleCapsuleIntersection, CapsuleHullIntersection}, 
+    {HullSphereIntersection, HullCapsuleIntersection, HullHullIntersection}
 };

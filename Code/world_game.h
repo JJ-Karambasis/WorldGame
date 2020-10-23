@@ -75,7 +75,7 @@ struct game
 #define GAME_INITIALIZE(name) game* name(ak_arena* TempStorage, input* Input, audio_output* AudioOutput, ak_string AssetPath)
 #define GAME_FIXED_TICK(name) void name(game* Game, void* DevContext)
 #define GAME_TICK(name) void name(game* Game, void* DevContext)
-#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, ak_f32 tInterpolate, ak_u32 WorldIndex)
+#define GAME_RENDER(name) void name(game* Game, graphics* Graphics, ak_f32 tInterpolate, ak_u32 WorldIndex, void* DevContext)
 
 typedef GAME_INITIALIZE(game_initialize);
 typedef GAME_FIXED_TICK(game_fixed_tick);

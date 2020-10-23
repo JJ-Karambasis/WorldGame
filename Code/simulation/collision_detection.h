@@ -88,5 +88,14 @@ ak_f32 SphereHullTOI(sphere* Sphere, ak_v3f DeltaA, convex_hull* Hull, ak_sqtf T
 ak_f32 CapsuleCapsuleTOI(capsule* CapsuleA, ak_v3f DeltaA, capsule* CapsuleB, ak_v3f DeltaB);
 ak_f32 SphereSphereTOI(sphere* SphereA, ak_v3f DeltaA, sphere* SphereB, ak_v3f DeltaB);
 ak_f32 SphereCapsuleTOI(sphere* Sphere, ak_v3f DeltaA, capsule* Capsule, ak_v3f DeltaB);
+ak_bool SphereSphereOverlap(sphere* SphereA, sphere* SphereB);
+ak_bool SphereCapsuleOverlap(sphere* Sphere, capsule* Capsule);
+ak_bool SphereHullOverlap(sphere* Sphere, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform);
+ak_bool CapsuleSphereOverlap(capsule* Capsule, sphere* Sphere);
+ak_bool CapsuleCapsuleOverlap(capsule* CapsuleA, capsule* CapsuleB);
+ak_bool CapsuleHullOverlap(capsule* Capsule, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform);
+ak_bool HullSphereOverlap(convex_hull* ConvexHull, ak_sqtf ConvexHullTransform, sphere* Sphere);
+ak_bool HullCapsuleOverlap(convex_hull* ConvexHull, ak_sqtf ConvexHullTransform, capsule* Capsule);
+ak_bool HullHullOverlap(convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB);
 
 #endif

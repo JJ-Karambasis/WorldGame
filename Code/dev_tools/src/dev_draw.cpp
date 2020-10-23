@@ -50,14 +50,13 @@ void DevDraw_Point(dev_context* DevContext, ak_v3f P, ak_f32 Thickness, ak_color
     DevDraw_Box(DevContext, P, AK_V3(Thickness, Thickness, Thickness), Color);
 }
 
-
 void DevDraw_LineEllipsoid(dev_context* DevContext, ak_v3f CenterP, ak_v3f Radius, ak_color3f Color)
 {
     ak_m4f Model = AK_TransformM4(CenterP, Radius);
     PushDrawLineMesh(DevContext->Graphics, DevContext->LineSphereMesh.MeshID, Model, Color, DevContext->LineSphereMesh.IndexCount, 0, 0); 
 }
 
-void DevDraw_Edge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Color)
+void DevDraw_Edge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_f32 Thickness, ak_color3f Color)
 {
     ak_v3f ZAxis = P1-P0;
     ak_f32 ZLength = AK_Magnitude(ZAxis);
@@ -65,7 +64,7 @@ void DevDraw_Edge(dev_context* DevContext, ak_v3f P0, ak_v3f P1, ak_color3f Colo
     
     ak_v3f XAxis, YAxis;
     AK_Basis(ZAxis, &XAxis, &YAxis);
-    DevDraw_OrientedBox(DevContext, P0, AK_V3(0.025f, 0.025f, ZLength), XAxis, YAxis, ZAxis, Color);
+    DevDraw_OrientedBox(DevContext, P0, AK_V3(Thickness, Thickness, ZLength), XAxis, YAxis, ZAxis, Color);
 }
 
 void DevDraw_Frame(dev_context* DevContext, ak_v3f Position, ak_v3f XAxis = AK_XAxis(), ak_v3f YAxis = AK_YAxis(), ak_v3f ZAxis = AK_ZAxis())
@@ -177,11 +176,12 @@ void DevDraw_GizmoState(dev_context* Context, dev_gizmo_state* GizmoState, ak_v3
 
 void DevDraw_Grid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color)
 {
+    const ak_f32 EdgeThickness = 0.025f;
     for(ak_f32 x = 0; x <= xRightBound; x+= DevContext->GizmoState.GridDistance)
     {
         if(x != 0)
         {
-            DevDraw_Edge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), Color);
+            DevDraw_Edge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), EdgeThickness, Color);
         }
     }
     
@@ -189,7 +189,7 @@ void DevDraw_Grid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound
     {
         if(x != 0)
         {
-            DevDraw_Edge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), Color);
+            DevDraw_Edge(DevContext, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), EdgeThickness, Color);
         }
     }
     
@@ -197,7 +197,7 @@ void DevDraw_Grid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound
     {
         if(y != 0)
         {
-            DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), Color);
+            DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), EdgeThickness, Color);
         }
     }
     
@@ -205,10 +205,10 @@ void DevDraw_Grid(dev_context* DevContext, ak_i32 xLeftBound, ak_i32 xRightBound
     {
         if(y != 0)
         {
-            DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), Color);
+            DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), EdgeThickness, Color);
         }
     }
     
-    DevDraw_Edge(DevContext, AK_V3f(0.0f, (ak_f32)yTopBound, 0.0f), AK_V3f(0.0f, (ak_f32)yBottomBound, 0.0f), AK_Green3());
-    DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, 0.0f, 0.0f), AK_V3f((ak_f32)xRightBound, 0.0f, 0.0f), AK_Red3());
+    DevDraw_Edge(DevContext, AK_V3f(0.0f, (ak_f32)yTopBound, 0.0f), AK_V3f(0.0f, (ak_f32)yBottomBound, 0.0f), EdgeThickness, AK_Green3());
+    DevDraw_Edge(DevContext, AK_V3f((ak_f32)xLeftBound, 0.0f, 0.0f), AK_V3f((ak_f32)xRightBound, 0.0f, 0.0f), EdgeThickness, AK_Red3());
 }

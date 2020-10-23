@@ -1252,43 +1252,50 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
     if(!LoadDefaultWorld)
     {                
         material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
-        world_id PlayerA = CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[0]);
-        world_id PlayerB = CreatePlayerEntity(&Game->World, Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]);
         
+#define DEV_ADD(function) DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, function)
+#define DEV_ADD_2(function) do { dual_world_id Dual = function; DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, Dual.A); DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, Dual.B); } while(0)
+        
+        DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[0]));        
+        DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]));
+        
+        
+#if 0
+        material FloorMaterial = { CreateDiffuse(AK_White3()) };
+        
+        DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(0.0f, 0.0f, -0.1f), AK_V3(20.0f, 20.0f, 1.0f), FloorMaterial));
+        
+        material ButtonMaterial = { CreateDiffuse(AK_Red3()) };
+        DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3( 0.0f, 5.0f, 0.0f), ButtonMaterial, true));
+        DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3(-2.5f, 5.0f, 0.0f), ButtonMaterial, true));
+        DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3( 2.5f, 5.0f, 0.0f), ButtonMaterial, true));
+        
+        DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, 0.5f, 0.0f), AK_V3(1.0f, 1.0f, 10.0f), FloorMaterial));        
+        DEV_ADD_2(CreateRampInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -2.0f, 0.0f), AK_V3(1.0f, 2.0f, 1.0f), AK_IdentityQuat<ak_f32>(), FloorMaterial));
+        
+        CreatePointLights(Game->World.GraphicsStates, AK_V3(0.0f, 0.0f, 10.0f), 100.0f, AK_White3(), 5.0f, true);
+        
+        DevContext->DevUI.PlayGameSettings.PlayGame = true;
+#else
         material DefaultFloorMaterial = { CreateDiffuse(AK_White3()) };    
-        world_id FloorA = CreateStaticEntity(&Game->World, Game->Assets, 0, 
-                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(15.0f, 15.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
-                                             MESH_ASSET_ID_BOX, DefaultFloorMaterial);
-        world_id FloorB = CreateStaticEntity(&Game->World, Game->Assets, 1, 
-                                             AK_V3(0.0f, 0.0f, -0.1f), AK_V3(15.0f, 15.0f, 0.1f), AK_IdentityQuat<ak_f32>(),
-                                             MESH_ASSET_ID_BOX, DefaultFloorMaterial);
+        DEV_ADD(CreateStaticEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, 0.0f, -0.1f), AK_V3(15.0f, 15.0f, 0.1f), 
+                                   AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, DefaultFloorMaterial));
+        DEV_ADD(CreateStaticEntity(&Game->World, Game->Assets, 1, AK_V3(0.0f, 0.0f, -0.1f), AK_V3(15.0f, 15.0f, 0.1f), 
+                                   AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, DefaultFloorMaterial));
         
         material DefaultButtonMaterial = { CreateDiffuse(AK_White3()*0.4f) };
-        world_id ButtonA = CreateButton(&Game->World, Game->Assets, 0, 
-                                        AK_V3(1.0f, -1.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), 
-                                        DefaultButtonMaterial, true);        
+        DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3(1.0f, -1.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), 
+                             DefaultButtonMaterial, true));        
         
         material PushingBlockMaterial = { CreateDiffuse(AK_RGB(0.5f, 0.7f, 0.3f)) };
-        world_id PushingBlockA = CreatePushableBox(&Game->World, Game->Assets, 0, AK_V3(-2.0f, -2.0f, 0.0f), 1.0f, 50.0f, PushingBlockMaterial);
+        DEV_ADD(CreatePushableBox(&Game->World, Game->Assets, 0, AK_V3(-2.0f, -2.0f, 0.0f), 1.0f, 50.0f, PushingBlockMaterial));
         
         material RigidBodyMaterial = { CreateDiffuse(AK_Red3()) };
-        world_id RigidBodyA = CreateSphereRigidBody(&Game->World, Game->Assets, 0, AK_V3(2.0f, 2.0f, 0.5f), 0.5f, 30.0f, 0.3f, RigidBodyMaterial);        
+        DEV_ADD(CreateSphereRigidBody(&Game->World, Game->Assets, 0, AK_V3(2.0f, 2.0f, 0.5f), 0.5f, 30.0f, 0.3f, RigidBodyMaterial));        
         
         CreatePointLight(&Game->World.GraphicsStates[0], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
-        CreatePointLight(&Game->World.GraphicsStates[1], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);
-        
-        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerA);
-        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PlayerB);
-        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorA);
-        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, FloorB);        
-        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, ButtonA);
-        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, PushingBlockA);
-        DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, RigidBodyA);
-        
-        ak_v3f Translations[2] = {AK_V3(-1.5f, 0.0f, 0.001f), AK_V3(1.5f, 0.0f, 0.001f)};        
-        ak_v2f Dimensions = AK_V2(1.0f, 1.0f);
-        CreateJumpingQuads(&Game->World, 0, Translations, Dimensions);
-        CreateJumpingQuads(&Game->World, 1, Translations, Dimensions);
+        CreatePointLight(&Game->World.GraphicsStates[1], AK_V3(0.0f, 0.0f, 2.9f), 5.0f, AK_White3(), 1.0f, true);        
+#endif
     }
     
     GlobalArena->EndTemp(&TempArena);
@@ -1314,22 +1321,18 @@ void DevContext_Tick()
     game* Game = Context->Game;
     dev_input* DevInput = &Context->DevInput;
     ak_f32 dt = Game->dt;
+    world* World = &Game->World;           
     
     ak_v2i Resolution = Game->Resolution;    
     Context->PlatformUpdate(&GetIO(), DevInput, Resolution, dt);        
     
-    if(!Context->DevUI.PlayGame)
-    {        
-        if(IsPressed(Game->Input->SwitchWorld))
-        {
-            Context->SelectedObject = {};
-            Game->CurrentWorldIndex = !Game->CurrentWorldIndex;                
-        }
+    view_settings ViewSettings = {};
+    if(!Context->DevUI.PlayGameSettings.PlayGame || Context->DevUI.PlayGameSettings.UseDevCamera)
+    {
         
         camera* DevCamera = &Context->Cameras[Game->CurrentWorldIndex];            
         ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;    
-        ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;        
-        world* World = &Game->World;           
+        ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;                
         
         ak_f32 Roll = 0;
         ak_f32 Pitch = 0;        
@@ -1383,8 +1386,17 @@ void DevContext_Tick()
             }
         }    
         
-        view_settings ViewSettings = GetViewSettings(DevCamera);    
-        DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);
+        ViewSettings = GetViewSettings(DevCamera);    
+        DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);        
+    }
+    
+    if(!Context->DevUI.PlayGameSettings.PlayGame)
+    {        
+        if(IsPressed(Game->Input->SwitchWorld))
+        {
+            Context->SelectedObject = {};
+            Game->CurrentWorldIndex = !Game->CurrentWorldIndex;                
+        }
         
         ray RayCast = DevRay_GetRayFromMouse(DevInput->MouseCoordinates, &ViewSettings, Resolution);                                         
         dev_gizmo_state* GizmoState = &Context->GizmoState;
@@ -1502,29 +1514,21 @@ void DevContext_Tick()
                                                 AK_Dot(DirectionToOld, DirectionToNew));
                     
                     
-                    ak_m3f Orientation = AK_IdentityM3<ak_f32>();
-                    switch(SelectedObject->Type)
-                    {
-                        case DEV_SELECTED_OBJECT_TYPE_ENTITY:
-                        {                                  
-                        } break;
-                    }
-                                        
                     switch(GizmoHit->Gizmo->MovementDirection)
                     {
                         case DEV_GIZMO_MOVEMENT_DIRECTION_X:
                         {
-                            PointDiff = AngleDiff*Orientation.XAxis;
+                            PointDiff = AK_V3(AngleDiff, 0.0f, 0.0f);
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
                         {
-                            PointDiff = AngleDiff*Orientation.YAxis;
+                            PointDiff = AK_V3(0.0f, AngleDiff, 0.0f);
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
                         {
-                            PointDiff = AngleDiff*Orientation.ZAxis;
+                            PointDiff = AK_V3(0.0f, 0.0f, AngleDiff);
                         } break;
                         
                         AK_INVALID_DEFAULT_CASE;
@@ -1694,12 +1698,12 @@ void DevContext_Tick()
                 }
             }
         }
-
+        
         if(IsDown(DevInput->Ctrl) && IsPressed(DevInput->Z))
         {
             DevContext_UndoLastEdit(Context);
         }
-
+        
         if(IsDown(DevInput->Ctrl) && IsPressed(DevInput->Y))
         {
             DevContext_RedoLastEdit(Context);
@@ -1713,6 +1717,35 @@ void DevContext_Tick()
     DevInput->Scroll = 0.0f;
     for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(DevInput->Buttons); ButtonIndex++)
         DevInput->Buttons[ButtonIndex].WasDown = DevInput->Buttons[ButtonIndex].IsDown;    
+}
+
+void DevContext_RenderPrimitives(dev_context* Context, ak_u32 WorldIndex, view_settings* ViewSettings)
+{
+    graphics_state* GraphicsState = &Context->Game->World.GraphicsStates[WorldIndex];
+    
+    PushRenderBufferViewportScissorAndView(Context->Graphics, GraphicsState->RenderBuffer, ViewSettings);
+    PushDepth(Context->Graphics, false);
+    
+    AK_ForEach(RenderPrimitive, &Context->RenderPrimitives)
+    {
+        switch(RenderPrimitive->Type)
+        {
+            case DEV_RENDER_PRIMITIVE_TYPE_POINT:
+            {
+                DevDraw_Point(Context, RenderPrimitive->Point.P, RenderPrimitive->Point.Size, RenderPrimitive->Point.Color);
+            } break;
+            
+            case DEV_RENDER_PRIMITIVE_TYPE_SEGMENT:
+            {
+                DevDraw_Edge(Context, RenderPrimitive->Segment.P0, RenderPrimitive->Segment.P1, RenderPrimitive->Segment.Size, RenderPrimitive->Segment.Color);
+            } break;
+            
+            AK_INVALID_DEFAULT_CASE;
+        }
+    }        
+    
+    Context->RenderPrimitives.Clear();
+    PushDepth(Context->Graphics, true);
 }
 
 void DevContext_RenderConvexHulls(dev_context* Context, ak_u32 WorldIndex, view_settings* ViewSettings)
@@ -1768,7 +1801,7 @@ void DevContext_RenderConvexHulls(dev_context* Context, ak_u32 WorldIndex, view_
                 
                 case COLLISION_VOLUME_TYPE_CONVEX_HULL:
                 {
-                    ak_sqtf NewTransform = Volume->ConvexHull->Header.Transform*Transform;
+                    ak_sqtf NewTransform = Volume->ConvexHull.Header.Transform*Transform;
                     ak_m4f Model = AK_TransformM4(NewTransform);
                     
                     PushDrawLineMesh(Context->Graphics, ConvexHulls[ConvexHullIndex].MeshID, Model, AK_Blue3(),
@@ -1800,11 +1833,7 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
     {
         case VIEW_MODE_TYPE_LIT:
         {                
-            graphics_light_buffer LightBuffer = GetLightBuffer(GraphicsState);
-            ShadowPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
-            
-            StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);                
-            EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
+            NormalEntityPass(Graphics, Game, GraphicsState, &ViewSettings);            
         } break;
         
         case VIEW_MODE_TYPE_UNLIT:
@@ -1926,7 +1955,13 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
     PushDepth(Graphics, true);    
     
     if(Context->DevUI.DrawCollisionVolumes)
-        DevContext_RenderConvexHulls(Context, WorldIndex, &ViewSettings);
+        DevContext_RenderConvexHulls(Context, WorldIndex, &ViewSettings);    
+    
+}
+
+camera* DevContext_GetCameraForRender(dev_context* Context, ak_u32 WorldIndex)
+{
+    return Context->DevUI.PlayGameSettings.UseDevCamera ? &Context->Cameras[WorldIndex] : &Context->Game->World.GraphicsStates[WorldIndex].Camera;
 }
 
 void DevContext_Render()
@@ -1936,26 +1971,35 @@ void DevContext_Render()
     graphics* Graphics = Context->Graphics;        
     world* World = &Game->World;        
     
-    if(!Context->DevUI.PlayGame)
+    if(!Context->DevUI.PlayGameSettings.PlayGame)
     {                         
-        DevContext_RenderWorld(Context, Game->CurrentWorldIndex);        
+        DevContext_RenderWorld(Context, Game->CurrentWorldIndex);                
+        camera* Camera = Context->Cameras + Game->CurrentWorldIndex;    
+        view_settings ViewSettings = GetViewSettings(Camera);        
+        DevContext_RenderPrimitives(Context, Game->CurrentWorldIndex, &ViewSettings);                                        
+        
         if(Context->DevUI.DrawOtherWorld)
             DevContext_RenderWorld(Context, !Game->CurrentWorldIndex);       
     }
     else
     {
+        camera* Camera = DevContext_GetCameraForRender(Context, Game->CurrentWorldIndex);
+        view_settings ViewSettings = GetViewSettings(Camera);        
+        
         if(Context->DevUI.DrawCollisionVolumes)
-        {
-            view_settings ViewSettings = GetViewSettings(&World->GraphicsStates[Game->CurrentWorldIndex].Camera);
+        {            
             DevContext_RenderConvexHulls(Context, Game->CurrentWorldIndex, &ViewSettings);
             if(Context->DevUI.DrawOtherWorld)
             {
-                ViewSettings = GetViewSettings(&World->GraphicsStates[!Game->CurrentWorldIndex].Camera);
+                Camera = DevContext_GetCameraForRender(Context, !Game->CurrentWorldIndex);
+                ViewSettings = GetViewSettings(Camera);
                 DevContext_RenderConvexHulls(Context, !Game->CurrentWorldIndex, &ViewSettings);
             }                
-        }
+        }                                                
+        
+        DevContext_RenderPrimitives(Context, Game->CurrentWorldIndex, &ViewSettings);                                                
     }
-    
+        
     if(Context->DevUI.DrawOtherWorld)
     {
         PushRenderBuffer(Graphics, World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer);

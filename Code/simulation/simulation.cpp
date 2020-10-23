@@ -74,6 +74,7 @@ sim_entity* simulation::GetSimEntity(sim_entity_id ID)
         } break;
         
         case SIM_ENTITY_TYPE_RIGID_BODY:
+        
         {
             return RigidBodyStorage.Get(ID.ID);
         } break;                
@@ -279,6 +280,17 @@ contact* simulation::ComputeDeepestContact(broad_phase_pair* Pair)
         return pResult;
     }    
     return NULL;
+}
+
+ak_bool simulation::ComputeIntersection(broad_phase_pair* Pair)
+{
+    collision_volume* VolumeA = CollisionVolumeStorage.Get(Pair->AVolumeID);
+    collision_volume* VolumeB = CollisionVolumeStorage.Get(Pair->BVolumeID);    
+    intersection_function* IntersectionFunction = IntersectionFunctions[VolumeA->Type][VolumeB->Type];
+    ak_bool Result = IntersectionFunction(Pair->SimEntityA, Pair->SimEntityB, VolumeA, VolumeB);
+    if(Result)
+        AddCollisionEvent(Pair->SimEntityA, Pair->SimEntityB, AK_V3<ak_f32>());
+    return Result;
 }
 
 inline ak_f32 

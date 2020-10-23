@@ -222,6 +222,32 @@ world_id CreateStaticEntity(world* World, assets* Assets, ak_u32 WorldIndex, ak_
     return CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_STATIC, SIM_ENTITY_TYPE_SIM_ENTITY, Position, Scale, Orientation, Mesh, Material);
 }
 
+world_id CreateFloor(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, material Material)
+{
+    return CreateStaticEntity(World, Assets, WorldIndex, Position, Scale, AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_FLOOR, Material);
+}
+
+dual_world_id CreateFloorInBothWorlds(world* World, assets* Assets, ak_v3f Position, ak_v3f Scale, material Material)
+{
+    dual_world_id Result;
+    Result.A = CreateFloor(World, Assets, 0, Position, Scale, Material);
+    Result.B = CreateFloor(World, Assets, 1, Position, Scale, Material);
+    return Result;
+}
+
+world_id CreateRamp(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, material Material)
+{
+    return CreateStaticEntity(World, Assets, WorldIndex, Position, Scale, Orientation, MESH_ASSET_ID_RAMP, Material);
+}
+
+dual_world_id CreateRampInBothWorlds(world* World, assets* Assets, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, material Material)
+{
+    dual_world_id Result;
+    Result.A = CreateRamp(World, Assets, 0, Position, Scale, Orientation, Material);
+    Result.B = CreateRamp(World, Assets, 1, Position, Scale, Orientation, Material);
+    return Result;
+}
+
 world_id CreateSphereRigidBody(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
                                ak_f32 Radius, ak_f32 Mass, ak_f32 Restitution, material Material)
 {
@@ -278,6 +304,11 @@ world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Po
     entity* Entity = World->EntityStorage[WorldIndex].Get(Result.ID);
     Entity->UserData = IndexToUserData(CreateButtonState(World, IsToggle));            
     return Result;
+}
+
+world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, material Material, ak_bool IsToggle)
+{
+    return CreateButton(World, Assets, WorldIndex, Position, AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), Material, IsToggle);
 }
 
 #if 0 

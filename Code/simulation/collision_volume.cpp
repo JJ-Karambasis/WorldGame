@@ -22,7 +22,7 @@ CreateCapsule(ak_v3f Bottom, ak_f32 Height, ak_f32 Radius)
 void AttachToCollisionVolume(collision_volume* CollisionVolume, convex_hull* ConvexHull)
 {
     CollisionVolume->Type = COLLISION_VOLUME_TYPE_CONVEX_HULL;
-    CollisionVolume->ConvexHull = ConvexHull;
+    CollisionVolume->ConvexHull = *ConvexHull;
 }
 
 void AttachToCollisionVolume(collision_volume* CollisionVolume, sphere* Sphere)

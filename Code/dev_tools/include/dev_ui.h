@@ -59,6 +59,12 @@ struct jumping_quad_spawner
     ak_v3f Translation[2];    
 };
 
+struct play_game_settings
+{
+    ak_bool PlayGame;
+    ak_bool UseDevCamera;
+};
+
 struct dev_ui
 {
     graphics_render_buffer* UIRenderBuffer;
@@ -69,7 +75,7 @@ struct dev_ui
     light_spawner LightSpawner;
     jumping_quad_spawner JumpingQuadSpawner;
     
-    ak_bool PlayGame;            
+    play_game_settings PlayGameSettings;    
     ak_bool DrawOtherWorld;
     ak_bool DrawCollisionVolumes;
     ak_f32 DetailWidth;

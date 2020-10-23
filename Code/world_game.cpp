@@ -118,10 +118,7 @@ BROAD_PHASE_PAIR_FILTER_FUNC(FilterCollisions)
 }
 
 void HandleSlidingCollisions(game* Game, ak_u32 WorldIndex, rigid_body* RigidBody)
-{            
-    ak_v3f MoveDelta = RigidBody->MoveDelta;
-    RigidBody->MoveDelta = AK_V3(MoveDelta.xy);
-    
+{                        
     simulation* Simulation = &Game->World.Simulations[WorldIndex];    
     entity_storage* EntityStorage = &Game->World.EntityStorage[WorldIndex];
     
@@ -133,54 +130,19 @@ void HandleSlidingCollisions(game* Game, ak_u32 WorldIndex, rigid_body* RigidBod
             ak_v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
             broad_phase_pair_list AllPairs = Simulation->GetAllPairs(RigidBody);
             broad_phase_pair_list Pairs = Simulation->FilterPairs(AllPairs, FilterCollisions, EntityStorage);
-            
+                                    
             continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
             if(ContactTOI.HitEntity)
             {
-                ak_v3f Normal = -ContactTOI.Contact.Normal;
+                ak_v3f Normal = -ContactTOI.Contact.Normal;                                                                
                 ak_f32 tMin = ContactTOI.t;
                 
-                RigidBody->Transform.Translation += Normal*(ContactTOI.Contact.Penetration+0.001f);
+                RigidBody->Transform.Translation += Normal*0.001f;
                 RigidBody->Transform.Translation += tMin*RigidBody->MoveDelta;                                
                 
                 RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;                
                 RigidBody->MoveDelta -= AK_Dot(RigidBody->MoveDelta, Normal)*Normal;
-                RigidBody->Velocity -= AK_Dot(RigidBody->Velocity, Normal)*Normal;
-            }
-            else
-            {
-                RigidBody->Transform.Translation = TargetPosition;
-                break;
-            }
-        }
-        else
-        {
-            break;
-        }
-    }    
-    
-    RigidBody->MoveDelta = AK_V3(0.0f, 0.0f, MoveDelta.z);    
-    for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
-    {
-        ak_f32 DeltaLength = AK_Magnitude(RigidBody->MoveDelta);
-        if(DeltaLength > 0)
-        {
-            ak_v3f TargetPosition = RigidBody->Transform.Translation + RigidBody->MoveDelta;
-            broad_phase_pair_list AllPairs = Simulation->GetAllPairs(RigidBody);
-            broad_phase_pair_list Pairs = Simulation->FilterPairs(AllPairs, FilterCollisions, EntityStorage);
-                        
-            continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
-            if(ContactTOI.HitEntity)
-            {
-                ak_v3f Normal = -ContactTOI.Contact.Normal;
-                ak_f32 tMin = ContactTOI.t;
-                
-                RigidBody->Transform.Translation += Normal*(ContactTOI.Contact.Penetration+0.001f);
-                RigidBody->Transform.Translation += tMin*RigidBody->MoveDelta;                                
-                
-                RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;                
-                RigidBody->MoveDelta -= AK_Dot(RigidBody->MoveDelta, Normal)*Normal;
-                RigidBody->Velocity -= AK_Dot(RigidBody->Velocity, Normal)*Normal;
+                RigidBody->Velocity -= AK_Dot(RigidBody->Velocity, Normal)*Normal;                
             }
             else
             {
@@ -253,16 +215,16 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                         SimEntity->Transform.Scale.z *= 0.01f;
                         
                         collision_volume* CollisionVolume = Simulation->CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
-                        CollisionVolume->ConvexHull->Header.Transform.Scale.z *= 100.0f;
+                        CollisionVolume->ConvexHull.Header.Transform.Scale.z *= 100.0f;
                     }
                     
                     if(!ButtonState->Collided && ButtonState->IsDown && ButtonState->IsToggle)
                     {
                         ButtonState->IsDown = false;
                         SimEntity->Transform.Scale.z *= 100.0f;
-                                                
+                        
                         collision_volume* CollisionVolume = Simulation->CollisionVolumeStorage.Get(SimEntity->CollisionVolumeID);
-                        CollisionVolume->ConvexHull->Header.Transform.Scale.z *= 0.01f;
+                        CollisionVolume->ConvexHull.Header.Transform.Scale.z *= 0.01f;
                     }
                     
                     ButtonState->Collided = false;                    
@@ -330,7 +292,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
             }            
             else if((TypeA == ENTITY_TYPE_BUTTON) || (TypeB == ENTITY_TYPE_BUTTON))
             {
-                Simulation->ComputeDeepestContact(Pair);
+                Simulation->ComputeIntersection(Pair);
             }
         }        
     }
@@ -342,7 +304,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
         Simulation->SolveConstraints(30, dt);
     }    
     
-    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    for(ak_u32 WorldIndex = 0; WorldIndex < 1; WorldIndex++)
     {
         simulation* Simulation = &World->Simulations[WorldIndex];
         AK_ForEach(RigidBody, &Simulation->RigidBodyStorage)
@@ -604,22 +566,19 @@ AK_EXPORT GAME_TICK(Tick)
 
 extern "C"
 AK_EXPORT GAME_RENDER(Render)
-{       
+{   
+    Dev_SetDeveloperContext(DevContext);
+    
     InterpolateState(&Game->World, WorldIndex, tInterpolate);                     
     graphics_state* GraphicsState = &Game->World.GraphicsStates[WorldIndex];
     
     AK_SetGlobalArena(Game->TempStorage);
     UpdateRenderBuffer(Graphics, &GraphicsState->RenderBuffer, Game->Resolution);
     
-    camera* Camera = &GraphicsState->Camera;
+    camera* Camera = Dev_GetCamera(WorldIndex);
     view_settings ViewSettings = GetViewSettings(Camera);
     
-    graphics_light_buffer LightBuffer = GetLightBuffer(GraphicsState);
-    ShadowPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);
-    
-    StandardEntityCommands(Graphics, GraphicsState, &ViewSettings);
-    EntityLitPass(Graphics, Game->Assets, &LightBuffer, &GraphicsState->GraphicsEntityStorage);            
-    JumpingQuadPass(Graphics, &Game->World.JumpingQuadStorage[WorldIndex], &Game->QuadMesh);
+    NormalEntityPassPlusJumpingQuad(Graphics, Game, GraphicsState, &Game->World.JumpingQuadStorage[WorldIndex], &ViewSettings);
     
 #if !DEVELOPER_BUILD
     PushCopyToOutput(Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);
