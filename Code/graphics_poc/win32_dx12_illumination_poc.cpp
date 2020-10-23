@@ -3,6 +3,25 @@
 #include <dxgi.h>
 #include <d3d12.h>
 
+#define BindKey(key, action) case key: { action.IsDown = IsDown; action.WasDown = WasDown; } break
+
+#define Dev_BindMouse(key, action) do \
+{ \
+    ak_bool IsDown = GetKeyState(key) & (1 << 15); \
+    if(IsDown != action.IsDown) \
+    { \
+        if(IsDown == false) \
+        { \
+            action.WasDown = true; \
+            action.IsDown = false; \
+        } \
+        else \
+        { \
+            action.IsDown = true; \
+        } \
+    } \
+} while(0)
+
 #define COM_RELEASE(com) \
 if(com) \
 com->Release(); \
@@ -39,8 +58,14 @@ struct object
 
 struct camera
 {
+    ak_v3f Target;
+    ak_v3f SphericalCoordinates;    
+};
+
+struct view_settings
+{
     ak_v3f Position;
-    ak_v3f Direction;    
+    ak_m3f Orientation;
 };
 
 struct light
@@ -50,6 +75,48 @@ struct light
     ak_color3f Color;
     ak_f32 Intensity;
 };
+
+struct button
+{
+    ak_bool WasDown;
+    ak_bool IsDown;
+};
+
+struct input
+{
+    union
+    {
+        button Buttons[3];
+        struct
+        {            
+            button LMB;
+            button MMB;                                                                                                            
+            button Alt;
+        };
+    };
+    
+    ak_v2i LastMouseCoordinates;
+    ak_v2i MouseCoordinates;
+    ak_f32 Scroll;
+};
+
+inline ak_bool IsDown(button Button)
+{
+    ak_bool Result = Button.IsDown;
+    return Result;
+}
+
+inline ak_bool IsPressed(button Button)
+{
+    ak_bool Result = IsDown(Button) && !Button.WasDown;
+    return Result;
+}
+
+inline ak_bool IsReleased(button Button)
+{
+    ak_bool Result = !IsDown(Button) && Button.WasDown;
+    return Result;
+}
 
 struct command_fence
 {
@@ -178,6 +245,26 @@ struct upload_buffer
     }
 };
 
+struct normal_buffer
+{
+    ID3D12Resource* Resource;
+    ak_u32          Size;
+    
+    void Upload(ID3D12GraphicsCommandList* CommandList, upload_buffer* UploadBuffer, void* SrcData, ak_u32 UploadSize, ak_u32 BufferOffset)
+    {
+        AK_Assert((BufferOffset+UploadSize) <= Size, "Buffer ran out of memory");
+        ak_u32 UploadOffset = (ak_u32)(UploadBuffer->Current-UploadBuffer->Start);
+        void* DstData = UploadBuffer->Push(UploadSize);
+        AK_MemoryCopy(DstData, SrcData, UploadSize);
+        CommandList->CopyBufferRegion(Resource, BufferOffset, UploadBuffer->Resource, UploadOffset, UploadSize);        
+    }
+    
+    D3D12_GPU_VIRTUAL_ADDRESS GetGPUAddress(ak_uaddr Offset)
+    {
+        return Resource->GetGPUVirtualAddress() + Offset;
+    }        
+};
+
 struct push_buffer
 {
     ID3D12Resource* Resource;
@@ -201,6 +288,25 @@ struct push_buffer
         return Resource->GetGPUVirtualAddress() + Offset;
     }
 };
+
+view_settings GetViewSettings(camera* Camera)
+{    
+    view_settings ViewSettings = {};
+    ak_v3f Up = AK_ZAxis();        
+    ak_f32 Degree = AK_ToDegree(Camera->SphericalCoordinates.inclination);                    
+    if(Degree > 0)
+        Up = -AK_ZAxis();    
+    if(Degree < -180.0f)
+        Up = -AK_YAxis();
+    if(AK_EqualZeroEps(Degree))
+        Up = AK_YAxis(); 
+    if(AK_EqualEps(AK_Abs(Degree), 180.0f))
+        Up = -AK_YAxis();        
+    
+    ViewSettings.Position = Camera->Target + AK_SphericalToCartesian(Camera->SphericalCoordinates);            
+    ViewSettings.Orientation = AK_OrientAt(ViewSettings.Position, Camera->Target, Up);           
+    return ViewSettings;
+}
 
 mesh ToMesh(ak_mesh_result<ak_vertex_p3_n3> MeshResult, ID3D12GraphicsCommandList* CommandList, upload_buffer* UploadBuffer, 
             push_buffer* VertexBuffer, push_buffer* IndexBuffer)
@@ -289,6 +395,20 @@ push_buffer CreatePushBuffer(ID3D12Device* Device, ak_u32 BufferSize, D3D12_RESO
     return {};
 }
 
+normal_buffer CreateNormalBuffer(ID3D12Device* Device, ak_u32 BufferSize, D3D12_RESOURCE_STATES InitialState, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
+{
+    ID3D12Resource* Resource = CreateBuffer(Device, BufferSize, InitialState, GetDefaultHeapProperties(), Flags);
+    if(Resource)
+    {
+        normal_buffer Result = {};
+        Result.Resource = Resource;
+        Result.Size = BufferSize;
+        return Result;
+    }
+    
+    return {};
+}
+
 upload_buffer CreateUploadBuffer(ID3D12Device* Device, ak_u32 BufferSize, D3D12_RESOURCE_FLAGS Flags = D3D12_RESOURCE_FLAG_NONE)
 {
     ID3D12Resource* Resource = CreateBuffer(Device, BufferSize, D3D12_RESOURCE_STATE_GENERIC_READ, GetUploadHeapProperties(), Flags);
@@ -328,7 +448,8 @@ light CreateLight(ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Inten
 }
 
 global ak_bool Global_Running;
-void Win32_ProcessMessages()
+
+void Win32_ProcessMessages(input* Input)
 {
     MSG Message = {};
     for(;;)
@@ -366,13 +487,40 @@ void Win32_ProcessMessages()
                 Global_Running = false;
             } break;
             
+            case WM_SYSKEYDOWN:
+            case WM_KEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_KEYUP:
+            {
+                DWORD VKCode = (DWORD)Message.wParam;
+                
+                ak_bool WasDown = ((Message.lParam & (1 << 30)) != 0);
+                ak_bool IsDown = ((Message.lParam & (1UL << 31)) == 0);
+                if(WasDown != IsDown)
+                {
+                    switch(VKCode)
+                    {
+                        BindKey(VK_MENU, Input->Alt);                          
+                    }
+                }
+                
+                if(((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) && (VKCode == VK_F4) && IsDown)
+                    PostQuitMessage(0);                                
+            } break;
+            
+            case WM_MOUSEWHEEL:
+            {
+                ak_f32 Scroll = (ak_f32)GET_WHEEL_DELTA_WPARAM(Message.wParam) / (ak_f32)WHEEL_DELTA;                
+                Input->Scroll = Scroll;
+            } break;
+            
             default:
             {
                 TranslateMessage(&Message);
                 DispatchMessage(&Message);
             } break;
         }
-    }        
+    }                
 }
 
 ak_fixed_array<IDXGIAdapter*> GetAdapters(ak_arena* Arena, IDXGIFactory* Factory)
@@ -515,7 +663,7 @@ ID3D12RootSignature* CreateRootSignature(ID3D12Device* Device, root_parameters P
     RootSignatureDesc.NumStaticSamplers = NumStaticSamples;
     RootSignatureDesc.pStaticSamplers = SamplersDesc;
     RootSignatureDesc.Flags = Flags;
-        
+    
     ID3DBlob* DataBlob = NULL;
     ID3DBlob* ErrorBlob = NULL;  
     
@@ -678,6 +826,9 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     push_buffer IndexBuffer = CreatePushBuffer(Device, AK_Megabyte(32), D3D12_RESOURCE_STATE_COPY_DEST);
     if(!IndexBuffer.Resource) { AK_MessageBoxOk("Fatal Error", "Failed to create the index buffer"); return -1; }
     
+    normal_buffer ViewProjBuffer = CreateNormalBuffer(Device, sizeof(ak_m4f)*2, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+    if(!ViewProjBuffer.Resource) { AK_MessageBoxOk("Fatal Error", "Failed to create the view projection buffer"); return -1; }
+    
     DirectCommandAllocator->Reset();
     DirectCommandList->Reset(DirectCommandAllocator, NULL);
     
@@ -695,10 +846,16 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     DirectCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&DirectCommandList);
     Fence.Signal(DirectCommandQueue);
     
-    ID3D12RootSignature* RootSignature = CreateRootSignature(Device, {}, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);    
-    if(!RootSignature) { AK_MessageBoxOk("Fatal Error", "Failed to create the root signature"); return -1; }
-        
     ak_temp_arena TempArena = AppArena->BeginTemp();
+    
+    root_parameters RootParameters = BeginRootParameters(AppArena, 3);
+    RootParameters.AddRootConstant(0, 0, 0, 16, D3D12_SHADER_VISIBILITY_VERTEX);
+    RootParameters.AddRootConstant(1, 0, 1, 4, D3D12_SHADER_VISIBILITY_PIXEL);
+    RootParameters.AddRootDescriptor(2, D3D12_ROOT_PARAMETER_TYPE_CBV, 1, 0, D3D12_SHADER_VISIBILITY_VERTEX);    
+    
+    ID3D12RootSignature* RootSignature = CreateRootSignature(Device, RootParameters, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);    
+    if(!RootSignature) { AK_MessageBoxOk("Fatal Error", "Failed to create the root signature"); return -1; }
+    
     ak_buffer VSResults = AK_ReadEntireFile("VertexShader.cso", AppArena);
     ak_buffer PSResults = AK_ReadEntireFile("PixelShader.cso", AppArena);    
     if(!VSResults.IsValid() || !PSResults.IsValid()) { AK_MessageBoxOk("Fatal Error", "Failed to load the hlsl shaders"); return -1; }
@@ -725,8 +882,16 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
     ID3D12PipelineState* PipelineState = NULL;
     if(FAILED(Device->CreateGraphicsPipelineState(&PipelineStateDesc, __uuidof(ID3D12PipelineState), (void**)&PipelineState))) { AK_MessageBoxOk("Fatal Error", "Failed to create the pipeline state"); return -1; }
     
+    input Input = {};
+    
+    camera Camera = {};
+    Camera.Target = AK_V3(0.0f, 0.0f, 0.0f);
+    Camera.SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
     
     ak_array<object> Objects = {};            
+    Objects.Add(CreateObject(AK_V3( 0.75f, 0.0f, 0.0f), AK_IdentityQuat<ak_f32>(), AK_V3(1.0f, 1.0f, 1.0f), &BoxMesh, AK_Red4()));
+    Objects.Add(CreateObject(AK_V3(-0.75f, 0.0f, 0.0f), AK_IdentityQuat<ak_f32>(), AK_V3(1.0f, 1.0f, 1.0f), &BoxMesh, AK_Green4()));
+    
     ak_array<light> Lights = {};    
     
     AppArena->EndTemp(&TempArena);                        
@@ -740,17 +905,93 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         ak_arena* GlobalArena = AK_GetGlobalArena();
         TempArena = GlobalArena->BeginTemp();
         
-        Win32_ProcessMessages();        
+        Win32_ProcessMessages(&Input);    
+        POINT MousePosition;
+        if(HWND ActiveWindow = GetForegroundWindow())
+        {
+            if(ActiveWindow == (HWND)PlatformWindow || IsChild(ActiveWindow, (HWND)PlatformWindow))
+            {
+                if(GetCursorPos(&MousePosition) && ScreenToClient((HWND)PlatformWindow, &MousePosition))
+                {                                    
+                    Input.MouseCoordinates = AK_V2((ak_i32)MousePosition.x, (ak_i32)MousePosition.y);
+                }
+            }
+        }
+        
+        Dev_BindMouse(VK_LBUTTON, Input.LMB);
+        Dev_BindMouse(VK_MBUTTON, Input.MMB);
+        
+        ak_v2i MouseDelta = Input.MouseCoordinates - Input.LastMouseCoordinates;    
+        ak_v3f* SphericalCoordinates = &Camera.SphericalCoordinates;                
+        
+        ak_f32 Roll = 0;
+        ak_f32 Pitch = 0;        
+        
+        ak_v2f PanDelta = AK_V2<ak_f32>();
+        ak_f32 Scroll = 0;
+        
+        if(IsDown(Input.Alt))
+        {
+            if(IsDown(Input.LMB))
+            {
+                SphericalCoordinates->inclination += MouseDelta.y*1e-3f;
+                SphericalCoordinates->azimuth += MouseDelta.x*1e-3f;
+                
+                ak_f32 InclindationDegree = AK_ToDegree(SphericalCoordinates->inclination);
+                if(InclindationDegree < -180.0f)
+                {
+                    ak_f32 Diff = InclindationDegree + 180.0f;
+                    InclindationDegree = 180.0f - Diff;
+                    InclindationDegree = AK_Min(180.0f, InclindationDegree);
+                    SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                }
+                else if(InclindationDegree > 180.0f)
+                {
+                    ak_f32 Diff = InclindationDegree - 180.0f;
+                    InclindationDegree = -180.0f + Diff;
+                    InclindationDegree = AK_Min(-180.0f, InclindationDegree);
+                    SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                }            
+            }
+            
+            if(IsDown(Input.MMB))        
+                PanDelta += AK_V2f(MouseDelta)*1e-3f;        
+            
+            if(AK_Abs(Input.Scroll) > 0)        
+            {
+                SphericalCoordinates->radius -= Input.Scroll*0.5f;                    
+                if(SphericalCoordinates->radius < 0.001f)
+                    SphericalCoordinates->radius = 0.001f;
+            }
+        }    
+        
+        view_settings ViewSettings = GetViewSettings(&Camera);    
+        Camera.Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);        
+        
+        Resolution = {};
+        AK_GetWindowResolution(PlatformWindow, (ak_u16*)&Resolution.w, (ak_u16*)&Resolution.h);
         
         Fence.WaitCPU();
         DirectCommandAllocator->Reset();
         DirectCommandList->Reset(DirectCommandAllocator, NULL);
         
-        Resolution = {};
-        AK_GetWindowResolution(PlatformWindow, (ak_u16*)&Resolution.w, (ak_u16*)&Resolution.h);
+        ak_m4f ViewProj[2] = 
+        {
+            AK_InvTransformM4(ViewSettings.Position, ViewSettings.Orientation),
+            AK_Perspective(AK_ToRadians(35.0f), AK_SafeRatio(Resolution.w, Resolution.h), 0.001f, 100.0f)
+        };
         
-        D3D12_RESOURCE_BARRIER Barrier = GetTransitionBarrier(SwapChainBuffers[FrameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        DirectCommandList->ResourceBarrier(1, &Barrier);
+        D3D12_RESOURCE_BARRIER PreCopyBarriers[2] = 
+        {
+            GetTransitionBarrier(SwapChainBuffers[FrameIndex], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET), 
+            GetTransitionBarrier(ViewProjBuffer.Resource, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST)
+        };
+         
+        DirectCommandList->ResourceBarrier(2, PreCopyBarriers);
+        
+        ViewProjBuffer.Upload(DirectCommandList, &UploadBuffer, ViewProj, sizeof(ViewProj), 0);        
+        D3D12_RESOURCE_BARRIER PostCopyBarrier = GetTransitionBarrier(ViewProjBuffer.Resource, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);        
+        DirectCommandList->ResourceBarrier(1, &PostCopyBarrier);
         
         D3D12_CPU_DESCRIPTOR_HANDLE RenderTargetHandle = RTVDescriptors.CPUIndex(FrameIndex);
         DirectCommandList->OMSetRenderTargets(1, &RenderTargetHandle, FALSE, NULL);
@@ -780,11 +1021,20 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         
         DirectCommandList->SetPipelineState(PipelineState);
         DirectCommandList->SetGraphicsRootSignature(RootSignature);
+        DirectCommandList->SetGraphicsRootConstantBufferView(2, ViewProjBuffer.GetGPUAddress(0));
         
-        DirectCommandList->DrawIndexedInstanced(BoxMesh.IndexCount, 1, BoxMesh.IndexOffset, BoxMesh.VertexOffset, 0);
+        AK_ForEach(Object, &Objects)
+        {
+            ak_m4f Transform = AK_TransformM4(Object->Transform);
+            mesh* Mesh = Object->Mesh;
+            
+            DirectCommandList->SetGraphicsRoot32BitConstants(0, 16, &Transform, 0);        
+            DirectCommandList->SetGraphicsRoot32BitConstants(1, 4, &Object->Color, 0);
+            DirectCommandList->DrawIndexedInstanced(Mesh->IndexCount, 1, Mesh->IndexOffset, Mesh->VertexOffset, 0);
+        }
         
-        Barrier = GetTransitionBarrier(SwapChainBuffers[FrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-        DirectCommandList->ResourceBarrier(1, &Barrier);
+        D3D12_RESOURCE_BARRIER PostDrawBarrier = GetTransitionBarrier(SwapChainBuffers[FrameIndex], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+        DirectCommandList->ResourceBarrier(1, &PostDrawBarrier);
         
         DirectCommandList->Close();
         DirectCommandQueue->ExecuteCommandLists(1, (ID3D12CommandList* const*)&DirectCommandList);
@@ -796,6 +1046,9 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         
         GlobalArena->EndTemp(&TempArena);        
         
+        Input.LastMouseCoordinates = Input.MouseCoordinates;
+        Input.Scroll = 0;
+            
         ak_high_res_clock End = AK_WallClock();
         ak_f64 Elapsed = AK_GetElapsedTime(End, Begin);
         
