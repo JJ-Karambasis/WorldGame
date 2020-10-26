@@ -46,11 +46,21 @@ if %COMPILE_GRAPHICS_POC_RAYTRACE% == 1 (
 set SHADER_COMMON=-Od -Zi -nologo
 set VERTEX_SHADER_COMMON=-T vs_5_1 %SHADER_COMMON%
 set PIXEL_SHADER_COMMON=-T ps_5_1 %SHADER_COMMON%
+set COMPUTE_SHADER_COMMON=-T cs_5_1 %SHADER_COMMON%
     
 if %COMPILE_GRAPHICS_ILLUMINATION_POC% == 1 (    
-    %Compiler% %Common% %Warnings% -DOS_WINDOWS ..\code\graphics_poc\win32_dx12_illumination_poc.cpp -link user32.lib Gdi32.lib -opt:ref -out:Illumination_POC.exe
-    fxc %VERTEX_SHADER_COMMON% -E TestVertexShader -Fo VertexShader.cso ..\code\graphics_poc\shaders\vertex_shaders.hlsl
-    fxc %PIXEL_SHADER_COMMON% -E TestPixelShader -Fo PixelShader.cso ..\code\graphics_poc\shaders\pixel_shaders.hlsl
+    %Compiler% %Common% %Warnings% -O2 -Oi -DOS_WINDOWS ..\code\graphics_poc\win32_dx12_illumination_poc.cpp -link user32.lib Gdi32.lib -opt:ref -out:Illumination_POC.exe
+    fxc %VERTEX_SHADER_COMMON% -E ObjectVertexShader -Fo ObjectVertexShader.cso ..\code\graphics_poc\shaders\object_vertex_shader.hlsl
+    fxc %VERTEX_SHADER_COMMON% -E ShadowMapVertexShader -Fo ShadowMapVertexShader.cso ..\code\graphics_poc\shaders\shadow_map_vertex_shader.hlsl
+    fxc %VERTEX_SHADER_COMMON% -E DebugPrimitiveVertexShader -Fo DebugPrimitiveVertexShader.cso ..\code\graphics_poc\shaders\debug_primitive_vertex_shader.hlsl
+    fxc %PIXEL_SHADER_COMMON% -E ObjectPixelShader -Fo ObjectPixelShader.cso ..\code\graphics_poc\shaders\object_pixel_shader.hlsl
+    fxc %PIXEL_SHADER_COMMON% -E ShadowMapPixelShader -Fo ShadowMapPixelShader.cso ..\code\graphics_poc\shaders\shadow_map_pixel_shader.hlsl   
+    fxc %PIXEL_SHADER_COMMON% -E DebugPrimitivePixelShader -Fo DebugPrimitivePixelShader.cso ..\code\graphics_poc\shaders\debug_primitive_pixel_shader.hlsl
+    fxc %COMPUTE_SHADER_COMMON% -E ShadeSurfelsComputeShader -Fo ShadeSurfelsComputeShader.cso ..\code\graphics_poc\shaders\shade_surfels_compute_shader.hlsl
+    fxc %COMPUTE_SHADER_COMMON% -DIRRADIANCE_BLENDING=1 -E ProbeBlendingComputeShader -Fo IrradianceProbeBlendingComputeShader.cso ..\code\graphics_poc\shaders\probe_blending_compute_shader.hlsl
+    fxc %COMPUTE_SHADER_COMMON% -DIRRADIANCE_BLENDING=0 -E ProbeBlendingComputeShader -Fo DistanceProbeBlendingComputeShader.cso ..\code\graphics_poc\shaders\probe_blending_compute_shader.hlsl
+    fxc %COMPUTE_SHADER_COMMON% -E ProbeBorderUpdateRowComputeShader -Fo ProbeBorderUpdateRowComputeShader.cso ..\code\graphics_poc\shaders\probe_border_update_compute_shader.hlsl
+    fxc %COMPUTE_SHADER_COMMON% -E ProbeBorderUpdateColumnComputeShader -Fo ProbeBorderUpdateColumnComputeShader.cso ..\code\graphics_poc\shaders\probe_border_update_compute_shader.hlsl
 )
 
 popd

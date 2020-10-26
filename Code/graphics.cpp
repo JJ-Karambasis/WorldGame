@@ -38,7 +38,7 @@ void PushWorldShadingCommands(graphics_state* GraphicsState, graphics_render_buf
     for(ak_u32 PointLightIndex = 0; PointLightIndex < LightBuffer.PointLightCount; PointLightIndex++)
     {           
         graphics_point_light* PointLight = LightBuffer.PointLights + PointLightIndex;              
-        ak_m4f LightPerspective = AK_Perspective(AK_PI*0.5f, AK_SafeRatio(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT), 0.01f, PointLight->Radius);
+        ak_m4f LightPerspective = AK_Perspective(AK_PI*1.0f, AK_SafeRatio(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT), 0.01f, PointLight->Radius);
         
         ak_m4f LightViewProjections[6] = 
         {

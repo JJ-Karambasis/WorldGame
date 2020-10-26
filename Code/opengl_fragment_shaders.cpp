@@ -207,7 +207,7 @@ i32 ChooseFaceIndex(v3f TexCoords, out v2f OutTexCoords)
         {            
             U =  TexCoords.z;
             V =  TexCoords.y;
-            Result = POSITIVE_X;
+            Result = POSITIVE_X; 
         }
         else
         {

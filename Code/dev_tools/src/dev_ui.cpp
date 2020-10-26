@@ -594,8 +594,8 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 
                 if(Spawner->WorldIndex == 2)
                 {
-                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
-                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
+                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
+                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
                     
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, A);
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, B);
@@ -606,8 +606,8 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 }
                 else if(Spawner->WorldIndex == 3)
                 {
-                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
-                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);
+                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
+                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
                     
                     entity* EntityA = Game->World.EntityStorage[A.WorldIndex].Get(A.ID);
                     entity* EntityB = Game->World.EntityStorage[B.WorldIndex].Get(B.ID);
@@ -624,7 +624,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 }
                 else
                 {       
-                    world_id EntityID = CreatePushableBox(&Game->World, Game->Assets, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material);                    
+                    world_id EntityID = CreatePushableBox(&Game->World, Game->Assets, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);                    
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
                     if(CurrentWorldIndex == EntityID.WorldIndex)
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
@@ -946,6 +946,7 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
         
         DevUI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", &UI->DrawOtherWorld);
         DevUI_Checkbox(AK_HashFunction("Draw Collision Volumes"), "Draw Collision Volumes", &UI->DrawCollisionVolumes);
+        DevUI_Checkbox(AK_HashFunction("Draw Grid"), "Draw Grid", &PlayGameSettings->DrawGrid);
         
         if(PrevPlayGame != PlayGameSettings->PlayGame)
         {
@@ -953,9 +954,11 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
             {
                 //NOTE(EVERYONE): Just started playing
                 PlayGameSettings->UseDevCamera = false;
+                PlayGameSettings->DrawGrid = false;
             }
             else
-            {                                
+            {       
+                PlayGameSettings->DrawGrid = true;
                 //NOTE(EVERYONE): Just stopped playing
                 for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
                 {
@@ -1056,6 +1059,15 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
                     DevContext->Cameras[1] = DevContext->Game->World.GraphicsStates[1].Camera;
                 }                
             }
+            
+            dev_gizmo_state* GizmoState = &DevContext->GizmoState;            
+            
+            AlignTextToFramePadding();
+            Text("Grid Size"); SameLine();
+            DragFloat(AK_HashFunction("Grid Size"), "", &GizmoState->GridDistance, 0.1f, 0.1f, 10);             
+            AK_Clamp(GizmoState->GridDistance, 0.1f, 10.0f);  
+            if(GizmoState->GridDistance < 0.1f)
+                GizmoState->GridDistance = 0.1f;            
         }
         
         if(CollapsingHeader("Debug Logs", ImGuiTreeNodeFlags_DefaultOpen))

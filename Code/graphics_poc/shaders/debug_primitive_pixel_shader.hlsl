@@ -5,7 +5,7 @@ cbuffer color_buffer : register(b0, space1)
     ak_color4f Color;
 };
 
-ak_color4f TestPixelShader() : SV_TARGET
+ak_v4f DebugPrimitivePixelShader() : SV_Target
 {
     return Color;
 }

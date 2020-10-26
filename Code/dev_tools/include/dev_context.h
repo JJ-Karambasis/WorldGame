@@ -183,7 +183,11 @@ struct dev_object_edit
     mesh_asset_id MeshID;
     ak_f32 Mass;
     ak_f32 Restitution;
+    ak_bool Interactable;
 };
+
+#define DEV_RENDER_GRID_CALLBACK(name) void name(dev_context* Context, graphics_state* GraphicsState, view_settings* ViewSettings)
+typedef DEV_RENDER_GRID_CALLBACK(dev_render_grid_callback);
 
 struct dev_context
 {
@@ -223,6 +227,8 @@ struct dev_context
     ak_array<dev_object_edit> RedoStack;
     
     ak_array<dev_render_primitive> RenderPrimitives;
+    
+    dev_render_grid_callback* RenderGrid;
 };
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, ak_string ProgramFilePath, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);

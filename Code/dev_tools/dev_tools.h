@@ -12,6 +12,7 @@ global struct dev_context* __Internal_Dev_Context__;
 #define Dev_DrawPoint(position, size, color) DevContext_AddPoint(__Internal_Dev_Context__, position, size, color)
 #define Dev_DrawSegment(position0, position1, size, color) DevContext_AddSegment(__Internal_Dev_Context__, position0, position1, size, color)
 #define Dev_GetCamera(WorldIndex) __Internal_Dev_Context__->DevUI.PlayGameSettings.UseDevCamera ? &__Internal_Dev_Context__->Cameras[WorldIndex] : &Game->World.GraphicsStates[WorldIndex].Camera
+#define Dev_DrawGrid(GraphicsState, ViewSettings) if(__Internal_Dev_Context__->DevUI.PlayGameSettings.DrawGrid) __Internal_Dev_Context__->RenderGrid(__Internal_Dev_Context__, GraphicsState, ViewSettings)
 
 #define PLATFORM_INIT_IMGUI(name) void name(void* PlatformWindow, struct ImGuiIO* IO)
 #define PLATFORM_DEVELOPMENT_UPDATE(name) void name(ImGuiIO* IO, struct dev_input* DevInput, ak_v2i RenderDim, ak_f32 dt)

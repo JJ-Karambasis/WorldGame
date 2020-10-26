@@ -41,9 +41,10 @@ void DeleteWorld(world* World, graphics* Graphics)
     DeleteGraphicsState(Graphics, &World->GraphicsStates[1]);
 }
 
-ak_u32 CreatePushingObject(world* World)
+ak_u32 CreatePushingObject(world* World, ak_bool Interactable)
 {
-    ak_u64 Result = World->PushingObjectStorage.Allocate();    
+    ak_u64 Result = World->PushingObjectStorage.Allocate();  
+    World->PushingObjectStorage.Get(Result)->Interactable = Interactable;
     return AK_PoolIndex(Result);
 }
 
@@ -277,12 +278,12 @@ world_id CreateSphereRigidBody(world* World, assets* Assets, ak_u32 WorldIndex, 
 }
 
 world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
-                           ak_f32 Mass, material Material)
+                           ak_f32 Mass, material Material, ak_bool Interactable)
 {
     AK_Assert(Mass != 0, "Cannot have zero mass for a rigid body");    
     world_id Result = CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, Position, Scale, Orientation, MESH_ASSET_ID_BOX, Material);    
     entity* Entity = World->EntityStorage[WorldIndex].Get(Result.ID);    
-    Entity->UserData = IndexToUserData(CreatePushingObject(World));
+    Entity->UserData = IndexToUserData(CreatePushingObject(World, Interactable));
     
     rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
     RigidBody->Restitution = 0;
@@ -293,9 +294,27 @@ world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v
     return Result;
 }
 
-world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material)
+world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material, ak_bool Interactable)
 {
-    return CreatePushableBox(World, Assets, WorldIndex, Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), Mass, Material);
+    return CreatePushableBox(World, Assets, WorldIndex, Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), Mass, Material, Interactable);
+}
+
+dual_world_id
+CreateDualPushableBox(world* World, assets* Assets, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material, ak_bool Interactable0, ak_bool Interactable1)
+{
+    AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
+    
+    dual_world_id Result;
+    Result.A = CreatePushableBox(World, Assets, 0, Position, Dimensions, Mass, Material, Interactable0);
+    Result.B = CreatePushableBox(World, Assets, 1, Position, Dimensions, Mass, Material, Interactable1);
+    
+    entity* EntityA = World->EntityStorage[0].Get(Result.A.ID);
+    entity* EntityB = World->EntityStorage[1].Get(Result.B.ID);
+    
+    EntityA->LinkID = EntityB->ID;
+    EntityB->LinkID = EntityA->ID;
+    
+    return Result;
 }
 
 world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, ak_quatf Orientation, material Material, ak_bool IsToggle)
@@ -310,69 +329,6 @@ world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Po
 {
     return CreateButton(World, Assets, WorldIndex, Position, AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), Material, IsToggle);
 }
-
-#if 0 
-world_id
-CreateSphereRigidBody(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Radius, ak_f32 Mass, ak_f32 Restitution, material Material)
-{
-    AK_Assert(Mass != 0, "Cannot have zero mass for a rigid body");    
-    world_id Result = CreateEntity(Game, ENTITY_TYPE_RIGID_BODY, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, Position, AK_V3(1.0f, 1.0f, 1.0f)*Radius, AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_SPHERE, Material, true);            
-    entity* Entity = GetEntity(Game, Result);    
-    simulation* Simulation = GetSimulation(Game, WorldIndex);        
-    
-    rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
-    
-    sphere Sphere = CreateSphere(AK_V3(0.0f, 0.0f, 0.0f), 1.0f);    
-    Simulation->AddCollisionVolume(RigidBody, &Sphere);
-    
-    ak_f32 SphereRadius = Sphere.Radius*GetEntityTransformNew(Game, Result)->Scale.LargestComp();
-    
-    RigidBody->Restitution = Restitution;
-    RigidBody->InvMass = 1.0f/Mass;
-    RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
-    RigidBody->LocalCenterOfMass = AK_V3<ak_f32>();
-    
-    return Result;
-}
-
-world_id
-CreatePushableBox(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material)
-{
-    AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
-    world_id Result = CreateEntity(Game, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, WorldIndex, 
-                                   Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, Material, false);        
-    entity* Entity = GetEntity(Game, Result);
-    Entity->UserData = IndexToUserData(CreatePushingObject(Game));
-    
-    simulation* Simulation = GetSimulation(Game, WorldIndex);                
-    rigid_body* RigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
-    
-    RigidBody->Restitution = 0;
-    RigidBody->InvMass = 1.0f/Mass;
-    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(AK_V3(Dimensions, Dimensions, Dimensions), Mass);
-    RigidBody->LocalCenterOfMass = AK_V3(0.0f, 0.0f, Dimensions*0.5f);
-    
-    return Result;
-}
-
-dual_world_id
-CreateDualPushableBox(game* Game, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material)
-{
-    AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
-    
-    dual_world_id Result;
-    Result.EntityA = CreatePushableBox(Game, 0, Position, Dimensions, Mass, Material);
-    Result.EntityB = CreatePushableBox(Game, 1, Position, Dimensions, Mass, Material);
-    
-    entity* EntityA = GetEntity(Game, Result.EntityA);
-    entity* EntityB = GetEntity(Game, Result.EntityB);    
-    
-    EntityA->LinkID = EntityB->ID;
-    EntityB->LinkID = EntityA->ID;
-    
-    return Result;
-}
-#endif
 
 inline ak_bool
 IsEntityType(entity* Entity, entity_type Type)

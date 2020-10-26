@@ -300,8 +300,13 @@ void ShadowPass(graphics* Graphics, assets* Assets, graphics_light_buffer* Light
     for(ak_u32 PointLightIndex = 0; PointLightIndex < LightBuffer->PointLightCount; PointLightIndex++)
     {           
         graphics_point_light* PointLight = LightBuffer->PointLights + PointLightIndex;              
-        ak_m4f LightPerspective = AK_Perspective(AK_PI*0.5f, AK_SafeRatio(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT), 0.01f, PointLight->Radius);
         
+#if 1
+        ak_f32 LightNear = 0.01f;
+#else
+        ak_f32 LightNear = 10.0f;
+#endif
+        ak_m4f LightPerspective = AK_Perspective(AK_PI*0.5f, AK_SafeRatio(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT), LightNear, PointLight->Radius);        
         ak_m4f LightViewProjections[6] = 
         {
             AK_LookAt(PointLight->Position, PointLight->Position + AK_XAxis(), AK_YAxis())*LightPerspective,

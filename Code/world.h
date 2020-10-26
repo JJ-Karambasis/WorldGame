@@ -40,7 +40,7 @@ struct entity
     world_id LinkID;         
     sim_entity_id SimEntityID;                 
     ak_u64 GraphicsEntityID;    
-    void* UserData;            
+    void* UserData;    
     
     collision_event_function* OnCollision;
 };
@@ -56,6 +56,7 @@ struct pushing_object
 {    
     world_id PlayerID;
     ak_v2f Direction;
+    ak_bool Interactable;
 };
 
 struct player

@@ -63,6 +63,7 @@ struct play_game_settings
 {
     ak_bool PlayGame;
     ak_bool UseDevCamera;
+    ak_bool DrawGrid;
 };
 
 struct dev_ui

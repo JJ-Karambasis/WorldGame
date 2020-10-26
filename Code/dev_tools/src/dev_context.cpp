@@ -1,3 +1,5 @@
+DEV_RENDER_GRID_CALLBACK(DevContext_RenderGrid);
+
 mesh_info DevContext_GetMeshInfoFromDevMesh(dev_mesh* DevMesh)
 {
     mesh_info MeshInfo;
@@ -682,7 +684,7 @@ ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                     if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material)) LoadWorld_Error(MaterialNotLoadedError);                    
                     
                     ak_f32 Mass = *Stream.Read<ak_f32>();
-                    EntityID = CreatePushableBox(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, Mass, Material);                    
+                    EntityID = CreatePushableBox(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, Mass, Material, true);                    
                 } break;
                 
                 AK_INVALID_DEFAULT_CASE;
@@ -1052,7 +1054,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
             {
                 CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
                                                   LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                  LastEdit->Mass, LastEdit->Material);
+                                                  LastEdit->Mass, LastEdit->Material, LastEdit->Interactable);
             } break;
             AK_INVALID_DEFAULT_CASE;
         }
@@ -1181,7 +1183,7 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
             {
                 CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
                                                   LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                  LastEdit->Mass, LastEdit->Material);
+                                                  LastEdit->Mass, LastEdit->Material, LastEdit->Interactable);
             } break;
             AK_INVALID_DEFAULT_CASE;
         }
@@ -1231,6 +1233,7 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
     DevUI_Initialize(&DevContext->DevUI, Graphics, PlatformWindow, InitImGui);        
     
     DevContext->DefaultWorldFilePathName = AK_StringConcat(ProgramFilePath, "DefaultWorld.txt", DevStorage);
+    DevContext->RenderGrid = DevContext_RenderGrid;
     
     ak_arena* GlobalArena = AK_GetGlobalArena();    
     ak_temp_arena TempArena = GlobalArena->BeginTemp();
@@ -1260,7 +1263,7 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]));
         
         
-#if 0
+#if 1
         material FloorMaterial = { CreateDiffuse(AK_White3()) };
         
         DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(0.0f, 0.0f, -0.1f), AK_V3(20.0f, 20.0f, 1.0f), FloorMaterial));
@@ -1270,8 +1273,12 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3(-2.5f, 5.0f, 0.0f), ButtonMaterial, true));
         DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3( 2.5f, 5.0f, 0.0f), ButtonMaterial, true));
         
-        DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, 0.5f, 0.0f), AK_V3(1.0f, 1.0f, 10.0f), FloorMaterial));        
-        DEV_ADD_2(CreateRampInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -2.0f, 0.0f), AK_V3(1.0f, 2.0f, 1.0f), AK_IdentityQuat<ak_f32>(), FloorMaterial));
+        DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -3.5f, 0.0f), AK_V3(1.0f, 1.0f, 10.0f), FloorMaterial));        
+        DEV_ADD_2(CreateRampInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -6.0f, 0.0f), AK_V3(1.0f, 2.0f, 1.0f), AK_IdentityQuat<ak_f32>(), FloorMaterial));
+        DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, 0.05f, 0.0f), AK_V3(1.0f, 4.0f, 10.0f), FloorMaterial));
+        
+        material PushableBoxMaterial = { CreateDiffuse(AK_White3()*0.4f) };
+        DEV_ADD_2(CreateDualPushableBox(&Game->World, Game->Assets, AK_V3(0.0f, -2.0f, 0.0f), 1.0f, 40.0f, PushableBoxMaterial, true, false));
         
         CreatePointLights(Game->World.GraphicsStates, AK_V3(0.0f, 0.0f, 10.0f), 100.0f, AK_White3(), 5.0f, true);
         
@@ -1670,10 +1677,12 @@ void DevContext_Tick()
                                     Undo.Mass = 1.0f / RigidBody->InvMass;
                                     Undo.Restitution = RigidBody->Restitution;
                                 } break;
+                                
                                 case ENTITY_TYPE_PUSHABLE:
                                 {
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     Undo.Mass = 1.0f / RigidBody->InvMass;
+                                    Undo.Interactable = GetPushingObject(&Game->World, Entity)->Interactable;
                                 } break;
                             }
                             Context->UndoStack.Add(Undo);
@@ -1816,6 +1825,70 @@ void DevContext_RenderConvexHulls(dev_context* Context, ak_u32 WorldIndex, view_
     PushDepth(Graphics, true);
 }
 
+DEV_RENDER_GRID_CALLBACK(DevContext_RenderGrid)
+{    
+    ak_v3f* FrustumCorners = GetFrustumCorners(ViewSettings, GraphicsState->RenderBuffer->Resolution);
+    
+    ak_v3f FrustumPlaneIntersectionPoints[4];
+    ak_i8 IntersectedCount = 0;
+    for(int i = 0; i < 4; i++)
+    {
+        ray FrustumRay = {};
+        FrustumRay.Origin = FrustumCorners[i];
+        FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
+        ak_f32 Distance = RayPlaneIntersection(AK_V3f(0, 0, 1), AK_V3f(0,0,0), FrustumRay.Origin, FrustumRay.Direction);
+        if(Distance != INFINITY)
+        {
+            IntersectedCount++;            
+            Distance = AK_Min(Distance, ViewSettings->ZFar);
+            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+        }
+        else
+        {            
+            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
+        }
+    }
+    
+    if(IntersectedCount != 0)
+    {
+        //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
+        ak_f32 MinX;
+        ak_f32 MaxX;
+        ak_f32 MinY;
+        ak_f32 MaxY;
+        if(IntersectedCount == 4)
+        {
+            MinX = FrustumPlaneIntersectionPoints[0].x;
+            MaxX = FrustumPlaneIntersectionPoints[0].x;
+            MinY = FrustumPlaneIntersectionPoints[0].y;
+            MaxY = FrustumPlaneIntersectionPoints[0].y;
+            for(int i = 0; i < 4; i++)
+            {
+                MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
+                MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
+                MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
+                MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+            }
+        }
+        else
+        {
+            MinX = FrustumCorners[0].x;
+            MaxX = FrustumCorners[0].x;
+            MinY = FrustumCorners[0].y;
+            MaxY = FrustumCorners[0].y;
+            for(int i = 0; i < 8; i++)
+            {
+                MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
+                MaxX = AK_Max(FrustumCorners[i].x, MaxX);
+                MinY = AK_Min(FrustumCorners[i].y, MinY);
+                MaxY = AK_Max(FrustumCorners[i].y, MaxY);
+            }
+        }
+        
+        DevDraw_Grid(Context, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
+    }    
+}
+
 void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
 {    
     game* Game = Context->Game;
@@ -1864,67 +1937,9 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
     AK_ForEach(PointLight, &GraphicsState->PointLightStorage)    
         DevDraw_Sphere(Context, PointLight->Position, DEV_POINT_LIGHT_RADIUS, AK_Yellow3());    
     
-    ak_v3f* FrustumCorners = GetFrustumCorners(&ViewSettings, GraphicsState->RenderBuffer->Resolution);
-    
-    ak_v3f FrustumPlaneIntersectionPoints[4];
-    ak_i8 IntersectedCount = 0;
-    for(int i = 0; i < 4; i++)
-    {
-        ray FrustumRay = {};
-        FrustumRay.Origin = FrustumCorners[i];
-        FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
-        ak_f32 Distance = RayPlaneIntersection(AK_V3f(0, 0, 1), AK_V3f(0,0,0), FrustumRay.Origin, FrustumRay.Direction);
-        if(Distance != INFINITY)
-        {
-            IntersectedCount++;            
-            Distance = AK_Min(Distance, ViewSettings.ZFar);
-            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
-        }
-        else
-        {            
-            FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * Distance);
-        }
-    }
-    
-    if(IntersectedCount != 0)
-    {
-        //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
-        ak_f32 MinX;
-        ak_f32 MaxX;
-        ak_f32 MinY;
-        ak_f32 MaxY;
-        if(IntersectedCount == 4)
-        {
-            MinX = FrustumPlaneIntersectionPoints[0].x;
-            MaxX = FrustumPlaneIntersectionPoints[0].x;
-            MinY = FrustumPlaneIntersectionPoints[0].y;
-            MaxY = FrustumPlaneIntersectionPoints[0].y;
-            for(int i = 0; i < 4; i++)
-            {
-                MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
-                MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
-                MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
-                MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
-            }
-        }
-        else
-        {
-            MinX = FrustumCorners[0].x;
-            MaxX = FrustumCorners[0].x;
-            MinY = FrustumCorners[0].y;
-            MaxY = FrustumCorners[0].y;
-            for(int i = 0; i < 8; i++)
-            {
-                MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
-                MaxX = AK_Max(FrustumCorners[i].x, MaxX);
-                MinY = AK_Min(FrustumCorners[i].y, MinY);
-                MaxY = AK_Max(FrustumCorners[i].y, MaxY);
-            }
-        }
+    if(Context->DevUI.PlayGameSettings.DrawGrid)
+        DevContext_RenderGrid(Context, GraphicsState, &ViewSettings);
         
-        DevDraw_Grid(Context, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f)); 
-    }
-    
     PushDepth(Graphics, false);        
     if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
     {           
