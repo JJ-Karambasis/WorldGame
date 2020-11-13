@@ -177,7 +177,7 @@ struct dev_loaded_world
 struct dev_object_edit
 {
     dev_object_edit_type ObjectEditType;
-    entity Entity;
+    entity Entity[2];
     material Material;
     dev_transform Transform;
     mesh_asset_id MeshID;

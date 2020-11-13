@@ -521,7 +521,15 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     if(CurrentWorldIndex == AID.WorldIndex)                    
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, AID, &Material);                                            
                     else                    
-                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, BID, &Material);                                            
+                        DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, BID, &Material); 
+                    dev_object_edit Undo;
+                    Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+                    Undo.Entity[0].ID = AID;
+                    Undo.Entity[0].Type = ENTITY_TYPE_STATIC;
+                    Undo.Entity[1].ID = BID;
+                    Undo.Entity[1].Type = ENTITY_TYPE_STATIC;
+                    DevContext->UndoStack.Add(Undo);
+                    DevContext->RedoStack.Clear();                                           
                 }
                 else
                 {                           
@@ -534,8 +542,9 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
                     dev_object_edit Undo;
                     Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
-                    Undo.Entity.ID = EntityID;
-                    Undo.Entity.Type = ENTITY_TYPE_STATIC;
+                    Undo.Entity[0].ID = EntityID;
+                    Undo.Entity[0].Type = ENTITY_TYPE_STATIC;
+                    Undo.Entity[1].ID = InvalidWorldID();
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();
                 }
@@ -567,8 +576,9 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
                 dev_object_edit Undo;
                 Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
-                Undo.Entity.ID = EntityID;
-                Undo.Entity.Type = ENTITY_TYPE_RIGID_BODY;
+                Undo.Entity[0].ID = EntityID;
+                Undo.Entity[0].Type = ENTITY_TYPE_RIGID_BODY;
+                Undo.Entity[1].ID = InvalidWorldID();
                 DevContext->UndoStack.Add(Undo);
                 DevContext->RedoStack.Clear();
             }
@@ -603,6 +613,15 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, A, &Material);                                            
                     else
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, B, &Material);
+
+                    dev_object_edit Undo;
+                    Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+                    Undo.Entity[0].ID = A ;
+                    Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[1].ID = B;
+                    Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    DevContext->UndoStack.Add(Undo);
+                    DevContext->RedoStack.Clear();  
                 }
                 else if(Spawner->WorldIndex == 3)
                 {
@@ -621,6 +640,15 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, A, &Material);                                            
                     else
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, B, &Material);
+
+                    dev_object_edit Undo;
+                    Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+                    Undo.Entity[0].ID = A ;
+                    Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[1].ID = B;
+                    Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    DevContext->UndoStack.Add(Undo);
+                    DevContext->RedoStack.Clear();  
                 }
                 else
                 {       
@@ -630,8 +658,9 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
                     dev_object_edit Undo;
                     Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
-                    Undo.Entity.ID = EntityID;
-                    Undo.Entity.Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[0].ID = EntityID;
+                    Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[1].ID = InvalidWorldID();
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();
                 }                    
