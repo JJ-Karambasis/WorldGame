@@ -1151,6 +1151,8 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
 
     dev_object_edit Redo;
     dual_world_id AIDs;
+    AIDs.A = InvalidWorldID();
+    AIDs.B = InvalidWorldID();
     Redo = LastEdit;
     if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
     {
@@ -1173,6 +1175,12 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
         Translations[0] = Redo.JumpProp[0].CenterP;
         Translations[1] = Redo.JumpProp[1].CenterP;
         AIDs = CreateJumpingQuads(World, Redo.JumpIds[0].A.WorldIndex, Translations, Redo.JumpProp->Dimensions);
+    }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
+    {
+        jumping_quad* JumpingQuad = World->JumpingQuadStorage[LastEdit.JumpIds[0].A.WorldIndex].Get(LastEdit.JumpIds[0].A.ID);  
+        Redo.JumpProp[0].CenterP = JumpingQuad->CenterP;
+        JumpingQuad->CenterP = LastEdit.JumpProp->CenterP;
     }
 
     DevContext->RedoStack.Add(Redo);
@@ -1338,7 +1346,11 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
     dev_object_edit Undo;
     Undo = LastEdit;
     dual_world_id AIDs;
+    AIDs.A = InvalidWorldID();
+    AIDs.B = InvalidWorldID();
     dual_world_id BIDs;
+    BIDs.A = InvalidWorldID();
+    BIDs.B = InvalidWorldID();
     if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
     {
         ak_v3f Translations[2];
@@ -1364,6 +1376,12 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
         {
             FreeJumpingQuad(World, LastEdit.JumpIds[1].A);
         }
+    }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
+    {
+        jumping_quad* JumpingQuad = World->JumpingQuadStorage[LastEdit.JumpIds[0].A.WorldIndex].Get(LastEdit.JumpIds[0].A.ID);  
+        Undo.JumpProp[0].CenterP = JumpingQuad->CenterP;
+        JumpingQuad->CenterP = LastEdit.JumpProp->CenterP;
     }
 
     DevContext->UndoStack.Add(Undo);
@@ -1640,13 +1658,22 @@ void DevContext_Tick()
                         case DEV_SELECTED_OBJECT_TYPE_ENTITY:
                         {      
                             GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Game->World.NewTransforms[SelectedObject->EntityID.WorldIndex][AK_PoolIndex(SelectedObject->EntityID.ID)].Orientation));
+                            entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                            Edit.Entity[0] = *World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                            Edit.Entity[1].ID = InvalidWorldID();
+                        } break;
+                        case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+                        {
+                            Edit.JumpIds[0].A = SelectedObject->EntityID;
+                            Edit.JumpIds[0].B = InvalidWorldID();
+                            Edit.JumpIds[1].A = InvalidWorldID();
+                            Edit.JumpIds[1].B = InvalidWorldID();
+                            jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID); 
+                            Edit.JumpProp[0].CenterP = JumpingQuad->CenterP;
                         } break;
                     }
                     
                     dev_transform* DevTransform = DevTransforms->Get(Index); 
-                    entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
-                    Edit.Entity[0] = *World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
-                    Edit.Entity[1].ID = InvalidWorldID();
                     Edit.ObjectEditType = DEV_OBJECT_EDIT_TYPE_TRANSFORM;
                     Edit.Transform = *DevTransform;
                     Edit.ObjectType = SelectedObject->Type;
