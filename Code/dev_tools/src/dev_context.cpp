@@ -994,25 +994,46 @@ void DevContext_UpdateEntityIdsInStack(ak_array<dev_object_edit> Stack, world_id
     }
 }
 
-void DevContext_UndoLastEdit(dev_context* DevContext)
+void DevContext_UpdateJumpEntityIdsInStack(ak_array<dev_object_edit> Stack, world_id OldEntityID, world_id NewEntityId)
+{
+    AK_ForEach(EditObject, &Stack)
+    {
+        if(AreEqualIDs(EditObject->JumpIds[0].A, OldEntityID))
+        {
+            EditObject->JumpIds[0].A = NewEntityId;
+        }
+
+        if(AreEqualIDs(EditObject->JumpIds[1].A, OldEntityID))
+        {
+            EditObject->JumpIds[1].A = NewEntityId;
+        }
+
+        if(AreEqualIDs(EditObject->JumpIds[0].B, OldEntityID))
+        {
+            EditObject->JumpIds[0].B = NewEntityId;
+        }
+
+        if(AreEqualIDs(EditObject->JumpIds[1].B, OldEntityID))
+        {
+            EditObject->JumpIds[1].B = NewEntityId;
+        }
+    }
+}
+
+void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit)
 {
     game* Game = DevContext->Game;
-    world* World = &Game->World;  
-    dev_object_edit* LastEdit = DevContext->UndoStack.Pop();
-    
-    if(LastEdit == NULL)
-    {
-        return;
-    }
-    
-    world_id EntityID = LastEdit->Entity[0].ID;
+    world* World = &Game->World;
+
+    world_id EntityID = LastEdit.Entity[0].ID;
     world_id CreatedEntity = {};
     
     dev_object_edit Redo;
-    Redo.Entity[0] = LastEdit->Entity[0];
-    Redo.Entity[1] = LastEdit->Entity[1];
-    Redo.ObjectEditType = LastEdit->ObjectEditType;
-    if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
+    Redo.Entity[0] = LastEdit.Entity[0];
+    Redo.Entity[1] = LastEdit.Entity[1];
+    Redo.ObjectEditType = LastEdit.ObjectEditType;
+    Redo.ObjectType = LastEdit.ObjectType;
+    if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
     {
         entity* Entity = World->EntityStorage[EntityID.WorldIndex].Get(EntityID.ID);
         ak_u32 Index = AK_PoolIndex(EntityID.ID);                                        
@@ -1022,7 +1043,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
         
         dev_transform* DevTransform = DevTransforms->Get(Index);                    
         Redo.Transform = *DevTransform;
-        *DevTransform = LastEdit->Transform;
+        *DevTransform = LastEdit.Transform;
         
         ak_sqtf* Transform = &World->NewTransforms[EntityID.WorldIndex][Index];
         Transform->Translation = DevTransform->Translation;
@@ -1038,29 +1059,29 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
         GraphicsEntity->Transform = AK_TransformM4(*Transform);
     }
-    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
     {
-        world_id LinkedEntity = LastEdit->Entity[0].LinkID;
-        Redo = *LastEdit;
-        switch(LastEdit->Entity[0].Type)
+        world_id LinkedEntity = LastEdit.Entity[0].LinkID;
+        Redo = LastEdit;
+        switch(LastEdit.Entity[0].Type)
         {
             case ENTITY_TYPE_STATIC:
             {
                 CreatedEntity = CreateStaticEntity(World, Game->Assets, EntityID.WorldIndex, 
-                                                   LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                   LastEdit->MeshID, LastEdit->Material);
+                                                   LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                   LastEdit.MeshID, LastEdit.Material);
             } break;
             case ENTITY_TYPE_RIGID_BODY:
             {
                 CreatedEntity = CreateSphereRigidBody(World, Game->Assets, EntityID.WorldIndex, 
-                                                      LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                      1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
+                                                      LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                      1.0f, LastEdit.Mass, LastEdit.Restitution, LastEdit.Material);
             } break;
             case ENTITY_TYPE_PUSHABLE:
             {
                 CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
-                                                  LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                  LastEdit->Mass, LastEdit->Material, LastEdit->Interactable);
+                                                  LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                  LastEdit.Mass, LastEdit.Material, LastEdit.Interactable);
             } break;
             AK_INVALID_DEFAULT_CASE;
         }
@@ -1074,7 +1095,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
         }
         DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntity);
     }
-    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
     {
         entity* Entity = GetEntity(Game, EntityID);
         ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[Entity->ID.WorldIndex];
@@ -1106,9 +1127,9 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
             } break;
         }
         FreeEntity(Game, EntityID);
-        if(LastEdit->Entity[1].ID.IsValid())
+        if(LastEdit.Entity[1].ID.IsValid())
         {
-            FreeEntity(Game, LastEdit->Entity[1].ID);
+            FreeEntity(Game, LastEdit.Entity[1].ID);
         }
         if(AreEqualIDs(DevContext->SelectedObject.EntityID, EntityID))
         {
@@ -1123,91 +1144,142 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
     }
 }
 
-void DevContext_RedoLastEdit(dev_context* DevContext)
+void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
 {
     game* Game = DevContext->Game;
-    world* World = &Game->World;  
-    dev_object_edit* LastEdit = DevContext->RedoStack.Pop();
+    world* World = &Game->World;
+
+    dev_object_edit Redo;
+    Redo = LastEdit;
+    if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    {
+        if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].A) || 
+            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
+            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
+            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
+        {
+            DevContext->SelectedObject = {};
+        }
+        FreeJumpingQuad(World, LastEdit.JumpIds[0].A);
+        if(LastEdit.JumpIds[1].A.IsValid())
+        {
+            FreeJumpingQuad(World, LastEdit.JumpIds[1].A);
+        }
+    }
+
+    DevContext->RedoStack.Add(Redo);
+}
+
+void DevContext_UndoLastEdit(dev_context* DevContext)
+{  
+    dev_object_edit* LastEdit = DevContext->UndoStack.Pop();
     
     if(LastEdit == NULL)
     {
         return;
     }
     
-    world_id EntityID = LastEdit->Entity[0].ID;
+    switch(LastEdit->ObjectType)
+    {
+        case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+        {
+            DevContext_UndoEntityEdit(DevContext, *LastEdit);
+        } break;
+
+        case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+        {
+            DevContext_UndoJumpEdit(DevContext, *LastEdit);
+        } break;
+
+        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+        {
+
+        } break;
+
+        AK_INVALID_DEFAULT_CASE;
+    }
+}
+
+void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit)
+{
+    game* Game = DevContext->Game;
+    world* World = &Game->World;
+
+    world_id EntityID = LastEdit.Entity[0].ID;
     world_id CreatedEntities[2];
     
     dev_object_edit Undo;
-    Undo.Entity[0] = LastEdit->Entity[0];
-    Undo.Entity[1] = LastEdit->Entity[1];
-    Undo.ObjectEditType = LastEdit->ObjectEditType;
-    if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
+    Undo.Entity[0] = LastEdit.Entity[0];
+    Undo.Entity[1] = LastEdit.Entity[1];
+    Undo.ObjectEditType = LastEdit.ObjectEditType;
+    Undo.ObjectType = LastEdit.ObjectType;
+    if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
     {
-        entity* Entity = World->EntityStorage[LastEdit->Entity[0].ID.WorldIndex].Get(LastEdit->Entity[0].ID.ID);
-        ak_u32 Index = AK_PoolIndex(LastEdit->Entity[0].ID.ID);                                        
-        ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[LastEdit->Entity[0].ID.WorldIndex];                    
+        entity* Entity = World->EntityStorage[LastEdit.Entity[0].ID.WorldIndex].Get(LastEdit.Entity[0].ID.ID);
+        ak_u32 Index = AK_PoolIndex(LastEdit.Entity[0].ID.ID);                                        
+        ak_array<dev_transform>* DevTransforms = &DevContext->InitialTransforms[LastEdit.Entity[0].ID.WorldIndex];                    
         if(DevTransforms->Size < (Index+1))
             DevTransforms->Resize(Index+1);
         
         dev_transform* DevTransform = DevTransforms->Get(Index);                    
         Undo.Transform = *DevTransform;
-        *DevTransform = LastEdit->Transform;
+        *DevTransform = LastEdit.Transform;
         
-        ak_sqtf* Transform = &World->NewTransforms[LastEdit->Entity[0].ID.WorldIndex][Index];
+        ak_sqtf* Transform = &World->NewTransforms[LastEdit.Entity[0].ID.WorldIndex][Index];
         Transform->Translation = DevTransform->Translation;
         Transform->Scale = DevTransform->Scale;
         Transform->Orientation = AK_Normalize(AK_EulerToQuat(DevTransform->Euler));
         
-        World->OldTransforms[LastEdit->Entity[0].ID.WorldIndex][Index] = *Transform;                        
+        World->OldTransforms[LastEdit.Entity[0].ID.WorldIndex][Index] = *Transform;                        
         
-        sim_entity* SimEntity = GetSimEntity(Game, LastEdit->Entity[0].ID);
+        sim_entity* SimEntity = GetSimEntity(Game, LastEdit.Entity[0].ID);
         SimEntity->Transform = *Transform;                    
         
-        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit->Entity[0].ID.WorldIndex];
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.Entity[0].ID.WorldIndex];
         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
         GraphicsEntity->Transform = AK_TransformM4(*Transform);
     }
-    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
     {
-        Undo = *LastEdit;
-        FreeEntity(Game, LastEdit->Entity[0].ID);
-        if(LastEdit->Entity[1].ID.IsValid())
+        Undo = LastEdit;
+        FreeEntity(Game, LastEdit.Entity[0].ID);
+        if(LastEdit.Entity[1].ID.IsValid())
         {
-            FreeEntity(Game, LastEdit->Entity[1].ID);
+            FreeEntity(Game, LastEdit.Entity[1].ID);
         }
     }
-    else if(LastEdit->ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
     {
-        world_id LinkedEntity = LastEdit->Entity[0].LinkID;
+        world_id LinkedEntity = LastEdit.Entity[0].LinkID;
         
-        Undo = *LastEdit;
+        Undo = LastEdit;
         for(int i = 0; i < 2; i++)
         {
-            if(!LastEdit->Entity[i].ID.IsValid())
+            if(!LastEdit.Entity[i].ID.IsValid())
             {
                 CreatedEntities[i] = InvalidWorldID();
                 continue;
             }
-            world_id NewEntityID = LastEdit->Entity[i].ID;
-            switch(LastEdit->Entity[i].Type)
+            world_id NewEntityID = LastEdit.Entity[i].ID;
+            switch(LastEdit.Entity[i].Type)
             {
                 case ENTITY_TYPE_STATIC:
                 {
                     CreatedEntities[i] = CreateStaticEntity(World, Game->Assets, NewEntityID.WorldIndex, 
-                                                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                    LastEdit->MeshID, LastEdit->Material);
+                                                    LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                    LastEdit.MeshID, LastEdit.Material);
                 } break;
                 case ENTITY_TYPE_RIGID_BODY:
                 {
                     CreatedEntities[i] = CreateSphereRigidBody(World, Game->Assets, NewEntityID.WorldIndex, 
-                                                        LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                        1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
+                                                        LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                        1.0f, LastEdit.Mass, LastEdit.Restitution, LastEdit.Material);
                 } break;
                 case ENTITY_TYPE_PUSHABLE:
                 {
                     CreatedEntities[i] = CreatePushableBox(World, Game->Assets, NewEntityID.WorldIndex, 
-                                                    LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                    LastEdit->Mass, LastEdit->Material, LastEdit->Interactable);
+                                                    LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                    LastEdit.Mass, LastEdit.Material, LastEdit.Interactable);
                 } break;
                 AK_INVALID_DEFAULT_CASE;
             }
@@ -1226,8 +1298,8 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
                     EntityB->LinkID = CreatedEntities[i];
                 }
                 DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntities[i]);
-                DevContext_UpdateEntityIdsInStack(DevContext->UndoStack, LastEdit->Entity[i].ID, CreatedEntities[i]);
-                DevContext_UpdateEntityIdsInStack(DevContext->RedoStack, LastEdit->Entity[i].ID, CreatedEntities[i]);
+                DevContext_UpdateEntityIdsInStack(DevContext->UndoStack, LastEdit.Entity[i].ID, CreatedEntities[i]);
+                DevContext_UpdateEntityIdsInStack(DevContext->RedoStack, LastEdit.Entity[i].ID, CreatedEntities[i]);
             }
         }
     }
@@ -1237,9 +1309,92 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
     {
         if(CreatedEntities[i].IsValid())
         {
-            DevContext_UpdateEntityIdsInStack(DevContext->UndoStack, LastEdit->Entity[i].ID, CreatedEntities[i]);
-            DevContext_UpdateEntityIdsInStack(DevContext->RedoStack, LastEdit->Entity[i].ID, CreatedEntities[i]);
+            DevContext_UpdateEntityIdsInStack(DevContext->UndoStack, LastEdit.Entity[i].ID, CreatedEntities[i]);
+            DevContext_UpdateEntityIdsInStack(DevContext->RedoStack, LastEdit.Entity[i].ID, CreatedEntities[i]);
         }
+    }
+}
+
+void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
+{
+    game* Game = DevContext->Game;
+    world* World = &Game->World;
+
+    dev_object_edit Undo;
+    Undo = LastEdit;
+    dual_world_id AIDs;
+    dual_world_id BIDs;
+    if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    {
+        ak_v3f Translations[2];
+        Translations[0] = Undo.JumpProp[0].CenterP;
+        Translations[1] = Undo.JumpProp[1].CenterP;
+        AIDs = CreateJumpingQuads(World, Undo.JumpIds[0].A.WorldIndex, Translations, Undo.JumpProp->Dimensions);
+        if(Undo.JumpIds[1].A.IsValid())
+        {
+            BIDs = CreateJumpingQuads(World, Undo.JumpIds[1].A.WorldIndex, Translations, Undo.JumpProp->Dimensions);
+        }
+    }
+    // else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
+    // {
+    //     if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].A) || 
+    //         AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
+    //         AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
+    //         AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
+    //     {
+    //         DevContext->SelectedObject = {};
+    //     }
+    //     FreeJumpingQuad(World, LastEdit.JumpIds[0].A);
+    //     if(LastEdit.JumpIds[1].A.IsValid())
+    //     {
+    //         FreeJumpingQuad(World, LastEdit.JumpIds[1].A);
+    //     }
+    // }
+
+    DevContext->UndoStack.Add(Undo);
+    if(AIDs.A.IsValid())
+    {
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->UndoStack, LastEdit.JumpIds[0].A, AIDs.A);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->RedoStack, LastEdit.JumpIds[0].A, AIDs.A);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->UndoStack, LastEdit.JumpIds[0].B, AIDs.B);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->RedoStack, LastEdit.JumpIds[0].B, AIDs.B);
+    }
+    if(BIDs.A.IsValid())
+    {
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->UndoStack, LastEdit.JumpIds[1].A, BIDs.A);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->RedoStack, LastEdit.JumpIds[1].A, BIDs.A);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->UndoStack, LastEdit.JumpIds[1].B, BIDs.B);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->RedoStack, LastEdit.JumpIds[1].B, BIDs.B);
+    }
+}
+
+void DevContext_RedoLastEdit(dev_context* DevContext)
+{  
+    dev_object_edit* LastEdit = DevContext->RedoStack.Pop();
+    
+    if(LastEdit == NULL)
+    {
+        return;
+    }
+    
+    switch(LastEdit->ObjectType)
+    {
+        case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+        {
+            DevContext_RedoEntityEdit(DevContext, *LastEdit);
+        } break;
+
+        case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+        {
+            DevContext_RedoJumpEdit(DevContext, *LastEdit);
+        } break;
+
+        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+        {
+
+        } break;
+
+        AK_INVALID_DEFAULT_CASE;
     }
 }
 
@@ -1479,6 +1634,7 @@ void DevContext_Tick()
                     Edit.Entity[1].ID = InvalidWorldID();
                     Edit.ObjectEditType = DEV_OBJECT_EDIT_TYPE_TRANSFORM;
                     Edit.Transform = *DevTransform;
+                    Edit.ObjectType = SelectedObject->Type;
                     Context->UndoStack.Add(Edit);
                     Context->RedoStack.Clear();
                 }
@@ -1704,6 +1860,7 @@ void DevContext_Tick()
                             Undo.Material = GraphicsEntity->Material;
                             Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_DELETE;
                             Undo.Transform = *DevTransform;
+                            Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                             switch(Entity->Type)
                             {
                                 case ENTITY_TYPE_STATIC:

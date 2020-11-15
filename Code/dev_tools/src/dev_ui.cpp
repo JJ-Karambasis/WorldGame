@@ -528,6 +528,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].Type = ENTITY_TYPE_STATIC;
                     Undo.Entity[1].ID = BID;
                     Undo.Entity[1].Type = ENTITY_TYPE_STATIC;
+                    Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();                                           
                 }
@@ -545,6 +546,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].ID = EntityID;
                     Undo.Entity[0].Type = ENTITY_TYPE_STATIC;
                     Undo.Entity[1].ID = InvalidWorldID();
+                    Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();
                 }
@@ -579,6 +581,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 Undo.Entity[0].ID = EntityID;
                 Undo.Entity[0].Type = ENTITY_TYPE_RIGID_BODY;
                 Undo.Entity[1].ID = InvalidWorldID();
+                Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                 DevContext->UndoStack.Add(Undo);
                 DevContext->RedoStack.Clear();
             }
@@ -620,6 +623,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
                     Undo.Entity[1].ID = B;
                     Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();  
                 }
@@ -647,6 +651,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
                     Undo.Entity[1].ID = B;
                     Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();  
                 }
@@ -661,6 +666,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].ID = EntityID;
                     Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
                     Undo.Entity[1].ID = InvalidWorldID();
+                    Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();
                 }                    
@@ -755,26 +761,38 @@ void DevUI_JumpingQuadSpawner(dev_context* DevContext, jumping_quad_spawner* Spa
     Separator();
     if(Button(AK_HashFunction("Create Jumping Quads"), "Create"))
     {
+        dev_object_edit Undo;
+        Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+        Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD;
+        Undo.JumpProp[0].Dimensions = Spawner->Dimension;
+        Undo.JumpProp[0].CenterP = Spawner->Translation[0];
+        Undo.JumpProp[0].Color = AK_Yellow3();
+        Undo.JumpProp[1].Dimensions = Spawner->Dimension;
+        Undo.JumpProp[1].CenterP = Spawner->Translation[1];
+        Undo.JumpProp[1].Color = AK_Yellow3();
         if(Spawner->WorldIndex == 2)
         {
             dual_world_id AIDs = CreateJumpingQuads(&DevContext->Game->World, 0, Spawner->Translation, Spawner->Dimension);
             dual_world_id BIDs = CreateJumpingQuads(&DevContext->Game->World, 1, Spawner->Translation, Spawner->Dimension);
             
-            DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD;
             if(CurrentWorldIndex == AIDs.A.WorldIndex)                
                 DevContext->SelectedObject.JumpingQuadID = AIDs.A;            
             else            
                 DevContext->SelectedObject.JumpingQuadID = BIDs.A;
+            Undo.JumpIds[0] = AIDs;
+            Undo.JumpIds[1] = BIDs;
         }
         else
         {
             dual_world_id IDs = CreateJumpingQuads(&DevContext->Game->World, Spawner->WorldIndex, Spawner->Translation, Spawner->Dimension);
             if(CurrentWorldIndex == IDs.A.WorldIndex)
             {
-                DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD;
                 DevContext->SelectedObject.JumpingQuadID = IDs.A;
             }
-        }                        
+            Undo.JumpIds[0] = IDs;
+        }
+        DevContext->UndoStack.Add(Undo);
+        DevContext->RedoStack.Clear();
     }
     
 }

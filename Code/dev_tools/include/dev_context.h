@@ -176,6 +176,7 @@ struct dev_loaded_world
 
 struct dev_object_edit
 {
+    dev_selected_object_type ObjectType;
     dev_object_edit_type ObjectEditType;
     entity Entity[2];
     material Material;
@@ -184,6 +185,8 @@ struct dev_object_edit
     ak_f32 Mass;
     ak_f32 Restitution;
     ak_bool Interactable;
+    jumping_quad JumpProp[2];
+    dual_world_id JumpIds[2];
 };
 
 #define DEV_RENDER_GRID_CALLBACK(name) void name(dev_context* Context, graphics_state* GraphicsState, view_settings* ViewSettings)
