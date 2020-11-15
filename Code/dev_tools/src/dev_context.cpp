@@ -1150,6 +1150,7 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
     world* World = &Game->World;
 
     dev_object_edit Redo;
+    dual_world_id AIDs;
     Redo = LastEdit;
     if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
     {
@@ -1166,8 +1167,22 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
             FreeJumpingQuad(World, LastEdit.JumpIds[1].A);
         }
     }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
+    {
+        ak_v3f Translations[2];
+        Translations[0] = Redo.JumpProp[0].CenterP;
+        Translations[1] = Redo.JumpProp[1].CenterP;
+        AIDs = CreateJumpingQuads(World, Redo.JumpIds[0].A.WorldIndex, Translations, Redo.JumpProp->Dimensions);
+    }
 
     DevContext->RedoStack.Add(Redo);
+    if(AIDs.A.IsValid())
+    {
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->UndoStack, LastEdit.JumpIds[0].A, AIDs.A);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->RedoStack, LastEdit.JumpIds[0].A, AIDs.A);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->UndoStack, LastEdit.JumpIds[0].B, AIDs.B);
+        DevContext_UpdateJumpEntityIdsInStack(DevContext->RedoStack, LastEdit.JumpIds[0].B, AIDs.B);
+    }
 }
 
 void DevContext_UndoLastEdit(dev_context* DevContext)
@@ -1191,10 +1206,10 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
             DevContext_UndoJumpEdit(DevContext, *LastEdit);
         } break;
 
-        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
-        {
+        // case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+        // {
 
-        } break;
+        // } break;
 
         AK_INVALID_DEFAULT_CASE;
     }
@@ -1335,21 +1350,21 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
             BIDs = CreateJumpingQuads(World, Undo.JumpIds[1].A.WorldIndex, Translations, Undo.JumpProp->Dimensions);
         }
     }
-    // else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
-    // {
-    //     if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].A) || 
-    //         AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
-    //         AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
-    //         AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
-    //     {
-    //         DevContext->SelectedObject = {};
-    //     }
-    //     FreeJumpingQuad(World, LastEdit.JumpIds[0].A);
-    //     if(LastEdit.JumpIds[1].A.IsValid())
-    //     {
-    //         FreeJumpingQuad(World, LastEdit.JumpIds[1].A);
-    //     }
-    // }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
+    {
+        if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].A) || 
+            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
+            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
+            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
+        {
+            DevContext->SelectedObject = {};
+        }
+        FreeJumpingQuad(World, LastEdit.JumpIds[0].A);
+        if(LastEdit.JumpIds[1].A.IsValid())
+        {
+            FreeJumpingQuad(World, LastEdit.JumpIds[1].A);
+        }
+    }
 
     DevContext->UndoStack.Add(Undo);
     if(AIDs.A.IsValid())
@@ -1389,10 +1404,10 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
             DevContext_RedoJumpEdit(DevContext, *LastEdit);
         } break;
 
-        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
-        {
+        // case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+        // {
 
-        } break;
+        // } break;
 
         AK_INVALID_DEFAULT_CASE;
     }
@@ -1890,6 +1905,17 @@ void DevContext_Tick()
                     
                     case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
                     {
+                        dev_object_edit Undo;
+                        Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD;
+                        Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_DELETE;
+                        jumping_quad* QuadA = World->JumpingQuadStorage[SelectedObject->JumpingQuadID.WorldIndex].Get(SelectedObject->JumpingQuadID.ID);
+                        jumping_quad* QuadB = World->JumpingQuadStorage[SelectedObject->JumpingQuadID.WorldIndex].Get(QuadA->OtherQuad.ID);
+                        Undo.JumpIds[0].A = SelectedObject->JumpingQuadID;
+                        Undo.JumpIds[0].B = QuadA->OtherQuad;
+                        Undo.JumpProp[0] = *QuadA;
+                        Undo.JumpProp[1] = *QuadB;
+                        Context->UndoStack.Add(Undo);
+                        Context->RedoStack.Clear();
                         FreeJumpingQuad(World, SelectedObject->JumpingQuadID);
                         *SelectedObject = {};                        
                     } break;
