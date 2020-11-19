@@ -1616,7 +1616,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         ak_arena* GlobalArena = AK_GetGlobalArena();
         TempArena = GlobalArena->BeginTemp();
         
-#if 0 
+#if 1
         local ak_bool Left = false;
         
         Objects[0].Transform.Translation.x += Left ? -0.01f : 0.01f;        
@@ -1766,7 +1766,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         LightBuffer.Upload(DirectCommandList, &UploadBuffer, &Lights.Size, sizeof(ak_u32), MAX_LIGHT_COUNT*sizeof(light));
         
         IrradianceField.RotationTransform = AK_IdentityM4<ak_f32>();        
-        
+#if 0 
         float u1 = 2.0f*AK_PI * AK_RandomF32();
         float cos1 = AK_Cos(u1);
         float sin1 = AK_Sin(u1);
@@ -1799,7 +1799,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         IrradianceField.RotationTransform.YAxis = AK_V4(_21, _22, _23, 1.0f);
         IrradianceField.RotationTransform.ZAxis = AK_V4(_31, _32, _33, 1.0f);
         IrradianceField.RotationTransform.Translation = AK_V4(0.0f, 0.0f, 0.0f, 1.0f);
-        
+#endif
         IrradianceFieldBuffer.Upload(DirectCommandList, &UploadBuffer, &IrradianceField, sizeof(irradiance_field), 0);        
         
         for(ak_u32 LightIndex = 0; LightIndex < Lights.Size; LightIndex++)
@@ -1916,7 +1916,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         };
         
         DirectCommandList->ResourceBarrier(AK_Count(MidComputeBarriers), MidComputeBarriers);
-        
+#if 1
         DirectCommandList->SetComputeRootSignature(ProbeBlendingRootSignature);
         DirectCommandList->SetComputeRootConstantBufferView(0, IrradianceFieldBuffer.GetGPUAddress(0));
         DirectCommandList->SetComputeRootDescriptorTable(1, SRVDescriptors.GPUIndex(8));        
@@ -1952,7 +1952,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
         DirectCommandList->Dispatch(TotalProbeCount, (ak_u32)IrradianceField.Count.y, 1);
         
         DirectCommandList->ResourceBarrier(AK_Count(UAVBarriers), UAVBarriers);
-                
+        
         DirectCommandList->SetPipelineState(ProbeBorderUpdateColumnPipelineState);
         ProbeUpdateBorderConstants[0] = IRRADIANCE_TEXEL_COUNT;
         ProbeUpdateBorderConstants[1] = 0;
@@ -1969,8 +1969,9 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             GetTransitionBarrier(IrradianceTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE), 
             GetTransitionBarrier(DistanceTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
         };
-        
+
         DirectCommandList->ResourceBarrier(AK_Count(PostComputeBarriers), PostComputeBarriers);
+#endif
         
         D3D12_CPU_DESCRIPTOR_HANDLE RTVHandle = RTVDescriptors.CPUIndex(FrameIndex);
         D3D12_CPU_DESCRIPTOR_HANDLE DSVHandle = DSVDescriptors.CPUIndex(0);
@@ -2026,6 +2027,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
             DirectCommandList->DrawIndexedInstanced(DebugSphereMesh.IndexCount, 1, DebugSphereMesh.IndexOffset, DebugSphereMesh.VertexOffset, 0);
         }
         
+#if 1
         for(ak_i32 ProbeZ = 0; ProbeZ < IrradianceField.Count.z; ProbeZ++)        
         {            
             for(ak_i32 ProbeY = 0; ProbeY < IrradianceField.Count.y; ProbeY++)
@@ -2045,7 +2047,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 #if 0
                     for(ak_i32 RayIndex = 0; RayIndex < RAYS_PER_PROBE; RayIndex++)
                     {
-                        ak_v3f RayEnd = Position+RayDirections[RayIndex]*100.0f;
+                        ak_v3f RayEnd = Position+RayDirections[RayIndex].xyz*100.0f;
                         ak_v3f ZAxis = RayEnd-Position;
                         ak_f32 ZLength = AK_Magnitude(ZAxis);
                         ZAxis /= ZLength;
@@ -2065,7 +2067,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
                 }
             }
         }
-        
+#endif
         
         
         D3D12_RESOURCE_BARRIER PrePresentBarriers[] = 

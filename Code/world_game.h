@@ -11,7 +11,7 @@
 #include <ak_common.h>
 
 #define PLAYER_RADIUS 0.35f
-#define PLAYER_HEIGHT 1.3f
+#define PLAYER_HEIGHT 0.8f
 #define PLAYER_MASS 65.0f
 
 struct game;

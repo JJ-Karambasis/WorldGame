@@ -59,12 +59,12 @@ ak_color4f ObjectPixelShader(ps_object_input Input) : SV_TARGET
         
         Irradiance = GetIrradiance(IrradiancePayload, Input.WorldPosition, Normal, SurfaceBias);
         Irradiance *= BlendWeight;            
-    }    
-    
+    }            
 #if 1
-    return ak_v4f(Diffuse + (SurfaceColor.rgb*AK_INV_PI*Irradiance), SurfaceColor.a);
+    ak_color3f Result = Diffuse + ((SurfaceColor.rgb/AK_PI)*Irradiance);                                       
+    return ak_v4f(Result, SurfaceColor.a);
 #else
     //return ak_v4f(Diffuse, SurfaceColor.a);
-    return ak_v4f(SurfaceColor.rgb*AK_INV_PI*Irradiance, SurfaceColor.a);
+    return ak_v4f(AK_INV_PI*Irradiance, SurfaceColor.a);
 #endif
 }

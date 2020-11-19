@@ -57,7 +57,8 @@ void ShadeSurfelsComputeShader(uint3 ThreadIndex : SV_DispatchThreadID)
             Irradiance = GetIrradiance(IrradiancePayload, Position, Normal, SurfaceBias);
             Irradiance *= BlendWeight;            
         }            
-        ProbeOutput[ThreadIndex.xy] = ak_color4f(Diffuse + (Albedo*AK_INV_PI*Irradiance), Depth);
+        ProbeOutput[ThreadIndex.xy] = ak_color4f(Diffuse + ((Albedo/AK_PI)*Irradiance), Depth);
+        //ProbeOutput[ThreadIndex.xy] = ak_color4f(0.0f, 0.0f, 0.0f, 0.0f);
     }
     else
     {

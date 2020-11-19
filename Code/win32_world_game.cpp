@@ -616,6 +616,8 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             AK_CopyArray(Game->World.OldTransforms[1].Entries, Game->World.NewTransforms[1].Entries, Game->World.NewTransforms[1].Size);
             Game->World.OldCameras[0] = Game->World.NewCameras[0];
             Game->World.OldCameras[1] = Game->World.NewCameras[1];
+                        
+            Win32_ProcessMessages(&Input);            
             
             if(Dev_ShouldPlayGame())
             {                
@@ -624,12 +626,12 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             }
             
             Accumulator -= Game->dtFixed;
+            
+            for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(Input.Buttons); ButtonIndex++)        
+            {
+                Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown;             
+            }            
         }
-        
-        for(ak_u32 ButtonIndex = 0; ButtonIndex < AK_Count(Input.Buttons); ButtonIndex++)        
-            Input.Buttons[ButtonIndex].WasDown = Input.Buttons[ButtonIndex].IsDown; 
-        
-        Win32_ProcessMessages(&Input);
         
         if(Dev_ShouldPlayGame())
             Global_GameCode.Tick(Game, Dev_GetDeveloperContext());

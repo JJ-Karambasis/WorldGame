@@ -1486,7 +1486,7 @@ void DevelopmentUpdateCamera(camera* Camera, dev_input* Input, ak_f32 dt)
     Camera->Velocity.xy *= (1.0f /  (1.0f+dt*CAMERA_LINEAR_DAMPING));            
     ak_v2f Vel = Camera->Velocity.xy*dt;
     ak_v3f Delta = Vel.x*Camera->Orientation.XAxis - Vel.y*Camera->Orientation.YAxis;
-    
+      
     Camera->FocalPoint += Delta;
     Camera->Position += Delta;
     

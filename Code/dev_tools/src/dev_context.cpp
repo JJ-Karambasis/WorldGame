@@ -675,18 +675,6 @@ ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                                                      Radius, Mass, Restitution, Material);                    
                 } break;
                 
-                case ENTITY_TYPE_PUSHABLE:
-                {
-                    EntityLinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
-                    ak_sqtf Transform = *Stream.Read<ak_sqtf>();
-                    
-                    material Material = {};
-                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material)) LoadWorld_Error(MaterialNotLoadedError);                    
-                    
-                    ak_f32 Mass = *Stream.Read<ak_f32>();
-                    EntityID = CreatePushableBox(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, Mass, Material, true);                    
-                } break;
-                
                 AK_INVALID_DEFAULT_CASE;
             }
             
@@ -903,22 +891,6 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                         AK_WriteFile(FileHandle, &Volume->Sphere.Radius, sizeof(Volume->Sphere.Radius));                        
                     } break;
                     
-                    case ENTITY_TYPE_PUSHABLE:
-                    {
-                        ak_u32 LinkIndex = (ak_u32)-1;
-                        if(Entity->LinkID.IsValid())
-                            LinkIndex = *EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
-                        
-                        AK_WriteFile(FileHandle, &LinkIndex, sizeof(LinkIndex));
-                        ak_sqtf Transform = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)];
-                        AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
-                        DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
-                        
-                        rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
-                        ak_f32 Mass = 1.0f/RigidBody->InvMass;
-                        AK_WriteFile(FileHandle, &Mass, sizeof(Mass));
-                    } break;
-                    
                     AK_INVALID_DEFAULT_CASE;
                 }
                 
@@ -1050,12 +1022,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
                                                       LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
                                                       1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
             } break;
-            case ENTITY_TYPE_PUSHABLE:
-            {
-                CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
-                                                  LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                  LastEdit->Mass, LastEdit->Material, LastEdit->Interactable);
-            } break;
+            
             AK_INVALID_DEFAULT_CASE;
         }
         if(LinkedEntity.IsValid())
@@ -1092,12 +1059,7 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
                 rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                 Redo.Mass = 1.0f / RigidBody->InvMass;
                 Redo.Restitution = RigidBody->Restitution;
-            } break;
-            case ENTITY_TYPE_PUSHABLE:
-            {
-                rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
-                Redo.Mass = 1.0f / RigidBody->InvMass;
-            } break;
+            } break;            
         }
         FreeEntity(Game, EntityID);
         if(AreEqualIDs(DevContext->SelectedObject.EntityID, EntityID))
@@ -1179,12 +1141,7 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
                                                       LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
                                                       1.0f, LastEdit->Mass, LastEdit->Restitution, LastEdit->Material);
             } break;
-            case ENTITY_TYPE_PUSHABLE:
-            {
-                CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
-                                                  LastEdit->Transform.Translation, LastEdit->Transform.Scale, AK_EulerToQuat(LastEdit->Transform.Euler), 
-                                                  LastEdit->Mass, LastEdit->Material, LastEdit->Interactable);
-            } break;
+            
             AK_INVALID_DEFAULT_CASE;
         }
         if(LinkedEntity.IsValid())
@@ -1259,10 +1216,9 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
 #define DEV_ADD(function) DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, function)
 #define DEV_ADD_2(function) do { dual_world_id Dual = function; DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, Dual.A); DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, Dual.B); } while(0)
         
-        DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[0]));        
+        DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(0.0f, 0.0f, 0.0f), PlayerMaterial, &Game->Players[0]));        
         DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]));
-        
-        
+                
 #if 1
         material FloorMaterial = { CreateDiffuse(AK_White3()) };
         
@@ -1274,11 +1230,15 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3( 2.5f, 5.0f, 0.0f), ButtonMaterial, true));
         
         DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -3.5f, 0.0f), AK_V3(1.0f, 1.0f, 10.0f), FloorMaterial));        
-        DEV_ADD_2(CreateRampInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -6.0f, 0.0f), AK_V3(1.0f, 2.0f, 1.0f), AK_IdentityQuat<ak_f32>(), FloorMaterial));
+        DEV_ADD_2(CreateRampInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -6.0f, 0.0f), AK_V3(1.0f, 2.0f, 2.0f), AK_IdentityQuat<ak_f32>(), FloorMaterial));
         DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, 0.05f, 0.0f), AK_V3(1.0f, 4.0f, 10.0f), FloorMaterial));
         
-        material PushableBoxMaterial = { CreateDiffuse(AK_White3()*0.4f) };
-        DEV_ADD_2(CreateDualPushableBox(&Game->World, Game->Assets, AK_V3(0.0f, -2.0f, 0.0f), 1.0f, 40.0f, PushableBoxMaterial, true, false));
+        material RigidBodyMaterial = { CreateDiffuse(AK_Red3()) };
+        DEV_ADD(CreateSphereRigidBody(&Game->World, Game->Assets, 0, AK_V3(2.0f, 2.0f, 0.5f), 0.5f, 30.0f, 0.3f, RigidBodyMaterial));        
+        
+        material PushableBoxMaterial = { CreateDiffuse(AK_White3()*0.4f) };        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));                        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 1.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
         
         CreatePointLights(Game->World.GraphicsStates, AK_V3(0.0f, 0.0f, 10.0f), 100.0f, AK_White3(), 5.0f, true);
         
@@ -1676,14 +1636,7 @@ void DevContext_Tick()
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     Undo.Mass = 1.0f / RigidBody->InvMass;
                                     Undo.Restitution = RigidBody->Restitution;
-                                } break;
-                                
-                                case ENTITY_TYPE_PUSHABLE:
-                                {
-                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
-                                    Undo.Mass = 1.0f / RigidBody->InvMass;
-                                    Undo.Interactable = GetPushingObject(&Game->World, Entity)->Interactable;
-                                } break;
+                                } break;                                
                             }
                             Context->UndoStack.Add(Undo);
                             Context->RedoStack.Clear();
@@ -2031,13 +1984,4 @@ void DevContext_Render()
     //PushCopyToOutput(Graphics, Context->DevRenderBuffer);
     PushScissor(Graphics, 0, 0, CurrentGraphicsState->RenderBuffer->Resolution.w, CurrentGraphicsState->RenderBuffer->Resolution.h);
     PushCopyToOutput(Graphics, Context->DevUI.UIRenderBuffer);    
-}
-
-void DevContext_DebugLog(const ak_char* Format, ...)
-{
-    dev_context* Context = Dev_GetDeveloperContext();
-    va_list Args;
-    va_start(Args, Format);    
-    Context->DevUI.Logs.Add(AK_FormatString(Context->DevUI.LogArena, Format, Args));
-    va_end(Args);
 }
