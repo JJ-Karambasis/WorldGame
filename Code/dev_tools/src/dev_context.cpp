@@ -1020,6 +1020,22 @@ void DevContext_UpdateJumpEntityIdsInStack(ak_array<dev_object_edit> Stack, worl
     }
 }
 
+void DevContext_UpdateLightIdsInStack(ak_array<dev_object_edit> Stack, world_id OldEntityID, world_id NewEntityId)
+{
+    AK_ForEach(EditObject, &Stack)
+    {
+        if(AreEqualIDs(EditObject->LightIds[0], OldEntityID))
+        {
+            EditObject->LightIds[0] = NewEntityId;
+        }
+
+        if(AreEqualIDs(EditObject->LightIds[1], OldEntityID))
+        {
+            EditObject->LightIds[1] = NewEntityId;
+        }
+    }
+}
+
 void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit)
 {
     game* Game = DevContext->Game;
@@ -1193,6 +1209,55 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
     }
 }
 
+void DevContext_UndoLightEdit(dev_context* DevContext, dev_object_edit LastEdit)
+{
+    game* Game = DevContext->Game;
+    world* World = &Game->World;
+
+    dev_object_edit Redo;
+    world_id AID = InvalidWorldID();
+    Redo = LastEdit;
+    if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    {
+        if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.LightIds[0]) || 
+            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.LightIds[1]))
+        {
+            DevContext->SelectedObject = {};
+        }
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.LightIds[0].WorldIndex];
+        GraphicsState->PointLightStorage.Free(LastEdit.LightIds[0].ID);
+        if(LastEdit.LightIds[1].IsValid())
+        {
+            GraphicsState = &World->GraphicsStates[LastEdit.LightIds[1].WorldIndex];
+            GraphicsState->PointLightStorage.Free(LastEdit.LightIds[1].ID);
+        }
+    }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
+    {
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.LightIds[0].WorldIndex];
+        AID.ID = CreatePointLight(GraphicsState, LastEdit.LightProp.Position, LastEdit.LightProp.Radius, LastEdit.LightProp.Color, LastEdit.LightProp.Intensity, LastEdit.LightProp.On);
+        AID.WorldIndex = LastEdit.LightIds[0].WorldIndex;
+    }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
+    {
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.LightIds[0].WorldIndex];
+        point_light* LightProp = GraphicsState->PointLightStorage.Get(LastEdit.LightIds[0].ID);
+        Redo.LightProp = *LightProp;
+        LightProp->Color = LastEdit.LightProp.Color;
+        LightProp->Intensity = LastEdit.LightProp.Intensity;
+        LightProp->On = LastEdit.LightProp.On;
+        LightProp->Position = LastEdit.LightProp.Position;
+        LightProp->Radius = LastEdit.LightProp.Radius;
+    }
+
+    DevContext->RedoStack.Add(Redo);
+    if(AID.IsValid())
+    {
+        DevContext_UpdateLightIdsInStack(DevContext->UndoStack, LastEdit.LightIds[0], AID);
+        DevContext_UpdateLightIdsInStack(DevContext->RedoStack, LastEdit.LightIds[0], AID);
+    }
+}
+
 void DevContext_UndoLastEdit(dev_context* DevContext)
 {  
     dev_object_edit* LastEdit = DevContext->UndoStack.Pop();
@@ -1214,10 +1279,10 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
             DevContext_UndoJumpEdit(DevContext, *LastEdit);
         } break;
 
-        // case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
-        // {
-
-        // } break;
+        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+        {
+            DevContext_UndoLightEdit(DevContext, *LastEdit);
+        } break;
 
         AK_INVALID_DEFAULT_CASE;
     }
@@ -1401,6 +1466,61 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
     }
 }
 
+void DevContext_RedoLightEdit(dev_context* DevContext, dev_object_edit LastEdit)
+{
+    game* Game = DevContext->Game;
+    world* World = &Game->World;
+
+    dev_object_edit Undo;
+    world_id AID = InvalidWorldID();
+    world_id BID = InvalidWorldID();
+    Undo = LastEdit;
+    if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
+    {
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.LightIds[0].WorldIndex];
+        AID.ID = CreatePointLight(GraphicsState, LastEdit.LightProp.Position, LastEdit.LightProp.Radius, LastEdit.LightProp.Color, LastEdit.LightProp.Intensity, LastEdit.LightProp.On);
+        AID.WorldIndex = LastEdit.LightIds[0].WorldIndex;
+        if(LastEdit.LightIds[1].IsValid())
+        {
+            GraphicsState = &World->GraphicsStates[LastEdit.LightIds[1].WorldIndex];
+            BID.ID = CreatePointLight(GraphicsState, LastEdit.LightProp.Position, LastEdit.LightProp.Radius, LastEdit.LightProp.Color, LastEdit.LightProp.Intensity, LastEdit.LightProp.On);
+            BID.WorldIndex = LastEdit.LightIds[1].WorldIndex;
+        }
+    }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
+    {
+        if(AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.LightIds[0]))
+        {
+            DevContext->SelectedObject = {};
+        }
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.LightIds[0].WorldIndex];
+        GraphicsState->PointLightStorage.Free(LastEdit.LightIds[0].ID);
+    }
+    else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_TRANSFORM)
+    {
+        graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.LightIds[0].WorldIndex];
+        point_light* LightProp = GraphicsState->PointLightStorage.Get(LastEdit.LightIds[0].ID);
+        Undo.LightProp = *LightProp;
+        LightProp->Color = LastEdit.LightProp.Color;
+        LightProp->Intensity = LastEdit.LightProp.Intensity;
+        LightProp->On = LastEdit.LightProp.On;
+        LightProp->Position = LastEdit.LightProp.Position;
+        LightProp->Radius = LastEdit.LightProp.Radius;
+    }
+
+    DevContext->UndoStack.Add(Undo);
+    if(AID.IsValid())
+    {
+        DevContext_UpdateLightIdsInStack(DevContext->UndoStack, LastEdit.LightIds[0], AID);
+        DevContext_UpdateLightIdsInStack(DevContext->RedoStack, LastEdit.LightIds[0], AID);
+    }
+    if(BID.IsValid())
+    {
+        DevContext_UpdateLightIdsInStack(DevContext->UndoStack, LastEdit.LightIds[1], BID);
+        DevContext_UpdateLightIdsInStack(DevContext->RedoStack, LastEdit.LightIds[1], BID);
+    }
+}
+
 void DevContext_RedoLastEdit(dev_context* DevContext)
 {  
     dev_object_edit* LastEdit = DevContext->RedoStack.Pop();
@@ -1422,10 +1542,10 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
             DevContext_RedoJumpEdit(DevContext, *LastEdit);
         } break;
 
-        // case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
-        // {
-
-        // } break;
+        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+        {
+            DevContext_RedoLightEdit(DevContext, *LastEdit);
+        } break;
 
         AK_INVALID_DEFAULT_CASE;
     }
@@ -1670,6 +1790,14 @@ void DevContext_Tick()
                             Edit.JumpIds[1].B = InvalidWorldID();
                             jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID); 
                             Edit.JumpProp[0].CenterP = JumpingQuad->CenterP;
+                        } break;
+                        case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+                        {
+                            Edit.LightIds[0] = SelectedObject->PointLightID;
+                            Edit.LightIds[1] = InvalidWorldID();
+                            graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
+                            point_light* LightProp = GraphicsState->PointLightStorage.Get(SelectedObject->PointLightID.ID);
+                            Edit.LightProp = *LightProp;
                         } break;
                     }
                     
@@ -1950,8 +2078,17 @@ void DevContext_Tick()
                     case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                     {
                         graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
+                        point_light* LightProp = GraphicsState->PointLightStorage.Get(SelectedObject->PointLightID.ID);
+                        dev_object_edit Undo;
+                        Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
+                        Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_DELETE;
+                        Undo.LightIds[0] = SelectedObject->PointLightID;
+                        Undo.LightIds[1] = InvalidWorldID();
+                        Undo.LightProp = *LightProp;
                         GraphicsState->PointLightStorage.Free(SelectedObject->PointLightID.ID);                    
                         *SelectedObject = {};
+                        Context->UndoStack.Add(Undo);
+                        Context->RedoStack.Clear();
                     } break;                                
                 }
             }

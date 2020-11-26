@@ -711,7 +711,10 @@ void DevUI_LightSpawner(dev_context* DevContext, light_spawner* Spawner, ak_u32 
         PointLight.Color = Spawner->Color;
         PointLight.Intensity = Spawner->Intensity;
         
-        
+        dev_object_edit Undo;
+        Undo.LightProp = PointLight;
+        Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
+        Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
         if(Spawner->WorldIndex == 2)
         {
             graphics_state* GraphicsStateA = &DevContext->Game->World.GraphicsStates[0];
@@ -728,6 +731,8 @@ void DevUI_LightSpawner(dev_context* DevContext, light_spawner* Spawner, ak_u32 
             {
                 DevContext->SelectedObject.PointLightID = MakeWorldID(BID, 1);
             }
+            Undo.LightIds[0] = MakeWorldID(AID, 0);
+            Undo.LightIds[1] = MakeWorldID(AID, 1);
         }
         else
         {
@@ -738,7 +743,11 @@ void DevUI_LightSpawner(dev_context* DevContext, light_spawner* Spawner, ak_u32 
                 DevContext->SelectedObject.Type = DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT;
                 DevContext->SelectedObject.PointLightID = MakeWorldID(ID, CurrentWorldIndex);
             }
+            Undo.LightIds[0] = MakeWorldID(ID, Spawner->WorldIndex);
+            Undo.LightIds[1] = InvalidWorldID();
         }
+        DevContext->UndoStack.Add(Undo);
+        DevContext->RedoStack.Clear();
     }
 }
 

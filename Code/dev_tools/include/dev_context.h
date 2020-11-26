@@ -187,6 +187,8 @@ struct dev_object_edit
     ak_bool Interactable;
     jumping_quad JumpProp[2];
     dual_world_id JumpIds[2];
+    world_id LightIds[2];
+    point_light LightProp;
 };
 
 #define DEV_RENDER_GRID_CALLBACK(name) void name(dev_context* Context, graphics_state* GraphicsState, view_settings* ViewSettings)
