@@ -1815,6 +1815,94 @@ void DevContext_Tick()
                 GizmoState->GizmoHit = {};
             }
         }
+        else if(!IsDown(DevInput->Alt) && GetIO().WantCaptureMouse)
+        {
+            //Record Selected Objects properties in a field on the Dev Context.
+            if(IsPressed(DevInput->LMB))
+            {
+                dev_selected_object* SelectedObject = &Context->SelectedObject;
+                Context->TempUndo.ObjectType = SelectedObject->Type;
+                Context->TempUndo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_TRANSFORM;
+                switch(SelectedObject->Type)
+                {
+                    case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+                    {      
+                        ak_u32 Index = AK_PoolIndex(SelectedObject->EntityID.ID);                                        
+                        ak_array<dev_transform>* DevTransforms = &Context->InitialTransforms[SelectedObject->EntityID.WorldIndex];                    
+                        if(DevTransforms->Size < (Index+1))
+                            DevTransforms->Resize(Index+1);
+                        entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                        Context->TempUndo.Entity[0] = *Entity;
+                        Context->TempUndo.Entity[1].ID = InvalidWorldID();
+                        Context->TempUndo.Transform = *DevTransforms->Get(Index);
+                    } break;
+                    case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+                    {
+                        Context->TempUndo.JumpIds[0].A = SelectedObject->EntityID;
+                        Context->TempUndo.JumpIds[0].B = InvalidWorldID();
+                        Context->TempUndo.JumpIds[1].A = InvalidWorldID();
+                        Context->TempUndo.JumpIds[1].B = InvalidWorldID();
+                        jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID); 
+                        Context->TempUndo.JumpProp[0].CenterP = JumpingQuad->CenterP;
+                    } break;
+                    case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+                    {
+                        Context->TempUndo.LightIds[0] = SelectedObject->PointLightID;
+                        Context->TempUndo.LightIds[1] = InvalidWorldID();
+                        graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
+                        point_light* LightProp = GraphicsState->PointLightStorage.Get(SelectedObject->PointLightID.ID);
+                        Context->TempUndo.LightProp = *LightProp;
+                    } break;
+                }
+            }
+        }
+        if(!IsDown(DevInput->Alt) && !GetIO().WantCaptureKeyboard && !GetIO().WantCaptureMouse && Context->TempUndo.ObjectType != DEV_SELECTED_OBJECT_TYPE_NONE)
+        {
+            //We are no longer on the Dev UI, check to see if the objects properties changed, if they did, add it to the undo stack.
+            if(!IsDown(DevInput->LMB))
+            {
+                dev_selected_object* SelectedObject = &Context->SelectedObject;
+                dev_object_edit TempEdit = Context->TempUndo;
+                switch(SelectedObject->Type)
+                {
+                    case DEV_SELECTED_OBJECT_TYPE_ENTITY:
+                    {      
+                        entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                        ak_u32 Index = AK_PoolIndex(SelectedObject->EntityID.ID); 
+                        ak_array<dev_transform>* DevTransforms = &Context->InitialTransforms[SelectedObject->EntityID.WorldIndex];                    
+                        if(DevTransforms->Size < (Index+1))
+                            DevTransforms->Resize(Index+1);
+                        dev_transform DevTransform = *DevTransforms->Get(Index);
+                        if(AreEqualIDs(Entity->ID, TempEdit.Entity[0].ID)
+                            && (TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation))
+                        {
+                            Context->UndoStack.Add(TempEdit);
+                        }
+                    } break;
+                    case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
+                    {
+                        jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                        if(AreEqualIDs(SelectedObject->EntityID, TempEdit.JumpIds[0].A) && 
+                            (TempEdit.JumpProp->CenterP != JumpingQuad->CenterP || TempEdit.JumpProp->Color != JumpingQuad->Color || TempEdit.JumpProp->Dimensions != JumpingQuad->Dimensions))
+                        {
+                            Context->UndoStack.Add(TempEdit);
+                        } 
+                        
+                    } break;
+                    case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
+                    {
+                        graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
+                        point_light* LightProp = GraphicsState->PointLightStorage.Get(SelectedObject->PointLightID.ID);
+                        if(AreEqualIDs(SelectedObject->EntityID, TempEdit.LightIds[0]) &&
+                            (TempEdit.LightProp.Color != LightProp->Color || TempEdit.LightProp.Intensity != LightProp->Intensity || TempEdit.LightProp.On != LightProp->On || TempEdit.LightProp.Position != LightProp->Position || TempEdit.LightProp.Radius != LightProp->Radius))
+                        {
+                            Context->UndoStack.Add(TempEdit);
+                        }
+                    } break;
+                }
+                Context->TempUndo.ObjectType = DEV_SELECTED_OBJECT_TYPE_NONE;
+            }
+        }
         
         dev_selected_object* SelectedObject = &Context->SelectedObject;            
         if(SelectedObject->Type != DEV_SELECTED_OBJECT_TYPE_NONE)

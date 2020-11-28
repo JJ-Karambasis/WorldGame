@@ -234,6 +234,8 @@ struct dev_context
     ak_array<dev_render_primitive> RenderPrimitives;
     
     dev_render_grid_callback* RenderGrid;
+
+    dev_object_edit TempUndo;
 };
 
 void DevContext_Initialize(game* Game, graphics* Graphics, void* PlatformWindow, ak_string ProgramFilePath, platform_init_imgui* InitImGui, platform_development_update* PlatformUpdate);
