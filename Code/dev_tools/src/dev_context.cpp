@@ -1074,6 +1074,28 @@ void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
         graphics_state* GraphicsState = &World->GraphicsStates[EntityID.WorldIndex];
         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
         GraphicsEntity->Transform = AK_TransformM4(*Transform);
+        
+        Redo.Material = LastEdit.Material;
+        GraphicsEntity->Material = LastEdit.Material;
+        if(Entity->Type == ENTITY_TYPE_PUSHABLE)
+        {
+            rigid_body* RigidBody = SimEntity->ToRigidBody();
+            Redo.Mass = 1.0f / RigidBody->InvMass;
+            RigidBody->InvMass = 1.0f / LastEdit.Mass;
+        }
+        else if (Entity->Type == ENTITY_TYPE_RIGID_BODY)
+        {
+            rigid_body* RigidBody = SimEntity->ToRigidBody();
+            Redo.Mass = 1.0f / RigidBody->InvMass;
+            Redo.Restitution = RigidBody->Restitution;
+            RigidBody->InvMass = 1.0f / LastEdit.Mass;
+            RigidBody->Restitution = LastEdit.Restitution;
+        }
+        else if (Entity->Type == ENTITY_TYPE_STATIC)
+        {
+            Redo.MeshID = GraphicsEntity->MeshID;
+            GraphicsEntity->MeshID = LastEdit.MeshID;
+        }
     }
     else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
     {
@@ -1197,6 +1219,8 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
         jumping_quad* JumpingQuad = World->JumpingQuadStorage[LastEdit.JumpIds[0].A.WorldIndex].Get(LastEdit.JumpIds[0].A.ID);  
         Redo.JumpProp[0].CenterP = JumpingQuad->CenterP;
         JumpingQuad->CenterP = LastEdit.JumpProp->CenterP;
+        JumpingQuad->Color = LastEdit.JumpProp->Color;
+        JumpingQuad->Dimensions = LastEdit.JumpProp->Dimensions;
     }
 
     DevContext->RedoStack.Add(Redo);
@@ -1326,6 +1350,28 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
         graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.Entity[0].ID.WorldIndex];
         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
         GraphicsEntity->Transform = AK_TransformM4(*Transform);
+
+        Undo.Material = LastEdit.Material;
+        GraphicsEntity->Material = LastEdit.Material;
+        if(Entity->Type == ENTITY_TYPE_PUSHABLE)
+        {
+            rigid_body* RigidBody = SimEntity->ToRigidBody();
+            Undo.Mass = 1.0f / RigidBody->InvMass;
+            RigidBody->InvMass = 1.0f / LastEdit.Mass;
+        }
+        else if (Entity->Type == ENTITY_TYPE_RIGID_BODY)
+        {
+            rigid_body* RigidBody = SimEntity->ToRigidBody();
+            Undo.Mass = 1.0f / RigidBody->InvMass;
+            Undo.Restitution = RigidBody->Restitution;
+            RigidBody->InvMass = 1.0f / LastEdit.Mass;
+            RigidBody->Restitution = LastEdit.Restitution;
+        }
+        else if (Entity->Type == ENTITY_TYPE_STATIC)
+        {
+            Undo.MeshID = GraphicsEntity->MeshID;
+            GraphicsEntity->MeshID = LastEdit.MeshID;
+        }
     }
     else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
     {
@@ -1447,6 +1493,8 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
         jumping_quad* JumpingQuad = World->JumpingQuadStorage[LastEdit.JumpIds[0].A.WorldIndex].Get(LastEdit.JumpIds[0].A.ID);  
         Undo.JumpProp[0].CenterP = JumpingQuad->CenterP;
         JumpingQuad->CenterP = LastEdit.JumpProp->CenterP;
+        JumpingQuad->Color = LastEdit.JumpProp->Color;
+        JumpingQuad->Dimensions = LastEdit.JumpProp->Dimensions;
     }
 
     DevContext->UndoStack.Add(Undo);
@@ -1781,6 +1829,27 @@ void DevContext_Tick()
                             entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
                             Edit.Entity[0] = *World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
                             Edit.Entity[1].ID = InvalidWorldID();
+                            graphics_state* GraphicsState = &World->GraphicsStates[Entity->ID.WorldIndex];
+                            graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                            Edit.Material = GraphicsEntity->Material;
+                            switch(Entity->Type)
+                            {
+                                case ENTITY_TYPE_STATIC:
+                                {
+                                    Edit.MeshID = GraphicsEntity->MeshID;
+                                } break;
+                                case ENTITY_TYPE_RIGID_BODY:
+                                {
+                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                    Edit.Mass = 1.0f / RigidBody->InvMass;
+                                    Edit.Restitution = RigidBody->Restitution;
+                                } break;
+                                case ENTITY_TYPE_PUSHABLE:
+                                {
+                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                    Edit.Mass = 1.0f / RigidBody->InvMass;
+                                } break;
+                            }
                         } break;
                         case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
                         {
@@ -1832,9 +1901,30 @@ void DevContext_Tick()
                         if(DevTransforms->Size < (Index+1))
                             DevTransforms->Resize(Index+1);
                         entity* Entity = World->EntityStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
+                        graphics_state* GraphicsState = &World->GraphicsStates[Entity->ID.WorldIndex];
+                        graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                        Context->TempUndo.Material = GraphicsEntity->Material;
                         Context->TempUndo.Entity[0] = *Entity;
                         Context->TempUndo.Entity[1].ID = InvalidWorldID();
                         Context->TempUndo.Transform = *DevTransforms->Get(Index);
+                        switch(Entity->Type)
+                        {
+                            case ENTITY_TYPE_STATIC:
+                            {
+                                Context->TempUndo.MeshID = GraphicsEntity->MeshID;
+                            } break;
+                            case ENTITY_TYPE_RIGID_BODY:
+                            {
+                                rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                Context->TempUndo.Mass = 1.0f / RigidBody->InvMass;
+                                Context->TempUndo.Restitution = RigidBody->Restitution;
+                            } break;
+                            case ENTITY_TYPE_PUSHABLE:
+                            {
+                                rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                Context->TempUndo.Mass = 1.0f / RigidBody->InvMass;
+                            } break;
+                        }
                     } break;
                     case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
                     {
@@ -1873,10 +1963,42 @@ void DevContext_Tick()
                         if(DevTransforms->Size < (Index+1))
                             DevTransforms->Resize(Index+1);
                         dev_transform DevTransform = *DevTransforms->Get(Index);
-                        if(AreEqualIDs(Entity->ID, TempEdit.Entity[0].ID)
-                            && (TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation))
+                        graphics_state* GraphicsState = &World->GraphicsStates[Entity->ID.WorldIndex];
+                        graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
+                        if(AreEqualIDs(Entity->ID, TempEdit.Entity[0].ID))
                         {
-                            Context->UndoStack.Add(TempEdit);
+                            switch(Entity->Type)
+                            {
+                                case ENTITY_TYPE_STATIC:
+                                {
+                                    if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
+                                        || GraphicsEntity->Material.Diffuse.Diffuse != TempEdit.Material.Diffuse.Diffuse || GraphicsEntity->Material.Diffuse.IsTexture != TempEdit.Material.Diffuse.IsTexture)
+                                    {
+                                        Context->UndoStack.Add(TempEdit);
+                                    }
+                                } break;
+                                case ENTITY_TYPE_RIGID_BODY:
+                                {
+                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                    if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
+                                        || GraphicsEntity->Material.Diffuse.Diffuse != TempEdit.Material.Diffuse.Diffuse || GraphicsEntity->Material.Diffuse.IsTexture != TempEdit.Material.Diffuse.IsTexture
+                                        || TempEdit.Mass != 1.0f / RigidBody->InvMass || TempEdit.Restitution != RigidBody->Restitution)
+                                    {
+                                        Context->UndoStack.Add(TempEdit);
+                                    }
+                                } break;
+                                case ENTITY_TYPE_PUSHABLE:
+                                {
+                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
+                                    Context->TempUndo.Mass = 1.0f / RigidBody->InvMass;
+                                    if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
+                                        || GraphicsEntity->Material.Diffuse.Diffuse != TempEdit.Material.Diffuse.Diffuse || GraphicsEntity->Material.Diffuse.IsTexture != TempEdit.Material.Diffuse.IsTexture
+                                        || TempEdit.Mass != 1.0f / RigidBody->InvMass)
+                                    {
+                                        Context->UndoStack.Add(TempEdit);
+                                    }
+                                } break;
+                            }
                         }
                     } break;
                     case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
