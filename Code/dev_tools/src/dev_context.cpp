@@ -991,6 +991,16 @@ void DevContext_UpdateEntityIdsInStack(ak_array<dev_object_edit> Stack, world_id
         {
             EditObject->Entity[1].ID = NewEntityId;
         }
+
+        if(AreEqualIDs(EditObject->Entity[0].LinkID, OldEntityID))
+        {
+            EditObject->Entity[0].LinkID = NewEntityId;
+        }
+
+        if(AreEqualIDs(EditObject->Entity[1].LinkID, OldEntityID))
+        {
+            EditObject->Entity[1].LinkID = NewEntityId;
+        }
     }
 }
 
@@ -1426,10 +1436,8 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
                 if(LinkedEntity.IsValid())
                 {
                     entity* EntityA = Game->World.EntityStorage[CreatedEntities[i].WorldIndex].Get(CreatedEntities[i].ID);
-                    entity* EntityB = Game->World.EntityStorage[LinkedEntity.WorldIndex].Get(LinkedEntity.ID);
                     
-                    EntityA->LinkID = LinkedEntity;
-                    EntityB->LinkID = CreatedEntities[i];
+                    EntityA->LinkID = CreatedEntities[(i+1)%2];
                 }
                 DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntities[i]);
                 DevContext_UpdateEntityIdsInStack(DevContext->UndoStack, LastEdit.Entity[i].ID, CreatedEntities[i]);
@@ -1858,7 +1866,7 @@ void DevContext_Tick()
                             Edit.JumpIds[1].A = InvalidWorldID();
                             Edit.JumpIds[1].B = InvalidWorldID();
                             jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID); 
-                            Edit.JumpProp[0].CenterP = JumpingQuad->CenterP;
+                            Edit.JumpProp[0] = *JumpingQuad;
                         } break;
                         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                         {
@@ -1933,7 +1941,7 @@ void DevContext_Tick()
                         Context->TempUndo.JumpIds[1].A = InvalidWorldID();
                         Context->TempUndo.JumpIds[1].B = InvalidWorldID();
                         jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID); 
-                        Context->TempUndo.JumpProp[0].CenterP = JumpingQuad->CenterP;
+                        Context->TempUndo.JumpProp[0] = *JumpingQuad;
                     } break;
                     case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
                     {

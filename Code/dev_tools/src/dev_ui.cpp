@@ -528,6 +528,8 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].Type = ENTITY_TYPE_STATIC;
                     Undo.Entity[1].ID = BID;
                     Undo.Entity[1].Type = ENTITY_TYPE_STATIC;
+                    Undo.Entity[0].LinkID = InvalidWorldID();
+                    Undo.Entity[1].LinkID = InvalidWorldID();
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();                                           
@@ -546,6 +548,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].ID = EntityID;
                     Undo.Entity[0].Type = ENTITY_TYPE_STATIC;
                     Undo.Entity[1].ID = InvalidWorldID();
+                    Undo.Entity[0].LinkID = InvalidWorldID();
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();
@@ -581,6 +584,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 Undo.Entity[0].ID = EntityID;
                 Undo.Entity[0].Type = ENTITY_TYPE_RIGID_BODY;
                 Undo.Entity[1].ID = InvalidWorldID();
+                Undo.Entity[0].LinkID = InvalidWorldID();
                 Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                 DevContext->UndoStack.Add(Undo);
                 DevContext->RedoStack.Clear();
@@ -623,6 +627,8 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
                     Undo.Entity[1].ID = B;
                     Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[0].LinkID = InvalidWorldID();
+                    Undo.Entity[1].LinkID = InvalidWorldID();
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();  
@@ -651,6 +657,8 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
                     Undo.Entity[1].ID = B;
                     Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[0].LinkID = B;
+                    Undo.Entity[1].LinkID = A;
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();  
@@ -666,6 +674,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                     Undo.Entity[0].ID = EntityID;
                     Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
                     Undo.Entity[1].ID = InvalidWorldID();
+                    Undo.Entity[0].LinkID = InvalidWorldID();
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
                     DevContext->UndoStack.Add(Undo);
                     DevContext->RedoStack.Clear();
