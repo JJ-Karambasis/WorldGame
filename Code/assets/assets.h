@@ -151,4 +151,47 @@ global material Global_Material1
     CreateSpecular(TEXTURE_ASSET_ID_TESTMATERIAL1_SPECULAR, 8)
 };
 
+inline ak_bool 
+MaterialDiffuseSlotsEqual(material_diffuse A, material_diffuse B)
+{
+    if(A.IsTexture == -1 || B.IsTexture == -1) return false;    
+    if(A.IsTexture != B.IsTexture) return false;
+    
+    if(A.IsTexture) return A.DiffuseID == B.DiffuseID;            
+    else return A.Diffuse == B.Diffuse;    
+}
+
+inline ak_bool
+MaterialNormalSlotsEqual(material_normal A, material_normal B)
+{
+    if(A.InUse != B.InUse) return false;    
+    if(A.InUse) return A.NormalID == B.NormalID;
+    else return true;    
+}
+
+inline ak_bool
+MaterialSpecularSlotsEqual(material_specular A, material_specular B)
+{
+    if(A.InUse != B.InUse) return false;
+    
+    if(A.InUse)
+    {
+        if(A.IsTexture != B.IsTexture) return false;
+        if(A.Shininess != B.Shininess) return false;
+        
+        if(A.IsTexture) return A.SpecularID == B.SpecularID;
+        else return A.Specular == B.Specular;
+    }
+    else return true;
+}
+
+inline ak_bool 
+AreMaterialsEqual(material A, material B)
+{
+    ak_bool Result = (MaterialDiffuseSlotsEqual(A.Diffuse, B.Diffuse) && 
+                      MaterialNormalSlotsEqual(A.Normal, B.Normal) && 
+                      MaterialSpecularSlotsEqual(A.Specular, B.Specular));
+    return Result;
+}
+
 #endif

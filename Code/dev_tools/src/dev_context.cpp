@@ -1085,8 +1085,12 @@ void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
         GraphicsEntity->Transform = AK_TransformM4(*Transform);
         
-        Redo.Material = LastEdit.Material;
+        Redo.Material = GraphicsEntity->Material;
         GraphicsEntity->Material = LastEdit.Material;
+        if(AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.Entity[0].ID))
+        {
+            DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&GraphicsEntity->Material);
+        }
         if(Entity->Type == ENTITY_TYPE_PUSHABLE)
         {
             rigid_body* RigidBody = SimEntity->ToRigidBody();
@@ -1361,8 +1365,12 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
         GraphicsEntity->Transform = AK_TransformM4(*Transform);
 
-        Undo.Material = LastEdit.Material;
+        Undo.Material = GraphicsEntity->Material;
         GraphicsEntity->Material = LastEdit.Material;
+        if(AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.Entity[0].ID))
+        {
+            DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&GraphicsEntity->Material);
+        }
         if(Entity->Type == ENTITY_TYPE_PUSHABLE)
         {
             rigid_body* RigidBody = SimEntity->ToRigidBody();
@@ -1980,7 +1988,7 @@ void DevContext_Tick()
                                 case ENTITY_TYPE_STATIC:
                                 {
                                     if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
-                                        || GraphicsEntity->Material.Diffuse.Diffuse != TempEdit.Material.Diffuse.Diffuse || GraphicsEntity->Material.Diffuse.IsTexture != TempEdit.Material.Diffuse.IsTexture)
+                                        || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material))
                                     {
                                         Context->UndoStack.Add(TempEdit);
                                     }
@@ -1989,7 +1997,7 @@ void DevContext_Tick()
                                 {
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
-                                        || GraphicsEntity->Material.Diffuse.Diffuse != TempEdit.Material.Diffuse.Diffuse || GraphicsEntity->Material.Diffuse.IsTexture != TempEdit.Material.Diffuse.IsTexture
+                                        || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material)
                                         || TempEdit.Mass != 1.0f / RigidBody->InvMass || TempEdit.Restitution != RigidBody->Restitution)
                                     {
                                         Context->UndoStack.Add(TempEdit);
@@ -2000,7 +2008,7 @@ void DevContext_Tick()
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     Context->TempUndo.Mass = 1.0f / RigidBody->InvMass;
                                     if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
-                                        || GraphicsEntity->Material.Diffuse.Diffuse != TempEdit.Material.Diffuse.Diffuse || GraphicsEntity->Material.Diffuse.IsTexture != TempEdit.Material.Diffuse.IsTexture
+                                        || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material)
                                         || TempEdit.Mass != 1.0f / RigidBody->InvMass)
                                     {
                                         Context->UndoStack.Add(TempEdit);
