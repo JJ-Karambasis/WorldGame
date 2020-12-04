@@ -160,6 +160,7 @@ struct dev_gizmo_state
     ak_f32 RotationAngleSnap;
     ak_bool ShouldSnap;
     ak_m3f OriginalRotation;
+    ak_bool UseLocalTransforms;
 };
 
 struct dev_transform

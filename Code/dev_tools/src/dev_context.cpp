@@ -332,88 +332,120 @@ ak_v3f DevContext_GetSelectedObjectPosition(world* World, dev_selected_object* S
     return {};
 }
 
-void DevContext_PopulateNonRotationGizmos(dev_gizmo_state* GizmoState, dev_mesh* GizmoMesh, dev_mesh* TrianglePlaneMesh, ak_v3f Position)
-{    
+void DevContext_PopulateNonRotationGizmos(dev_context* DevContext, dev_gizmo_state* GizmoState, dev_mesh* GizmoMesh, dev_mesh* TrianglePlaneMesh, ak_v3f Position)
+{   
+    ak_v3f XAxis;
+    ak_v3f YAxis;
+    ak_v3f ZAxis;
+    ak_v3f Gizmo1 = AK_V3f(0, 0, 0);
+    ak_v3f Gizmo2 = AK_V3f(0, 0, 0);
+    ak_v3f Gizmo3 = AK_V3f(0, 0, 0);
+    if(GizmoState->UseLocalTransforms || GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE)
+    {
+        game* Game = DevContext->Game;
+        ak_m3f Orientation = AK_QuatToMatrix(Game->World.NewTransforms[DevContext->SelectedObject.EntityID.WorldIndex][AK_PoolIndex(DevContext->SelectedObject.EntityID.ID)].Orientation);
+        XAxis = Orientation.XAxis;
+        YAxis = Orientation.YAxis;
+        ZAxis = Orientation.ZAxis;
+        Gizmo1 = Gizmo1 + DEV_GIZMO_PLANE_DISTANCE*XAxis;
+        Gizmo1 = Gizmo1 + DEV_GIZMO_PLANE_DISTANCE*YAxis;
+        Gizmo2 = Gizmo2 + DEV_GIZMO_PLANE_DISTANCE*XAxis;
+        Gizmo2 = Gizmo2 + DEV_GIZMO_PLANE_DISTANCE*ZAxis;
+        Gizmo3 = Gizmo3 + DEV_GIZMO_PLANE_DISTANCE*YAxis;
+        Gizmo3 = Gizmo3 + DEV_GIZMO_PLANE_DISTANCE*ZAxis;
+    } 
+    else
+    {
+        XAxis = AK_XAxis();
+        YAxis = AK_YAxis();
+        ZAxis = AK_ZAxis();
+        Gizmo1 = Gizmo1 + DEV_GIZMO_PLANE_DISTANCE*XAxis;
+        Gizmo1 = Gizmo1 + DEV_GIZMO_PLANE_DISTANCE*YAxis;
+        Gizmo2 = Gizmo2 + DEV_GIZMO_PLANE_DISTANCE*XAxis;
+        Gizmo2 = Gizmo2 + DEV_GIZMO_PLANE_DISTANCE*ZAxis;
+        Gizmo3 = Gizmo3 + DEV_GIZMO_PLANE_DISTANCE*YAxis;
+        Gizmo3 = Gizmo3 + DEV_GIZMO_PLANE_DISTANCE*ZAxis;
+    }
     {
         ak_v3f X, Y, Z;
-        Z = AK_XAxis();
+        Z = XAxis;
         AK_Basis(Z, &X, &Y);
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         dev_gizmo Gizmo;
         Gizmo.Mesh = GizmoMesh;
         Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
+        Gizmo.IntersectionPlane = ZAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_X;
         GizmoState->Gizmos[0] =  Gizmo;
     }
     
     {
         ak_v3f X, Y, Z;
-        Z = AK_YAxis();
+        Z = YAxis;
         AK_Basis(Z, &X, &Y);
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         dev_gizmo Gizmo;
         Gizmo.Mesh = GizmoMesh;
         Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
+        Gizmo.IntersectionPlane = ZAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_Y;
         GizmoState->Gizmos[1] =  Gizmo;
     }
     
     {
         ak_v3f X, Y, Z;
-        Z = AK_ZAxis();
+        Z = ZAxis;
         AK_Basis(Z, &X, &Y);
         
         ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
         dev_gizmo Gizmo;
         Gizmo.Mesh = GizmoMesh;
         Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
+        Gizmo.IntersectionPlane = YAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_Z;
         GizmoState->Gizmos[2] =  Gizmo;
     }
     
     {
         ak_v3f X, Y, Z;
-        Z = AK_ZAxis();
+        Z = ZAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position + AK_V3(DEV_GIZMO_PLANE_DISTANCE, DEV_GIZMO_PLANE_DISTANCE, 0.0f), X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + Gizmo1, X, Y, Z);
         dev_gizmo Gizmo;
         Gizmo.Mesh = TrianglePlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(0, 0, 1);
+        Gizmo.IntersectionPlane = ZAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_XY;
         GizmoState->Gizmos[3] =  Gizmo;
     }
     
     {
         ak_v3f X, Y, Z;
-        Z = AK_YAxis();
+        Z = YAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position + AK_V3(DEV_GIZMO_PLANE_DISTANCE, 0.0f, DEV_GIZMO_PLANE_DISTANCE), X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + Gizmo2, X, Y, Z);
         dev_gizmo Gizmo;
         Gizmo.Mesh = TrianglePlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(0, 1, 0);
+        Gizmo.IntersectionPlane = YAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_XZ;
         GizmoState->Gizmos[4] =  Gizmo;
     }
     
     {
         ak_v3f X, Y, Z;
-        Z = AK_XAxis();
+        Z = XAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position + AK_V3(0.0f, DEV_GIZMO_PLANE_DISTANCE, DEV_GIZMO_PLANE_DISTANCE), X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + Gizmo3, X, Y, Z);
         dev_gizmo Gizmo;
         Gizmo.Mesh = TrianglePlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
-        Gizmo.IntersectionPlane = AK_V3f(1, 0, 0);
+        Gizmo.IntersectionPlane = XAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_YZ;
         GizmoState->Gizmos[5] =  Gizmo;
     }    
@@ -2067,38 +2099,61 @@ void DevContext_Tick()
             {            
                 ak_v3f PointDiff = AK_V3<ak_f32>();
                 ak_v3f NewPoint = RayCast.Origin + (RayCast.Direction*t);
+                ak_v3f MouseDiff = GizmoHit->HitMousePosition - NewPoint;
+                ak_v3f XAxis;
+                ak_v3f YAxis;
+                ak_v3f ZAxis;
+                if(GizmoState->UseLocalTransforms)
+                {
+                    ak_m3f Orientation = AK_QuatToMatrix(Game->World.NewTransforms[Context->SelectedObject.EntityID.WorldIndex][AK_PoolIndex(Context->SelectedObject.EntityID.ID)].Orientation);
+                    XAxis = Orientation.XAxis;
+                    YAxis = Orientation.YAxis;
+                    ZAxis = Orientation.ZAxis;
+                } 
+                else
+                {
+                    XAxis = AK_XAxis();
+                    YAxis = AK_YAxis();
+                    ZAxis = AK_ZAxis();
+                }
                 if(GizmoState->TransformMode != DEV_GIZMO_MOVEMENT_TYPE_ROTATE)
                 {
                     switch(GizmoHit->Gizmo->MovementDirection)
                     {
                         case DEV_GIZMO_MOVEMENT_DIRECTION_X:
                         {
-                            PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, 0.0f);
+                            //PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, 0.0f);
+                            PointDiff = AK_Dot(MouseDiff, XAxis) * XAxis;
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
                         {
-                            PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
+                            //PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
+                            PointDiff = AK_Dot(MouseDiff, YAxis) * YAxis;
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
                         {
-                            PointDiff = AK_V3(0.0f, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
+                            //PointDiff = AK_V3(0.0f, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
+                            PointDiff = AK_Dot(MouseDiff, ZAxis) * ZAxis;
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_XY:
                         {
-                            PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
+                            //PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, GizmoHit->HitMousePosition.y - NewPoint.y, 0.0f);
+                            PointDiff = (AK_Dot(MouseDiff, XAxis) * XAxis) + AK_Dot(MouseDiff, YAxis) * YAxis;
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_XZ:
                         {
-                            PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
+                            //PointDiff = AK_V3(GizmoHit->HitMousePosition.x - NewPoint.x, 0.0f, GizmoHit->HitMousePosition.z - NewPoint.z);
+                            PointDiff = (AK_Dot(MouseDiff, XAxis) * XAxis) + AK_Dot(MouseDiff, ZAxis) * ZAxis;
                         } break;
                         
                         case DEV_GIZMO_MOVEMENT_DIRECTION_YZ:
                         {
-                            PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, GizmoHit->HitMousePosition.z - NewPoint.z);
+                            //PointDiff = AK_V3(0.0f, GizmoHit->HitMousePosition.y - NewPoint.y, GizmoHit->HitMousePosition.z - NewPoint.z);
+                            PointDiff = (AK_Dot(MouseDiff, ZAxis) * ZAxis) + AK_Dot(MouseDiff, YAxis) * YAxis;
                         } break;                    
                     }
                 }
@@ -2566,7 +2621,7 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
                 case DEV_GIZMO_MOVEMENT_TYPE_SCALE:
                 {                                        
                     dev_mesh* GizmoMesh = (GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE) ? &Context->TriangleScaleMesh : &Context->TriangleArrowMesh;
-                    DevContext_PopulateNonRotationGizmos(GizmoState, GizmoMesh, &Context->TrianglePlaneMesh, SelectedObjectPosition);                
+                    DevContext_PopulateNonRotationGizmos(Context, GizmoState, GizmoMesh, &Context->TrianglePlaneMesh, SelectedObjectPosition);                
                     
                 } break;
                 

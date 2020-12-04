@@ -1111,6 +1111,10 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
             DragFloat(AK_HashFunction("Rotate Angle Snap"), "", &GizmoState->RotationAngleSnap, 0.1f, 0.1f, 180.0f);                                             
             if(GizmoState->RotationAngleSnap < 0.1f)
                 GizmoState->RotationAngleSnap = 0.1f;
+
+            AlignTextToFramePadding();
+            Text("Use Local Transforms"); SameLine();
+            Checkbox(AK_HashFunction("Use Local Transforms"), "", &GizmoState->UseLocalTransforms);
         }
         else
         {
