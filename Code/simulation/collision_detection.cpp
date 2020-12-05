@@ -128,21 +128,21 @@ ak_bool RayTriangleIntersectionNoCull(ak_v3f RayOrigin, ak_v3f RayDirection, ak_
     ak_f32 InverseDeterminant = 1.0f / Det;
     
     ak_v3f TVec = RayOrigin - P0;
-
+    
     *u = AK_Dot(TVec, PVec) * InverseDeterminant;
     if(*u < 0 || *u > 1)
     {
         return false;
     }
-
+    
     ak_v3f QVec = AK_Cross(TVec, Edge1);
-
+    
     *v = AK_Dot(RayDirection, QVec) * InverseDeterminant;
     if(*v < 0 || *u + *v > 1)
     {
         return false;
     }
-
+    
     *t = AK_Dot(Edge2, QVec) * InverseDeterminant;
     
     return true;
@@ -499,9 +499,9 @@ contact_list GetCapsuleCapsuleContacts(capsule* CapsuleA, capsule* CapsuleB)
     
     ak_v3f Normal = P1-P0;
     ak_f32 NormalLength = AK_SqrMagnitude(Normal);  
-        
+    
     AK_Assert(!AK_EqualZeroEps(NormalLength), "Normal is not defined from gjk");
-        
+    
     ak_f32 Radius = CapsuleA->Radius+CapsuleB->Radius;        
     
     contact_list Result = {};
@@ -635,7 +635,7 @@ contact GetCapsuleHullDeepestContact(capsule* Capsule, convex_hull* ConvexHull, 
     convex_hull_support  BGJK = {ConvexHull, ConvexHullTransform};
     
     gjk_distance Distance = GJKDistance(&AGJK, &BGJK);
-        
+    
     ak_v3f P0, P1;
     Distance.GetClosestPoints(&P0, &P1);        
     
@@ -688,7 +688,7 @@ contact GetHullHullDeepestContact(convex_hull* ConvexHullA, ak_sqtf ConvexHullTr
     
     ak_v3f Witness0, Witness1;
     DistanceResult.GetClosestPoints(&Witness0, &Witness1);                            
-    Contact.Normal = AK_Normalize(Witness1-Witness0);
+    Contact.Normal = AK_Normalize(Witness0-Witness1);
     Contact.Penetration = 0;
     Contact.Position = Witness0 + ((Witness1-Witness0)*0.5f);
     return Contact;    
@@ -779,7 +779,7 @@ ak_f32 CapsuleHullTOI(capsule* Capsule, ak_v3f DeltaA, convex_hull* Hull, ak_sqt
             return tStart;
         }        
     }
-        
+    
     return INFINITY;    
 }
 

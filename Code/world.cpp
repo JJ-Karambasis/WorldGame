@@ -1,4 +1,11 @@
 inline entity* 
+GetEntity(world* World, world_id ID)
+{
+    entity* Result = World->EntityStorage[ID.WorldIndex].Get(ID.ID);
+    return Result;
+}
+
+inline entity* 
 GetEntity(game* Game, world_id ID)
 {
     entity* Result = Game->World.EntityStorage[ID.WorldIndex].Get(ID.ID);
@@ -6,16 +13,28 @@ GetEntity(game* Game, world_id ID)
 }
 
 inline sim_entity*
+GetSimEntity(world* World, world_id ID)
+{
+    simulation* Simulation = &World->Simulations[ID.WorldIndex];
+    return Simulation->GetSimEntity(GetEntity(World, ID)->SimEntityID);
+}
+
+inline rigid_body*
+GetRigidBody(world* World, world_id ID)
+{    
+    return GetSimEntity(World, ID)->ToRigidBody();
+}
+
+inline sim_entity*
 GetSimEntity(game* Game, world_id ID)
 {
-    simulation* Simulation = &Game->World.Simulations[ID.WorldIndex];
-    return Simulation->GetSimEntity(GetEntity(Game, ID)->SimEntityID);
+    return GetSimEntity(&Game->World, ID);
 }
 
 inline rigid_body*
 GetRigidBody(game* Game, world_id ID)
 {    
-    return GetSimEntity(Game, ID)->ToRigidBody();
+    return GetRigidBody(&Game->World, ID);
 }
 
 inline entity* 
@@ -68,10 +87,30 @@ ak_u32 CreateMovable(world* World)
     return AK_PoolIndex(Result);
 }
 
+ak_bool ValidateMovable(movable* Movable)
+{
+    if(Movable->ParentID.IsValid() && Movable->ChildID.IsValid())
+        return !AreEqualIDs(Movable->ParentID, Movable->ChildID);
+    return true;
+}
+
 movable* GetMovable(world* World, entity* Entity)
 {
     AK_Assert(Entity->Type == ENTITY_TYPE_MOVABLE, "Cannot get a movable of an entity that is not a movable");
-    return World->MovableStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+    
+    movable* Movable = World->MovableStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+    AK_Assert(ValidateMovable(Movable), "Corrupted movable");
+    return Movable;
+}
+
+inline world_id GetChildID(movable* Movable)
+{
+    return Movable ? Movable->ChildID : InvalidWorldID();
+}
+
+inline world_id GetParentID(movable* Movable)
+{
+    return Movable ? Movable->ParentID : InvalidWorldID();
 }
 
 void DeleteButtonState(world* World, ak_u32 Index)
@@ -315,6 +354,7 @@ inline ak_bool CanBePushed(ak_v2f MoveDirection, ak_v2f ObjectDirection)
 }
 
 COLLISION_EVENT(OnButtonCollision)
+
 {
     button_state* ButtonState = GetButtonState(&Game->World, Entity);
     ButtonState->Collided = true;

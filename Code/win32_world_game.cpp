@@ -35,11 +35,11 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, MSG Message);
 #define HR_Release(iunknown) \
 do \
 { \
-    if(iunknown) \
-    { \
-        iunknown->Release(); \
-        iunknown = NULL; \
-    } \
+if(iunknown) \
+{ \
+iunknown->Release(); \
+iunknown = NULL; \
+} \
 } while(0)
 
 global ak_string Global_EXEFilePath;
@@ -49,37 +49,6 @@ global ak_bool Global_Running;
 
 //TODO(JJ): This lock can probably be moved out into some developer code macros since it is only used for hot reloading (for the audio thread)
 global ak_lock Global_Lock;
-
-HWND Win32_CreateWindow(WNDCLASSEX* WindowClass, char* WindowName,  
-                        ak_v2i WindowDim)
-{    
-    DWORD ExStyle = 0;
-    DWORD Style = WS_OVERLAPPEDWINDOW|WS_VISIBLE;
-    
-    RECT WindowRect = {0, 0, (LONG)WindowDim.w, (LONG)WindowDim.h};
-    AdjustWindowRectEx(&WindowRect, Style, FALSE, ExStyle);
-    
-    HWND Window = CreateWindowEx(ExStyle, WindowClass->lpszClassName, "AKEngine", Style, 
-                                 CW_USEDEFAULT, CW_USEDEFAULT, 
-                                 WindowRect.right-WindowRect.left,
-                                 WindowRect.bottom-WindowRect.top,
-                                 0, 0, WindowClass->hInstance, NULL);
-    if(!Window)            
-        return {};        
-    
-    return Window;
-}
-
-inline ak_v2i 
-Win32_GetWindowDim(HWND Window)
-{
-    ak_v2i Result = {};    
-    RECT Rect;
-    if(GetClientRect(Window, &Rect))    
-        Result = AK_V2((ak_i32)(Rect.right-Rect.left), (ak_i32)(Rect.bottom-Rect.top));            
-    return Result;
-}
-
 FILETIME Win32_GetFileCreationTime(ak_string FilePath)
 {    
     WIN32_FILE_ATTRIBUTE_DATA FindData;
@@ -507,7 +476,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
     ak_string OpenGLGraphicsTempDLLPathName = AK_StringConcat(Global_EXEFilePath, "OpenGL_Temp.dll", Global_PlatformArena);        
     ak_string AssetFilePath = AK_StringConcat(Global_EXEFilePath, "WorldGame.assets", Global_PlatformArena);
     
-    ak_window* PlatformWindow = AK_CreateWindow(1920, 1080, GAME_NAME);            
+    ak_window* PlatformWindow = AK_CreateWindow(1280, 720, GAME_NAME);            
     if(!PlatformWindow)   
     {
         //TODO(JJ): Diagnostic and error logging
@@ -616,7 +585,7 @@ int Win32_GameMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs
             AK_CopyArray(Game->World.OldTransforms[1].Entries, Game->World.NewTransforms[1].Entries, Game->World.NewTransforms[1].Size);
             Game->World.OldCameras[0] = Game->World.NewCameras[0];
             Game->World.OldCameras[1] = Game->World.NewCameras[1];
-                        
+            
             Win32_ProcessMessages(&Input);            
             
             if(Dev_ShouldPlayGame())
@@ -739,22 +708,22 @@ PLATFORM_DEVELOPMENT_UPDATE(Platform_DevUpdate)
     }    
     
 #define Dev_BindMouse(key, action) do \
-    { \
-        ak_bool IsDown = GetKeyState(key) & (1 << 15); \
-        if(IsDown != action.IsDown) \
-        { \
-            if(IsDown == false) \
-            { \
-                action.WasDown = true; \
-                action.IsDown = false; \
-            } \
-            else \
-            { \
-                action.IsDown = true; \
-            } \
-        } \
-    } while(0)
-        
+{ \
+ak_bool IsDown = GetKeyState(key) & (1 << 15); \
+if(IsDown != action.IsDown) \
+{ \
+if(IsDown == false) \
+{ \
+action.WasDown = true; \
+action.IsDown = false; \
+} \
+else \
+{ \
+action.IsDown = true; \
+} \
+} \
+} while(0)
+    
     Dev_BindMouse(VK_LBUTTON, DevInput->LMB);
     Dev_BindMouse(VK_MBUTTON, DevInput->MMB);
 }
@@ -899,7 +868,7 @@ void Win32_HandleDevKeyboard(dev_context* DevContext, MSG Message)
             BindKey(VK_CONTROL, Input->Ctrl);
         }
     }
-        
+    
     if((VKCode == VK_ESCAPE) && IsDown)
         PostQuitMessage(0);    
 }

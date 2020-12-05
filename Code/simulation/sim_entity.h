@@ -49,6 +49,9 @@ struct rigid_body : public sim_entity
     ak_f32 Restitution;
     ak_f32 InvMass;
     
+    inline ak_f32 GetMoveDistance() { return AK_Magnitude(MoveDelta); }
+    inline ak_v3f GetMoveDirection() { return MoveDelta/GetMoveDistance(); }
+    
     inline void ApplyForce(ak_v3f Direction, ak_f32 Strength) { Force += (Direction*Strength); }    
     inline void ApplyForce(ak_v2f Direction, ak_f32 Strength) { Force.xy += (Direction*Strength); }    
     inline void ApplyConstantAcceleration(ak_v3f Direction, ak_f32 AccelerationStrength) { ApplyForce(Direction, AccelerationStrength*(1.0f/InvMass)); }

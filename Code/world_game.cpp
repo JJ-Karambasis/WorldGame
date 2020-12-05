@@ -81,11 +81,25 @@ struct filter_common
     ak_u32 WorldIndex;
 };
 
-struct filter_ignore_entity : filter_common
+struct filter_ignore_entity : public filter_common
 {
     world_id Entity0;
     world_id Entity1;
+    world_id Entity2;
+    world_id Entity3;
 };
+
+filter_ignore_entity* GetFilterIgnoreEntity(world* World, ak_u32 WorldIndex, world_id EntityA = InvalidWorldID(), world_id EntityB = InvalidWorldID(), world_id EntityC = InvalidWorldID(), world_id EntityD = InvalidWorldID())
+{
+    filter_ignore_entity* FilterData = AK_GetGlobalArena()->Push<filter_ignore_entity>();
+    FilterData->World = World;
+    FilterData->WorldIndex = WorldIndex;
+    FilterData->Entity0 = EntityA;
+    FilterData->Entity1 = EntityB;
+    FilterData->Entity2 = EntityC;
+    FilterData->Entity3 = EntityD;
+    return FilterData;
+}
 
 inline ak_bool 
 BroadPhaseFilterCommon(entity* EntityB)
@@ -113,56 +127,18 @@ BROAD_PHASE_PAIR_FILTER_FUNC(FilterEntity)
     filter_ignore_entity* Filter = (filter_ignore_entity*)UserData;
     entity* EntityB = GetEntity(&Filter->World->EntityStorage[Filter->WorldIndex], Pair->SimEntityB);
     
-    if(AreEqualIDs(EntityB->ID, Filter->Entity0) || AreEqualIDs(EntityB->ID, Filter->Entity1))
+    if(AreEqualIDs(EntityB->ID, Filter->Entity0) || AreEqualIDs(EntityB->ID, Filter->Entity1) || 
+       AreEqualIDs(EntityB->ID, Filter->Entity2) || AreEqualIDs(EntityB->ID, Filter->Entity3))
+    {
         return false;
+    }
     
     return BroadPhaseFilterCommon(EntityB);    
 }
 
 #define PAIR_IS_TYPE(typeA, typeB, type) ((typeA == type) || (typeB == type))
 
-void UpdateMovement(rigid_body* RigidBody, ak_v3f Offset, ak_v3f Normal, ak_v3f TargetPosition)
-{    
-    RigidBody->Transform.Translation += Offset;    
-    RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;                
-    RigidBody->MoveDelta -= AK_Dot(RigidBody->MoveDelta, Normal)*Normal;
-    RigidBody->Velocity -= AK_Dot(RigidBody->Velocity, Normal)*Normal;                    
-}
-
-inline ak_v3f
-GetOffset(ak_v3f MoveDelta, ak_v3f Normal, ak_f32 tMin)
-{    
-    ak_v3f Result = Normal*0.001f + tMin*MoveDelta;    
-    return Result;
-}
-
-ak_bool HandleSliding(rigid_body* RigidBody, ak_f32 tHit, ak_v3f Normal)
-{       
-    RigidBody->Velocity -= AK_Dot(Normal, RigidBody->Velocity)*Normal;
-    
-    ak_f32 MoveDeltaDistance = AK_Magnitude(RigidBody->MoveDelta);
-    if(MoveDeltaDistance == 0.0f)
-        return true;
-    
-    ak_v3f MoveDirection = RigidBody->MoveDelta/MoveDeltaDistance;                                                                                                        
-    ak_f32 HitDeltaDistance = AK_Max(MoveDeltaDistance*tHit-VERY_CLOSE_DISTANCE, 0.0f);
-    
-    ak_v3f Destination = RigidBody->Transform.Translation + RigidBody->MoveDelta;
-    ak_v3f NewBasePoint = RigidBody->Transform.Translation + MoveDirection*HitDeltaDistance;                        
-    
-    ak_planef SlidingPlane = AK_Plane(NewBasePoint, Normal);
-    ak_v3f NewDestination = Destination - AK_SignDistance(SlidingPlane, Destination)*SlidingPlane.Normal;  
-    
-    RigidBody->MoveDelta = NewDestination - NewBasePoint;        
-    
-    RigidBody->Transform.Translation = NewBasePoint;
-    if(AK_Magnitude(RigidBody->MoveDelta) < VERY_CLOSE_DISTANCE)                                                    
-        return true;    
-    
-    return false;
-}
-
-ak_bool CanPushPushable(rigid_body* Pushable, ak_v3f Normal)
+ak_bool CanPushMovable(rigid_body* Pushable, ak_v3f Normal)
 {
     ak_m3f Orientation = AK_QuatToMatrix(Pushable->Transform.Orientation);    
     ak_f32 XTest = AK_Abs(AK_Dot(Orientation.XAxis, Normal));
@@ -177,10 +153,68 @@ struct toi_normal
     ak_f32  tHit;
 };
 
+inline toi_normal MakeTOINormal(ak_f32 tHit, ak_v3f Normal)
+{
+    toi_normal Result = {};
+    Result.Intersected = true;
+    Result.Normal = Normal;
+    Result.tHit = tHit;
+    return Result;
+}
+
+inline ak_f32 GetDeltaClamped(ak_f32 Delta)
+{
+    return AK_Max(Delta-VERY_CLOSE_DISTANCE, 0.0f);
+}
+
+inline ak_f32 GetDeltaClamped(ak_f32 Delta, ak_f32 t)
+{
+    return AK_Max(Delta*t-VERY_CLOSE_DISTANCE, 0.0f);
+}
+
+void MovementPushableUpdateChild(world* World, ak_u32 WorldIndex, entity* Entity, ak_v3f MoveDelta, world_id IgnoreEntityID_0, world_id IgnoreEntityID_1)
+{
+    if(Entity->Type == ENTITY_TYPE_MOVABLE)
+    {
+        
+        simulation* Simulation = &World->Simulations[WorldIndex];
+        movable* Movable = GetMovable(World, Entity);
+        if(Movable->ChildID.IsValid())
+        {
+            rigid_body* RigidBody = GetRigidBody(World, Movable->ChildID);
+            RigidBody->MoveDelta = MoveDelta;
+            
+            entity* TestEntity = GetEntity(&World->EntityStorage[WorldIndex], RigidBody);
+            movable* TestMovable = GetMovable(World, TestEntity);
+            
+            filter_ignore_entity* FilterData = GetFilterIgnoreEntity(World, WorldIndex, IgnoreEntityID_0, IgnoreEntityID_1, TestMovable->ChildID, TestMovable->ParentID); 
+            
+            broad_phase_pair_list Pairs = Simulation->GetPairs(RigidBody, FilterEntity, FilterData);
+            continuous_contact ChildContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);
+            
+            if(ChildContactTOI.HitEntity)
+            {
+                ak_f32 MoveDeltaLength = AK_Magnitude(MoveDelta);
+                ak_v3f MoveDirection = MoveDelta/MoveDeltaLength;
+                ak_v3f NewMoveDelta = MoveDirection*GetDeltaClamped(MoveDeltaLength, ChildContactTOI.t);
+                MovementPushableUpdateChild(World, WorldIndex, TestEntity, NewMoveDelta, IgnoreEntityID_0, IgnoreEntityID_1);
+                RigidBody->Transform.Translation += NewMoveDelta;
+            }
+            else
+            {
+                MovementPushableUpdateChild(World, WorldIndex, TestEntity, RigidBody->MoveDelta, IgnoreEntityID_0, IgnoreEntityID_1);
+                RigidBody->Transform.Translation += RigidBody->MoveDelta;
+            }
+            
+            RigidBody->MoveDelta = {};
+        }
+    }
+}
+
 toi_normal MovementPushableUpdateRecursive(world* World, ak_u32 WorldIndex, rigid_body* RigidBody, continuous_contact ContactTOI, world_id IgnoreEntityID)
 {   
     toi_normal Result = {};
-        
+    
     ak_arena* GlobalArena = AK_GetGlobalArena();    
     simulation* Simulation = World->Simulations + WorldIndex;    
     entity_storage* EntityStorage = World->EntityStorage + WorldIndex;    
@@ -188,101 +222,119 @@ toi_normal MovementPushableUpdateRecursive(world* World, ak_u32 WorldIndex, rigi
     rigid_body* RigidBodyA = RigidBody;
     entity* EntityA = GetEntity(EntityStorage, RigidBodyA);            
     entity* EntityB = GetEntity(EntityStorage, ContactTOI.HitEntity);    
+    
+    movable* MovableA = (EntityA->Type == ENTITY_TYPE_MOVABLE) ? GetMovable(World, EntityA) : NULL;
+    
     if(EntityB->Type == ENTITY_TYPE_MOVABLE)
     {
         rigid_body* RigidBodyB = ContactTOI.HitEntity->ToRigidBody();                        
-        if(CanPushPushable(RigidBodyB, ContactTOI.Contact.Normal))
-        {   
-            movable* MovableB = GetMovable(World, EntityB);
-            if(MovableB->ParentID.IsValid())
+        movable* MovableB = GetMovable(World, EntityB);
+        
+        if(MovableB->ParentID.IsValid())
+        {
+            rigid_body* ParentRigidBody = GetRigidBody(World, MovableB->ParentID);
+            continuous_contact ParentContactTOI = Simulation->ComputeTOI(RigidBodyA, ParentRigidBody);
+            if(ParentContactTOI.HitEntity && ParentContactTOI.t <= ContactTOI.t)
             {
-                entity* ParentEntity = EntityStorage->Get(MovableB->ParentID.ID);                
-                rigid_body* ParentRigidBody = Simulation->GetSimEntity(ParentEntity->SimEntityID)->ToRigidBody();
-                continuous_contact ParentContactTOI = Simulation->ComputeTOI(RigidBodyA, ParentRigidBody);
-                if(ParentContactTOI.HitEntity && ParentContactTOI.t <= ContactTOI.t)
-                {
-                    EntityB = ParentEntity;
-                    RigidBodyB = ParentRigidBody;
-                    MovableB = GetMovable(World, ParentEntity);
-                    ContactTOI = ParentContactTOI;
-                }
+                EntityB = GetEntity(World, MovableB->ParentID);
+                RigidBodyB = ParentRigidBody;
+                MovableB = GetMovable(World, EntityB);
+                ContactTOI = ParentContactTOI;
             }
+        }
+        
+        
+        if(CanPushMovable(RigidBodyB, ContactTOI.Contact.Normal))
+        {   
+            filter_ignore_entity* FilterDataRigidBodyB = GetFilterIgnoreEntity(World, WorldIndex, EntityA->ID, IgnoreEntityID, MovableB->ChildID, MovableB->ParentID);
             
-            filter_ignore_entity* FilterData = GlobalArena->Push<filter_ignore_entity>();
-            FilterData->World = World;
-            FilterData->WorldIndex = WorldIndex;                
-            FilterData->Entity0 = EntityA->ID;
-            FilterData->Entity1 = IgnoreEntityID;
-            
-            ak_v3f PushableMoveDirection = AK_Normalize(AK_V3(ContactTOI.Contact.Normal.xy));
-            ak_f32 MoveDeltaDistance = AK_Magnitude(RigidBodyA->MoveDelta);
+            ak_v3f MovableMoveDirection = AK_Normalize(AK_V3(ContactTOI.Contact.Normal.xy));
+            ak_f32 MoveDeltaDistance = RigidBodyA->GetMoveDistance();
             ak_v3f MoveDirection = RigidBodyA->MoveDelta/MoveDeltaDistance;
             
-            ak_f32 RemainderDistance = AK_Max((MoveDeltaDistance - (MoveDeltaDistance*ContactTOI.t)) - VERY_CLOSE_DISTANCE, 0.0f);
-            ak_v3f RemainderDelta = MoveDirection*RemainderDistance;                                    
-            RigidBodyB->MoveDelta = AK_Dot(PushableMoveDirection, RemainderDelta)*PushableMoveDirection;
-                        
-            broad_phase_pair_list PushablePairs = Simulation->GetPairs(RigidBodyB, FilterEntity, FilterData);
-            continuous_contact PushableContactTOI = Simulation->ComputeTOI(RigidBodyB, PushablePairs);
+            ak_f32 RemainderDistance = GetDeltaClamped(MoveDeltaDistance-(MoveDeltaDistance*ContactTOI.t));
             
-            if(!PushableContactTOI.HitEntity)
+            ak_v3f RemainderDelta = MoveDirection*RemainderDistance;                                    
+            
+            RigidBodyB->MoveDelta = AK_Dot(MovableMoveDirection, RemainderDelta)*MovableMoveDirection;
+            
+            broad_phase_pair_list MovablePairs = Simulation->GetPairs(RigidBodyB, FilterEntity, FilterDataRigidBodyB);
+            continuous_contact MovableContactTOI = Simulation->ComputeTOI(RigidBodyB, MovablePairs);
+            
+            filter_ignore_entity* FilterDataRigidBodyA = GetFilterIgnoreEntity(World, WorldIndex, IgnoreEntityID, GetChildID(MovableA), GetParentID(MovableA));
+            
+            if(!MovableContactTOI.HitEntity)
             {
-                RigidBodyB->Transform.Translation += RigidBodyB->MoveDelta;
-                RigidBodyA->Transform.Translation += MoveDirection*AK_Max(MoveDeltaDistance*ContactTOI.t-VERY_CLOSE_DISTANCE, 0.0f);
-                RigidBodyA->MoveDelta = MoveDirection*RemainderDistance;                                
+                MovementPushableUpdateChild(World, WorldIndex, EntityB, RigidBodyB->MoveDelta,
+                                            EntityA->ID, IgnoreEntityID);
                 
-                broad_phase_pair_list RemainderPairs = Simulation->GetPairs(RigidBodyA, FilterEntity, FilterData);                                    
+                ak_v3f MoveDeltaA = MoveDirection*GetDeltaClamped(MoveDeltaDistance, ContactTOI.t);
+                MovementPushableUpdateChild(World, WorldIndex, EntityA, MoveDeltaA, 
+                                            IgnoreEntityID, InvalidWorldID());
+                
+                RigidBodyB->Transform.Translation += RigidBodyB->MoveDelta;
+                
+                RigidBodyA->Transform.Translation += MoveDeltaA;
+                RigidBodyA->MoveDelta = MoveDirection*RemainderDistance;   
+                
+                
+                broad_phase_pair_list RemainderPairs = Simulation->GetPairs(RigidBodyA, FilterEntity, FilterDataRigidBodyA);                                    
                 continuous_contact RemainderContactTOI = Simulation->ComputeTOI(RigidBodyA, RemainderPairs);                                                    
                 if(RemainderContactTOI.HitEntity)
                 {
-                    Result.Intersected = true;
-                    Result.tHit = RemainderContactTOI.t;
-                    Result.Normal = RemainderContactTOI.Contact.Normal;
+                    Result = MakeTOINormal(RemainderContactTOI.t, RemainderContactTOI.Contact.Normal);
                 }
             }
             else
             {
-                ak_v3f P = RigidBodyB->Transform.Translation;
-                toi_normal TOINormal = MovementPushableUpdateRecursive(World, WorldIndex, RigidBodyB, PushableContactTOI, FilterData->Entity0);                
+                ak_v3f PrevP = RigidBodyB->Transform.Translation;
+                toi_normal TOINormal = MovementPushableUpdateRecursive(World, WorldIndex, RigidBodyB, MovableContactTOI, EntityA->ID);                
                 if(TOINormal.Intersected)
                 {                    
-                    ak_f32 PushableDeltaDistance = AK_Magnitude(RigidBodyB->MoveDelta);                                        
-                    ak_f32 PushableHitDeltaDistance = AK_Max(PushableDeltaDistance*TOINormal.tHit-VERY_CLOSE_DISTANCE, 0.0f);                                                                                                                                
-                    RigidBodyB->Transform.Translation += PushableMoveDirection*PushableHitDeltaDistance;                                                                             
+                    ak_f32 MovableDeltaDistance = AK_Magnitude(RigidBodyB->MoveDelta);                                        
+                    ak_f32 MovableHitDeltaDistance = GetDeltaClamped(MovableDeltaDistance, TOINormal.tHit);
                     
-                    RigidBodyA->Transform.Translation += MoveDirection*AK_Max(MoveDeltaDistance*ContactTOI.t-VERY_CLOSE_DISTANCE, 0.0f);
+                    MovementPushableUpdateChild(World, WorldIndex, EntityB, MovableMoveDirection*MovableHitDeltaDistance, EntityA->ID, IgnoreEntityID);
+                    
+                    ak_v3f MoveDeltaA = MoveDirection*GetDeltaClamped(MoveDeltaDistance, ContactTOI.t);
+                    MovementPushableUpdateChild(World, WorldIndex, EntityA, MoveDeltaA, 
+                                                IgnoreEntityID, InvalidWorldID());
+                    
+                    RigidBodyB->Transform.Translation += MovableMoveDirection*MovableHitDeltaDistance;      
+                    RigidBodyA->Transform.Translation += MoveDeltaA;
                     RigidBodyA->MoveDelta = MoveDirection*RemainderDistance;
-                    broad_phase_pair_list RemainderPairs = Simulation->GetPairs(RigidBodyA, FilterEntity, FilterData);                                    
-                    continuous_contact RemainderContactTOI = Simulation->ComputeTOI(RigidBodyA, RemainderPairs);                                                    
                     
+                    broad_phase_pair_list RemainderPairs = Simulation->GetPairs(RigidBodyA, FilterEntity, FilterDataRigidBodyA);                                    
+                    continuous_contact RemainderContactTOI = Simulation->ComputeTOI(RigidBodyA, RemainderPairs);                                                    
                     if(RemainderContactTOI.HitEntity)
                     {
-                        Result.Intersected = true;
-                        Result.Normal = RemainderContactTOI.Contact.Normal;
-                        Result.tHit = RemainderContactTOI.t;
+                        Result = MakeTOINormal(RemainderContactTOI.t, RemainderContactTOI.Contact.Normal);
                     }
                     else
                     {
-                        Result.Intersected = true;
-                        Result.Normal = ContactTOI.Contact.Normal;
-                        Result.tHit = TOINormal.tHit;
+                        Result = MakeTOINormal(TOINormal.tHit, ContactTOI.Contact.Normal);
                     }
                 }
                 else
                 {
-                    RigidBodyB->Transform.Translation += RigidBodyB->MoveDelta;                    
-                    ak_f32 Dist = AK_Magnitude(P-RigidBodyB->Transform.Translation);
                     
-                    RigidBodyA->Transform.Translation += MoveDirection*AK_Max(MoveDeltaDistance*ContactTOI.t-VERY_CLOSE_DISTANCE, 0.0f);
+                    MovementPushableUpdateChild(World, WorldIndex, EntityB, RigidBodyB->MoveDelta, EntityA->ID, IgnoreEntityID);
+                    
+                    ak_v3f MoveDeltaA = MoveDirection*GetDeltaClamped(MoveDeltaDistance, ContactTOI.t);
+                    MovementPushableUpdateChild(World, WorldIndex, EntityA, MoveDeltaA, 
+                                                IgnoreEntityID, InvalidWorldID());
+                    
+                    RigidBodyB->Transform.Translation += RigidBodyB->MoveDelta;                    
+                    ak_f32 Dist = AK_Magnitude(PrevP-RigidBodyB->Transform.Translation);
+                    
+                    RigidBodyA->Transform.Translation += MoveDeltaA;
                     RigidBodyA->MoveDelta = MoveDirection*Dist;                                
                     
-                    broad_phase_pair_list RemainderPairs = Simulation->GetPairs(RigidBodyA, FilterEntity, FilterData);                                    
+                    broad_phase_pair_list RemainderPairs = Simulation->GetPairs(RigidBodyA, FilterEntity, FilterDataRigidBodyA);                                    
                     continuous_contact RemainderContactTOI = Simulation->ComputeTOI(RigidBodyA, RemainderPairs);                                                    
                     if(RemainderContactTOI.HitEntity)
                     {
-                        Result.Intersected = true;
-                        Result.tHit = RemainderContactTOI.t;
-                        Result.Normal = RemainderContactTOI.Contact.Normal;
+                        Result = MakeTOINormal(RemainderContactTOI.t, RemainderContactTOI.Contact.Normal);
                     }                    
                 }
             }
@@ -291,23 +343,21 @@ toi_normal MovementPushableUpdateRecursive(world* World, ak_u32 WorldIndex, rigi
         }
         else
         {
-            Result.Intersected = true;
-            Result.Normal = ContactTOI.Contact.Normal;
-            Result.tHit = ContactTOI.t;
+            Result = MakeTOINormal(ContactTOI.t, ContactTOI.Contact.Normal);
         }
     }
     else
     {        
-        Result.Intersected = true;
-        Result.Normal = ContactTOI.Contact.Normal;
-        Result.tHit = ContactTOI.t;        
+        Result = MakeTOINormal(ContactTOI.t, ContactTOI.Contact.Normal);
     }
     
     return Result;    
 }
 
 void MovementPushableUpdate(world* World, ak_u32 WorldIndex, rigid_body* RigidBody, ak_f32 dt)
-{       
+{   
+    ak_high_res_clock StartClock = AK_WallClock();
+    
     RigidBody->MoveDelta = RigidBody->Velocity*dt;
     if(AK_Magnitude(RigidBody->MoveDelta) > VERY_CLOSE_DISTANCE)
     {        
@@ -328,12 +378,33 @@ void MovementPushableUpdate(world* World, ak_u32 WorldIndex, rigid_body* RigidBo
                 RigidBody->Transform.Translation += RigidBody->MoveDelta;
                 break;
             }
-             
+            
             toi_normal TOINormal = MovementPushableUpdateRecursive(World, WorldIndex, RigidBody, ContactTOI, InvalidWorldID());            
             if(TOINormal.Intersected)
             {
-                if(HandleSliding(RigidBody, TOINormal.tHit, -TOINormal.Normal))
+                ak_v3f Normal = -TOINormal.Normal;
+                ak_f32 tHit = TOINormal.tHit;
+                
+                RigidBody->Velocity -= AK_Dot(Normal, RigidBody->Velocity)*Normal;
+                
+                ak_f32 MoveDeltaDistance = AK_Magnitude(RigidBody->MoveDelta);
+                if(AK_EqualZeroEps(MoveDeltaDistance))
                     break;
+                
+                ak_v3f MoveDirection = RigidBody->MoveDelta/MoveDeltaDistance;                                                                                                        
+                ak_f32 HitDeltaDistance = GetDeltaClamped(MoveDeltaDistance, tHit);
+                
+                ak_v3f Destination = RigidBody->Transform.Translation + RigidBody->MoveDelta;
+                ak_v3f NewBasePoint = RigidBody->Transform.Translation + MoveDirection*HitDeltaDistance;                        
+                
+                ak_planef SlidingPlane = AK_Plane(NewBasePoint, Normal);
+                ak_v3f NewDestination = Destination - AK_SignDistance(SlidingPlane, Destination)*SlidingPlane.Normal;  
+                
+                RigidBody->MoveDelta = NewDestination - NewBasePoint;        
+                
+                RigidBody->Transform.Translation = NewBasePoint;
+                if(AK_Magnitude(RigidBody->MoveDelta) < VERY_CLOSE_DISTANCE)                                                    
+                    break;                                    
             }
             else
             {
@@ -344,6 +415,28 @@ void MovementPushableUpdate(world* World, ak_u32 WorldIndex, rigid_body* RigidBo
     }    
     
     RigidBody->MoveDelta = {};
+    
+    ak_high_res_clock EndClock = AK_WallClock();
+    ak_f64 Elapsed = AK_GetElapsedTime(EndClock, StartClock);
+}
+
+struct broad_phase_filter_movable_data : public filter_common
+{    
+    broad_phase_pair_list* NonMovables;
+};
+
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhaseFilterPushableCallback)
+{
+    broad_phase_filter_movable_data* Filter = (broad_phase_filter_movable_data*)UserData;
+    
+    entity* EntityB = GetEntity(&Filter->World->EntityStorage[Filter->WorldIndex], Pair->SimEntityB);
+    if(EntityB->Type == ENTITY_TYPE_MOVABLE)
+        return true;
+    else
+    {
+        Filter->NonMovables->AddPair(Pair->SimEntityA, Pair->SimEntityB, Pair->AVolumeID, Pair->BVolumeID);
+        return false;
+    }
 }
 
 void MovementGravityUpdate(world* World, ak_u32 WorldIndex, rigid_body* RigidBody, ak_v3f GravityVelocity, ak_f32 dt)
@@ -355,49 +448,76 @@ void MovementGravityUpdate(world* World, ak_u32 WorldIndex, rigid_body* RigidBod
     RigidBody->MoveDelta = GravityVelocity*dt;
     for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
     {
-        filter_common* FilterCommonData = GlobalArena->Push<filter_common>();
-        FilterCommonData->World = World;
-        FilterCommonData->WorldIndex = WorldIndex;                        
+        broad_phase_filter_movable_data* Filter = GlobalArena->Push<broad_phase_filter_movable_data>();
+        Filter->World = World;
+        Filter->WorldIndex = WorldIndex;                                        
         
-        broad_phase_pair_list Pairs = Simulation->GetPairs(RigidBody, FilterCommon, FilterCommonData);                                    
-        continuous_contact ContactTOI = Simulation->ComputeTOI(RigidBody, Pairs);                        
+        broad_phase_pair_list Pairs = Simulation->GetPairs(RigidBody, FilterCommon, Filter);                                    
+        broad_phase_pair_list NonMovablePairs = Simulation->AllocatePairList(Pairs.Count);
         
-        if(!ContactTOI.HitEntity)
+        Filter->NonMovables = &NonMovablePairs;
+        broad_phase_pair_list MovablePairs = Simulation->FilterPairs(Pairs, BroadPhaseFilterPushableCallback, Filter);
+        
+        continuous_contact MovableContactTOI = Simulation->ComputeTOI(RigidBody, MovablePairs);
+        continuous_contact NonMovableContactTOI = Simulation->ComputeTOI(RigidBody, NonMovablePairs);
+        
+        if(!MovableContactTOI.HitEntity && !NonMovableContactTOI.HitEntity)
         {
             RigidBody->Transform.Translation += RigidBody->MoveDelta;
             break;
-        }                                                
+        }     
         
-        entity* HitEntity = GetEntity(EntityStorage, ContactTOI.HitEntity);            
+        continuous_contact BestContact = NonMovableContactTOI;
+        if(BestContact.t >= MovableContactTOI.t)
+            BestContact = MovableContactTOI;
+        
+        entity* HitEntity = GetEntity(EntityStorage, BestContact.HitEntity);            
         if(HitEntity->Type == ENTITY_TYPE_MOVABLE)
         {
-            ak_f32 ZTest = AK_Abs(AK_Dot(AK_ZAxis(), ContactTOI.Contact.Normal));
+            ak_f32 ZTest = AK_Abs(AK_Dot(AK_ZAxis(), BestContact.Contact.Normal));
             if(ZTest > 0.999f && ZTest < 1.001f)
             {
-                movable* Movable = GetMovable(World, HitEntity);
+                movable* HitMovable = GetMovable(World, HitEntity);
                 entity* TestEntity = GetEntity(EntityStorage, RigidBody);                    
-                Movable->ChildID = TestEntity->ID;                       
                 
-                if(TestEntity->Type == ENTITY_TYPE_MOVABLE)
+                if(BestContact.Contact.Normal.z < 0)
                 {
-                    movable* TestMovable = GetMovable(World, TestEntity);
-                    TestMovable->ParentID = HitEntity->ID;
+                    HitMovable->ChildID = TestEntity->ID;                       
+                    if(TestEntity->Type == ENTITY_TYPE_MOVABLE)
+                    {
+                        movable* TestMovable = GetMovable(World, TestEntity);
+                        TestMovable->ParentID = HitEntity->ID;
+                        AK_Assert(ValidateMovable(TestMovable), "Corrupted movable");
+                    }
                 }
+                else
+                {
+                    HitMovable->ParentID = TestEntity->ID;                       
+                    if(TestEntity->Type == ENTITY_TYPE_MOVABLE)
+                    {
+                        movable* TestMovable = GetMovable(World, TestEntity);
+                        TestMovable->ChildID = HitEntity->ID;
+                        AK_Assert(ValidateMovable(TestMovable), "Corrupted movable");
+                    }
+                }
+                
+                AK_Assert(ValidateMovable(HitMovable), "Corrupted movable");
             }
         }
+        
         
         ak_f32 MoveDistance = AK_Magnitude(RigidBody->MoveDelta);
         ak_v3f Direction = RigidBody->MoveDelta/MoveDistance;
         
-        ak_f32 NearestDistance = MoveDistance*ContactTOI.t;                        
+        ak_f32 NearestDistance = MoveDistance*BestContact.t;                        
         ak_f32 ShortenDistance = AK_Max(NearestDistance-VERY_CLOSE_DISTANCE, 0.0f);
         
-        if(AK_Dot(-ContactTOI.Contact.Normal, AK_ZAxis()) < 0.7f)
+        if(AK_Dot(-BestContact.Contact.Normal, AK_ZAxis()) < 0.7f)
         {                            
             ak_v3f Destination = RigidBody->Transform.Translation + RigidBody->MoveDelta;
             ak_v3f NewBasePoint = RigidBody->Transform.Translation + Direction*ShortenDistance;                        
             
-            ak_planef SlidingPlane = AK_Plane(NewBasePoint, -ContactTOI.Contact.Normal);
+            ak_planef SlidingPlane = AK_Plane(NewBasePoint, -BestContact.Contact.Normal);
             ak_v3f NewDestination = Destination - AK_SignDistance(SlidingPlane, Destination)*SlidingPlane.Normal;       
             
             RigidBody->MoveDelta = NewDestination - NewBasePoint;
@@ -542,7 +662,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
         simulation* Simulation = &World->Simulations[WorldIndex];                
         Simulation->CollisionEvents.Count = 0;
     }
-      
+    
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {        
         simulation* Simulation = &World->Simulations[WorldIndex];                
@@ -741,9 +861,9 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
             }
         }
     }
-        
+    
     ApplyGravity = false;    
-        
+    
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = &World->Simulations[WorldIndex];
@@ -809,7 +929,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                     
                     ak_v3f OriginalDelta = RigidBody->MoveDelta;                                                          
                     RigidBody->MoveDelta = AK_V3(OriginalDelta.xy);             
-                                        
+                    
                     for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
                     {
                         ak_f32 DeltaLength = AK_Magnitude(RigidBody->MoveDelta);                        
@@ -862,7 +982,7 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
                                 
                                 RigidBody->Transform.Translation += Normal*0.0001f;
                                 RigidBody->Transform.Translation += tMin*RigidBody->MoveDelta;                
-                                                                
+                                
                                 if(ApplyGravity)
                                 {                
                                     RigidBody->MoveDelta = TargetPosition - RigidBody->Transform.Translation;                

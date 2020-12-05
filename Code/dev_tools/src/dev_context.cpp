@@ -574,9 +574,9 @@ ak_bool DevContext_ReadMaterial(ak_stream* Stream, assets* Assets, material* Mat
 
 #define LoadWorld_Error(message, ...) do \
 { \
-    AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
-    GlobalArena->EndTemp(&TempArena); \
-    return false; \
+AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
+GlobalArena->EndTemp(&TempArena); \
+return false; \
 } while(0)
 
 ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_string LoadedWorldFile)
@@ -1218,7 +1218,7 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         
         DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(0.0f, 0.0f, 0.0f), PlayerMaterial, &Game->Players[0]));        
         DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]));
-                
+        
 #if 1
         material FloorMaterial = { CreateDiffuse(AK_White3()) };
         
@@ -1236,9 +1236,18 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         material RigidBodyMaterial = { CreateDiffuse(AK_Red3()) };
         DEV_ADD(CreateSphereRigidBody(&Game->World, Game->Assets, 0, AK_V3(2.0f, 2.0f, 0.5f), 0.5f, 30.0f, 0.3f, RigidBodyMaterial));        
         
+        DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, 
+                                          AK_V3(0.0f, -4.0f, 1.1f), AK_V3(1.0f, 1.0f, 10.0f), RigidBodyMaterial));
+        
         material PushableBoxMaterial = { CreateDiffuse(AK_White3()*0.4f) };        
-        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));                        
-        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 1.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 2.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));
+        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 4.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));
+#if 1
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(2.6f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(3.9f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
+#endif
         
         CreatePointLights(Game->World.GraphicsStates, AK_V3(0.0f, 0.0f, 10.0f), 100.0f, AK_White3(), 5.0f, true);
         
@@ -1892,7 +1901,7 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
     
     if(Context->DevUI.PlayGameSettings.DrawGrid)
         DevContext_RenderGrid(Context, GraphicsState, &ViewSettings);
-        
+    
     PushDepth(Graphics, false);        
     if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
     {           
@@ -1967,7 +1976,7 @@ void DevContext_Render()
         
         DevContext_RenderPrimitives(Context, Game->CurrentWorldIndex, &ViewSettings);                                                
     }
-        
+    
     if(Context->DevUI.DrawOtherWorld)
     {
         PushRenderBuffer(Graphics, World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer);
