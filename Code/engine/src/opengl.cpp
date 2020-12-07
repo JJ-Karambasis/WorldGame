@@ -1,4 +1,4 @@
-#include "opengl.h"
+#include "../include/opengl.h"
 #include "opengl_shaders.cpp"
 
 #define SHADOW_MAP_TEXTURE_UNIT 3
@@ -788,7 +788,6 @@ AK_EXPORT INIT_GRAPHICS(InitGraphics)
     opengl_context* OpenGL = GraphicsStorage->Push<opengl_context>();    
     
     OpenGL->Storage = GraphicsStorage;
-    OpenGL->TempStorage = TempStorage;
     OpenGL->MeshPool = AK_CreatePool<opengl_mesh>();
     OpenGL->TexturePool = AK_CreatePool<opengl_texture>();
     

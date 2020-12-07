@@ -3,17 +3,19 @@
 
 #include <engine.h>
 
+#define GAME_NAME_DLL AK_Cat(GAME_NAME, ".dll")
 
-struct win32_platform
+struct win32_platform : public platform
 {
-    ak_arena* Arena;
+    ak_arena*  Arena;
+    ak_window* Window;
     
     ak_string ExecutablePath;
     ak_string EngineDLLPathName;
+    ak_string GameDLLPathName;
     
     HMODULE EngineLibrary;
-    engine_initialize* Engine_Initialize;
-    engine_tick* Engine_Tick;
+    HMODULE GameLibrary;
 };
 
 #endif
