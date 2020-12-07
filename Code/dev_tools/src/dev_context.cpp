@@ -2103,7 +2103,7 @@ void DevContext_Tick()
                 ak_v3f XAxis;
                 ak_v3f YAxis;
                 ak_v3f ZAxis;
-                if(GizmoState->UseLocalTransforms)
+                if(GizmoState->UseLocalTransforms && GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_TRANSLATE)
                 {
                     ak_m3f Orientation = AK_QuatToMatrix(Game->World.NewTransforms[Context->SelectedObject.EntityID.WorldIndex][AK_PoolIndex(Context->SelectedObject.EntityID.ID)].Orientation);
                     XAxis = Orientation.XAxis;
@@ -2115,6 +2115,13 @@ void DevContext_Tick()
                     XAxis = AK_XAxis();
                     YAxis = AK_YAxis();
                     ZAxis = AK_ZAxis();
+                    if(GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_SCALE && GizmoHit->HitMousePosition != NewPoint)
+                    {
+                        ak_quatf Orientation = Game->World.NewTransforms[Context->SelectedObject.EntityID.WorldIndex][AK_PoolIndex(Context->SelectedObject.EntityID.ID)].Orientation;
+                        ak_v3f RotatedOPoint = AK_Rotate(GizmoHit->HitMousePosition, AK_Conjugate(Orientation));
+                        ak_v3f RotatedNewPoint = AK_Rotate(NewPoint, AK_Conjugate(Orientation));
+                        MouseDiff = RotatedOPoint - RotatedNewPoint;
+                    }
                 }
                 if(GizmoState->TransformMode != DEV_GIZMO_MOVEMENT_TYPE_ROTATE)
                 {
