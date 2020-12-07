@@ -641,7 +641,7 @@ ak_f32 PointSegmentDistance(ak_v3f P, ak_v3f A, ak_v3f B)
     return Result;
 }
 
-ak_f32 PointTriangleDistance(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f C)
+ak_f64 PointTriangleDistance(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f C)
 {
     ak_v3f AB = B-A;
     ak_v3f AC = C-A;
@@ -676,17 +676,17 @@ ak_f32 PointTriangleDistance(ak_v3f P, ak_v3f A, ak_v3f B, ak_v3f C)
     else
     {
         Result = PointSegmentDistance(P, A, B);
-        ak_f32 Dist1 = PointSegmentDistance(P, A, C);
+        ak_f64 Dist1 = PointSegmentDistance(P, A, C);
         
         if(Result > Dist1)        
             Result = Dist1;        
         
-        ak_f32 Dist2 = PointSegmentDistance(P, B, C);
+        ak_f64 Dist2 = PointSegmentDistance(P, B, C);
         if(Result > Dist2)
             Result = Dist2;                
     }
     
-    return (ak_f32)Result;
+    return Result;
 }
 
 ak_i32 PerformTriangleTest(gjk_simplex* Simplex, ak_v3f* V)
@@ -695,7 +695,7 @@ ak_i32 PerformTriangleTest(gjk_simplex* Simplex, ak_v3f* V)
     ak_v3f B = Simplex->Vertex[1].W;
     ak_v3f C = Simplex->Vertex[0].W;
     
-    ak_f32 Distance = PointTriangleDistance(AK_V3<ak_f32>(), A, B, C);
+    ak_f64 Distance = PointTriangleDistance(AK_V3<ak_f32>(), A, B, C);
     if(AK_EqualZeroEps(Distance))
         return 1;
     
@@ -760,7 +760,7 @@ ak_i32 PerformTetrahedronTest(gjk_simplex* Simplex, ak_v3f* V)
     ak_v3f C = Simplex->Vertex[1].W;
     ak_v3f D = Simplex->Vertex[0].W;
     
-    ak_f32 Distance = PointTriangleDistance(A, B, C, D);
+    ak_f64 Distance = PointTriangleDistance(A, B, C, D);
     if(AK_EqualZeroEps(Distance))
         return -1;
     
@@ -865,7 +865,7 @@ ak_bool GJKIntersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
         
         ak_f32 Delta = AK_Dot(V, Support.W);
         
-        if(Delta < 0)        
+        if(Delta <= 0)        
             return false;        
         
         Simplex->Add(&Support);
@@ -878,6 +878,12 @@ ak_bool GJKIntersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
         
         if(AK_EqualZeroEps(AK_SqrMagnitude(V)))
             return false;
+        
+        if(Iterations > 100)
+        {
+            Dev_DebugLog("Warning, GJK couldn't terminate");
+            return false;
+        }
     }    
 }
 

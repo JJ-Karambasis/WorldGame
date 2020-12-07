@@ -606,9 +606,9 @@ ak_bool DevContext_ReadMaterial(ak_stream* Stream, assets* Assets, material* Mat
 
 #define LoadWorld_Error(message, ...) do \
 { \
-    AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
-    GlobalArena->EndTemp(&TempArena); \
-    return false; \
+AK_Free(LoadedWorldFile.Data); DeleteWorld(&World, DevContext->Graphics); AK_DeleteArray(&DevTransforms[0]); AK_DeleteArray(&DevTransforms[1]); AK_MessageBoxOk("Load World Error", AK_FormatString(GlobalArena, message, __VA_ARGS__)); \
+GlobalArena->EndTemp(&TempArena); \
+return false; \
 } while(0)
 
 ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWorld, ak_string LoadedWorldFile)
@@ -705,18 +705,6 @@ ak_bool DevContext_LoadWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                     
                     EntityID = CreateSphereRigidBody(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, 
                                                      Radius, Mass, Restitution, Material);                    
-                } break;
-                
-                case ENTITY_TYPE_PUSHABLE:
-                {
-                    EntityLinkIndexes[WorldIndex][EntityIndex] = *Stream.Read<ak_u32>();
-                    ak_sqtf Transform = *Stream.Read<ak_sqtf>();
-                    
-                    material Material = {};
-                    if(!DevContext_ReadMaterial(&Stream, DevContext->Game->Assets, &Material)) LoadWorld_Error(MaterialNotLoadedError);                    
-                    
-                    ak_f32 Mass = *Stream.Read<ak_f32>();
-                    EntityID = CreatePushableBox(&World, Game->Assets, WorldIndex, Transform.Translation, Transform.Scale, Transform.Orientation, Mass, Material, true);                    
                 } break;
                 
                 AK_INVALID_DEFAULT_CASE;
@@ -935,22 +923,6 @@ ak_bool DevContext_SaveWorld(dev_context* DevContext, dev_loaded_world* LoadedWo
                         AK_WriteFile(FileHandle, &Volume->Sphere.Radius, sizeof(Volume->Sphere.Radius));                        
                     } break;
                     
-                    case ENTITY_TYPE_PUSHABLE:
-                    {
-                        ak_u32 LinkIndex = (ak_u32)-1;
-                        if(Entity->LinkID.IsValid())
-                            LinkIndex = *EntityMap[!WorldIndex].Find(Entity->LinkID.ID);
-                        
-                        AK_WriteFile(FileHandle, &LinkIndex, sizeof(LinkIndex));
-                        ak_sqtf Transform = World->NewTransforms[ID.WorldIndex][AK_PoolIndex(ID.ID)];
-                        AK_WriteFile(FileHandle, &Transform, sizeof(Transform));
-                        DevContext_WriteMaterial(DevContext->Game->Assets, FileHandle, &GraphicsEntity->Material);
-                        
-                        rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
-                        ak_f32 Mass = 1.0f/RigidBody->InvMass;
-                        AK_WriteFile(FileHandle, &Mass, sizeof(Mass));
-                    } break;
-                    
                     AK_INVALID_DEFAULT_CASE;
                 }
                 
@@ -1018,17 +990,17 @@ void DevContext_UpdateEntityIdsInStack(ak_array<dev_object_edit> Stack, world_id
         {
             EditObject->Entity[0].ID = NewEntityId;
         }
-
+        
         if(AreEqualIDs(EditObject->Entity[1].ID, OldEntityID))
         {
             EditObject->Entity[1].ID = NewEntityId;
         }
-
+        
         if(AreEqualIDs(EditObject->Entity[0].LinkID, OldEntityID))
         {
             EditObject->Entity[0].LinkID = NewEntityId;
         }
-
+        
         if(AreEqualIDs(EditObject->Entity[1].LinkID, OldEntityID))
         {
             EditObject->Entity[1].LinkID = NewEntityId;
@@ -1044,17 +1016,17 @@ void DevContext_UpdateJumpEntityIdsInStack(ak_array<dev_object_edit> Stack, worl
         {
             EditObject->JumpIds[0].A = NewEntityId;
         }
-
+        
         if(AreEqualIDs(EditObject->JumpIds[1].A, OldEntityID))
         {
             EditObject->JumpIds[1].A = NewEntityId;
         }
-
+        
         if(AreEqualIDs(EditObject->JumpIds[0].B, OldEntityID))
         {
             EditObject->JumpIds[0].B = NewEntityId;
         }
-
+        
         if(AreEqualIDs(EditObject->JumpIds[1].B, OldEntityID))
         {
             EditObject->JumpIds[1].B = NewEntityId;
@@ -1070,7 +1042,7 @@ void DevContext_UpdateLightIdsInStack(ak_array<dev_object_edit> Stack, world_id 
         {
             EditObject->LightIds[0] = NewEntityId;
         }
-
+        
         if(AreEqualIDs(EditObject->LightIds[1], OldEntityID))
         {
             EditObject->LightIds[1] = NewEntityId;
@@ -1082,7 +1054,7 @@ void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;
-
+    
     world_id EntityID = LastEdit.Entity[0].ID;
     world_id CreatedEntity = {};
     
@@ -1123,7 +1095,7 @@ void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
         {
             DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&GraphicsEntity->Material);
         }
-        if(Entity->Type == ENTITY_TYPE_PUSHABLE)
+        if(Entity->Type == ENTITY_TYPE_MOVABLE)
         {
             rigid_body* RigidBody = SimEntity->ToRigidBody();
             Redo.Mass = 1.0f / RigidBody->InvMass;
@@ -1161,12 +1133,14 @@ void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
                                                       LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
                                                       1.0f, LastEdit.Mass, LastEdit.Restitution, LastEdit.Material);
             } break;
-            case ENTITY_TYPE_PUSHABLE:
+            
+            case ENTITY_TYPE_MOVABLE:
             {
-                CreatedEntity = CreatePushableBox(World, Game->Assets, EntityID.WorldIndex, 
-                                                  LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
-                                                  LastEdit.Mass, LastEdit.Material, LastEdit.Interactable);
+                CreatedEntity = CreateMovableEntity(World, Game->Assets, EntityID.WorldIndex, 
+                                                    LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                    LastEdit.Mass, LastEdit.Material);
             } break;
+            
             AK_INVALID_DEFAULT_CASE;
         }
         if(LinkedEntity.IsValid())
@@ -1203,12 +1177,7 @@ void DevContext_UndoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
                 rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                 Redo.Mass = 1.0f / RigidBody->InvMass;
                 Redo.Restitution = RigidBody->Restitution;
-            } break;
-            case ENTITY_TYPE_PUSHABLE:
-            {
-                rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
-                Redo.Mass = 1.0f / RigidBody->InvMass;
-            } break;
+            } break;            
         }
         FreeEntity(Game, EntityID);
         if(LastEdit.Entity[1].ID.IsValid())
@@ -1232,7 +1201,7 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;
-
+    
     dev_object_edit Redo;
     dual_world_id AIDs;
     AIDs.A = InvalidWorldID();
@@ -1241,9 +1210,9 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
     if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
     {
         if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].A) || 
-            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
-            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
-            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
+           AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
+           AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
+           AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
         {
             DevContext->SelectedObject = {};
         }
@@ -1268,7 +1237,7 @@ void DevContext_UndoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
         JumpingQuad->Color = LastEdit.JumpProp->Color;
         JumpingQuad->Dimensions = LastEdit.JumpProp->Dimensions;
     }
-
+    
     DevContext->RedoStack.Add(Redo);
     if(AIDs.A.IsValid())
     {
@@ -1283,14 +1252,14 @@ void DevContext_UndoLightEdit(dev_context* DevContext, dev_object_edit LastEdit)
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;
-
+    
     dev_object_edit Redo;
     world_id AID = InvalidWorldID();
     Redo = LastEdit;
     if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_CREATE)
     {
         if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.LightIds[0]) || 
-            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.LightIds[1]))
+           AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.LightIds[1]))
         {
             DevContext->SelectedObject = {};
         }
@@ -1319,7 +1288,7 @@ void DevContext_UndoLightEdit(dev_context* DevContext, dev_object_edit LastEdit)
         LightProp->Position = LastEdit.LightProp.Position;
         LightProp->Radius = LastEdit.LightProp.Radius;
     }
-
+    
     DevContext->RedoStack.Add(Redo);
     if(AID.IsValid())
     {
@@ -1343,17 +1312,17 @@ void DevContext_UndoLastEdit(dev_context* DevContext)
         {
             DevContext_UndoEntityEdit(DevContext, *LastEdit);
         } break;
-
+        
         case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
         {
             DevContext_UndoJumpEdit(DevContext, *LastEdit);
         } break;
-
+        
         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
         {
             DevContext_UndoLightEdit(DevContext, *LastEdit);
         } break;
-
+        
         AK_INVALID_DEFAULT_CASE;
     }
 }
@@ -1362,7 +1331,7 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;
-
+    
     world_id EntityID = LastEdit.Entity[0].ID;
     world_id CreatedEntities[2];
     
@@ -1396,14 +1365,14 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
         graphics_state* GraphicsState = &World->GraphicsStates[LastEdit.Entity[0].ID.WorldIndex];
         graphics_entity* GraphicsEntity = GraphicsState->GraphicsEntityStorage.Get(Entity->GraphicsEntityID);
         GraphicsEntity->Transform = AK_TransformM4(*Transform);
-
+        
         Undo.Material = GraphicsEntity->Material;
         GraphicsEntity->Material = LastEdit.Material;
         if(AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.Entity[0].ID))
         {
             DevContext->SelectedObject.MaterialContext = DevUI_ContextFromMaterial(&GraphicsEntity->Material);
         }
-        if(Entity->Type == ENTITY_TYPE_PUSHABLE)
+        if(Entity->Type == ENTITY_TYPE_MOVABLE)
         {
             rigid_body* RigidBody = SimEntity->ToRigidBody();
             Undo.Mass = 1.0f / RigidBody->InvMass;
@@ -1444,27 +1413,29 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
                 CreatedEntities[i] = InvalidWorldID();
                 continue;
             }
+            
             world_id NewEntityID = LastEdit.Entity[i].ID;
             switch(LastEdit.Entity[i].Type)
             {
                 case ENTITY_TYPE_STATIC:
                 {
                     CreatedEntities[i] = CreateStaticEntity(World, Game->Assets, NewEntityID.WorldIndex, 
-                                                    LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
-                                                    LastEdit.MeshID, LastEdit.Material);
+                                                            LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                            LastEdit.MeshID, LastEdit.Material);
                 } break;
                 case ENTITY_TYPE_RIGID_BODY:
                 {
                     CreatedEntities[i] = CreateSphereRigidBody(World, Game->Assets, NewEntityID.WorldIndex, 
-                                                        LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
-                                                        1.0f, LastEdit.Mass, LastEdit.Restitution, LastEdit.Material);
+                                                               LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                               1.0f, LastEdit.Mass, LastEdit.Restitution, LastEdit.Material);
                 } break;
-                case ENTITY_TYPE_PUSHABLE:
+                case ENTITY_TYPE_MOVABLE:
                 {
-                    CreatedEntities[i] = CreatePushableBox(World, Game->Assets, NewEntityID.WorldIndex, 
-                                                    LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
-                                                    LastEdit.Mass, LastEdit.Material, LastEdit.Interactable);
+                    CreatedEntities[i] = CreateMovableEntity(World, Game->Assets, NewEntityID.WorldIndex, 
+                                                             LastEdit.Transform.Translation, LastEdit.Transform.Scale, AK_EulerToQuat(LastEdit.Transform.Euler), 
+                                                             LastEdit.Mass, LastEdit.Material);
                 } break;
+                
                 AK_INVALID_DEFAULT_CASE;
             }
         }
@@ -1476,7 +1447,6 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
                 if(LinkedEntity.IsValid())
                 {
                     entity* EntityA = Game->World.EntityStorage[CreatedEntities[i].WorldIndex].Get(CreatedEntities[i].ID);
-                    
                     EntityA->LinkID = CreatedEntities[(i+1)%2];
                 }
                 DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, CreatedEntities[i]);
@@ -1484,6 +1454,7 @@ void DevContext_RedoEntityEdit(dev_context* DevContext, dev_object_edit LastEdit
                 DevContext_UpdateEntityIdsInStack(DevContext->RedoStack, LastEdit.Entity[i].ID, CreatedEntities[i]);
             }
         }
+        
     }
     
     DevContext->UndoStack.Add(Undo);
@@ -1501,7 +1472,7 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;
-
+    
     dev_object_edit Undo;
     Undo = LastEdit;
     dual_world_id AIDs;
@@ -1524,9 +1495,9 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
     else if(LastEdit.ObjectEditType == DEV_OBJECT_EDIT_TYPE_DELETE)
     {
         if( AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].A) || 
-            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
-            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
-            AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
+           AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[0].B) ||
+           AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].A) ||
+           AreEqualIDs(DevContext->SelectedObject.EntityID, LastEdit.JumpIds[1].B))
         {
             DevContext->SelectedObject = {};
         }
@@ -1544,7 +1515,7 @@ void DevContext_RedoJumpEdit(dev_context* DevContext, dev_object_edit LastEdit)
         JumpingQuad->Color = LastEdit.JumpProp->Color;
         JumpingQuad->Dimensions = LastEdit.JumpProp->Dimensions;
     }
-
+    
     DevContext->UndoStack.Add(Undo);
     if(AIDs.A.IsValid())
     {
@@ -1566,7 +1537,7 @@ void DevContext_RedoLightEdit(dev_context* DevContext, dev_object_edit LastEdit)
 {
     game* Game = DevContext->Game;
     world* World = &Game->World;
-
+    
     dev_object_edit Undo;
     world_id AID = InvalidWorldID();
     world_id BID = InvalidWorldID();
@@ -1603,7 +1574,7 @@ void DevContext_RedoLightEdit(dev_context* DevContext, dev_object_edit LastEdit)
         LightProp->Position = LastEdit.LightProp.Position;
         LightProp->Radius = LastEdit.LightProp.Radius;
     }
-
+    
     DevContext->UndoStack.Add(Undo);
     if(AID.IsValid())
     {
@@ -1632,17 +1603,17 @@ void DevContext_RedoLastEdit(dev_context* DevContext)
         {
             DevContext_RedoEntityEdit(DevContext, *LastEdit);
         } break;
-
+        
         case DEV_SELECTED_OBJECT_TYPE_JUMPING_QUAD:
         {
             DevContext_RedoJumpEdit(DevContext, *LastEdit);
         } break;
-
+        
         case DEV_SELECTED_OBJECT_TYPE_POINT_LIGHT:
         {
             DevContext_RedoLightEdit(DevContext, *LastEdit);
         } break;
-
+        
         AK_INVALID_DEFAULT_CASE;
     }
 }
@@ -1700,9 +1671,8 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
 #define DEV_ADD(function) DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, function)
 #define DEV_ADD_2(function) do { dual_world_id Dual = function; DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, Dual.A); DevContext_AddToDevTransform(DevContext->InitialTransforms, &DevContext->Game->World, Dual.B); } while(0)
         
-        DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[0]));        
+        DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 0, AK_V3<ak_f32>(0.0f, 0.0f, 0.0f), PlayerMaterial, &Game->Players[0]));        
         DEV_ADD(CreatePlayerEntity(&Game->World, Game->Assets, 1, AK_V3<ak_f32>(), PlayerMaterial, &Game->Players[1]));
-        
         
 #if 1
         material FloorMaterial = { CreateDiffuse(AK_White3()) };
@@ -1715,11 +1685,24 @@ void DevContext_Initialize(game* Game, graphics* Graphics, ak_string ProgramFile
         DEV_ADD(CreateButton(&Game->World, Game->Assets, 0, AK_V3( 2.5f, 5.0f, 0.0f), ButtonMaterial, true));
         
         DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -3.5f, 0.0f), AK_V3(1.0f, 1.0f, 10.0f), FloorMaterial));        
-        DEV_ADD_2(CreateRampInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -6.0f, 0.0f), AK_V3(1.0f, 2.0f, 1.0f), AK_IdentityQuat<ak_f32>(), FloorMaterial));
+        DEV_ADD_2(CreateRampInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, -6.0f, 0.0f), AK_V3(1.0f, 2.0f, 2.0f), AK_IdentityQuat<ak_f32>(), FloorMaterial));
         DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, AK_V3(-4.0f, 0.05f, 0.0f), AK_V3(1.0f, 4.0f, 10.0f), FloorMaterial));
         
-        material PushableBoxMaterial = { CreateDiffuse(AK_White3()*0.4f) };
-        DEV_ADD_2(CreateDualPushableBox(&Game->World, Game->Assets, AK_V3(0.0f, -2.0f, 0.0f), 1.0f, 40.0f, PushableBoxMaterial, true, false));
+        material RigidBodyMaterial = { CreateDiffuse(AK_Red3()) };
+        DEV_ADD(CreateSphereRigidBody(&Game->World, Game->Assets, 0, AK_V3(2.0f, 2.0f, 0.5f), 0.5f, 30.0f, 0.3f, RigidBodyMaterial));        
+        
+        DEV_ADD_2(CreateFloorInBothWorlds(&Game->World, Game->Assets, 
+                                          AK_V3(0.0f, -4.0f, 1.1f), AK_V3(1.0f, 1.0f, 10.0f), RigidBodyMaterial));
+        
+        material PushableBoxMaterial = { CreateDiffuse(AK_White3()*0.4f) };        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 2.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));
+        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(0.0f, -2.0f, 4.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));
+#if 1
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(2.6f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
+        DEV_ADD(CreateMovableEntity(&Game->World, Game->Assets, 0, AK_V3(3.9f, -2.0f, 0.0f), AK_V3(1.0f, 1.0f, 1.0f), 45.0f, PushableBoxMaterial));        
+#endif
         
         CreatePointLights(Game->World.GraphicsStates, AK_V3(0.0f, 0.0f, 10.0f), 100.0f, AK_White3(), 5.0f, true);
         
@@ -1892,7 +1875,7 @@ void DevContext_Tick()
                                     Edit.Mass = 1.0f / RigidBody->InvMass;
                                     Edit.Restitution = RigidBody->Restitution;
                                 } break;
-                                case ENTITY_TYPE_PUSHABLE:
+                                case ENTITY_TYPE_MOVABLE:
                                 {
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     Edit.Mass = 1.0f / RigidBody->InvMass;
@@ -1967,7 +1950,7 @@ void DevContext_Tick()
                                 Context->TempUndo.Mass = 1.0f / RigidBody->InvMass;
                                 Context->TempUndo.Restitution = RigidBody->Restitution;
                             } break;
-                            case ENTITY_TYPE_PUSHABLE:
+                            case ENTITY_TYPE_MOVABLE:
                             {
                                 rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                 Context->TempUndo.Mass = 1.0f / RigidBody->InvMass;
@@ -2020,7 +2003,7 @@ void DevContext_Tick()
                                 case ENTITY_TYPE_STATIC:
                                 {
                                     if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
-                                        || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material))
+                                       || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material))
                                     {
                                         Context->UndoStack.Add(TempEdit);
                                     }
@@ -2029,19 +2012,19 @@ void DevContext_Tick()
                                 {
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
-                                        || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material)
-                                        || TempEdit.Mass != 1.0f / RigidBody->InvMass || TempEdit.Restitution != RigidBody->Restitution)
+                                       || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material)
+                                       || TempEdit.Mass != 1.0f / RigidBody->InvMass || TempEdit.Restitution != RigidBody->Restitution)
                                     {
                                         Context->UndoStack.Add(TempEdit);
                                     }
                                 } break;
-                                case ENTITY_TYPE_PUSHABLE:
+                                case ENTITY_TYPE_MOVABLE:
                                 {
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     Context->TempUndo.Mass = 1.0f / RigidBody->InvMass;
                                     if(TempEdit.Transform.Euler != DevTransform.Euler || TempEdit.Transform.Scale != DevTransform.Scale || TempEdit.Transform.Translation != DevTransform.Translation 
-                                        || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material)
-                                        || TempEdit.Mass != 1.0f / RigidBody->InvMass)
+                                       || !AreMaterialsEqual(TempEdit.Material, GraphicsEntity->Material)
+                                       || TempEdit.Mass != 1.0f / RigidBody->InvMass)
                                     {
                                         Context->UndoStack.Add(TempEdit);
                                     }
@@ -2053,7 +2036,7 @@ void DevContext_Tick()
                     {
                         jumping_quad* JumpingQuad = World->JumpingQuadStorage[SelectedObject->EntityID.WorldIndex].Get(SelectedObject->EntityID.ID);
                         if(AreEqualIDs(SelectedObject->EntityID, TempEdit.JumpIds[0].A) && 
-                            (TempEdit.JumpProp->CenterP != JumpingQuad->CenterP || TempEdit.JumpProp->Color != JumpingQuad->Color || TempEdit.JumpProp->Dimensions != JumpingQuad->Dimensions))
+                           (TempEdit.JumpProp->CenterP != JumpingQuad->CenterP || TempEdit.JumpProp->Color != JumpingQuad->Color || TempEdit.JumpProp->Dimensions != JumpingQuad->Dimensions))
                         {
                             Context->UndoStack.Add(TempEdit);
                         } 
@@ -2064,7 +2047,7 @@ void DevContext_Tick()
                         graphics_state* GraphicsState = &World->GraphicsStates[SelectedObject->PointLightID.WorldIndex];
                         point_light* LightProp = GraphicsState->PointLightStorage.Get(SelectedObject->PointLightID.ID);
                         if(AreEqualIDs(SelectedObject->EntityID, TempEdit.LightIds[0]) &&
-                            (TempEdit.LightProp.Color != LightProp->Color || TempEdit.LightProp.Intensity != LightProp->Intensity || TempEdit.LightProp.On != LightProp->On || TempEdit.LightProp.Position != LightProp->Position || TempEdit.LightProp.Radius != LightProp->Radius))
+                           (TempEdit.LightProp.Color != LightProp->Color || TempEdit.LightProp.Intensity != LightProp->Intensity || TempEdit.LightProp.On != LightProp->On || TempEdit.LightProp.Position != LightProp->Position || TempEdit.LightProp.Radius != LightProp->Radius))
                         {
                             Context->UndoStack.Add(TempEdit);
                         }
@@ -2330,14 +2313,7 @@ void DevContext_Tick()
                                     rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
                                     Undo.Mass = 1.0f / RigidBody->InvMass;
                                     Undo.Restitution = RigidBody->Restitution;
-                                } break;
-                                
-                                case ENTITY_TYPE_PUSHABLE:
-                                {
-                                    rigid_body* RigidBody = GetSimEntity(Game, Entity->ID)->ToRigidBody();
-                                    Undo.Mass = 1.0f / RigidBody->InvMass;
-                                    Undo.Interactable = GetPushingObject(&Game->World, Entity)->Interactable;
-                                } break;
+                                } break;                                
                             }
                             Context->UndoStack.Add(Undo);
                             Context->RedoStack.Clear();
@@ -2613,7 +2589,7 @@ void DevContext_RenderWorld(dev_context* Context, ak_u32 WorldIndex)
     
     if(Context->DevUI.PlayGameSettings.DrawGrid)
         DevContext_RenderGrid(Context, GraphicsState, &ViewSettings);
-        
+    
     PushDepth(Graphics, false);        
     if(Context->SelectedObject.Type != DEV_SELECTED_OBJECT_TYPE_NONE)
     {           
@@ -2688,7 +2664,7 @@ void DevContext_Render()
         
         DevContext_RenderPrimitives(Context, Game->CurrentWorldIndex, &ViewSettings);                                                
     }
-        
+    
     if(Context->DevUI.DrawOtherWorld)
     {
         PushRenderBuffer(Graphics, World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer);
@@ -2705,13 +2681,4 @@ void DevContext_Render()
     //PushCopyToOutput(Graphics, Context->DevRenderBuffer);
     PushScissor(Graphics, 0, 0, CurrentGraphicsState->RenderBuffer->Resolution.w, CurrentGraphicsState->RenderBuffer->Resolution.h);
     PushCopyToOutput(Graphics, Context->DevUI.UIRenderBuffer);    
-}
-
-void DevContext_DebugLog(const ak_char* Format, ...)
-{
-    dev_context* Context = Dev_GetDeveloperContext();
-    va_list Args;
-    va_start(Args, Format);    
-    Context->DevUI.Logs.Add(AK_FormatString(Context->DevUI.LogArena, Format, Args));
-    va_end(Args);
 }

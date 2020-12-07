@@ -389,7 +389,7 @@ ak_v3f GenerateSphericalFibonacciDir(ak_f32 Index, ak_f32 NumSamples)
 ak_v3f GenerateSphericalFibonacciDir(ak_f32 Index, ak_f32 NumSamples, ak_m4f RotationTransform)
 {
     ak_v4f Dir = ak_v4f(GenerateSphericalFibonacciDir(Index, NumSamples), 0.0f);
-    return normalize(mul(RotationTransform, Dir).xyz);
+    return normalize(mul(Dir, RotationTransform).xyz);
 }
 
 ak_f32 GetBlendWeight(irradiance_field IrradianceField, ak_v3f WorldPosition)
@@ -480,4 +480,14 @@ ak_color3f GetIrradiance(irradiance_payload Payload, ak_v3f SurfacePosition, ak_
     Irradiance *= 2.0f*AK_PI;    
     
     return Irradiance;    
+}
+
+ak_color3f ToneMap(ak_color3f x)
+{
+    ak_f32 a = 2.51f;
+    ak_f32 b = 0.03f;
+    ak_f32 c = 2.43f;
+    ak_f32 d = 0.59f;
+    ak_f32 e = 0.14f;
+    return saturate((x*(a*x + b)) / (x*(c*x + d) + e));
 }

@@ -8,9 +8,9 @@ enum entity_type
 {
     ENTITY_TYPE_PLAYER,
     ENTITY_TYPE_STATIC,    
-    ENTITY_TYPE_RIGID_BODY,    
-    ENTITY_TYPE_PUSHABLE,  
-    ENTITY_TYPE_BUTTON,
+    ENTITY_TYPE_RIGID_BODY,        
+    ENTITY_TYPE_BUTTON,    
+    ENTITY_TYPE_MOVABLE, 
     ENTITY_TYPE_COUNT
 };
 
@@ -45,23 +45,16 @@ struct entity
     collision_event_function* OnCollision;
 };
 
-enum player_state
-{
-    PLAYER_STATE_NONE,
-    PLAYER_STATE_JUMPING,
-    PLAYER_STATE_PUSHING
-};
-
-struct pushing_object
-{    
-    world_id PlayerID;
-    ak_v2f Direction;
-    ak_bool Interactable;
-};
-
 struct player
-{    
-    player_state State;        
+{            
+    ak_v3f GravityVelocity;
+};
+
+struct movable
+{
+    world_id ChildID;
+    world_id ParentID;
+    ak_v3f GravityVelocity;
 };
 
 struct jumping_quad
@@ -81,14 +74,14 @@ struct button_state
 };
 
 typedef ak_pool<entity> entity_storage;
-typedef ak_pool<pushing_object> pushing_object_storage;
 typedef ak_pool<jumping_quad> jumping_quad_storage;
 typedef ak_pool<button_state> button_state_storage;
+typedef ak_pool<movable> movable_storage;
 
 struct world
-{
-    button_state_storage ButtonStateStorage;
-    pushing_object_storage PushingObjectStorage;  
+{    
+    movable_storage MovableStorage;
+    button_state_storage ButtonStateStorage;    
     jumping_quad_storage JumpingQuadStorage[2];
     entity_storage EntityStorage[2];    
     ak_array<ak_sqtf> OldTransforms[2];
@@ -109,8 +102,8 @@ inline ak_bool AreEqualIDs(world_id A, world_id B) { return (A.ID == B.ID) && (A
 COLLISION_EVENT(OnPlayerCollision);
 COLLISION_EVENT(OnCollisionStub) { }
 
-global ak_f32 Global_PlayerAcceleration = 20.0f;
+global ak_f32 Global_PlayerAcceleration = 23.0f;
 global ak_f32 Global_PlayerDamping = 5.0f;
-global ak_f32 Global_Gravity = 10.0f;
+global ak_f32 Global_Gravity = 20.0f;
 
 #endif

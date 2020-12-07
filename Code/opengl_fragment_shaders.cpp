@@ -265,7 +265,11 @@ f32 SampleOmniShadowMap(i32 ShadowMapIndex, v3f PixelWorldPosition, v3f LightWor
     ClosestDepth *= FarPlaneDistance;
     f32 Bias = max(0.05f*(1.0f-dot(N, L)), 0.05f);
     f32 Result = step(CurrentDepth-Bias, ClosestDepth);
+#if 0 
     return Result;
+#else
+    return 1.0f;
+#endif
 }
 
 //NOTE(EVERYONE): Got this from here http://www.thetenthplanet.de/archives/1180

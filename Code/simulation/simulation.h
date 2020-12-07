@@ -16,6 +16,7 @@
 #define MAX_MANIFOLD_COUNT 8
 #define MAX_CONSTRAINT_COUNT 64
 #define MAX_COLLISION_EVENT_COUNT 64
+#define SIMULATION_PAIR_CHECK_COUNT 1024        
 
 struct contact_constraint
 {
@@ -92,9 +93,6 @@ typedef ak_pool<manifold> manifold_storage;
 typedef ak_pool<contact_constraint> contact_storage;
 typedef ak_pool<constraint> constraint_storage;
 
-#define BROAD_PHASE_PAIR_FILTER_FUNC(name) ak_bool name(broad_phase_pair* Pair, void* UserData)
-typedef BROAD_PHASE_PAIR_FILTER_FUNC(broad_phase_pair_filter_func);
-
 struct simulation
 {
     collision_volume_storage CollisionVolumeStorage;
@@ -113,11 +111,10 @@ struct simulation
     sim_entity*   GetSimEntity(sim_entity_id ID);
     template <typename type> void AddCollisionVolume(sim_entity* SimEntity, type* Collider);        
     
-    broad_phase_pair_list AllocatePairList(ak_u32 Capacity);                    
-    broad_phase_pair_list GetAllPairs();
-    broad_phase_pair_list GetAllPairs(rigid_body* RigidBody);
-    broad_phase_pair_list GetSimEntityOnlyPairs(rigid_body* RigidBody);
+    broad_phase_pair_list AllocatePairList(ak_u32 Capacity);                            
     broad_phase_pair_list FilterPairs(broad_phase_pair_list Pairs, broad_phase_pair_filter_func* FilterFunc, void* UserData = NULL);
+    broad_phase_pair_list GetPairs(rigid_body* RigidBody, broad_phase_pair_filter_func* FilterFunc = NULL, void* UserData = NULL);
+    broad_phase_pair_list GetAllPairs(broad_phase_pair_filter_func* FilterFunc = NULL, void* UserData = NULL);
     
     void Integrate(ak_f32 dt);
     void AddContactConstraints(rigid_body* RigidBodyA, rigid_body* RigidBodyB, contact_list Contacts);
@@ -128,6 +125,7 @@ struct simulation
     ak_bool  ComputeIntersection(broad_phase_pair* Pair);
     void SolveConstraints(ak_u32 MaxIterations, ak_f32 dt);        
     continuous_contact ComputeTOI(rigid_body* RigidBody, broad_phase_pair_list Pairs);
+    continuous_contact ComputeTOI(rigid_body* RigidBodyA, sim_entity* SimEntityB);
 };
 
 #if DEVELOPER_BUILD

@@ -185,9 +185,9 @@ const ak_char* DevUI_GetEntityType(entity_type Type)
     {
         ENUM_TYPE(ENTITY_TYPE_STATIC);
         ENUM_TYPE(ENTITY_TYPE_PLAYER);
-        ENUM_TYPE(ENTITY_TYPE_RIGID_BODY);
-        ENUM_TYPE(ENTITY_TYPE_PUSHABLE);
+        ENUM_TYPE(ENTITY_TYPE_RIGID_BODY);        
         ENUM_TYPE(ENTITY_TYPE_BUTTON);
+        ENUM_TYPE(ENTITY_TYPE_MOVABLE);
         
         AK_INVALID_DEFAULT_CASE;
     }   
@@ -591,8 +591,7 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
             }
         } break;
         
-        
-        case ENTITY_TYPE_PUSHABLE:
+        case ENTITY_TYPE_MOVABLE:
         {
             Separator();
             DevUI_RadiusTool(AK_HashFunction("Radius Spawner"), TRANSFORM_ITEM_WIDTH, &Spawner->Radius);
@@ -609,10 +608,11 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
             {
                 material Material = DevUI_MaterialFromContext(&Spawner->MaterialContext);
                 
+                ak_v3f Scale = AK_V3(Spawner->Radius*2, Spawner->Radius*2, Spawner->Radius*2);
                 if(Spawner->WorldIndex == 2)
                 {
-                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
-                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
+                    world_id A = CreateMovableEntity(&Game->World, Game->Assets, 0, Spawner->Translation, Scale, Spawner->Mass, Material);
+                    world_id B = CreateMovableEntity(&Game->World, Game->Assets, 1, Spawner->Translation, Scale, Spawner->Mass, Material);
                     
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, A);
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, B);
@@ -620,13 +620,13 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, A, &Material);                                            
                     else
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, B, &Material);
-
+                    
                     dev_object_edit Undo;
                     Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
                     Undo.Entity[0].ID = A ;
-                    Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[0].Type = ENTITY_TYPE_MOVABLE;
                     Undo.Entity[1].ID = B;
-                    Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[1].Type = ENTITY_TYPE_MOVABLE;
                     Undo.Entity[0].LinkID = InvalidWorldID();
                     Undo.Entity[1].LinkID = InvalidWorldID();
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
@@ -635,8 +635,8 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 }
                 else if(Spawner->WorldIndex == 3)
                 {
-                    world_id A = CreatePushableBox(&Game->World, Game->Assets, 0, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
-                    world_id B = CreatePushableBox(&Game->World, Game->Assets, 1, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);
+                    world_id A = CreateMovableEntity(&Game->World, Game->Assets, 0, Spawner->Translation, Scale, Spawner->Mass, Material);
+                    world_id B = CreateMovableEntity(&Game->World, Game->Assets, 1, Spawner->Translation, Scale, Spawner->Mass, Material);
                     
                     entity* EntityA = Game->World.EntityStorage[A.WorldIndex].Get(A.ID);
                     entity* EntityB = Game->World.EntityStorage[B.WorldIndex].Get(B.ID);
@@ -650,13 +650,13 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, A, &Material);                                            
                     else
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, B, &Material);
-
+                    
                     dev_object_edit Undo;
                     Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
                     Undo.Entity[0].ID = A ;
-                    Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[0].Type = ENTITY_TYPE_MOVABLE;
                     Undo.Entity[1].ID = B;
-                    Undo.Entity[1].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[1].Type = ENTITY_TYPE_MOVABLE;
                     Undo.Entity[0].LinkID = B;
                     Undo.Entity[1].LinkID = A;
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
@@ -665,14 +665,14 @@ void DevUI_EntitySpawner(dev_context* DevContext, entity_spawner* Spawner, ak_u3
                 }
                 else
                 {       
-                    world_id EntityID = CreatePushableBox(&Game->World, Game->Assets, Spawner->WorldIndex, Spawner->Translation, Spawner->Radius*2, Spawner->Mass, Material, true);                    
+                    world_id EntityID = CreateMovableEntity(&Game->World, Game->Assets, Spawner->WorldIndex, Spawner->Translation, Scale, Spawner->Mass, Material);                    
                     DevContext_AddToDevTransform(DevContext->InitialTransforms, &Game->World, EntityID);
                     if(CurrentWorldIndex == EntityID.WorldIndex)
                         DevContext_SetEntityAsSelectedObject(&DevContext->SelectedObject, EntityID, &Material);
                     dev_object_edit Undo;
                     Undo.ObjectEditType = DEV_OBJECT_EDIT_TYPE_CREATE;
                     Undo.Entity[0].ID = EntityID;
-                    Undo.Entity[0].Type = ENTITY_TYPE_PUSHABLE;
+                    Undo.Entity[0].Type = ENTITY_TYPE_MOVABLE;
                     Undo.Entity[1].ID = InvalidWorldID();
                     Undo.Entity[0].LinkID = InvalidWorldID();
                     Undo.ObjectType = DEV_SELECTED_OBJECT_TYPE_ENTITY;
@@ -897,17 +897,7 @@ void DevUI_Details(dev_context* DevContext, dev_selected_object* SelectedObject)
                     
                     ak_f32 SphereRadius = 1.0f*Transform->Scale.LargestComp();
                     RigidBody->LocalInvInertiaTensor = GetSphereInvInertiaTensor(SphereRadius, Mass);
-                } break;
-                
-                case ENTITY_TYPE_PUSHABLE:
-                {
-                    rigid_body* RigidBody = Game->World.Simulations[Entity->ID.WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
-                    ak_f32 Mass = 1.0f/RigidBody->InvMass;
-                    DevUI_MassTool(AK_HashFunction("Edit Mass"), TRANSFORM_ITEM_WIDTH, &Mass);
-                    RigidBody->InvMass = 1.0f/Mass;
-                    
-                    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(AK_V3(1.0f, 1.0f, 1.0f), Mass);                    
-                } break;
+                } break;                
             }
             
         } break;
@@ -1111,7 +1101,7 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
             DragFloat(AK_HashFunction("Rotate Angle Snap"), "", &GizmoState->RotationAngleSnap, 0.1f, 0.1f, 180.0f);                                             
             if(GizmoState->RotationAngleSnap < 0.1f)
                 GizmoState->RotationAngleSnap = 0.1f;
-
+            
             AlignTextToFramePadding();
             Text("Use Local Transforms"); SameLine();
             Checkbox(AK_HashFunction("Use Local Transforms"), "", &GizmoState->UseLocalTransforms);
@@ -1136,7 +1126,25 @@ void DevUI_Update(dev_context* DevContext, dev_ui* UI)
             DragFloat(AK_HashFunction("Grid Size"), "", &GizmoState->GridDistance, 0.1f, 0.1f, 10);             
             AK_Clamp(GizmoState->GridDistance, 0.1f, 10.0f);  
             if(GizmoState->GridDistance < 0.1f)
-                GizmoState->GridDistance = 0.1f;            
+                GizmoState->GridDistance = 0.1f;
+            
+            AK_ForEach(RigidBody, &Game->World.Simulations[0].RigidBodyStorage)
+            {
+                ak_u32 Index = UserDataToIndex(RigidBody->UserData);
+                entity* Entity = Game->World.EntityStorage[0].GetByIndex(Index);
+                if(Entity->Type == ENTITY_TYPE_MOVABLE)
+                {
+                    Text("Movable %d Vel: (%f, %f, %f), Del: (%f, %f, %f)", Index, RigidBody->Velocity.x, RigidBody->Velocity.y, RigidBody->Velocity.z, 
+                         RigidBody->MoveDelta.x, RigidBody->MoveDelta.y, RigidBody->MoveDelta.z);
+                }
+                
+                if(Entity->Type == ENTITY_TYPE_PLAYER)
+                {
+                    Text("Player %d Vel: (%f, %f, %f), Del: (%f, %f, %f)", Index, RigidBody->Velocity.x, RigidBody->Velocity.y, RigidBody->Velocity.z, 
+                         RigidBody->MoveDelta.x, RigidBody->MoveDelta.y, RigidBody->MoveDelta.z);
+                }
+            }
+            
         }
         
         if(CollapsingHeader("Debug Logs", ImGuiTreeNodeFlags_DefaultOpen))

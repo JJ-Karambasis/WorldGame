@@ -1,4 +1,11 @@
 inline entity* 
+GetEntity(world* World, world_id ID)
+{
+    entity* Result = World->EntityStorage[ID.WorldIndex].Get(ID.ID);
+    return Result;
+}
+
+inline entity* 
 GetEntity(game* Game, world_id ID)
 {
     entity* Result = Game->World.EntityStorage[ID.WorldIndex].Get(ID.ID);
@@ -6,16 +13,34 @@ GetEntity(game* Game, world_id ID)
 }
 
 inline sim_entity*
+GetSimEntity(world* World, world_id ID)
+{
+    simulation* Simulation = &World->Simulations[ID.WorldIndex];
+    return Simulation->GetSimEntity(GetEntity(World, ID)->SimEntityID);
+}
+
+inline rigid_body*
+GetRigidBody(world* World, world_id ID)
+{    
+    return GetSimEntity(World, ID)->ToRigidBody();
+}
+
+inline sim_entity*
 GetSimEntity(game* Game, world_id ID)
 {
-    simulation* Simulation = &Game->World.Simulations[ID.WorldIndex];
-    return Simulation->GetSimEntity(GetEntity(Game, ID)->SimEntityID);
+    return GetSimEntity(&Game->World, ID);
 }
 
 inline rigid_body*
 GetRigidBody(game* Game, world_id ID)
 {    
-    return GetSimEntity(Game, ID)->ToRigidBody();
+    return GetRigidBody(&Game->World, ID);
+}
+
+inline entity* 
+GetEntity(entity_storage* EntityStorage, sim_entity* SimEntity)
+{
+    return EntityStorage->GetByIndex(UserDataToIndex(SimEntity->UserData));
 }
 
 template <typename type>
@@ -26,7 +51,8 @@ void AddCollisionVolume(game* Game, world_id EntityID, type* Collider)
 
 void DeleteWorld(world* World, graphics* Graphics)
 {
-    AK_DeletePool(&World->PushingObjectStorage);
+    AK_DeletePool(&World->MovableStorage);
+    AK_DeletePool(&World->ButtonStateStorage);
     AK_DeletePool(&World->JumpingQuadStorage[0]);
     AK_DeletePool(&World->JumpingQuadStorage[1]);
     AK_DeletePool(&World->EntityStorage[0]);
@@ -41,24 +67,6 @@ void DeleteWorld(world* World, graphics* Graphics)
     DeleteGraphicsState(Graphics, &World->GraphicsStates[1]);
 }
 
-ak_u32 CreatePushingObject(world* World, ak_bool Interactable)
-{
-    ak_u64 Result = World->PushingObjectStorage.Allocate();  
-    World->PushingObjectStorage.Get(Result)->Interactable = Interactable;
-    return AK_PoolIndex(Result);
-}
-
-void DeletePushingObject(world* World, ak_u32 Index)
-{
-    World->PushingObjectStorage.Free(World->PushingObjectStorage.IDs[Index]);
-}
-
-pushing_object* GetPushingObject(world* World, entity* Entity)
-{
-    AK_Assert(Entity->Type == ENTITY_TYPE_PUSHABLE, "Cannot get a pushing object of an entity that is not a pushing object");
-    return World->PushingObjectStorage.GetByIndex(UserDataToIndex(Entity->UserData));
-}
-
 ak_u32 CreateButtonState(world* World, ak_bool IsToggle)
 {
     ak_u64 Result = World->ButtonStateStorage.Allocate();
@@ -71,6 +79,38 @@ button_state* GetButtonState(world* World, entity* Entity)
 {
     AK_Assert(Entity->Type == ENTITY_TYPE_BUTTON, "Cannot get a button state of an entity that is not a button");
     return World->ButtonStateStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+}
+
+ak_u32 CreateMovable(world* World)
+{
+    ak_u64 Result = World->MovableStorage.Allocate();
+    return AK_PoolIndex(Result);
+}
+
+ak_bool ValidateMovable(movable* Movable)
+{
+    if(Movable->ParentID.IsValid() && Movable->ChildID.IsValid())
+        return !AreEqualIDs(Movable->ParentID, Movable->ChildID);
+    return true;
+}
+
+movable* GetMovable(world* World, entity* Entity)
+{
+    AK_Assert(Entity->Type == ENTITY_TYPE_MOVABLE, "Cannot get a movable of an entity that is not a movable");
+    
+    movable* Movable = World->MovableStorage.GetByIndex(UserDataToIndex(Entity->UserData));
+    AK_Assert(ValidateMovable(Movable), "Corrupted movable");
+    return Movable;
+}
+
+inline world_id GetChildID(movable* Movable)
+{
+    return Movable ? Movable->ChildID : InvalidWorldID();
+}
+
+inline world_id GetParentID(movable* Movable)
+{
+    return Movable ? Movable->ParentID : InvalidWorldID();
 }
 
 void DeleteButtonState(world* World, ak_u32 Index)
@@ -95,11 +135,8 @@ void FreeEntity(game* Game, world_id ID)
         LinkEntity->LinkID = InvalidWorldID();
     }
     
-    if(Entity->Type == ENTITY_TYPE_PUSHABLE)
-        DeletePushingObject(&Game->World, UserDataToIndex(Entity->UserData));
-    
     if(Entity->Type == ENTITY_TYPE_BUTTON)
-        DeleteButtonState(&Game->World, UserDataToIndex(Entity->UserData));
+        DeleteButtonState(&Game->World, UserDataToIndex(Entity->UserData));        
     
     Game->World.EntityStorage[ID.WorldIndex].Free(ID.ID);    
 }
@@ -211,9 +248,7 @@ world_id CreatePlayerEntity(world* World, assets* Assets, ak_u32 WorldIndex, ak_
     World->Simulations[WorldIndex].AddCollisionVolume(RigidBody, &PlayerCapsule);
     
     RigidBody->Restitution = 0;
-    RigidBody->InvMass = 1.0f/PLAYER_MASS;
-    RigidBody->LocalInvInertiaTensor = GetCylinderInvInertiaTensor(PlayerCapsule.Radius, PlayerCapsule.GetHeight(), PLAYER_MASS);
-    RigidBody->LocalCenterOfMass = PlayerCapsule.GetCenter();            
+    RigidBody->InvMass = 0.0f;        
     return Result;
 }
 
@@ -221,6 +256,27 @@ world_id CreateStaticEntity(world* World, assets* Assets, ak_u32 WorldIndex, ak_
                             mesh_asset_id Mesh, material Material)
 {
     return CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_STATIC, SIM_ENTITY_TYPE_SIM_ENTITY, Position, Scale, Orientation, Mesh, Material);
+}
+
+world_id CreateMovableEntity(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
+                             ak_f32 Mass, material Material)
+{
+    AK_Assert(Mass > 0, "Mass cannot be zero");
+    world_id Result = CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_MOVABLE, SIM_ENTITY_TYPE_RIGID_BODY, Position, Scale, Orientation,
+                                   MESH_ASSET_ID_BOX, Material);
+    entity* Entity = World->EntityStorage[WorldIndex].Get(Result.ID);    
+    
+    Entity->UserData = IndexToUserData(CreateMovable(World));
+    
+    rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
+    RigidBody->Restitution = 0;
+    RigidBody->InvMass = 0.0f;    
+    return Result;
+}
+
+world_id CreateMovableEntity(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_f32 Mass, material Material)
+{
+    return CreateMovableEntity(World, Assets, WorldIndex, Position, Scale, AK_IdentityQuat<ak_f32>(), Mass, Material);
 }
 
 world_id CreateFloor(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, material Material)
@@ -277,46 +333,6 @@ world_id CreateSphereRigidBody(world* World, assets* Assets, ak_u32 WorldIndex, 
     return CreateSphereRigidBody(World, Assets, WorldIndex, Position, AK_V3(1.0f, 1.0f, 1.0f), AK_IdentityQuat<ak_f32>(), Radius, Mass, Restitution, Material);
 }
 
-world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
-                           ak_f32 Mass, material Material, ak_bool Interactable)
-{
-    AK_Assert(Mass != 0, "Cannot have zero mass for a rigid body");    
-    world_id Result = CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_PUSHABLE, SIM_ENTITY_TYPE_RIGID_BODY, Position, Scale, Orientation, MESH_ASSET_ID_BOX, Material);    
-    entity* Entity = World->EntityStorage[WorldIndex].Get(Result.ID);    
-    Entity->UserData = IndexToUserData(CreatePushingObject(World, Interactable));
-    
-    rigid_body* RigidBody = World->Simulations[WorldIndex].GetSimEntity(Entity->SimEntityID)->ToRigidBody();
-    RigidBody->Restitution = 0;
-    RigidBody->InvMass = 1.0f/Mass;
-    RigidBody->LocalInvInertiaTensor = GetBoxInvInertiaTensor(AK_V3(1.0f, 1.0f, 1.0f), Mass);
-    RigidBody->LocalCenterOfMass = AK_V3(0.0f, 0.0f, 0.5f);    
-    
-    return Result;
-}
-
-world_id CreatePushableBox(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material, ak_bool Interactable)
-{
-    return CreatePushableBox(World, Assets, WorldIndex, Position, AK_V3(Dimensions, Dimensions, Dimensions), AK_IdentityQuat<ak_f32>(), Mass, Material, Interactable);
-}
-
-dual_world_id
-CreateDualPushableBox(world* World, assets* Assets, ak_v3f Position, ak_f32 Dimensions, ak_f32 Mass, material Material, ak_bool Interactable0, ak_bool Interactable1)
-{
-    AK_Assert(Mass != 0, "Cannot have zero mass for a pushable box body");    
-    
-    dual_world_id Result;
-    Result.A = CreatePushableBox(World, Assets, 0, Position, Dimensions, Mass, Material, Interactable0);
-    Result.B = CreatePushableBox(World, Assets, 1, Position, Dimensions, Mass, Material, Interactable1);
-    
-    entity* EntityA = World->EntityStorage[0].Get(Result.A.ID);
-    entity* EntityB = World->EntityStorage[1].Get(Result.B.ID);
-    
-    EntityA->LinkID = EntityB->ID;
-    EntityB->LinkID = EntityA->ID;
-    
-    return Result;
-}
-
 world_id CreateButton(world* World, assets* Assets, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, ak_quatf Orientation, material Material, ak_bool IsToggle)
 {
     world_id Result = CreateEntity(World, Assets, WorldIndex, ENTITY_TYPE_BUTTON, SIM_ENTITY_TYPE_SIM_ENTITY, Position, Dimensions, Orientation, MESH_ASSET_ID_BUTTON, Material);
@@ -343,50 +359,8 @@ inline ak_bool CanBePushed(ak_v2f MoveDirection, ak_v2f ObjectDirection)
     return Result;
 }
 
-COLLISION_EVENT(OnPlayerCollision)
-{
-    player* Player = (player*)Entity->UserData;
-    simulation* Simulation = &Game->World.Simulations[Entity->ID.WorldIndex];
-    
-    switch(Player->State)
-    {
-        case PLAYER_STATE_JUMPING:
-        {
-            Player->State = PLAYER_STATE_NONE;            
-        } break;
-        
-        case PLAYER_STATE_NONE:
-        {   
-            if(CollidedEntity->Type == ENTITY_TYPE_PUSHABLE)
-            {
-                rigid_body* PlayerRigidBody = Simulation->GetSimEntity(Entity->SimEntityID)->ToRigidBody();
-                
-                ak_v2f N = AK_Normalize(Normal.xy);                
-                ak_v2f MoveDirection = AK_Normalize(PlayerRigidBody->Acceleration.xy);
-                if(CanBePushed(MoveDirection, N))                
-                {                    
-                    Player->State = PLAYER_STATE_PUSHING;
-                    pushing_object* PushingObject = GetPushingObject(&Game->World, CollidedEntity);
-                    PushingObject->PlayerID = Entity->ID;                    
-                    PushingObject->Direction = N;
-                    
-                    PlayerRigidBody->Velocity = {};
-                }                     
-            }
-            
-            if(CollidedEntity->Type == ENTITY_TYPE_BUTTON)
-            {
-                if(AK_EqualApprox(Normal, AK_ZAxis(), 1e-3f))
-                {
-                    AK_Assert(false, "Temp");
-                }
-            }
-            
-        } break;
-    }                
-}
-
 COLLISION_EVENT(OnButtonCollision)
+
 {
     button_state* ButtonState = GetButtonState(&Game->World, Entity);
     ButtonState->Collided = true;
