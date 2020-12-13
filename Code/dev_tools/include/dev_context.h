@@ -141,6 +141,7 @@ struct dev_gizmo
     ak_sqtf Transform;
     ak_v3f IntersectionPlane;
     dev_gizmo_movement_direction MovementDirection;
+    ak_bool IsHighLighted;
 };
 
 struct gizmo_intersection_result

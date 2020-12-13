@@ -101,41 +101,46 @@ void DevDraw_Frame(dev_context* DevContext, ak_v3f Position, ak_v3f XAxis = AK_X
 
 ak_color3f DevDraw_GetGizmoColor(dev_gizmo Gizmo)
 {
+    ak_color3f GizmoColor = AK_White3();
     switch(Gizmo.MovementDirection)
     {
         case DEV_GIZMO_MOVEMENT_DIRECTION_X:
         {
-            return AK_Red3();
+            GizmoColor = AK_Red3();
         } break;
         
         case DEV_GIZMO_MOVEMENT_DIRECTION_Y:
         {
-            return AK_Green3();
+            GizmoColor = AK_Green3();
         } break;
         
         case DEV_GIZMO_MOVEMENT_DIRECTION_Z:
         {
-            return AK_Blue3();
+            GizmoColor = AK_Blue3();
         } break;
         
         case DEV_GIZMO_MOVEMENT_DIRECTION_XY:
         {
-            return AK_Blue3();
+            GizmoColor = AK_Blue3();
         } break;
         
         case DEV_GIZMO_MOVEMENT_DIRECTION_XZ:
         {
-            return AK_Green3();
+            GizmoColor = AK_Green3();
         } break;
         
         case DEV_GIZMO_MOVEMENT_DIRECTION_YZ:
         {
-            return AK_Red3();
+            GizmoColor = AK_Red3();
         } break;
         
         AK_INVALID_DEFAULT_CASE;
     }
-    return AK_White3();
+    if(Gizmo.IsHighLighted)
+    {
+        GizmoColor = AK_Yellow3();
+    }
+    return GizmoColor;
 }
 
 void DevDraw_GizmoState(dev_context* Context, dev_gizmo_state* GizmoState, ak_v3f Position)
