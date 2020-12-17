@@ -707,6 +707,8 @@ PLATFORM_DEVELOPMENT_UPDATE(Platform_DevUpdate)
         }
     }    
     
+#define
+    
 #define Dev_BindMouse(key, action) do \
 { \
 ak_bool IsDown = GetKeyState(key) & (1 << 15); \
@@ -806,7 +808,7 @@ ak_bool Win32_DevWindowProc(dev_context* DevContext, MSG Message)
         case WM_MOUSEWHEEL:
         {
             ak_f32 Scroll = (ak_f32)GET_WHEEL_DELTA_WPARAM(Message.wParam) / (ak_f32)WHEEL_DELTA;
-            IO.MouseWheel += Scroll;                    
+            IO.MouseWheel += Scroll;                     
             Input->Scroll = Scroll;
         } break;
         

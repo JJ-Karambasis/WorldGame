@@ -29,14 +29,22 @@ ak_bool PopulateAssetMap(assets* Assets)
     return true;
 }
 
-assets* InitAssets(ak_arena* Storage, ak_string AssetPath)
-{        
+assets* InitAssets(ak_string AssetPath)
+{   
+    ak_arena* Storage = AK_CreateArena(AK_Megabyte(1));
+    if(!Storage)
+        return NULL;
+    
     ak_file_handle* AssetFile = LoadAssetFile(AssetPath);
     if(!AssetFile)
+    {
+        AK_DeleteArena(Storage);
         return NULL;
+    }
     
     assets* Assets = Storage->Push<assets>();    
     Assets->AssetFile = AssetFile;
+    Assets->AssetArena = Storage;
     
     Assets->MeshNameMap = AK_CreateHashMap<char*, mesh_asset_id>(8191);
     Assets->TextureNameMap = AK_CreateHashMap<char*, texture_asset_id>(8191);

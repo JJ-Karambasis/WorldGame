@@ -1,11 +1,12 @@
 #include "game.h"
 
-GAME_UPDATE(Game_Tick);
+#include <assets.cpp>
+#include <src/graphics_state.cpp>
 
 extern "C"
 AK_EXPORT GAME_STARTUP(Game_Startup)
 {
-    world_game* Game = (world_game*)AK_Allocate(sizeof(world_game));
+    game* Game = (game*)AK_Allocate(sizeof(game));
     if(!Game)
     {
         //TODO(JJ): Diagnostic and error logging
@@ -13,25 +14,32 @@ AK_EXPORT GAME_STARTUP(Game_Startup)
         return NULL;
     }
     
-    Game->Engine = Engine;
-    Engine->Game = Game;
-    return true;
-}
-
-extern "C" 
-AK_EXPORT GAME_UPDATE(Game_Update)
-{
-    world_game* WorldGame = (world_game*)Game;
+    Game->Scratch = AK_CreateArena(AK_Megabyte(4));
+    Game->Graphics = Graphics;
+    Game->Assets = Assets;
+    Game->dtFixed = dtFixed;
+    
+    Game->Update = Game_Update;
+    Game->Shutdown = Game_Shutdown;
+    
+    return Game;
 }
 
 extern "C"
-AK_EXPORT GAME_GET_GRAPHICS_STATE(Game_GetGraphicsState)
+AK_EXPORT GAME_UPDATE(Game_Update)
 {
-    world_game* WorldGame = (world_game*)Game;
-    
-    graphics_state GraphicsState = {};
-    return GraphicsState;
+    Game->World->Update(Game);
 }
+
+extern "C"
+AK_EXPORT GAME_SHUTDOWN(Game_Shutdown)
+{
+    Game->World->Shutdown(Game);
+    AK_DeleteArena(Game->Scratch);
+    AK_Free(Game);
+}
+
+#include "game_common_source.cpp"
 
 #define AK_COMMON_IMPLEMENTATION
 #include <ak_common.h>

@@ -1,5 +1,5 @@
-#ifndef WORLD_H
-#define WORLD_H
+#ifndef ENTITY_H
+#define ENTITY_H
 
 enum entity_type
 {
@@ -45,33 +45,5 @@ struct movable
     ak_u64 ParentID;
     ak_v3f GravityVelocity;
 };
-
-struct jumping_quad
-{
-    ak_u64 ID;
-    ak_v3f CenterP;
-    ak_v2f Dimensions; 
-    ak_color3f Color;
-    world_id OtherQuad;    
-};
-
-struct button_state
-{
-    ak_bool IsToggle;    
-    ak_bool Collided;    
-    ak_bool IsDown;    
-};
-
-struct world
-{
-    entity_storage EntityStorage[2];
-    ak_array<ak_sqtf> OldTransforms[2];
-    ak_array<physics_objects> PhysicObjects[2];
-    camera OldCamera[2];
-    camera CurrentCamera[2];
-};
-
-#define UserDataToIndex(data) ((ak_u32)(AK_SafeAddrToU32((ak_uaddr)(data))))
-#define IndexToUserData(index) ((void*)(ak_uaddr)(index))
 
 #endif

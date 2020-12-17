@@ -52,6 +52,7 @@ struct material
 
 struct assets
 {
+    ak_arena* AssetArena;
     ak_file_handle* AssetFile;
     
     ak_hash_map<char*, mesh_asset_id> MeshNameMap;        

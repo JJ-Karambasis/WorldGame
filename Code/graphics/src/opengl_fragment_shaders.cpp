@@ -376,7 +376,7 @@ void main()
 
     c3 Ambient = 0.03*SurfaceColor.xyz;
     FinalColor += Ambient;
-    FragColor = c4(FinalColor, 1.0f);    
+    FragColor = c4(FinalColor.xyz, 1.0f);    
 }
 
 )";

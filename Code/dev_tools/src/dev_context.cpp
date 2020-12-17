@@ -2667,6 +2667,7 @@ void DevContext_Render()
     
     if(Context->DevUI.DrawOtherWorld)
     {
+        
         PushRenderBuffer(Graphics, World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer);
         
         ak_v2i CopyResolution = World->GraphicsStates[Game->CurrentWorldIndex].RenderBuffer->Resolution / 5;
