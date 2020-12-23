@@ -377,6 +377,7 @@ void DevContext_PopulateNonRotationGizmos(dev_context* DevContext, dev_gizmo_sta
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = ZAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_X;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[0].IsHighLighted;
         GizmoState->Gizmos[0] =  Gizmo;
     }
     
@@ -391,6 +392,7 @@ void DevContext_PopulateNonRotationGizmos(dev_context* DevContext, dev_gizmo_sta
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = ZAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_Y;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[1].IsHighLighted;
         GizmoState->Gizmos[1] =  Gizmo;
     }
     
@@ -405,6 +407,7 @@ void DevContext_PopulateNonRotationGizmos(dev_context* DevContext, dev_gizmo_sta
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = YAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_Z;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[2].IsHighLighted;
         GizmoState->Gizmos[2] =  Gizmo;
     }
     
@@ -419,6 +422,7 @@ void DevContext_PopulateNonRotationGizmos(dev_context* DevContext, dev_gizmo_sta
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = ZAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_XY;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[3].IsHighLighted;
         GizmoState->Gizmos[3] =  Gizmo;
     }
     
@@ -433,6 +437,7 @@ void DevContext_PopulateNonRotationGizmos(dev_context* DevContext, dev_gizmo_sta
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = YAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_XZ;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[4].IsHighLighted;
         GizmoState->Gizmos[4] =  Gizmo;
     }
     
@@ -447,6 +452,7 @@ void DevContext_PopulateNonRotationGizmos(dev_context* DevContext, dev_gizmo_sta
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = XAxis;
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_YZ;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[5].IsHighLighted;
         GizmoState->Gizmos[5] =  Gizmo;
     }    
 }
@@ -464,6 +470,7 @@ void DevContext_PopulateRotationGizmos(dev_gizmo_state* GizmoState, dev_mesh* Tr
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_XAxis();
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_X;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[0].IsHighLighted;
         GizmoState->Gizmos[0] =  Gizmo;
     }
     
@@ -478,6 +485,7 @@ void DevContext_PopulateRotationGizmos(dev_gizmo_state* GizmoState, dev_mesh* Tr
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_YAxis();
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_Y;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[1].IsHighLighted;
         GizmoState->Gizmos[1] =  Gizmo;
     }
     
@@ -492,6 +500,7 @@ void DevContext_PopulateRotationGizmos(dev_gizmo_state* GizmoState, dev_mesh* Tr
         Gizmo.Transform = AK_SQT(Transform);
         Gizmo.IntersectionPlane = AK_ZAxis();
         Gizmo.MovementDirection = DEV_GIZMO_MOVEMENT_DIRECTION_Z;
+        Gizmo.IsHighLighted = GizmoState->Gizmos[2].IsHighLighted;
         GizmoState->Gizmos[2] =  Gizmo;
     }
     
@@ -1831,11 +1840,20 @@ void DevContext_Tick()
         
         ray RayCast = DevRay_GetRayFromMouse(DevInput->MouseCoordinates, &ViewSettings, Resolution);                                         
         dev_gizmo_state* GizmoState = &Context->GizmoState;
+        ak_u32 GizmoCount = (GizmoState->TransformMode == DEV_GIZMO_MOVEMENT_TYPE_ROTATE) ? 3 : 6;
+        for(ak_u32 GizmoIndex = 0; GizmoIndex < GizmoCount; GizmoIndex++)
+        {
+            GizmoState->Gizmos[GizmoIndex].IsHighLighted = false;
+        }
         if(!IsDown(DevInput->Alt) && !GetIO().WantCaptureMouse)
         {        
+            gizmo_intersection_result GizmoHit = DevRay_CastToGizmos(Context, GizmoState, RayCast, ViewSettings.ZNear);
+            if(GizmoHit.Hit)
+            {
+                GizmoHit.Gizmo->IsHighLighted = true;
+            }
             if(IsPressed(DevInput->LMB))
             {            
-                gizmo_intersection_result GizmoHit = DevRay_CastToGizmos(Context, GizmoState, RayCast, ViewSettings.ZNear);
                 if(!GizmoHit.Hit)
                 {
                     GizmoState->GizmoHit = {};
