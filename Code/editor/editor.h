@@ -25,7 +25,6 @@ struct editor;
 #include "include/ui.h"
 #include "include/world_management.h"
 #include "include/dev_mesh.h"
-#include "include/gizmo.h"
 #include "include/frame_playback.h"
 
 #define EDITOR_RUN(name) ak_i32 name(graphics* Graphics, platform* Platform, dev_platform* DevPlatform, ImGuiContext* Context)
