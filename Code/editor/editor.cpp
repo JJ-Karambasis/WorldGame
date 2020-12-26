@@ -938,6 +938,25 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 {
                     DevCamera->Target = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                 }
+                
+                if(IsPressed(&DevInput->Delete))
+                {
+                    switch(SelectedObject->Type)
+                    {
+                        case SELECTED_OBJECT_TYPE_ENTITY:
+                        {
+                            Editor->WorldManagement.DeleteDevEntity(Editor->CurrentWorldIndex, SelectedObject->ID);
+                        } break;
+                        
+                        case SELECTED_OBJECT_TYPE_LIGHT:
+                        {
+                            Editor->WorldManagement.DeleteDevPointLight(Editor->CurrentWorldIndex, 
+                                                                        SelectedObject->ID);
+                        } break;
+                    }
+                    
+                    Editor->GizmoState.SelectedObject = {};
+                }
             }
         }
     }

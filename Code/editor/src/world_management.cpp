@@ -931,3 +931,21 @@ void world_management::SetState(world_management_state State)
 {
     NewState = State;
 }
+
+void world_management::DeleteDevEntity(ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink)
+{
+    dev_entity* DevEntity = DevEntities[WorldIndex].Get(ID);
+    if(ProcessLink)
+    {
+        if(DevEntity->LinkID)
+        {
+            DeleteDevEntity(!WorldIndex, DevEntity->LinkID, false);
+        }
+    }
+    DevEntities[WorldIndex].Free(ID);
+}
+
+void world_management::DeleteDevPointLight(ak_u32 WorldIndex, ak_u64 ID)
+{
+    DevPointLights[WorldIndex].Free(ID);
+}

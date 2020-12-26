@@ -72,6 +72,9 @@ struct world_management
     
     dual_dev_point_light CreateDevPointLightInBothWorlds(ak_char* Name, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity);
     
+    void DeleteDevEntity(ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true);
+    void DeleteDevPointLight(ak_u32 WorldIndex, ak_u64 ID);
+    
     void SetState(world_management_state State);    void Update(editor* Editor, dev_platform* DevPlatform, assets* Assets);
     
     void DeleteAll();
