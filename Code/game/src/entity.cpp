@@ -1,6 +1,18 @@
 #define PLAYER_RADIUS 0.35f
 #define PLAYER_HEIGHT 0.8f
 
+void ResizeWorld(world* World, ak_u32 WorldIndex, ak_u32 Size)
+{
+    if(Size > World->PhysicsObjects[WorldIndex].Size) 
+        World->PhysicsObjects[WorldIndex].Resize(Size);
+    
+    if(Size > World->GraphicsObjects[WorldIndex].Size)
+        World->GraphicsObjects[WorldIndex].Resize(Size);
+    
+    if(Size > World->OldTransforms[WorldIndex].Size)
+        World->OldTransforms[WorldIndex].Resize(Size);
+}
+
 entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
                      mesh_asset_id MeshID, material Material)
 {
@@ -9,19 +21,11 @@ entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Pos
     ak_u64 ID = EntityStorage->Allocate();
     ak_u32 Index = AK_PoolIndex(ID);
     
+    ResizeWorld(World, WorldIndex, Index+1);
+    
     entity* Entity = EntityStorage->GetByIndex(Index);
     Entity->Type = Type;
     Entity->ID =   ID;
-    
-    ak_u32 IndexPlusOne = Index+1;
-    if(IndexPlusOne > World->PhysicsObjects[WorldIndex].Size)
-        World->PhysicsObjects[WorldIndex].Resize(IndexPlusOne);
-    
-    if(IndexPlusOne > World->GraphicsObjects[WorldIndex].Size)
-        World->GraphicsObjects[WorldIndex].Resize(IndexPlusOne);
-    
-    if(IndexPlusOne > World->OldTransforms[WorldIndex].Size)
-        World->OldTransforms[WorldIndex].Resize(IndexPlusOne);
     
     physics_object* PhysicsObject = &World->PhysicsObjects[WorldIndex][Index];
     PhysicsObject->Position = Position;

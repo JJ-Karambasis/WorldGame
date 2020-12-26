@@ -119,8 +119,8 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
     ak_string WorldDLLPath = AK_StringConcat(Global_Platform.ProgramPath, WorldName, Global_Platform.Arena);
     WorldDLLPath = AK_StringConcat(WorldDLLPath, ".dll", Global_Platform.Arena);
     
-    HMODULE WorldLibrary = LoadLibrary(WorldDLLPath.Data);
-    if(!WorldLibrary)
+    Global_Platform.WorldLibrary = LoadLibrary(WorldDLLPath.Data);
+    if(!Global_Platform.WorldLibrary)
     {
         //TODO(JJ): Diagnostic and error logging
         AK_InvalidCode();
@@ -129,9 +129,7 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
     }
     
     ak_string StartupCode = AK_StringConcat(WorldName, "_Startup", Global_Platform.Arena);
-    ak_string UpdateCode = AK_StringConcat(WorldName, "_Update", Global_Platform.Arena);
-    ak_string ShutdownCode = AK_StringConcat(WorldName, "_Shutdown", Global_Platform.Arena);
-    world_startup* Startup = (world_startup*)GetProcAddress(WorldLibrary, StartupCode.Data);
+    world_startup* Startup = (world_startup*)GetProcAddress(Global_Platform.WorldLibrary, StartupCode.Data);
     
     if(!Startup)
     {
@@ -143,6 +141,25 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
     
     Global_Platform.Arena->EndTemp(&TempArena);
     return Startup;
+}
+
+PLATFORM_UNLOAD_CODE(Win32_UnloadWorldCode)
+{
+    if(Global_Platform.WorldLibrary)
+    {
+        FreeLibrary(Global_Platform.WorldLibrary);
+        Global_Platform.WorldLibrary = NULL;
+    }
+}
+
+
+PLATFORM_UNLOAD_CODE(Win32_UnloadGameCode)
+{
+    if(Global_Platform.GameLibrary)
+    {
+        FreeLibrary(Global_Platform.GameLibrary);
+        Global_Platform.GameLibrary = NULL;
+    }
 }
 
 PLATFORM_GET_RESOLUTION(Win32_GetResolution)
@@ -164,7 +181,9 @@ ak_bool Win32_InitPlatform()
     
     Global_Platform.ProcessMessages = Win32_ProcessMessages;
     Global_Platform.LoadGameCode = Win32_LoadGameCode;
+    Global_Platform.UnloadGameCode = Win32_UnloadGameCode;
     Global_Platform.LoadWorldCode = Win32_LoadWorldCode;
+    Global_Platform.UnloadWorldCode = Win32_UnloadWorldCode;
     Global_Platform.GetResolution = Win32_GetResolution;
     
     Global_Platform.ProgramPath = AK_GetExecutablePath(Global_Platform.Arena);
@@ -172,7 +191,7 @@ ak_bool Win32_InitPlatform()
     Global_Platform.GameDLLPathName = AK_StringConcat(Global_Platform.ProgramPath, GAME_NAME_DLL, Global_Platform.Arena);
     Global_Platform.AssetPath = AK_StringConcat(Global_Platform.ProgramPath, "WorldGame.assets", Global_Platform.Arena);
     
-    Global_Platform.Window = AK_CreateWindow(1920, 1080, GAME_NAME);
+    Global_Platform.Window = AK_CreateWindow(1280, 720, GAME_NAME);
     if(!Global_Platform.Window)
     {
         //TODO(JJ): Diagnostic and error logging
@@ -272,7 +291,7 @@ DEV_PLATFORM_UPDATE(Win32_DevUpdate)
     {
         MSG Message = {};
         
-        input* Input = Game ? &Game->Input : NULL;
+        input* Input = Editor->Game ? &Editor->Game->Input : NULL;
         ak_i32 Status = Win32_ProcessMessage(Input, &Message);
         if(Status == -1) return false;
         else if(Status == 0) break;
@@ -295,6 +314,10 @@ DEV_PLATFORM_UPDATE(Win32_DevUpdate)
                     BindKey('E', DevInput->E);
                     BindKey('R', DevInput->R);      
                     BindKey('S', DevInput->S);
+                    BindKey('F', DevInput->F);
+                    BindKey('Q', DevInput->Q);
+                    BindKey('N', DevInput->N);
+                    BindKey('D', DevInput->D);
                     BindKey('L', DevInput->L);
                     BindKey('Z', DevInput->Z);
                     BindKey('Y', DevInput->Y);
@@ -400,8 +423,7 @@ DEV_BUILD_WORLD(Win32_BuildWorld)
     
     PROCESS_INFORMATION ProcessInfo = {};
     ak_temp_arena TempArena = Global_Platform.Arena->BeginTemp();
-    ak_char* Command = AK_FormatString(Global_Platform.Arena, "cmd.exe /C ..\\code\\build_world.bat %s %.*s", 
-                                       WORLDS_PATH, WorldName.Length, WorldName.Data).Data; 
+    ak_char* Command = AK_FormatString(Global_Platform.Arena, "cmd.exe /C ..\\code\\build_world.bat %s %.*s >> %s", WORLDS_PATH, WorldName.Length, WorldName.Data, BUILD_WORLD_LOG_FILE).Data; 
     
     if(!CreateProcess(NULL, Command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &StartupInfo, &ProcessInfo))
     {
@@ -422,6 +444,22 @@ DEV_BUILD_WORLD(Win32_BuildWorld)
     return ExitCode == 0;
 }
 
+DEV_DELETE_WORLD_FILES(Win32_DeleteWorldFiles)
+{
+    ak_temp_arena TempArena = Global_Platform.Arena->BeginTemp();
+    ak_string Dll = AK_StringConcat(WorldName, ".dll", Global_Platform.Arena);
+    ak_string Exp = AK_StringConcat(WorldName, ".exp", Global_Platform.Arena);
+    ak_string Lib = AK_StringConcat(WorldName, ".lib", Global_Platform.Arena);
+    ak_string Obj = AK_StringConcat(WorldName, ".obj", Global_Platform.Arena);
+    
+    if(AK_FileExists(Dll)) AK_FileRemove(Dll);
+    if(AK_FileExists(Exp)) AK_FileRemove(Exp);
+    if(AK_FileExists(Lib)) AK_FileRemove(Lib);
+    if(AK_FileRemove(Obj)) AK_FileRemove(Obj);
+    
+    Global_Platform.Arena->EndTemp(&TempArena);
+}
+
 int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
 {
     if(!Win32_InitPlatform())
@@ -438,7 +476,6 @@ int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineAr
     
     
     graphics* Graphics = InitGraphics(PlatformData);
-    
     
     ImGuiContext* Context = ImGui::CreateContext();
     
@@ -489,6 +526,7 @@ int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineAr
     
     Global_DevPlatform.Update = Win32_DevUpdate;
     Global_DevPlatform.BuildWorld = Win32_BuildWorld;
+    Global_DevPlatform.DeleteWorldFiles = Win32_DeleteWorldFiles;
     
     return Editor_Run(Graphics, &Global_Platform, &Global_DevPlatform, Context);
 }

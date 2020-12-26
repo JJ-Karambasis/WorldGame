@@ -14,6 +14,7 @@ struct win32_platform : public platform
     
     HMODULE GameLibrary;
     HMODULE EngineLibrary;
+    HMODULE WorldLibrary;
 };
 
 #ifdef DEV_EDITOR

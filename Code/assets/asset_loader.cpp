@@ -145,14 +145,21 @@ mesh* LoadMesh(assets* Assets, mesh_asset_id ID)
     
     mesh_info* MeshInfo = Assets->MeshInfos + ID;            
     
+    
     ak_u32 MeshSize = GetMeshDataSize(MeshInfo);
-    ak_u32 AllocationSize = sizeof(mesh) + MeshSize;
+    ak_u32 AllocationSize = sizeof(mesh) + MeshSize + sizeof(ak_v3f)*MeshInfo->Header.VertexCount;
     mesh* Mesh = (mesh*)AK_Allocate(AllocationSize);
     
+    ak_u32 VertexStride = GetVertexStride(MeshInfo);
     Mesh->Vertices = (void*)&Mesh[1];
-    Mesh->Indices = (void*)((ak_u8*)Mesh->Vertices + GetVertexStride(MeshInfo)*MeshInfo->Header.VertexCount);
-    
+    Mesh->Indices = (void*)((ak_u8*)Mesh->Vertices + VertexStride*MeshInfo->Header.VertexCount);
+    Mesh->Positions = (ak_v3f*)((ak_u8*)Mesh->Indices + GetIndexStride(MeshInfo)*MeshInfo->Header.IndexCount);
     AK_ReadFile(FileHandle, Mesh->Vertices, MeshSize, MeshInfo->Header.OffsetToData);
+    
+    for(ak_u32 VertexIndex = 0; VertexIndex < MeshInfo->Header.VertexCount; VertexIndex++)
+    {
+        Mesh->Positions[VertexIndex] = *(ak_v3f*)((ak_u8*)Mesh->Vertices + VertexStride*VertexIndex);
+    }
     
     Assets->Meshes[ID] = Mesh;
     

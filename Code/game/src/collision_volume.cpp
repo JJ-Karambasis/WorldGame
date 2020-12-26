@@ -57,3 +57,40 @@ void AddSphereVolume(physics_object* PhysicsObject, ak_pool<collision_volume>* S
     
     PhysicsObject->CollisionVolumeID = VolumeID;
 }
+
+
+capsule TransformCapsule(capsule* Capsule, ak_sqtf Transform)
+{
+    capsule Result;
+    
+    ak_v3f ZScale = AK_V3(1.0f, 1.0f, Transform.Scale.z);
+    Result.P0 = AK_Transform(Capsule->P0, Transform.Translation, Transform.Orientation, ZScale);
+    Result.P1 = AK_Transform(Capsule->P1, Transform.Translation, Transform.Orientation, ZScale);
+    
+    ak_u32 Component = Transform.Scale.xy.LargestComp();
+    Result.Radius = Capsule->Radius*Transform.Scale[Component];
+    return Result;
+}
+
+sphere TransformSphere(sphere* Sphere, ak_sqtf Transform)
+{
+    sphere Result = {};
+    
+    ak_u32 Component = Transform.Scale.LargestComp();    
+    Result.Radius = Sphere->Radius*Transform.Scale[Component];        
+    Result.CenterP = AK_Transform(Sphere->CenterP, Transform);
+    return Result;
+}
+
+inline void 
+TranslateCapsule(capsule* Capsule, ak_v3f Delta)
+{
+    Capsule->P0 += Delta;
+    Capsule->P1 += Delta;
+}
+
+inline void
+TranslateSphere(sphere* Sphere, ak_v3f Delta)
+{
+    Sphere->CenterP += Delta;
+}

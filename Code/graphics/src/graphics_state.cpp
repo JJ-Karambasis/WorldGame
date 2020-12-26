@@ -1,5 +1,16 @@
 #include "graphics_push_commands.cpp"
 
+inline ak_v3f* 
+GetFrustumCorners(view_settings* ViewSettings, ak_v2i RenderDim)
+{
+    ak_arena* GlobalArena = AK_GetGlobalArena();
+    ak_v3f* Result = GlobalArena->PushArray<ak_v3f>(8);
+    ak_m4f Perspective = AK_Perspective(ViewSettings->FieldOfView, AK_SafeRatio(RenderDim.w, RenderDim.h), ViewSettings->ZNear, ViewSettings->ZFar);    
+    AK_GetFrustumCorners(Result, Perspective);
+    AK_TransformPoints(Result, 8, AK_TransformM4(ViewSettings->Position, ViewSettings->Orientation));    
+    return Result;
+}
+
 void UpdateRenderBuffer(graphics* Graphics, graphics_render_buffer** RenderBuffer, ak_v2i RenderDim)
 {
     if(!(*RenderBuffer))
@@ -201,4 +212,16 @@ void Game_Render(game* Game, graphics_state* GraphicsState)
     }
     
     PushCopyToOutput(Game->Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);
+}
+
+graphics_point_light ToGraphicsPointLight(point_light* PointLight)
+{
+    graphics_point_light Result;
+    
+    Result.Color = PointLight->Color;
+    Result.Intensity = PointLight->Intensity;
+    Result.Position = PointLight->Position;
+    Result.Radius = PointLight->Radius;
+    
+    return Result;
 }

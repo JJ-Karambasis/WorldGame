@@ -60,6 +60,7 @@ struct mesh
 {
     void* Vertices;
     void* Indices;
+    ak_v3f* Positions;
 };
 
 struct half_edge

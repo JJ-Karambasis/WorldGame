@@ -44,17 +44,6 @@ void CreatePointLights(graphics_state* GraphicsStates, ak_v3f Position, ak_f32 R
     CreatePointLight(&GraphicsStates[1], Position, Radius, Color, Intensity, On);
 }
 
-inline ak_v3f* 
-GetFrustumCorners(view_settings* ViewSettings, ak_v2i RenderDim)
-{
-    ak_arena* GlobalArena = AK_GetGlobalArena();
-    ak_v3f* Result = GlobalArena->PushArray<ak_v3f>(8);
-    ak_m4f Perspective = AK_Perspective(ViewSettings->FieldOfView, AK_SafeRatio(RenderDim.w, RenderDim.h), ViewSettings->ZNear, ViewSettings->ZFar);    
-    AK_GetFrustumCorners(Result, Perspective);
-    AK_TransformPoints(Result, 8, AK_TransformM4(ViewSettings->Position, ViewSettings->Orientation));    
-    return Result;
-}
-
 view_settings GetViewSettings(camera* Camera)
 {    
     view_settings ViewSettings = {};

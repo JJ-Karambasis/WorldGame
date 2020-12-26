@@ -697,7 +697,7 @@ void glDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity, GLs
     if((ID == 131185) || (ID == 131204) || (ID == 131218) || (ID == 131139) || (ID == 131169) || (ID == 8))        
         return;
     
-    AK_Assert(false, "GL Debug Message(%u): %s\n", Message);
+    AK_Assert(false, "GL Debug Message(%u): %s\n", ID, Message);
 }
 
 #endif

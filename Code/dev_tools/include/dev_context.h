@@ -274,6 +274,6 @@ void DevContext_DebugLog(const ak_char* Format, ...)
     va_list Args;
     va_start(Args, Format);    
     Context->DevUI.Logs.Add(AK_FormatString(Context->DevUI.LogArena, Format, Args));
+#endif
     va_end(Args);
 }
-#endif

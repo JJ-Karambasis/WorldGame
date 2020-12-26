@@ -5,7 +5,7 @@ struct dev_input
 {
     union
     {
-        button Buttons[13];
+        button Buttons[17];
         struct
         {
             button ToggleDevState;            
@@ -16,11 +16,15 @@ struct dev_input
             button R;  
             button S;
             button L;
+            button F;
+            button N;
+            button D;
             button Z;
             button Y;
             button Delete;
             button Ctrl;
             button Alt;
+            button Q;
         };
     };
     

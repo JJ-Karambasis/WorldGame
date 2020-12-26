@@ -25,8 +25,10 @@ struct physics_object
         struct
         {
             ak_v3f Position;
+            ak_f32 __pad0__;
             ak_quatf Orientation;
-            ak_v3f Scale;
+            ak_v3f   Scale;
+            ak_f32 __pad1__;
         };
     };
     ak_v3f Velocity;
@@ -38,6 +40,7 @@ struct graphics_object
 {
     mesh_asset_id MeshID;
     material Material;
+    ak_m4f Transform;
 };
 
 struct point_light
