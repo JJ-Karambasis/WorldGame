@@ -517,6 +517,8 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                                                      Spawner->EntityType, Spawner->Translation, 
                                                      Spawner->Axis, Spawner->Angle, Spawner->Scale, 
                                                      Material, Spawner->MeshID);
+                    
+                    WorldManagement->EntityNameCollisionMap[Spawner->WorldIndex].Insert(Spawner->Name, true);
                 }
                 else
                     UI->ShowEntityNameErrorText = true;
@@ -548,6 +550,9 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                         Entity0->LinkID = Entity1->ID;
                         Entity1->LinkID = Entity0->ID;
                     }
+                    
+                    WorldManagement->EntityNameCollisionMap[0].Insert(Entity0->Name, true);
+                    WorldManagement->EntityNameCollisionMap[1].Insert(Entity1->Name, true);
                 }
             }
         }

@@ -21,6 +21,15 @@ void Editor_DebugLog(const ak_char* Format, ...)
     va_end(Args);
 }
 
+
+void Editor_DebugLog(ak_string String)
+{
+    if(!Internal__LogArena)
+        Internal__LogArena = AK_CreateArena();
+    Internal__Logs.Add(AK_PushString(String, Internal__LogArena));
+}
+
+
 #define EDITOR_ITEM_WIDTH 80.0f
 
 global editor_create_new_world_modal* Editor_CreateNewWorldModal;
@@ -815,116 +824,120 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     graphics_camera* DevCamera = &Editor->Cameras[Editor->CurrentWorldIndex];
     ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;
     
-    if(!Editor->Game || Editor->UI.GameUseDevCamera)
+    if(Editor->WorldManagement.NewState == WORLD_MANAGEMENT_STATE_NONE)
     {
-        ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;                
         
-        ak_f32 Roll = 0;
-        ak_f32 Pitch = 0;        
-        
-        ak_v2f PanDelta = AK_V2<ak_f32>();
-        ak_f32 Scroll = 0;
-        
-        if(IsDown(&DevInput->Alt))
+        if(!Editor->Game || Editor->UI.GameUseDevCamera)
         {
-            if(IsDown(&DevInput->LMB))
+            ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;                
+            
+            ak_f32 Roll = 0;
+            ak_f32 Pitch = 0;        
+            
+            ak_v2f PanDelta = AK_V2<ak_f32>();
+            ak_f32 Scroll = 0;
+            
+            if(IsDown(&DevInput->Alt))
             {
-                SphericalCoordinates->inclination += MouseDelta.y*1e-3f;
-                SphericalCoordinates->azimuth += MouseDelta.x*1e-3f;
-                
-                ak_f32 InclindationDegree = AK_ToDegree(SphericalCoordinates->inclination);
-                if(InclindationDegree < -180.0f)
+                if(IsDown(&DevInput->LMB))
                 {
-                    ak_f32 Diff = InclindationDegree + 180.0f;
-                    InclindationDegree = 180.0f - Diff;
-                    InclindationDegree = AK_Min(180.0f, InclindationDegree);
-                    SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                    SphericalCoordinates->inclination += MouseDelta.y*1e-3f;
+                    SphericalCoordinates->azimuth += MouseDelta.x*1e-3f;
+                    
+                    ak_f32 InclindationDegree = AK_ToDegree(SphericalCoordinates->inclination);
+                    if(InclindationDegree < -180.0f)
+                    {
+                        ak_f32 Diff = InclindationDegree + 180.0f;
+                        InclindationDegree = 180.0f - Diff;
+                        InclindationDegree = AK_Min(180.0f, InclindationDegree);
+                        SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                    }
+                    else if(InclindationDegree > 180.0f)
+                    {
+                        ak_f32 Diff = InclindationDegree - 180.0f;
+                        InclindationDegree = -180.0f + Diff;
+                        InclindationDegree = AK_Min(-180.0f, InclindationDegree);
+                        SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                    }            
                 }
-                else if(InclindationDegree > 180.0f)
+                
+                if(IsDown(&DevInput->MMB))        
+                    PanDelta += AK_V2f(MouseDelta)*1e-3f;        
+                
+                if(AK_Abs(DevInput->Scroll) > 0)        
                 {
-                    ak_f32 Diff = InclindationDegree - 180.0f;
-                    InclindationDegree = -180.0f + Diff;
-                    InclindationDegree = AK_Min(-180.0f, InclindationDegree);
-                    SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
-                }            
-            }
+                    SphericalCoordinates->radius -= DevInput->Scroll*0.5f;                    
+                }
+            }    
             
-            if(IsDown(&DevInput->MMB))        
-                PanDelta += AK_V2f(MouseDelta)*1e-3f;        
+            if(SphericalCoordinates->radius < 1e-3f)
+                SphericalCoordinates->radius = 1e-3f;
             
-            if(AK_Abs(DevInput->Scroll) > 0)        
-            {
-                SphericalCoordinates->radius -= DevInput->Scroll*0.5f;                    
-            }
-        }    
-        
-        if(SphericalCoordinates->radius < 1e-3f)
-            SphericalCoordinates->radius = 1e-3f;
-        
-        view_settings ViewSettings = GetViewSettings(DevCamera);    
-        DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);        
-    }
-    
-    if(!Editor->Game)
-    {
-        if(IsPressed(&DevInput->Q))
-        {
-            Editor->CurrentWorldIndex = !Editor->CurrentWorldIndex;
-            Editor->GizmoState.SelectedObject = {};
+            view_settings ViewSettings = GetViewSettings(DevCamera);    
+            DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);        
         }
         
-        view_settings ViewSettings = GetViewSettings(DevCamera);
-        ray RayCast = Editor_GetRayCastFromMouse(Editor, &ViewSettings, Resolution);
-        
-        Editor_SelectObjects(Editor, Assets, RayCast, Resolution, ViewSettings.ZNear);
-        
-        selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
-        if(SelectedObject)
+        if(!Editor->Game)
         {
-            if(SelectedObject->Type != SELECTED_OBJECT_TYPE_ENTITY)
-                Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
-            else
+            if(IsPressed(&DevInput->Q))
             {
-                if(IsPressed(&DevInput->W)) 
+                Editor->CurrentWorldIndex = !Editor->CurrentWorldIndex;
+                Editor->GizmoState.SelectedObject = {};
+            }
+            
+            view_settings ViewSettings = GetViewSettings(DevCamera);
+            ray RayCast = Editor_GetRayCastFromMouse(Editor, &ViewSettings, Resolution);
+            
+            Editor_SelectObjects(Editor, Assets, RayCast, Resolution, ViewSettings.ZNear);
+            
+            selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
+            if(SelectedObject)
+            {
+                if(SelectedObject->Type != SELECTED_OBJECT_TYPE_ENTITY)
                     Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
-                if(IsPressed(&DevInput->E)) 
-                    Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_SCALE;
-                if(IsPressed(&DevInput->R)) 
-                    Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_ROTATE;
-            }
-            
-            ak_v3f SelectorDiff = Editor_GetSelectorDiff(Editor, RayCast);
-            
-            switch(SelectedObject->Type)
-            {
-                case SELECTED_OBJECT_TYPE_ENTITY:
+                else
                 {
-                    dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
-                    
-                    switch(Editor->GizmoState.TransformMode)
+                    if(IsPressed(&DevInput->W)) 
+                        Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
+                    if(IsPressed(&DevInput->E)) 
+                        Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_SCALE;
+                    if(IsPressed(&DevInput->R)) 
+                        Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_ROTATE;
+                }
+                
+                ak_v3f SelectorDiff = Editor_GetSelectorDiff(Editor, RayCast);
+                
+                switch(SelectedObject->Type)
+                {
+                    case SELECTED_OBJECT_TYPE_ENTITY:
                     {
-                        case SELECTOR_TRANSFORM_MODE_TRANSLATE:
-                        {
-                            Entity->Transform.Translation -= SelectorDiff;
-                        } break;
+                        dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                         
-                        case SELECTOR_TRANSFORM_MODE_SCALE:
+                        switch(Editor->GizmoState.TransformMode)
                         {
-                            Entity->Transform.Scale -= SelectorDiff;
-                        } break;
-                        
-                        case SELECTOR_TRANSFORM_MODE_ROTATE:
-                        {
-                            Entity->Euler -= SelectorDiff;
-                            Entity->Transform.Orientation *= Editor_GetOrientationDiff(Editor, SelectorDiff);
-                        } break;
-                    }
-                } break;
-            }
-            
-            if(IsPressed(&DevInput->F))
-            {
-                DevCamera->Target = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                            case SELECTOR_TRANSFORM_MODE_TRANSLATE:
+                            {
+                                Entity->Transform.Translation -= SelectorDiff;
+                            } break;
+                            
+                            case SELECTOR_TRANSFORM_MODE_SCALE:
+                            {
+                                Entity->Transform.Scale -= SelectorDiff;
+                            } break;
+                            
+                            case SELECTOR_TRANSFORM_MODE_ROTATE:
+                            {
+                                Entity->Euler -= SelectorDiff;
+                                Entity->Transform.Orientation *= Editor_GetOrientationDiff(Editor, SelectorDiff);
+                            } break;
+                        }
+                    } break;
+                }
+                
+                if(IsPressed(&DevInput->F))
+                {
+                    DevCamera->Target = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                }
             }
         }
     }
@@ -1205,22 +1218,27 @@ view_settings Editor_RenderGameWorld(editor* Editor, graphics* Graphics, game* G
     ak_array<graphics_object>* GraphicsObjects = &World->GraphicsObjects[WorldIndex];
     graphics_render_buffer* RenderBuffer = Editor->RenderBuffers[WorldIndex];
     
-    AK_ForEach(Entity, EntityStorage)
+    for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
     {
-        ak_u32 Index = AK_PoolIndex(Entity->ID);
-        ak_sqtf* NewTransform = &PhysicsObjects->Get(Index)->Transform;
-        ak_sqtf* OldTransform = OldTransforms->Get(Index);
-        graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
-        
-        ak_sqtf InterpState;
-        InterpState.Translation = AK_Lerp(OldTransform->Translation, tInterpolated, NewTransform->Translation);
-        InterpState.Orientation = AK_Lerp(OldTransform->Orientation, tInterpolated, NewTransform->Orientation);
-        InterpState.Scale = NewTransform->Scale;
-        
-        GraphicsObject->Transform = AK_TransformM4(InterpState);
-        
-        if(Entity->Type == ENTITY_TYPE_PLAYER)
-            Camera->Target = GraphicsObject->Transform.Translation.xyz;
+        ak_u64 ID = EntityStorage->IDs[EntityIndex];
+        if(AK_PoolIsAllocatedID(ID))
+        {
+            ak_u32 Index = AK_PoolIndex(ID);
+            ak_sqtf* NewTransform = &PhysicsObjects->Get(Index)->Transform;
+            ak_sqtf* OldTransform = OldTransforms->Get(Index);
+            graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
+            
+            ak_sqtf InterpState;
+            InterpState.Translation = AK_Lerp(OldTransform->Translation, tInterpolated, NewTransform->Translation);
+            InterpState.Orientation = AK_Lerp(OldTransform->Orientation, tInterpolated, NewTransform->Orientation);
+            InterpState.Scale = NewTransform->Scale;
+            
+            GraphicsObject->Transform = AK_TransformM4(InterpState);
+            
+            entity* Entity = EntityStorage->GetByIndex(Index);
+            if(Entity->Type == ENTITY_TYPE_PLAYER)
+                Camera->Target = GraphicsObject->Transform.Translation.xyz;
+        }
     }
     
     if(Editor->UI.GameUseDevCamera)
@@ -1244,15 +1262,19 @@ view_settings Editor_RenderGameWorld(editor* Editor, graphics* Graphics, game* G
     PushLightBuffer(Graphics, &LightBuffer);
     
     
-    AK_ForEach(Entity, EntityStorage)
+    for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
     {
-        ak_u32 Index = AK_PoolIndex(Entity->ID);
-        graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
-        graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &GraphicsObject->Material);
-        graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
-        
-        PushMaterial(Graphics, Material);
-        PushDrawMesh(Graphics, MeshHandle, GraphicsObject->Transform, GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
+        ak_u64 ID = EntityStorage->IDs[EntityIndex];
+        if(AK_PoolIsAllocatedID(ID))
+        {
+            ak_u32 Index = AK_PoolIndex(ID);
+            graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
+            graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &GraphicsObject->Material);
+            graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
+            
+            PushMaterial(Graphics, Material);
+            PushDrawMesh(Graphics, MeshHandle, GraphicsObject->Transform, GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
+        }
     }
     
     return ViewSettings;
@@ -1604,7 +1626,7 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                     WorldManagement->SetState(WORLD_MANAGEMENT_STATE_DELETE);
             }
             
-            WorldManagement->Update(Editor->Scratch, DevPlatform, Assets);
+            WorldManagement->Update(Editor, DevPlatform, Assets);
             
             
             

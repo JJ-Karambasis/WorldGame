@@ -19,6 +19,31 @@ void ResizeWorld(world* World, ak_u32 WorldIndex, ak_u32 Size)
         World->Movables[WorldIndex].Resize(Size*2);
 }
 
+void DeleteEntity(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true)
+{
+    world* World = Game->World;
+    ak_u32 Index = AK_PoolIndex(ID);
+    
+    physics_object* PhysicsObject = World->PhysicsObjects[WorldIndex].Get(Index);
+    collision_volume* Volume = World->CollisionVolumeStorage.Get(PhysicsObject->CollisionVolumeID);
+    while(Volume)
+    {
+        ak_u64 NextID = Volume->NextID;
+        World->CollisionVolumeStorage.Free(Volume->ID);
+        Volume = World->CollisionVolumeStorage.Get(NextID);
+    }
+    
+    entity* Entity = World->EntityStorage[WorldIndex].Get(ID);
+    
+    if(ProcessLink)
+    {
+        if(Entity->LinkID)
+            DeleteEntity(Game, !WorldIndex, Entity->LinkID, false);
+    }
+    
+    World->EntityStorage[WorldIndex].Free(ID);
+}
+
 entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
                      mesh_asset_id MeshID, material Material)
 {
@@ -34,11 +59,13 @@ entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Pos
     Entity->ID =   ID;
     
     physics_object* PhysicsObject = &World->PhysicsObjects[WorldIndex][Index];
+    *PhysicsObject = {};
     PhysicsObject->Position = Position;
     PhysicsObject->Orientation = Orientation;
     PhysicsObject->Scale = Scale;
     
     graphics_object* GraphicsObject = &World->GraphicsObjects[WorldIndex][Index];
+    *GraphicsObject = {};
     GraphicsObject->MeshID = MeshID;
     GraphicsObject->Material = Material;
     
@@ -69,6 +96,7 @@ entity* CreateButtonEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3
     entity* Entity = CreateEntity(Game, WorldIndex, ENTITY_TYPE_BUTTON, Position, Dimensions, 
                                   AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BUTTON, Material);
     button_state* ButtonState = Game->World->ButtonStates[WorldIndex].Get(AK_PoolIndex(Entity->ID));
+    *ButtonState = {};
     ButtonState->IsToggled = IsToggled;
     return Entity;
 }

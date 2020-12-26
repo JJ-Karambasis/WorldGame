@@ -209,7 +209,7 @@ void Internal__InsertIndices(ak_pool<type>* Pool, ak_hash_map<ak_char*, ak_u32>*
         HashMap->Insert(Entry->Name, Index++);
 }
 
-ak_bool Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagement, dev_platform* DevPlatform, assets* Assets)
+ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagement, dev_platform* DevPlatform, assets* Assets)
 {
     ak_string_builder HeaderFile = {};
     
@@ -241,14 +241,13 @@ ak_bool Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagemen
     
     if(!DevPlatform->BuildWorld(WorldManagement->CurrentWorldName))
     {
-        ak_buffer BuildErrorBuffer = AK_ReadEntireFile("build_world_log.txt", Scratch);
-        Editor_DebugLog((ak_char*)BuildErrorBuffer.Data);
+        ak_string Message = AK_CreateString(AK_ReadEntireFile("build_world_log.txt", Scratch));
         AK_FileRemove("build_world_log.txt");
         
         AK_FileRemove(HeaderPath);
         if(AK_FileExists(RenameHeaderPath))
             AK_FileRename(RenameHeaderPath, HeaderPath);
-        return false;
+        return Message;
     }
     else
     {
@@ -320,7 +319,7 @@ ak_bool Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagemen
     
     BinaryBuilder.ReleaseMemory();
     
-    return true;
+    return AK_CreateEmptyString();
 }
 
 ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManagement, ak_string WorldName, dev_platform* DevPlatform, assets* Assets)
@@ -382,6 +381,8 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
     WorldSource.NewLine();
     
     //WorldSource.WriteLine("#include \"generated.cpp\"");
+    WorldSource.WriteLine("#include <assets.cpp>");
+    WorldSource.WriteLine("#include <game_common_source.cpp>");
     WorldSource.WriteLine("#define AK_COMMON_IMPLEMENTATION");
     WorldSource.WriteLine("#include <ak_common.h>");
     
@@ -420,19 +421,22 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
     WorldManagement->CurrentWorldName = AK_PushString(WorldName);
     WorldManagement->CurrentWorldPath = AK_PushString(NewWorldDirectoryPath);
     
-    ak_bool Result = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
-    if(!Result)
+    ak_string ErrorMessage = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
+    if(!AK_StringIsNullOrEmpty(ErrorMessage))
     {
+        ak_string Message = AK_FormatString(Scratch, "Failed to create world. Building of the world failed.\n Compiler errors: \n%.*s", ErrorMessage.Length, ErrorMessage.Data);
+        AK_MessageBoxOk("Failed to create world", Message);
+        Editor_DebugLog(ErrorMessage);
+        WorldManagement->DeleteAll();
         AK_FileRemove(WorldHeaderPath);
         AK_FileRemove(WorldSourcePath);
         AK_DirectoryRemove(NewWorldDirectoryPath);
-        return false;
     }
     
     WorldHeader.ReleaseMemory();
     WorldSource.ReleaseMemory();
     
-    return true;
+    return AK_StringIsNullOrEmpty(ErrorMessage);
 }
 
 ak_bool Internal__LoadWorld(ak_arena* Scratch, world_management* WorldManagement, ak_string WorldName, assets* Assets, dev_platform* DevPlatform)
@@ -602,13 +606,17 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
     WorldManagement->CurrentWorldPath = AK_PushString(WorldDirectoryPath);
     WorldManagement->CurrentWorldName = AK_PushString(WorldName);
     
-    ak_bool Result = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
-    if(!Result)
+    ak_string ErrorMessage = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
+    if(!AK_StringIsNullOrEmpty(ErrorMessage))
     {
+        ak_string Message = AK_FormatString(Scratch, "Failed to load world. Building of the world failed.\n Compiler errors: \n%.*s", ErrorMessage.Length, ErrorMessage.Data);
         WorldManagement->DeleteAll();
-        AK_MessageBoxOk("Failed to load world", "Failed to load world. There were compiler errors. Please see log window for details. Fix the compiler errors and then reload the world");
+        Editor_DebugLog(ErrorMessage);
+        AK_MessageBoxOk("Failed to load world", Message);
         return false;
     }
+    
+    
     
 #undef DELETE_TEMP_DATA
     
@@ -637,8 +645,9 @@ void Internal__DeleteWorld(ak_arena* Scratch, ak_string WorldName, dev_platform*
     DevPlatform->DeleteWorldFiles(WorldName);
 }
 
-void world_management::Update(ak_arena* Scratch, dev_platform* DevPlatform, assets* Assets)
+void world_management::Update(editor* Editor, dev_platform* DevPlatform, assets* Assets)
 {
+    ak_arena* Scratch = Editor->Scratch;
     ak_array<ak_string> Worlds = Internal__GetAllWorldNames(Scratch);
     
     if(NewState == WORLD_MANAGEMENT_STATE_NONE)
@@ -688,13 +697,12 @@ void world_management::Update(ak_arena* Scratch, dev_platform* DevPlatform, asse
                 
                 if(ImGui::Button("Create"))
                 {
-                    if(!Internal__CreateNewWorld(Scratch, this, WorldName, DevPlatform, Assets))
+                    if(Internal__CreateNewWorld(Scratch, this, WorldName, DevPlatform, Assets))
                     {
-                        AK_Assert(false, "Create new world failure");
+                        Editor->GizmoState.SelectedObject = {};
+                        NewState = WORLD_MANAGEMENT_STATE_NONE;
+                        ImGui::CloseCurrentPopup();
                     }
-                    
-                    NewState = WORLD_MANAGEMENT_STATE_NONE;
-                    ImGui::CloseCurrentPopup();
                 }
                 
                 if(AK_StringIsNullOrEmpty(WorldName))
@@ -765,6 +773,7 @@ void world_management::Update(ak_arena* Scratch, dev_platform* DevPlatform, asse
                     ak_string WorldName = Worlds[WorldSelectedIndex];
                     if(Internal__LoadWorld(Scratch, this, WorldName, Assets, DevPlatform))
                     {
+                        Editor->GizmoState.SelectedObject = {};
                         NewState = WORLD_MANAGEMENT_STATE_NONE;
                         ImGui::CloseCurrentPopup();
                     }
@@ -789,7 +798,9 @@ void world_management::Update(ak_arena* Scratch, dev_platform* DevPlatform, asse
         
         case WORLD_MANAGEMENT_STATE_SAVE:
         {
-            Internal__BuildWorld(Scratch, this, DevPlatform, Assets);
+            ak_string ErrorMessage = Internal__BuildWorld(Scratch, this, DevPlatform, Assets);
+            if(!AK_StringIsNullOrEmpty(ErrorMessage))
+                Editor_DebugLog(ErrorMessage);
             NewState = WORLD_MANAGEMENT_STATE_NONE;
         } break;
         
@@ -837,6 +848,8 @@ void world_management::Update(ak_arena* Scratch, dev_platform* DevPlatform, asse
                     
                     if(AK_StringEquals(WorldName, CurrentWorldName))
                         DeleteStrings();
+                    
+                    Editor->GizmoState.SelectedObject = {};
                 }
                 
                 if(WorldSelectedIndex == (ak_u32)-1)
