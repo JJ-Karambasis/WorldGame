@@ -389,13 +389,13 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
     for(ak_u32 GizmoIndex = 0; GizmoIndex < GizmoCount; GizmoIndex++)
         GizmoState->Gizmos[GizmoIndex].IsHighLighted = false;
     
-    if(!IsDown(Input->Alt) && !ImGui::GetIO().WantCaptureMouse)
+    if(!IsDown(&Input->Alt) && !ImGui::GetIO().WantCaptureMouse)
     {
         gizmo_intersection_result GizmoHitTest = Editor_CastToGizmos(Editor, GizmoState, RayCast, ZNear);
         
         if(GizmoHitTest.Hit) GizmoHitTest.Gizmo->IsHighLighted = true;
         
-        if(IsPressed(Input->LMB))
+        if(IsPressed(&Input->LMB))
         {
             if(!GizmoHitTest.Hit)
             {
@@ -421,7 +421,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
             }
         }
         
-        if(IsReleased(Input->LMB))
+        if(IsReleased(&Input->LMB))
         {
             GizmoState->GizmoHit = {};
         }
@@ -825,9 +825,9 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
         ak_v2f PanDelta = AK_V2<ak_f32>();
         ak_f32 Scroll = 0;
         
-        if(IsDown(DevInput->Alt))
+        if(IsDown(&DevInput->Alt))
         {
-            if(IsDown(DevInput->LMB))
+            if(IsDown(&DevInput->LMB))
             {
                 SphericalCoordinates->inclination += MouseDelta.y*1e-3f;
                 SphericalCoordinates->azimuth += MouseDelta.x*1e-3f;
@@ -849,7 +849,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 }            
             }
             
-            if(IsDown(DevInput->MMB))        
+            if(IsDown(&DevInput->MMB))        
                 PanDelta += AK_V2f(MouseDelta)*1e-3f;        
             
             if(AK_Abs(DevInput->Scroll) > 0)        
@@ -867,7 +867,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     
     if(!Editor->Game)
     {
-        if(IsPressed(DevInput->Q))
+        if(IsPressed(&DevInput->Q))
         {
             Editor->CurrentWorldIndex = !Editor->CurrentWorldIndex;
             Editor->GizmoState.SelectedObject = {};
@@ -885,11 +885,11 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
             else
             {
-                if(IsPressed(DevInput->W)) 
+                if(IsPressed(&DevInput->W)) 
                     Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
-                if(IsPressed(DevInput->E)) 
+                if(IsPressed(&DevInput->E)) 
                     Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_SCALE;
-                if(IsPressed(DevInput->R)) 
+                if(IsPressed(&DevInput->R)) 
                     Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_ROTATE;
             }
             
@@ -922,7 +922,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 } break;
             }
             
-            if(IsPressed(DevInput->F))
+            if(IsPressed(&DevInput->F))
             {
                 DevCamera->Target = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
             }
@@ -1436,20 +1436,34 @@ void Editor_Render(editor* Editor, graphics* Graphics, platform* Platform, asset
 ak_u64 GetEntryID(editor* Editor, dev_entity* DevEntity, ak_u32 WorldIndex)
 {
     ak_u64 Result = 0;
-    if(DevEntity->Type == ENTITY_TYPE_PLAYER)
+    
+    switch(DevEntity->Type)
     {
-        Result= CreatePlayerEntity(Editor->Game, WorldIndex, DevEntity->Transform.Translation, DevEntity->Material)->ID;
-    }
-    else
-    {
-        Result = CreateEntity(Editor->Game, WorldIndex, DevEntity->Type, DevEntity->Transform.Translation, DevEntity->Transform.Scale, 
-                              DevEntity->Transform.Orientation, DevEntity->MeshID, DevEntity->Material)->ID;
+        case ENTITY_TYPE_PLAYER:
+        {
+            Result = CreatePlayerEntity(Editor->Game, WorldIndex, DevEntity->Transform.Translation, 
+                                        DevEntity->Material)->ID;
+        } break;
+        
+        case ENTITY_TYPE_BUTTON:
+        {
+            Result = CreateButtonEntity(Editor->Game, WorldIndex, DevEntity->Transform.Translation, 
+                                        DevEntity->Transform.Scale, DevEntity->Material, DevEntity->IsToggled)->ID;
+        } break;
+        
+        case ENTITY_TYPE_STATIC:
+        {
+            Result = CreateStaticEntity(Editor->Game, WorldIndex, DevEntity->Transform.Translation, DevEntity->Transform.Scale, DevEntity->Transform.Orientation, 
+                                        DevEntity->MeshID, DevEntity->Material)->ID;
+        } break;
+        
+        AK_INVALID_DEFAULT_CASE;
     }
     
     ak_u32 Index = AK_PoolIndex(Result);
     ak_u32 IndexPlusOne = Index+1;
     if(IndexPlusOne > Editor->GameEntityNames[WorldIndex].Size)
-        Editor->GameEntityNames[WorldIndex].Resize(IndexPlusOne);
+        Editor->GameEntityNames[WorldIndex].Resize(IndexPlusOne*2);
     
     AK_MemoryCopy(Editor->GameEntityNames[WorldIndex][AK_PoolIndex(Result)], 
                   DevEntity->Name, MAX_OBJECT_NAME_LENGTH);
@@ -1572,21 +1586,21 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             
             dev_input* DevInput = &Editor->Input;
             
-            if(IsDown(DevInput->Ctrl))
+            if(IsDown(&DevInput->Ctrl))
             {
-                if(IsDown(DevInput->S)) 
+                if(IsDown(&DevInput->S)) 
                     WorldManagement->SetState(WORLD_MANAGEMENT_STATE_SAVE);
             }
             
-            if(IsDown(DevInput->Alt))
+            if(IsDown(&DevInput->Alt))
             {
-                if(IsDown(DevInput->L)) 
+                if(IsDown(&DevInput->L)) 
                     WorldManagement->SetState(WORLD_MANAGEMENT_STATE_LOAD);
                 
-                if(IsDown(DevInput->N))
+                if(IsDown(&DevInput->N))
                     WorldManagement->SetState(WORLD_MANAGEMENT_STATE_CREATE);
                 
-                if(IsDown(DevInput->D))
+                if(IsDown(&DevInput->D))
                     WorldManagement->SetState(WORLD_MANAGEMENT_STATE_DELETE);
             }
             

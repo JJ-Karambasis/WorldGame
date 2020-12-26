@@ -293,6 +293,9 @@ ak_bool Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagemen
             
             mesh_info* MeshInfo = GetMeshInfo(Assets, DevEntity->MeshID);
             Internal__WriteName(&BinaryBuilder, MeshInfo->Name, (ak_u8)MeshInfo->Header.NameLength);
+            
+            if(DevEntity->Type == ENTITY_TYPE_BUTTON)
+                BinaryBuilder.Write(DevEntity->IsToggled);
         }
     }
     
@@ -534,6 +537,9 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
             {
                 LinkHashMap->Insert(LinkName.Data, DevEntity->ID);
             }
+            
+            if(Type == ENTITY_TYPE_BUTTON)
+                DevEntity->IsToggled = WorldFileStream.CopyConsume<ak_bool>();
         }
     }
     

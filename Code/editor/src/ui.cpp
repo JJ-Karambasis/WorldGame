@@ -463,13 +463,29 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
         Spawner->EntityType = Type;
     }
     
+    ImGui::Separator();
+    UI_NameTool(AK_HashFunction("Name Spawner"), Spawner->Name, MAX_OBJECT_NAME_LENGTH);
+    ImGui::Separator();
     switch(Type)
     {
+        case ENTITY_TYPE_BUTTON:
+        {
+            UI_TranslationTool(AK_HashFunction("Translation Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Translation);
+            ImGui::Separator();
+            UI_ScaleTool(AK_HashFunction("Scale Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Scale);
+            ImGui::Separator();
+            const ak_char* WorldIndexList[] = {"World A", "World B", "Both"};
+            UI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex, 
+                              WorldIndexList, AK_Count(WorldIndexList));
+            ImGui::Separator();
+            Spawner->MeshID = MESH_ASSET_ID_BUTTON;
+            UI_MaterialTool(Assets, &Spawner->MaterialContext);
+            ImGui::Separator();
+            
+        } break;
+        
         case ENTITY_TYPE_STATIC:
         {
-            ImGui::Separator();
-            UI_NameTool(AK_HashFunction("Name Spawner"), Spawner->Name, MAX_OBJECT_NAME_LENGTH);
-            ImGui::Separator();
             UI_TranslationTool(AK_HashFunction("Translation Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Translation);
             ImGui::Separator();
             UI_ScaleTool(AK_HashFunction("Scale Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Scale);
@@ -483,49 +499,62 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             ImGui::Separator();
             UI_MaterialTool(Assets, &Spawner->MaterialContext);
             ImGui::Separator();
-            
-            if(UI_Button(AK_HashFunction("Create Entity Button"), "Create"))
+        } break;
+    } 
+    
+    if(UI_Button(AK_HashFunction("Create Entity Button"), "Create"))
+    {
+        if(!AK_StringIsNullOrEmpty(AK_CreateString(Spawner->Name)))
+        {
+            UI->ShowEntityNameNullErrorText = false;
+            material Material = UI_MaterialFromContext(&Spawner->MaterialContext);
+            if(Spawner->WorldIndex < 2)
             {
-                if(AK_StringIsNullOrEmpty(AK_CreateString(Spawner->Name)))
+                if(!WorldManagement->EntityNameCollisionMap[Spawner->WorldIndex].Find(Spawner->Name))
                 {
-                    UI->ShowEntityNameNullErrorText = true;
+                    UI->ShowEntityNameErrorText = false;
+                    WorldManagement->CreateDevEntity(Spawner->WorldIndex, Spawner->Name, 
+                                                     Spawner->EntityType, Spawner->Translation, 
+                                                     Spawner->Axis, Spawner->Angle, Spawner->Scale, 
+                                                     Material, Spawner->MeshID);
+                }
+                else
+                    UI->ShowEntityNameErrorText = true;
+            }
+            else
+            {
+                if(WorldManagement->EntityNameCollisionMap[0].Find(Spawner->Name) ||
+                   WorldManagement->EntityNameCollisionMap[1].Find(Spawner->Name))
+                {
+                    UI->ShowEntityNameErrorText = true;
                 }
                 else
                 {
-                    UI->ShowEntityNameNullErrorText = false;
-                    material Material = UI_MaterialFromContext(&Spawner->MaterialContext);
-                    if(Spawner->WorldIndex == 2)
+                    UI->ShowEntityNameErrorText = false;
+                    
+                    dev_entity* Entity0 = WorldManagement->CreateDevEntity(0, Spawner->Name, 
+                                                                           Spawner->EntityType, Spawner->Translation, 
+                                                                           Spawner->Axis, Spawner->Angle, 
+                                                                           Spawner->Scale, Material, Spawner->MeshID);
+                    
+                    dev_entity* Entity1 = WorldManagement->CreateDevEntity(1, Spawner->Name, 
+                                                                           Spawner->EntityType, Spawner->Translation, 
+                                                                           Spawner->Axis, Spawner->Angle, 
+                                                                           Spawner->Scale, Material,
+                                                                           Spawner->MeshID);
+                    
+                    if(Spawner->WorldIndex == 3)
                     {
-                        if(WorldManagement->EntityNameCollisionMap[0].Find(Spawner->Name) ||
-                           WorldManagement->EntityNameCollisionMap[1].Find(Spawner->Name))
-                        {
-                            UI->ShowEntityNameErrorText = true;
-                        }
-                        else
-                        {
-                            UI->ShowEntityNameErrorText = false;
-                        }
-                    }
-                    else
-                    {
-                        if(WorldManagement->EntityNameCollisionMap[Spawner->WorldIndex].Find(Spawner->Name))
-                        {
-                            UI->ShowEntityNameErrorText = true;
-                        }
-                        else
-                        {
-                            UI->ShowEntityNameErrorText = false;
-                            
-                            WorldManagement->CreateDevEntity(Spawner->WorldIndex, Spawner->Name, Spawner->EntityType, Spawner->Translation, Spawner->Axis, Spawner->Angle, 
-                                                             Spawner->Scale, Material, Spawner->MeshID);
-                            
-                            WorldManagement->EntityNameCollisionMap[Spawner->WorldIndex].Insert(Spawner->Name, true);
-                        }
+                        Entity0->LinkID = Entity1->ID;
+                        Entity1->LinkID = Entity0->ID;
                     }
                 }
             }
-        } break;
-    } 
+        }
+        else
+            UI->ShowEntityNameNullErrorText = true;
+        
+    }
     
     if(UI->ShowEntityNameErrorText)
     {
@@ -727,17 +756,22 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                     
                     ak_f32 HalfAngleMax = 180.0f;
                     
+                    if(Entity->Type == ENTITY_TYPE_BUTTON)
+                        UI_PushDisabledItem();
+                    
                     UI_DragAngle(Hash, "X", &Rotation.x, 0.1f, -HalfAngleMax, HalfAngleMax); 
                     ImGui::SameLine();
                     UI_DragAngle(Hash+1, "Y", &Rotation.y, 0.1f, -HalfAngleMax, HalfAngleMax); ImGui::SameLine();
                     UI_DragAngle(Hash+2, "Z", &Rotation.z, 0.1f, -HalfAngleMax, HalfAngleMax);
                     ImGui::PopItemWidth();
                     
+                    if(Entity->Type == ENTITY_TYPE_BUTTON)
+                        UI_PopDisabledItem();
+                    
                     ImGui::Text("Type: %s", UI_GetEntityType(Entity->Type));
                     material_context MaterialContext = UI_ContextFromMaterial(&Entity->Material);
                     UI_MaterialTool(Assets, &MaterialContext);
                     Entity->Material = UI_MaterialFromContext(&MaterialContext);
-                    
                     
                     ak_v3f PointDiff = Rotation-Entity->Euler;
                     
@@ -750,6 +784,11 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                     Entity->Transform.Orientation *= AK_Normalize(XOrientation*YOrientation*ZOrientation);
                     
                     Entity->Euler = Rotation;
+                    
+                    if(Entity->Type == ENTITY_TYPE_BUTTON)
+                    {
+                        UI_Checkbox(AK_HashFunction("Button IsToggled checkbox"), "Is Toggled", &Entity->IsToggled);
+                    }
                 } break;
                 
                 case SELECTED_OBJECT_TYPE_LIGHT:

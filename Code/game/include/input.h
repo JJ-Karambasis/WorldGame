@@ -23,21 +23,21 @@ struct input
     };                
 };
 
-inline ak_bool IsDown(button Button)
+inline ak_bool IsDown(button* Button)
 {
-    ak_bool Result = Button.IsDown;
+    ak_bool Result = Button->IsDown;
     return Result;
 }
 
-inline ak_bool IsPressed(button Button)
+inline ak_bool IsPressed(button* Button)
 {
-    ak_bool Result = IsDown(Button) && !Button.WasDown;
+    ak_bool Result = IsDown(Button) && !Button->WasDown;
     return Result;
 }
 
-inline ak_bool IsReleased(button Button)
+inline ak_bool IsReleased(button* Button)
 {
-    ak_bool Result = !IsDown(Button) && Button.WasDown;
+    ak_bool Result = !IsDown(Button) && Button->WasDown;
     return Result;
 }
 

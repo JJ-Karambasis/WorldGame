@@ -4,13 +4,19 @@
 void ResizeWorld(world* World, ak_u32 WorldIndex, ak_u32 Size)
 {
     if(Size > World->PhysicsObjects[WorldIndex].Size) 
-        World->PhysicsObjects[WorldIndex].Resize(Size);
+        World->PhysicsObjects[WorldIndex].Resize(Size*2);
     
     if(Size > World->GraphicsObjects[WorldIndex].Size)
-        World->GraphicsObjects[WorldIndex].Resize(Size);
+        World->GraphicsObjects[WorldIndex].Resize(Size*2);
     
     if(Size > World->OldTransforms[WorldIndex].Size)
-        World->OldTransforms[WorldIndex].Resize(Size);
+        World->OldTransforms[WorldIndex].Resize(Size*2);
+    
+    if(Size > World->ButtonStates[WorldIndex].Size)
+        World->ButtonStates[WorldIndex].Resize(Size*2);
+    
+    if(Size > World->Movables[WorldIndex].Size)
+        World->Movables[WorldIndex].Resize(Size*2);
 }
 
 entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
@@ -55,6 +61,16 @@ entity* CreatePlayerEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, mater
 entity* CreateStaticEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, mesh_asset_id MeshID, material Material)
 {
     return CreateEntity(Game, WorldIndex, ENTITY_TYPE_STATIC, Position, Scale, Orientation, MeshID, Material);
+}
+
+entity* CreateButtonEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, 
+                           material Material, ak_bool IsToggled)
+{
+    entity* Entity = CreateEntity(Game, WorldIndex, ENTITY_TYPE_BUTTON, Position, Dimensions, 
+                                  AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BUTTON, Material);
+    button_state* ButtonState = Game->World->ButtonStates[WorldIndex].Get(AK_PoolIndex(Entity->ID));
+    ButtonState->IsToggled = IsToggled;
+    return Entity;
 }
 
 point_light* CreatePointLight(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity)

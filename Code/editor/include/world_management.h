@@ -11,6 +11,7 @@ struct dev_entity
     ak_sqtf Transform;
     material Material;
     mesh_asset_id MeshID;
+    ak_bool IsToggled;
 };
 
 struct dual_dev_entity

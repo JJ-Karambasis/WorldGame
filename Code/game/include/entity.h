@@ -58,6 +58,11 @@ struct player
     ak_v3f GravityVelocity;
 };
 
+struct button_state : public button
+{
+    ak_bool IsToggled;    
+};
+
 struct movable
 {
     ak_u64 ChildID;

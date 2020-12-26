@@ -19,7 +19,13 @@ struct broad_phase
     world* World;
     ak_u32 WorldIndex;
     
+    broad_phase_pair_list GetAllPairs(ak_arena* Arena, broad_phase_pair_filter_func* FilterFunc=NULL, 
+                                      void* UserData=NULL);
+    
     broad_phase_pair_list GetPairs(ak_arena* Arena, ak_u64 ID, broad_phase_pair_filter_func* FilterFunc=NULL, void* UserData=NULL);
+    
+    broad_phase_pair_list FilterPairs(ak_arena* Arena, broad_phase_pair_list List, 
+                                      broad_phase_pair_filter_func* FilterFunc, void* UserData=NULL);
 };
 
 #endif

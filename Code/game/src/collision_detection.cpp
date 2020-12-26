@@ -22,6 +22,25 @@ TOIResult.VolumeB = VolumeB; \
 } \
 } while(0)
 
+ak_bool CollisionDetection_Intersect(collision_detection* CollisionDetection, broad_phase_pair* Pair)
+{
+    world* World = CollisionDetection->BroadPhase.World;
+    ak_u32 WorldIndex = CollisionDetection->BroadPhase.WorldIndex;
+    
+    ak_pool<collision_volume>* CollisionVolumes = &World->CollisionVolumeStorage;
+    ak_array<physics_object>* PhysicsObjects = &World->PhysicsObjects[WorldIndex];
+    
+    collision_volume* VolumeA = World->CollisionVolumeStorage.Get(Pair->VolumeA);
+    collision_volume* VolumeB = World->CollisionVolumeStorage.Get(Pair->VolumeB);
+    
+    physics_object* ObjectA = PhysicsObjects->Get(AK_PoolIndex(Pair->EntityA));
+    physics_object* ObjectB = PhysicsObjects->Get(AK_PoolIndex(Pair->EntityB));
+    
+    intersection_function* IntersectionFunction = IntersectionFunctions[VolumeA->Type][VolumeB->Type];
+    return IntersectionFunction(ObjectA, ObjectB, VolumeA, VolumeB);
+    
+}
+
 ccd_contact CCD_GetEarliestContact(collision_detection* CollisionDetection, ak_u64 ID, 
                                    broad_phase_pair_filter_func* FilterFunc, void* UserData)
 {

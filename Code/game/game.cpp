@@ -35,6 +35,22 @@ AK_EXPORT GAME_STARTUP(Game_Startup)
     return Game;
 }
 
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_FilterStaticEntitiesFunc)
+{
+    ak_pool<entity>* EntityStorage = &BroadPhase->World->EntityStorage[BroadPhase->WorldIndex];
+    ak_bool AreStatic = (EntityStorage->Get(Pair.EntityA)->Type == ENTITY_TYPE_STATIC ||
+                         EntityStorage->Get(Pair.EntityB)->Type == ENTITY_TYPE_STATIC);
+    return !AreStatic;
+}
+
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_FilterOnlyStaticEntitiesFunc)
+{
+    ak_pool<entity>* EntityStorage = &BroadPhase->World->EntityStorage[BroadPhase->WorldIndex];
+    ak_bool AreStatic = (EntityStorage->Get(Pair.EntityA)->Type == ENTITY_TYPE_STATIC ||
+                         EntityStorage->Get(Pair.EntityB)->Type == ENTITY_TYPE_STATIC);
+    return AreStatic;
+}
+
 inline ak_f32 GetDeltaClamped(ak_f32 Delta)
 {
     return AK_Max(Delta-VERY_CLOSE_DISTANCE, 0.0f);
@@ -58,7 +74,8 @@ void Game_PlayerMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_f32 
     {
         for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
         {
-            ccd_contact ContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID);
+            ccd_contact ContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID, 
+                                                            BroadPhase_FilterOnlyStaticEntitiesFunc);
             if(!ContactCCD.Intersected)
             {
                 PhysicsObject->Position += PhysicsObject->MoveDelta;
@@ -110,7 +127,7 @@ void Game_GravityMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_v3f
     {
         for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
         {
-            ccd_contact ContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID);
+            ccd_contact ContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID, BroadPhase_FilterOnlyStaticEntitiesFunc);
             if(!ContactCCD.Intersected)
             {
                 PhysicsObject->Position += PhysicsObject->MoveDelta;
@@ -124,6 +141,8 @@ void Game_GravityMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_v3f
             ak_f32 ShortenDistance = AK_Max(NearestDistance-VERY_CLOSE_DISTANCE, 0.0f);
             
             contact* Contact = &ContactCCD.Contact;
+            if(ContactCCD.t == 0.0f && Contact->Penetration > 0)
+                ShortenDistance -= Contact->Penetration+VERY_CLOSE_DISTANCE;
             
             if(AK_Dot(-Contact->Normal, AK_ZAxis()) < 0.7f)
             {                            
@@ -178,20 +197,20 @@ AK_EXPORT GAME_UPDATE(Game_Update)
     ak_f32 dt = Game->dtFixed;
     input* Input = &Game->Input;
     
-    if(IsPressed(Input->SwitchWorld))
+    if(IsPressed(&Input->SwitchWorld))
         Game->CurrentWorldIndex = !Game->CurrentWorldIndex;
     
     ak_v2f InputDirection = {};
-    if(IsDown(Input->MoveForward))
+    if(IsDown(&Input->MoveForward))
         InputDirection.y = 1.0f;
     
-    if(IsDown(Input->MoveBackward))
+    if(IsDown(&Input->MoveBackward))
         InputDirection.y = -1.0f;
     
-    if(IsDown(Input->MoveRight))
+    if(IsDown(&Input->MoveRight))
         InputDirection.x = 1.0f;
     
-    if(IsDown(Input->MoveLeft))
+    if(IsDown(&Input->MoveLeft))
         InputDirection.x = -1.0f;
     
     if(InputDirection != 0.0f)
@@ -244,6 +263,67 @@ AK_EXPORT GAME_UPDATE(Game_Update)
             }
         }
     }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_array<physics_object>* PhysicsObjects = &World->PhysicsObjects[WorldIndex];
+        ak_array<button_state>* ButtonStates = &World->ButtonStates[WorldIndex];
+        ak_pool<collision_volume>* CollisionVolumeStorage = &World->CollisionVolumeStorage;
+        
+        AK_Assert(PhysicsObjects->Size == ButtonStates->Size, "Invalid game array size");
+        ak_u32 Size = PhysicsObjects->Size;
+        
+        for(ak_u32 Index = 0; Index < Size; Index++) 
+        {
+            button_state* ButtonState = ButtonStates->Get(Index);
+            physics_object* PhysicsObject = PhysicsObjects->Get(Index);
+            
+            if(IsPressed(ButtonState))
+            {
+                PhysicsObject->Transform.Scale.z *= 0.01f;
+                collision_volume* CollisionVolume = CollisionVolumeStorage->Get(PhysicsObject->CollisionVolumeID);
+                CollisionVolume->ConvexHull.Header.Transform.Scale.z *= 100.0f;
+            }
+            
+            if(IsReleased(ButtonState))
+            {
+                PhysicsObject->Transform.Scale.z *= 100.0f;
+                collision_volume* CollisionVolume = CollisionVolumeStorage->Get(PhysicsObject->CollisionVolumeID);
+                CollisionVolume->ConvexHull.Header.Transform.Scale.z *= 0.01f;
+            }
+            
+            ButtonState->WasDown = ButtonState->IsDown;
+            if(ButtonState->IsToggled)
+                ButtonState->IsDown = false;
+        }
+    }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_pool<entity>* EntityStorage = &World->EntityStorage[WorldIndex];
+        ak_array<button_state>* ButtonStates = &World->ButtonStates[WorldIndex];
+        
+        broad_phase BroadPhase = BroadPhase_Begin(World, WorldIndex);
+        collision_detection CollisionDetection = CollisionDetection_Begin(BroadPhase, Game->Scratch);
+        
+        broad_phase_pair_list Pairs = BroadPhase.GetAllPairs(Game->Scratch, BroadPhase_FilterStaticEntitiesFunc);
+        AK_ForEach(Pair, &Pairs)
+        {
+            entity* EntityA = EntityStorage->Get(Pair->EntityA);
+            entity* EntityB = EntityStorage->Get(Pair->EntityB);
+            
+            if((EntityA->Type == ENTITY_TYPE_BUTTON) || (EntityB->Type == ENTITY_TYPE_BUTTON))
+            {
+                if(CollisionDetection_Intersect(&CollisionDetection, Pair))
+                {
+                    entity* Button = (EntityA->Type == ENTITY_TYPE_BUTTON) ? EntityA : EntityB;
+                    button_state* ButtonState = ButtonStates->Get(AK_PoolIndex(Button->ID));
+                    ButtonState->IsDown = true;
+                }
+            }
+        }
+    }
+    
 }
 
 WORLD_SHUTDOWN(Game_WorldShutdownCommon)

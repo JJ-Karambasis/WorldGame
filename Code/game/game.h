@@ -92,6 +92,8 @@ struct world
     ak_array<ak_sqtf> OldTransforms[2];
     ak_array<physics_object> PhysicsObjects[2];
     ak_array<graphics_object> GraphicsObjects[2];
+    ak_array<button_state> ButtonStates[2];
+    ak_array<movable> Movables[2];
     ak_pool<collision_volume> CollisionVolumeStorage;
     
     player Players[2];
