@@ -119,7 +119,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
                                 if(Internal__LoadWorld(Editor->Scratch, WorldManagement, 
                                                        Name, Assets, DevPlatform))
                                 {
-                                    Editor_PlayGame(Editor, Graphics, Assets, Platform);
+                                    Editor_PlayGame(Editor, Graphics, Assets, Platform, DevPlatform);
                                     NewState = FRAME_PLAYBACK_STATE_PLAYING;
                                     Reader.FrameHeaders = Stream->Peek<frame_header>();
                                 }

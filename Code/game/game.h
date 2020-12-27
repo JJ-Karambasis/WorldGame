@@ -32,7 +32,7 @@ struct world;
 
 #define PLATFORM_PROCESS_MESSAGES(name) ak_bool name(input* Input)
 #define PLATFORM_LOAD_GAME_CODE(name) game_startup* name()
-#define PLATFORM_LOAD_WORLD_CODE(name) world_startup* name(ak_string WorldName)
+#define PLATFORM_LOAD_WORLD_CODE(name) world_startup* name(ak_string WorldPath, ak_string WorldName)
 #define PLATFORM_UNLOAD_CODE(name) void name()
 #define PLATFORM_GET_RESOLUTION(name) ak_v2i name()
 
@@ -106,5 +106,22 @@ extern "C" AK_EXPORT GAME_STARTUP(Game_Startup);
 extern "C" AK_EXPORT GAME_UPDATE(Game_Update);
 extern "C" AK_EXPORT GAME_SHUTDOWN(Game_Shutdown);
 WORLD_SHUTDOWN(Game_WorldShutdownCommon);
+
+#if defined(GAME_COMPILED) && defined(DEVELOPER_BUILD)
+#include <editor.h>
+
+extern "C"
+{
+    AK_EXPORT editor* Internal__Editor;
+}
+
+#define Debug_Log(format, ...) Internal__Editor->DebugLog(format, __VA_ARGS__)
+#define Debug_DrawPoint(position, size, color) Internal__Editor->DrawPoint(Internal__Editor, position, size, color)
+#define Debug_DrawSegment(position0, position1, size, color) Internal__Editor->DrawSegment(Internal__Editor, position0, position1, size, color)
+#else
+#define Debug_Log(format, ...)
+#define Debug_DrawPoint(position, size, color)
+#define Debug_DrawSegment(position0, position1, size, color)
+#endif
 
 #endif

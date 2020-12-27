@@ -75,7 +75,7 @@ struct world_management
     void DeleteDevEntity(ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true);
     void DeleteDevPointLight(ak_u32 WorldIndex, ak_u64 ID);
     
-    void SetState(world_management_state State);    void Update(editor* Editor, dev_platform* DevPlatform, assets* Assets);
+    void SetState(world_management_state State);    void Update(editor* Editor, platform* Platform, dev_platform* DevPlatform, assets* Assets);
     
     void DeleteAll();
     void DeleteIndices();

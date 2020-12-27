@@ -116,8 +116,9 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
 {
     ak_temp_arena TempArena = Global_Platform.Arena->BeginTemp();
     
-    ak_string WorldDLLPath = AK_StringConcat(Global_Platform.ProgramPath, WorldName, Global_Platform.Arena);
-    WorldDLLPath = AK_StringConcat(WorldDLLPath, ".dll", Global_Platform.Arena);
+    ak_string WorldDLLPath = AK_FormatString(Global_Platform.Arena, "%.*s\\lib\\%.*s.dll", 
+                                             WorldPath.Length, WorldPath.Data, 
+                                             WorldName.Length, WorldName.Data);
     
     Global_Platform.WorldLibrary = LoadLibrary(WorldDLLPath.Data);
     if(!Global_Platform.WorldLibrary)
@@ -423,16 +424,17 @@ DEV_BUILD_WORLD(Win32_BuildWorld)
     
     PROCESS_INFORMATION ProcessInfo = {};
     ak_temp_arena TempArena = Global_Platform.Arena->BeginTemp();
-    ak_char* Command = AK_FormatString(Global_Platform.Arena, "cmd.exe /C ..\\code\\build_world.bat %s %.*s >> %s", WORLDS_PATH, WorldName.Length, WorldName.Data, BUILD_WORLD_LOG_FILE).Data; 
     
-    if(!CreateProcess(NULL, Command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &StartupInfo, &ProcessInfo))
+    ak_string BatFilePath = AK_StringConcat(WorldPath, "build.bat", Global_Platform.Arena);
+    
+    ak_char* Command = AK_FormatString(Global_Platform.Arena, "cmd.exe /C %.*s >> %s", BatFilePath.Length, BatFilePath.Data, BUILD_WORLD_LOG_FILE).Data; 
+    if(!CreateProcess(NULL, Command, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, WorldPath.Data, &StartupInfo, &ProcessInfo))
     {
         //TODO(JJ): Diagnostic and error logging
         AK_InvalidCode();
         Global_Platform.Arena->EndTemp(&TempArena);
         return false;
     }
-    
     WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
     
     DWORD ExitCode;
@@ -444,20 +446,15 @@ DEV_BUILD_WORLD(Win32_BuildWorld)
     return ExitCode == 0;
 }
 
-DEV_DELETE_WORLD_FILES(Win32_DeleteWorldFiles)
+DEV_SET_GAME_DEBUG_EDITOR(Win32_SetGameDebugEditor)
 {
-    ak_temp_arena TempArena = Global_Platform.Arena->BeginTemp();
-    ak_string Dll = AK_StringConcat(WorldName, ".dll", Global_Platform.Arena);
-    ak_string Exp = AK_StringConcat(WorldName, ".exp", Global_Platform.Arena);
-    ak_string Lib = AK_StringConcat(WorldName, ".lib", Global_Platform.Arena);
-    ak_string Obj = AK_StringConcat(WorldName, ".obj", Global_Platform.Arena);
-    
-    if(AK_FileExists(Dll)) AK_FileRemove(Dll);
-    if(AK_FileExists(Exp)) AK_FileRemove(Exp);
-    if(AK_FileExists(Lib)) AK_FileRemove(Lib);
-    if(AK_FileRemove(Obj)) AK_FileRemove(Obj);
-    
-    Global_Platform.Arena->EndTemp(&TempArena);
+    editor** OutEditor = (editor**)GetProcAddress(Global_Platform.GameLibrary, "Internal__Editor");
+    if(OutEditor)
+    {
+        *OutEditor = Editor;
+        return true;
+    }
+    return false;
 }
 
 int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
@@ -526,7 +523,7 @@ int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineAr
     
     Global_DevPlatform.Update = Win32_DevUpdate;
     Global_DevPlatform.BuildWorld = Win32_BuildWorld;
-    Global_DevPlatform.DeleteWorldFiles = Win32_DeleteWorldFiles;
+    Global_DevPlatform.SetGameDebugEditor = Win32_SetGameDebugEditor;
     
     return Editor_Run(Graphics, &Global_Platform, &Global_DevPlatform, Context);
 }

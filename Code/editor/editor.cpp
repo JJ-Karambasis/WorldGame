@@ -1,6 +1,5 @@
 #include "editor.h"
 
-
 #include <imgui.cpp>
 #include <imgui_draw.cpp>
 #include <imgui_widgets.cpp>
@@ -10,7 +9,7 @@
 #include <game_common_source.cpp>
 #include <src/graphics_state.cpp>
 
-void Editor_DebugLog(const ak_char* Format, ...)
+EDITOR_DEBUG_LOG(Editor_DebugLog)
 {
     if(!Internal__LogArena)
         Internal__LogArena = AK_CreateArena();
@@ -21,6 +20,26 @@ void Editor_DebugLog(const ak_char* Format, ...)
     va_end(Args);
 }
 
+EDITOR_DRAW_POINT(Editor_DrawPoint)
+{
+    render_primitive Primitive = {};
+    Primitive.Type = RENDER_PRIMITIVE_TYPE_POINT;
+    Primitive.Point.P = Position;
+    Primitive.Point.Size = Size;
+    Primitive.Point.Color = Color;
+    Editor->RenderPrimitives.Add(Primitive);
+}
+
+EDITOR_DRAW_SEGMENT(Editor_DrawSegment)
+{
+    render_primitive Primitive = {};
+    Primitive.Type = RENDER_PRIMITIVE_TYPE_SEGMENT;
+    Primitive.Segment.P0 = P0;
+    Primitive.Segment.P1 = P1;
+    Primitive.Segment.Size = Size;
+    Primitive.Segment.Color = Color;
+    Editor->RenderPrimitives.Add(Primitive);
+}
 
 void Editor_DebugLog(ak_string String)
 {
@@ -28,7 +47,6 @@ void Editor_DebugLog(ak_string String)
         Internal__LogArena = AK_CreateArena();
     Internal__Logs.Add(AK_PushString(String, Internal__LogArena));
 }
-
 
 #define EDITOR_ITEM_WIDTH 80.0f
 
@@ -62,6 +80,7 @@ gizmo_selected_object Editor_GizmoSelectedObject(ak_u64 ID, selected_object_type
 #include "src/world_management.cpp"
 #include "src/dev_mesh.cpp"
 #include "src/frame_playback.cpp"
+#include "src/generated_string_templates.cpp"
 
 dev_entity* selected_object::GetEntity(world_management* WorldManagement, ak_u32 WorldIndex)
 {
@@ -743,6 +762,10 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
     UI->EditorScaleSnapIndex = 3;
     UI->EditorRotateSnapIndex = 1;
     
+    Editor->DebugLog = Editor_DebugLog;
+    Editor->DrawPoint = Editor_DrawPoint;
+    Editor->DrawSegment = Editor_DrawSegment;
+    
     return Editor;
 }
 
@@ -1415,6 +1438,29 @@ void Editor_Render(editor* Editor, graphics* Graphics, platform* Platform, asset
         }
     }
     
+    PushDepth(Graphics, false);
+    
+    AK_ForEach(RenderPrimitive, &Editor->RenderPrimitives)
+    {
+        switch(RenderPrimitive->Type)
+        {
+            case RENDER_PRIMITIVE_TYPE_POINT:
+            {
+                Editor_DrawPoint(Editor, Graphics, RenderPrimitive->Point.P, 
+                                 RenderPrimitive->Point.Size, RenderPrimitive->Point.Color);
+            } break;
+            
+            case RENDER_PRIMITIVE_TYPE_SEGMENT:
+            {
+                Editor_DrawEdge(Editor, Graphics, RenderPrimitive->Segment.P0, RenderPrimitive->Segment.P1, RenderPrimitive->Segment.Size, 
+                                RenderPrimitive->Segment.Color);
+            } break;
+        }
+    }
+    Editor->RenderPrimitives.Clear();
+    
+    PushDepth(Graphics, true);
+    
     PushProjection(Graphics, AK_Orthographic(0.0f, (ak_f32)Resolution.w, 0.0f, (ak_f32)Resolution.h, -1.0f, 1.0f));
     PushCull(Graphics, GRAPHICS_CULL_MODE_NONE);
     PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);        
@@ -1552,13 +1598,21 @@ void Editor_StopGame(editor* Editor, platform* Platform)
     Platform->UnloadWorldCode();
 }
 
-ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform)
+ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform, 
+                        dev_platform* DevPlatform)
 {
     world_management* WorldManagement = &Editor->WorldManagement;
     
     game_startup* GameStartup = Platform->LoadGameCode();
-    world_startup* WorldStartup = Platform->LoadWorldCode(WorldManagement->CurrentWorldName);
+    world_startup* WorldStartup = Platform->LoadWorldCode(WorldManagement->CurrentWorldPath, WorldManagement->CurrentWorldName);
     if(!GameStartup || !WorldStartup)
+    {
+        //TODO(JJ): Diagnostic and error logging
+        AK_InvalidCode();
+        return false;
+    }
+    
+    if(!DevPlatform->SetGameDebugEditor(Editor))
     {
         //TODO(JJ): Diagnostic and error logging
         AK_InvalidCode();
@@ -1645,7 +1699,7 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                     WorldManagement->SetState(WORLD_MANAGEMENT_STATE_DELETE);
             }
             
-            WorldManagement->Update(Editor, DevPlatform, Assets);
+            WorldManagement->Update(Editor, Platform, DevPlatform, Assets);
             
             
             
@@ -1680,7 +1734,7 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             {
                 if(UI_Button(AK_HashFunction("Play Game Button"), "Play"))
                 {
-                    Editor_PlayGame(Editor, Graphics, Assets, Platform);
+                    Editor_PlayGame(Editor, Graphics, Assets, Platform, DevPlatform);
                 }
                 
                 UI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", 

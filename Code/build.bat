@@ -1,7 +1,7 @@
 @echo off
 
-set WORLDS_PATH=YOUR_PATH_TO_WORLDS_HERE
-set RECORDINGS_PATH=YOUR_PATH_TO_RECORDINGS_HERE
+set WORLDS_PATH={YOUR_PATH_TO_WORLD_HERE}
+set RECORDINGS_PATH={YOUR_PATH_TO_RECORDINGS_HERE}
 set GAME_NAME=World_Game
 
 set AKCommonPath=-I..\code\AKCommon
@@ -39,7 +39,7 @@ if %COMPILE_GRAPHICS% == 1 (
 )
 
 if %COMPILE_GAME% == 1 (
-    %Compiler% %Common% %Warnings% -LD -DOS_WINDOWS ..\code\game\game.cpp -link -opt:ref -incremental:no -pdb:%DLL_PDB_NAME% -out:%DLL_NAME%
+    %Compiler% %Common% %Warnings% -LD %EditorPath% %ImGuiPath% -DOS_WINDOWS -DGAME_COMPILED ..\code\game\game.cpp -link -opt:ref -incremental:no -pdb:%DLL_PDB_NAME% -out:%DLL_NAME%
 )
 
 if %COMPILE_PLATFORM% == 1 (
@@ -50,3 +50,5 @@ if %COMPILE_EDITOR% == 1 (
     %Compiler% %Common% %Warnings% %ImGuiPath% %EditorPath% %GamePath% -LD %DemoWindow% -DOS_WINDOWS -D_RECORDINGS_PATH_=%RECORDINGS_PATH% ..\code\editor\editor.cpp -link -opt:ref -incremental:no -pdb:Editor_dll_pdb.pdb -out:Editor.dll
     %Compiler% %Common% %Warnings% %ImGuiPath% %EditorPath% %GamePath% -DOS_WINDOWS -DDEV_EDITOR ..\code\platforms\win32\win32_platform.cpp -link user32.lib ole32.lib -opt:ref -out:Editor.exe
 )
+
+popd

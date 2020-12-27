@@ -234,15 +234,18 @@ ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagem
     ak_string HeaderPath = AK_StringConcat(WorldManagement->CurrentWorldPath, "generated.h", Scratch);
     ak_string RenameHeaderPath = AK_StringConcat(WorldManagement->CurrentWorldPath, "generated_rename.h", Scratch);
     
+    ak_string BuildWorldLogFilePath = 
+        AK_StringConcat(WorldManagement->CurrentWorldPath, BUILD_WORLD_LOG_FILE, Scratch);
+    
     if(AK_FileExists(HeaderPath))
         AK_FileRename(HeaderPath, RenameHeaderPath);
     
     AK_WriteEntireFile(HeaderPath, HeaderFileString.Data, HeaderFileString.Length);
     
-    if(!DevPlatform->BuildWorld(WorldManagement->CurrentWorldName))
+    if(!DevPlatform->BuildWorld(WorldManagement->CurrentWorldPath))
     {
-        ak_string Message = AK_CreateString(AK_ReadEntireFile("build_world_log.txt", Scratch));
-        AK_FileRemove("build_world_log.txt");
+        ak_string Message = AK_CreateString(AK_ReadEntireFile(BuildWorldLogFilePath, Scratch));
+        AK_FileRemove(BuildWorldLogFilePath);
         
         AK_FileRemove(HeaderPath);
         if(AK_FileExists(RenameHeaderPath))
@@ -252,7 +255,7 @@ ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagem
     else
     {
         Editor_DebugLog("Successfully built game!");
-        AK_FileRemove("build_world_log.txt");
+        AK_FileRemove(BuildWorldLogFilePath);
         if(AK_FileExists(RenameHeaderPath))
             AK_FileRemove(RenameHeaderPath);
     }
@@ -322,69 +325,10 @@ ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagem
     return AK_CreateEmptyString();
 }
 
-ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManagement, ak_string WorldName, dev_platform* DevPlatform, assets* Assets)
+ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManagement, ak_string WorldName, dev_platform* DevPlatform, assets* Assets, 
+                                 platform* Platform)
 {
     AK_Assert(!AK_StringIsNullOrEmpty(WorldName), "WorldName cannot be null or empty");
-    
-    ak_string_builder WorldHeader = {};
-    ak_string_builder WorldSource = {};
-    
-    ak_string WorldNameUpper = AK_ToUpper(WorldName, Scratch);
-    ak_string WorldNameLower = AK_ToLower(WorldName, Scratch);
-    ak_string HeaderGuard = AK_StringConcat(WorldNameUpper, "_H", Scratch);
-    
-    WorldHeader.WriteLine("#ifndef %.*s", HeaderGuard.Length, HeaderGuard.Data);
-    WorldHeader.WriteLine("#define %.*s", HeaderGuard.Length, HeaderGuard.Data);
-    WorldHeader.WriteLine("#include <game.h>");
-    WorldHeader.WriteLine("#include \"generated.h\"");
-    WorldHeader.NewLine();
-    WorldHeader.WriteLine("struct %.*s : public world", WorldNameLower.Length, WorldNameLower.Data);
-    WorldHeader.WriteLine("{");
-    WorldHeader.WriteLine("\tentities_a WorldEntitiesA;");
-    WorldHeader.WriteLine("\tentities_b WorldEntitiesB;");
-    WorldHeader.WriteLine("\tpoint_lights_a PointLightsA;");
-    WorldHeader.WriteLine("\tpoint_lights_b PointLightsB;");
-    WorldHeader.WriteLine("};");
-    WorldHeader.WriteLine("extern \"C\" AK_EXPORT WORLD_STARTUP(%.*s_Startup);", WorldName.Length, WorldName.Data);
-    WorldHeader.WriteLine("extern \"C\" AK_EXPORT WORLD_UPDATE(%.*s_Update);", WorldName.Length, WorldName.Data);
-    WorldHeader.WriteLine("extern \"C\" AK_EXPORT WORLD_SHUTDOWN(%.*s_Shutdown);", WorldName.Length, WorldName.Data);
-    WorldHeader.WriteLine("#endif");
-    
-    WorldSource.WriteLine("#include \"%.*s.h\"", WorldName.Length, WorldName.Data);
-    WorldSource.NewLine();
-    
-    WorldSource.WriteLine("extern \"C\"");
-    WorldSource.WriteLine("AK_EXPORT WORLD_STARTUP(%.*s_Startup)", WorldName.Length, WorldName.Data);
-    WorldSource.WriteLine("{");
-    WorldSource.WriteLine("\t%.*s* World = (%.*s*)AK_Allocate(sizeof(%.*s));", WorldNameLower.Length, WorldNameLower.Data, WorldNameLower.Length, 
-                          WorldNameLower.Data, WorldNameLower.Length, WorldNameLower.Data);
-    //TODO(JJ): Generate some error handling when we have some proper error handling :)
-    WorldSource.WriteLine("\tWorld->Update = %.*s_Update;", WorldName.Length, WorldName.Data);
-    WorldSource.WriteLine("\tWorld->Shutdown = %.*s_Shutdown;", WorldName.Length, WorldName.Data);
-    WorldSource.WriteLine("\tGame->World = World;");
-    WorldSource.WriteLine("\treturn true;");
-    WorldSource.WriteLine("}");
-    WorldSource.NewLine();
-    
-    WorldSource.WriteLine("extern \"C\"");
-    WorldSource.WriteLine("AK_EXPORT WORLD_UPDATE(%.*s_Update)", WorldName.Length, WorldName.Data);
-    WorldSource.WriteLine("{");
-    WorldSource.WriteLine("}");
-    WorldSource.NewLine();
-    
-    WorldSource.WriteLine("extern \"C\"");
-    WorldSource.WriteLine("AK_EXPORT WORLD_SHUTDOWN(%.*s_Shutdown)", WorldName.Length, WorldName.Data);
-    WorldSource.WriteLine("{");
-    WorldSource.WriteLine("\tGame->WorldShutdownCommon(Game);");
-    WorldSource.WriteLine("\tGame->World = NULL;");
-    WorldSource.WriteLine("}");
-    WorldSource.NewLine();
-    
-    //WorldSource.WriteLine("#include \"generated.cpp\"");
-    WorldSource.WriteLine("#include <assets.cpp>");
-    WorldSource.WriteLine("#include <game_common_source.cpp>");
-    WorldSource.WriteLine("#define AK_COMMON_IMPLEMENTATION");
-    WorldSource.WriteLine("#include <ak_common.h>");
     
     WorldManagement->DeleteAll();
     
@@ -406,17 +350,24 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
     
     ak_string NewWorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
     
-    ak_string WorldHeaderString = WorldHeader.PushString(Scratch);
-    ak_string WorldSourceString = WorldSource.PushString(Scratch);
+    ak_string GameCodePath = AK_FormatString(Scratch, "%.*s..%cCode%c", 
+                                             Platform->ProgramPath.Length, Platform->ProgramPath.Data, AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER);
+    
+    ak_string WorldHeaderString = GetWorldHeaderFile(Scratch, WorldName);
+    ak_string WorldSourceString = GetWorldSourceFile(Scratch, WorldName);
+    ak_string WorldBuildString = GetWorldBuildFile(Scratch, GameCodePath, WorldName);
     
     ak_string WorldHeaderPath = AK_FormatString(Scratch, "%.*s%.*s.h", NewWorldDirectoryPath.Length, NewWorldDirectoryPath.Data, WorldName.Length, WorldName.Data);
     ak_string WorldSourcePath = AK_FormatString(Scratch, "%.*s%.*s.cpp", NewWorldDirectoryPath.Length, NewWorldDirectoryPath.Data, WorldName.Length, WorldName.Data);
+    ak_string WorldBuildPath = AK_StringConcat(NewWorldDirectoryPath, "build.bat", Scratch);
+    
     
     if(!AK_DirectoryExists(NewWorldDirectoryPath))
         AK_CreateDirectory(NewWorldDirectoryPath);
     
     AK_WriteEntireFile(WorldHeaderPath, WorldHeaderString.Data, WorldHeaderString.Length);
     AK_WriteEntireFile(WorldSourcePath, WorldSourceString.Data, WorldSourceString.Length);
+    AK_WriteEntireFile(WorldBuildPath, WorldBuildString.Data, WorldBuildString.Length);
     
     WorldManagement->CurrentWorldName = AK_PushString(WorldName);
     WorldManagement->CurrentWorldPath = AK_PushString(NewWorldDirectoryPath);
@@ -428,13 +379,9 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
         AK_MessageBoxOk("Failed to create world", Message);
         Editor_DebugLog(ErrorMessage);
         WorldManagement->DeleteAll();
-        AK_FileRemove(WorldHeaderPath);
-        AK_FileRemove(WorldSourcePath);
-        AK_DirectoryRemove(NewWorldDirectoryPath);
+        
+        AK_DirectoryRemoveRecursively(NewWorldDirectoryPath);
     }
-    
-    WorldHeader.ReleaseMemory();
-    WorldSource.ReleaseMemory();
     
     return AK_StringIsNullOrEmpty(ErrorMessage);
 }
@@ -623,29 +570,13 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
     return true;
 }
 
-void Internal__DeleteWorld(ak_arena* Scratch, ak_string WorldName, dev_platform* DevPlatform)
+void Internal__DeleteWorld(ak_arena* Scratch, ak_string WorldName)
 {
     ak_string WorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
-    
-    ak_string WorldGeneratedPath = AK_StringConcat(WorldDirectoryPath, "generated.h", Scratch);
-    ak_string WorldHeaderPath = AK_FormatString(Scratch, "%s%.*s.h", WorldDirectoryPath.Data, WorldName.Length, WorldName.Data);
-    ak_string WorldSourcePath = 
-        AK_FormatString(Scratch, "%s%.*s.cpp", WorldDirectoryPath.Data, WorldName.Length, 
-                        WorldName.Data);
-    ak_string WorldAssetPath = AK_FormatString(Scratch, "%s%.*s.world", WorldDirectoryPath.Data, 
-                                               WorldName.Length, WorldName.Data);
-    
-    if(AK_FileExists(WorldGeneratedPath)) AK_FileRemove(WorldGeneratedPath);
-    if(AK_FileExists(WorldHeaderPath)) AK_FileRemove(WorldHeaderPath);
-    if(AK_FileExists(WorldSourcePath)) AK_FileRemove(WorldSourcePath);
-    if(AK_FileExists(WorldAssetPath)) AK_FileRemove(WorldAssetPath);
-    
-    AK_DirectoryRemove(WorldDirectoryPath);
-    
-    DevPlatform->DeleteWorldFiles(WorldName);
+    AK_DirectoryRemoveRecursively(WorldDirectoryPath);
 }
 
-void world_management::Update(editor* Editor, dev_platform* DevPlatform, assets* Assets)
+void world_management::Update(editor* Editor, platform* Platform, dev_platform* DevPlatform, assets* Assets)
 {
     ak_arena* Scratch = Editor->Scratch;
     ak_array<ak_string> Worlds = Internal__GetAllWorldNames(Scratch);
@@ -697,7 +628,7 @@ void world_management::Update(editor* Editor, dev_platform* DevPlatform, assets*
                 
                 if(ImGui::Button("Create"))
                 {
-                    if(Internal__CreateNewWorld(Scratch, this, WorldName, DevPlatform, Assets))
+                    if(Internal__CreateNewWorld(Scratch, this, WorldName, DevPlatform, Assets, Platform))
                     {
                         Editor->GizmoState.SelectedObject = {};
                         NewState = WORLD_MANAGEMENT_STATE_NONE;
@@ -841,7 +772,7 @@ void world_management::Update(editor* Editor, dev_platform* DevPlatform, assets*
                 if(ImGui::Button("Delete"))
                 {
                     ak_string WorldName = Worlds[WorldSelectedIndex];
-                    Internal__DeleteWorld(Scratch, WorldName, DevPlatform);
+                    Internal__DeleteWorld(Scratch, WorldName);
                     
                     NewState = WORLD_MANAGEMENT_STATE_NONE;
                     ImGui::CloseCurrentPopup();

@@ -1,7 +1,10 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
+#ifndef GAME_COMPILED
 #include <game.h>
+#endif
+
 #include <imgui.h>
 
 #define BUILD_WORLD_LOG_FILE "build_world_log.txt"
@@ -26,6 +29,7 @@ struct editor;
 #include "include/world_management.h"
 #include "include/dev_mesh.h"
 #include "include/frame_playback.h"
+#include "include/generated_string_templates.h"
 
 #define EDITOR_RUN(name) ak_i32 name(graphics* Graphics, platform* Platform, dev_platform* DevPlatform, ImGuiContext* Context)
 typedef EDITOR_RUN(editor_run);
@@ -33,11 +37,20 @@ typedef EDITOR_RUN(editor_run);
 #define DEV_PLATFORM_UPDATE(name) ak_bool name(editor* Editor, ak_f32 dt)
 typedef DEV_PLATFORM_UPDATE(dev_platform_update);
 
-#define DEV_BUILD_WORLD(name) ak_bool name(ak_string WorldName)
+#define DEV_BUILD_WORLD(name) ak_bool name(ak_string WorldPath)
 typedef DEV_BUILD_WORLD(dev_build_world);
 
-#define DEV_DELETE_WORLD_FILES(name) void name(ak_string WorldName)
-typedef DEV_DELETE_WORLD_FILES(dev_delete_world_files);
+#define DEV_SET_GAME_DEBUG_EDITOR(name) ak_bool name(editor* Editor)
+typedef DEV_SET_GAME_DEBUG_EDITOR(dev_set_game_debug_editor);
+
+#define EDITOR_DEBUG_LOG(name) void name(const ak_char* Format, ...)
+typedef EDITOR_DEBUG_LOG(editor_debug_log);
+
+#define EDITOR_DRAW_POINT(name) void name(editor* Editor, ak_v3f Position, ak_f32 Size, ak_color3f Color)
+typedef EDITOR_DRAW_POINT(editor_draw_point);
+
+#define EDITOR_DRAW_SEGMENT(name) void name(editor* Editor, ak_v3f P0, ak_v3f P1, ak_f32 Size, ak_color3f Color)
+typedef EDITOR_DRAW_SEGMENT(editor_draw_segment);
 
 struct world_file_header
 {
@@ -52,7 +65,7 @@ struct dev_platform
 {
     dev_platform_update* Update;
     dev_build_world* BuildWorld;
-    dev_delete_world_files* DeleteWorldFiles;
+    dev_set_game_debug_editor* SetGameDebugEditor;
 };
 
 #define MAX_WORLD_NAME 256
@@ -128,6 +141,37 @@ struct gizmo_state
     gizmo_selected_object SelectedObject;
 };
 
+enum render_primitive_type
+{
+    RENDER_PRIMITIVE_TYPE_POINT,
+    RENDER_PRIMITIVE_TYPE_SEGMENT
+};
+
+struct render_point
+{
+    ak_v3f P;
+    ak_f32 Size;
+    ak_color3f Color;    
+};
+
+struct render_segment
+{
+    ak_v3f P0;
+    ak_v3f P1;
+    ak_f32 Size;
+    ak_color3f Color;
+};
+
+struct render_primitive
+{
+    render_primitive_type Type;
+    union
+    {
+        render_point Point;
+        render_segment Segment;
+    };
+};
+
 struct editor
 {
     ak_arena* Scratch;
@@ -170,6 +214,12 @@ struct editor
     ak_bool ShowCloseButtonInModals;
     
     ak_u32 WorldSelectedIndex;
+    
+    ak_array<render_primitive> RenderPrimitives;
+    
+    editor_debug_log* DebugLog;
+    editor_draw_point* DrawPoint;
+    editor_draw_segment* DrawSegment;
 };
 
 #define EDITOR_CREATE_NEW_WORLD_MODAL(name) void name(editor* Editor, dev_platform* DevPlatform, \
@@ -196,6 +246,6 @@ EDITOR_DELETE_WORLD_MODAL(DeleteWorldModal);
 selected_object* Editor_GetSelectedObject(editor* Editor);
 ak_quatf Editor_GetOrientationDiff(ak_m3f OriginalRotation, ak_v3f SelectorDiff);
 void Editor_StopGame(editor* Editor, platform* Platform);
-ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform);
+ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform, dev_platform* DevPlatform);
 
 #endif //EDITOR_H

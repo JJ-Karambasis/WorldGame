@@ -18,6 +18,8 @@ AK_EXPORT GAME_STARTUP(Game_Startup)
         return NULL;
     }
     
+    Debug_Log("Game Started!");
+    
     Game->Scratch = AK_CreateArena(AK_Megabyte(4));
     Game->Graphics = Graphics;
     Game->Assets = Assets;
