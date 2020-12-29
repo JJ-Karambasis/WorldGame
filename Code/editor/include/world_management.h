@@ -3,10 +3,9 @@
 
 struct dev_entity
 {
-    ak_char Name[MAX_OBJECT_NAME_LENGTH];
+    ak_string Name;
+    ak_string LinkName;
     entity_type Type;
-    ak_u64 ID;
-    ak_u64 LinkID;
     ak_v3f Euler;
     ak_sqtf Transform;
     material Material;
@@ -22,7 +21,7 @@ struct dual_dev_entity
 
 struct dev_point_light
 {
-    ak_char Name[MAX_OBJECT_NAME_LENGTH];
+    ak_string Name;
     ak_u64  ID;
     graphics_point_light Light;
 };
@@ -44,6 +43,8 @@ enum world_management_state
 
 struct world_management
 {
+    ak_arena* StringArena;
+    
     world_management_state OldState;
     world_management_state NewState;
     
@@ -53,14 +54,14 @@ struct world_management
     ak_pool<dev_entity> DevEntities[2];
     ak_pool<dev_point_light> DevPointLights[2];
     
-    ak_hash_map<ak_char*, ak_u32> EntityIndices[2];
-    ak_hash_map<ak_char*, ak_u32> PointLightIndices[2];
+    ak_hash_map<ak_string, ak_u32> EntityIndices[2];
+    ak_hash_map<ak_string, ak_u32> PointLightIndices[2];
     
+    ak_hash_map<ak_string, ak_u64> EntityTables[2];
+    ak_hash_map<ak_string, ak_u64> PointLightTables[2];
     
-    ak_hash_map<ak_char*, ak_bool> EntityNameCollisionMap[2]; 
-    
-    
-    ak_hash_map<ak_char*, ak_bool> LightNameCollisionMap[2];
+    dev_entity* AllocateDevEntity(ak_u32 WorldIndex);
+    dev_point_light* AllocateDevPointLight(ak_u32 WorldIndex);
     
     dev_entity* CreateDevEntity(ak_u32 WorldIndex, ak_char* Name, entity_type Type, ak_v3f Position, 
                                 ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID);
@@ -72,14 +73,16 @@ struct world_management
     
     dual_dev_point_light CreateDevPointLightInBothWorlds(ak_char* Name, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity);
     
-    void DeleteDevEntity(ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true);
-    void DeleteDevPointLight(ak_u32 WorldIndex, ak_u64 ID);
+    dev_entity* CopyDevEntity(dev_entity* CopyDevEntity, ak_u32 WorldIndex);
+    dev_point_light* CopyDevPointLight(dev_point_light* CopyPointLight, ak_u32 WorldIndex);
+    
+    void DeleteDevEntity(ak_u32 WorldIndex, ak_string Name, ak_bool ProcessLink=true);
+    void DeleteDevPointLight(ak_u32 WorldIndex, ak_string Name);
     
     void SetState(world_management_state State);    void Update(editor* Editor, platform* Platform, dev_platform* DevPlatform, assets* Assets);
     
     void DeleteAll();
     void DeleteIndices();
-    void DeleteStrings();
 };
 
 #endif

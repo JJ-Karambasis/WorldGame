@@ -277,7 +277,6 @@ toi_normal MovementPushableUpdateRecursive(world* World, ak_u32 WorldIndex, rigi
                 RigidBodyA->Transform.Translation += MoveDeltaA;
                 RigidBodyA->MoveDelta = MoveDirection*RemainderDistance;   
                 
-                
                 broad_phase_pair_list RemainderPairs = Simulation->GetPairs(RigidBodyA, FilterEntity, FilterDataRigidBodyA);                                    
                 continuous_contact RemainderContactTOI = Simulation->ComputeTOI(RigidBodyA, RemainderPairs);                                                    
                 if(RemainderContactTOI.HitEntity)

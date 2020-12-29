@@ -1,6 +1,9 @@
 #ifndef UI_H
 #define UI_H
 
+global ak_u32 StaticEntity_HighestIndex;
+global const char* StaticEntity_DefaultName = "Static_%d";
+
 struct material_context
 {
     ak_bool DiffuseIsTexture;

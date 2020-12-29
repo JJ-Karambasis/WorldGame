@@ -5,12 +5,13 @@ ak_string Internal__GetWorldDirectoryPath(ak_arena* Scratch, ak_string WorldName
     return Result;
 }
 
-ak_u32 Internal__WriteName(ak_binary_builder* Builder, ak_char* Name, ak_u8 NameLength)
+ak_u32 Internal__WriteName(ak_binary_builder* Builder, ak_string Name)
 {
     ak_u32 Result = 0;
-    Result += Builder->Write(NameLength);
-    Builder->WriteString(Name);
-    Result += NameLength;
+    Result += Builder->Write(Name.Length);
+    if(Name.Length != 0)
+        Builder->WriteString(Name.Data);
+    Result += Name.Length;
     return Result;
 }
 
@@ -20,7 +21,7 @@ void Internal__WriteMaterial(ak_binary_builder* Builder, assets* Assets, materia
     if(Material->Diffuse.IsTexture)
     {
         texture_info* TextureInfo = GetTextureInfo(Assets, Material->Diffuse.DiffuseID);            
-        Internal__WriteName(Builder, TextureInfo->Name, (ak_u8)TextureInfo->Header.NameLength);        
+        Internal__WriteName(Builder, AK_CreateString(TextureInfo->Name, TextureInfo->Header.NameLength));
     }
     else    
         Builder->Write(Material->Diffuse.Diffuse);
@@ -32,7 +33,7 @@ void Internal__WriteMaterial(ak_binary_builder* Builder, assets* Assets, materia
         if(Material->Specular.IsTexture)
         {
             texture_info* TextureInfo = GetTextureInfo(Assets, Material->Specular.SpecularID); 
-            Internal__WriteName(Builder, TextureInfo->Name, (ak_u8)TextureInfo->Header.NameLength);            
+            Internal__WriteName(Builder, AK_CreateString(TextureInfo->Name, TextureInfo->Header.NameLength));           
         }
         else        
             Builder->Write(Material->Specular.Specular);
@@ -44,14 +45,14 @@ void Internal__WriteMaterial(ak_binary_builder* Builder, assets* Assets, materia
     if(Material->Normal.InUse)
     {
         texture_info* TextureInfo = GetTextureInfo(Assets, Material->Normal.NormalID); 
-        Internal__WriteName(Builder, TextureInfo->Name, (ak_u8)TextureInfo->Header.NameLength);        
+        Internal__WriteName(Builder, AK_CreateString(TextureInfo->Name, (ak_u8)TextureInfo->Header.NameLength));        
     }                        
 }
 
 ak_string Internal__ReadAssetName(ak_stream* Stream, ak_arena* Arena)
 {    
     ak_string Result;
-    Result.Length = Stream->CopyConsume<ak_u8>();
+    Result.Length = Stream->CopyConsume<ak_u32>();
     Result.Data = Arena->PushArray<char>(Result.Length+1);
     Result.Data[Result.Length] = 0;
     AK_MemoryCopy(Result.Data, Stream->PeekConsume<char>(Result.Length), Result.Length);
@@ -99,55 +100,43 @@ ak_bool Internal__ReadMaterial(ak_stream* Stream, assets* Assets, ak_arena* Scra
     return true;
 }
 
-dev_entity* Internal__CreateDevEntity(ak_pool<dev_entity>* DevEntities, ak_char* Name, entity_type Type, ak_v3f Position, 
-                                      ak_quatf Orientation, ak_v3f Scale, material Material, mesh_asset_id MeshID)
+ak_u64 Internal__CreateDevEntity(ak_arena* StringArena, ak_pool<dev_entity>* DevEntities, ak_char* Name, entity_type Type, ak_v3f Position, 
+                                 ak_quatf Orientation, ak_v3f Scale, material Material, mesh_asset_id MeshID)
 {
     ak_u64 ID = DevEntities->Allocate();
     dev_entity* Entity = DevEntities->Get(ID);
     
-    AK_CopyArray(Entity->Name, Name, MAX_OBJECT_NAME_LENGTH);
+    Entity->Name = AK_PushString(Name, StringArena);
     Entity->Type = Type;
-    Entity->ID = ID;
-    Entity->LinkID = 0;
     Entity->Transform = AK_SQT(Position, Orientation, Scale);
     Entity->Material = Material;
     Entity->MeshID = MeshID;
     Entity->Euler = AK_QuatToEuler(Entity->Transform.Orientation);
     
-    return Entity;
+    return ID;
 }
 
-dev_entity* Internal__CreateDevEntity(ak_pool<dev_entity>* DevEntities, ak_char* Name, entity_type Type, ak_v3f Position, 
-                                      ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID)
+ak_u64 Internal__CreateDevEntity(ak_arena* StringArena, ak_pool<dev_entity>* DevEntities, ak_char* Name, entity_type Type, ak_v3f Position, 
+                                 ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID)
 {
-    ak_u64 ID = DevEntities->Allocate();
-    dev_entity* Entity = DevEntities->Get(ID);
-    
-    AK_CopyArray(Entity->Name, Name, MAX_OBJECT_NAME_LENGTH);
-    Entity->Type = Type;
-    Entity->ID = ID;
-    Entity->LinkID = 0;
-    Entity->Transform = AK_SQT(Position, AK_RotQuat(Axis, Angle), Scale);
-    Entity->Material = Material;
-    Entity->MeshID = MeshID;
-    Entity->Euler = AK_QuatToEuler(Entity->Transform.Orientation);
-    
-    return Entity;
+    ak_u64 ID = Internal__CreateDevEntity(StringArena, DevEntities, Name, Type, Position,
+                                          AK_RotQuat(Axis, Angle), Scale, Material, MeshID);
+    return ID;
 }
 
-dev_point_light* Internal__CreateDevPointLight(ak_pool<dev_point_light>* DevPointLights, ak_char* Name, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity)
+ak_u64 Internal__CreateDevPointLight(ak_arena* StringArena, ak_pool<dev_point_light>* DevPointLights, ak_char* Name, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity)
 {
     ak_u64 ID = DevPointLights->Allocate();
     dev_point_light* PointLight = DevPointLights->Get(ID);
     
-    AK_CopyArray(PointLight->Name, Name, MAX_OBJECT_NAME_LENGTH);
+    PointLight->Name = AK_PushString(Name, StringArena);
     PointLight->Light.Color = Color;
     PointLight->Light.Intensity = Intensity;
     PointLight->Light.Position = Position;
     PointLight->Light.Radius = Radius;
     PointLight->ID = ID;
     
-    return PointLight;
+    return ID;
 }
 
 ak_array<ak_string> Internal__GetAllWorldNames(ak_arena* Scratch)
@@ -197,12 +186,12 @@ void Internal__WriteStruct(ak_string_builder* Builder, ak_pool<type>* Pool, cons
     Builder->WriteLine("struct %s", Name);
     Builder->WriteLine("{");
     AK_ForEach(Entry, Pool)
-        Builder->WriteLine("\tak_u64 %s;", Entry->Name);
+        Builder->WriteLine("\tak_u64 %.*s;", Entry->Name.Length, Entry->Name.Data);
     Builder->WriteLine("};");
 }
 
 template <typename type>
-void Internal__InsertIndices(ak_pool<type>* Pool, ak_hash_map<ak_char*, ak_u32>* HashMap)
+void Internal__InsertIndices(ak_pool<type>* Pool, ak_hash_map<ak_string, ak_u32>* HashMap)
 {
     ak_u32 Index = 0;
     AK_ForEach(Entry, Pool)
@@ -276,16 +265,8 @@ ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagem
         ak_pool<dev_entity>* DevEntities = &WorldManagement->DevEntities[WorldIndex];
         AK_ForEach(DevEntity, DevEntities)
         {
-            Internal__WriteName(&BinaryBuilder, DevEntity->Name, (ak_u8)AK_StringLength(DevEntity->Name));
-            
-            ak_char* LinkName = NULL;
-            if(DevEntity->LinkID)
-                LinkName = WorldManagement->DevEntities[!WorldIndex].Get(DevEntity->LinkID)->Name;
-            
-            ak_u8 LinkNameLength = LinkName ? (ak_u8)(AK_StringLength(LinkName)) : 0;
-            BinaryBuilder.Write(LinkNameLength);
-            if(LinkName)
-                BinaryBuilder.Write(LinkName);
+            Internal__WriteName(&BinaryBuilder, DevEntity->Name);
+            Internal__WriteName(&BinaryBuilder, DevEntity->LinkName);
             
             BinaryBuilder.Write(DevEntity->Type);
             BinaryBuilder.Write(DevEntity->Transform.Translation);
@@ -294,7 +275,7 @@ ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagem
             Internal__WriteMaterial(&BinaryBuilder, Assets, &DevEntity->Material);
             
             mesh_info* MeshInfo = GetMeshInfo(Assets, DevEntity->MeshID);
-            Internal__WriteName(&BinaryBuilder, MeshInfo->Name, (ak_u8)MeshInfo->Header.NameLength);
+            Internal__WriteName(&BinaryBuilder, AK_CreateString(MeshInfo->Name, MeshInfo->Header.NameLength));
             
             if(DevEntity->Type == ENTITY_TYPE_BUTTON)
                 BinaryBuilder.Write(DevEntity->IsToggled);
@@ -306,8 +287,7 @@ ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagem
         ak_pool<dev_point_light>* DevPointLights = &WorldManagement->DevPointLights[WorldIndex];
         AK_ForEach(DevPointLight, DevPointLights)
         {
-            Internal__WriteName(&BinaryBuilder, DevPointLight->Name, 
-                                (ak_u8)AK_StringLength(DevPointLight->Name));
+            Internal__WriteName(&BinaryBuilder, DevPointLight->Name);
             BinaryBuilder.Write(DevPointLight->Light.Color);
             BinaryBuilder.Write(DevPointLight->Light.Intensity);
             BinaryBuilder.Write(DevPointLight->Light.Position);
@@ -332,21 +312,15 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
     
     WorldManagement->DeleteAll();
     
+    WorldManagement->StringArena = AK_CreateArena();
+    
     material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
     dual_dev_entity DualPlayerEntity = WorldManagement->CreateDevEntityInBothWorlds("Player", ENTITY_TYPE_PLAYER, AK_V3(0.0f, 0.0f, 0.0f), AK_XAxis(), 0.0f, AK_V3(1.0f, 1.0f, 1.0f), PlayerMaterial, MESH_ASSET_ID_PLAYER);
     
-    WorldManagement->EntityNameCollisionMap[0].Insert(DualPlayerEntity.EntityA->Name, true);
-    WorldManagement->EntityNameCollisionMap[1].Insert(DualPlayerEntity.EntityB->Name, true);
-    
     material FloorMaterial = { CreateDiffuse(AK_White3()) };
     dual_dev_entity DualStaticEntity = WorldManagement->CreateDevEntityInBothWorlds("Default_Floor", ENTITY_TYPE_STATIC, AK_V3(0.0f, 0.0f, -1.0f), AK_XAxis(), 0.0f, AK_V3(10.0f, 10.0f, 1.0f), FloorMaterial, MESH_ASSET_ID_BOX);
-    WorldManagement->EntityNameCollisionMap[0].Insert(DualStaticEntity.EntityA->Name, true);
-    WorldManagement->EntityNameCollisionMap[1].Insert(DualStaticEntity.EntityB->Name, true);
     
     dual_dev_point_light DualPointLights = WorldManagement->CreateDevPointLightInBothWorlds("Default_Light", AK_V3(0.0f, 0.0f, 10.0f), 20.0f, AK_White3(), 1.0f);
-    
-    WorldManagement->LightNameCollisionMap[0].Insert(DualPointLights.PointLightA->Name, true);
-    WorldManagement->LightNameCollisionMap[1].Insert(DualPointLights.PointLightB->Name, true);
     
     ak_string NewWorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
     
@@ -369,8 +343,8 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
     AK_WriteEntireFile(WorldSourcePath, WorldSourceString.Data, WorldSourceString.Length);
     AK_WriteEntireFile(WorldBuildPath, WorldBuildString.Data, WorldBuildString.Length);
     
-    WorldManagement->CurrentWorldName = AK_PushString(WorldName);
-    WorldManagement->CurrentWorldPath = AK_PushString(NewWorldDirectoryPath);
+    WorldManagement->CurrentWorldName = AK_PushString(WorldName, WorldManagement->StringArena);
+    WorldManagement->CurrentWorldPath = AK_PushString(NewWorldDirectoryPath, WorldManagement->StringArena);
     
     ak_string ErrorMessage = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
     if(!AK_StringIsNullOrEmpty(ErrorMessage))
@@ -386,8 +360,15 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
     return AK_StringIsNullOrEmpty(ErrorMessage);
 }
 
-ak_bool Internal__LoadWorld(ak_arena* Scratch, world_management* WorldManagement, ak_string WorldName, assets* Assets, dev_platform* DevPlatform)
+ak_bool Internal__LoadWorld(editor* Editor, ak_string WorldName, assets* Assets, dev_platform* DevPlatform)
 {
+    ak_arena* Scratch = Editor->Scratch;
+    world_management* WorldManagement = &Editor->WorldManagement;
+    edit_recordings* EditRecordings = &Editor->EditRecordings;
+    
+    Editor->UI.EntitySpawner.Init = false;
+    Editor->UI.LightSpawner.Init = false;
+    
     ak_string WorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
     ak_string WorldAssetFilename = AK_StringConcat(WorldName, ".world", Scratch);
     ak_string WorldFilePath = AK_StringConcat(WorldDirectoryPath, WorldAssetFilename, Scratch);
@@ -422,17 +403,20 @@ ak_bool Internal__LoadWorld(ak_arena* Scratch, world_management* WorldManagement
 #define DELETE_TEMP_DATA() \
 do \
 { \
+AK_DeleteArena(StringArena); \
 AK_DeletePool(&DevEntitiesArray[0]); \
 AK_DeletePool(&DevEntitiesArray[1]); \
 AK_DeletePool(&DevPointLightsArray[0]); \
 AK_DeletePool(&DevPointLightsArray[1]); \
-AK_DeleteHashMap(&EntityNameCollisionMaps[0]); \
-AK_DeleteHashMap(&EntityNameCollisionMaps[1]); \
-AK_DeleteHashMap(&LightNameCollisionMaps[0]); \
-AK_DeleteHashMap(&LightNameCollisionMaps[1]); \
+AK_DeleteHashMap(&EntityTables[0]); \
+AK_DeleteHashMap(&EntityTables[1]); \
+AK_DeleteHashMap(&PointLightTables[0]); \
+AK_DeleteHashMap(&PointLightTables[1]); \
 AK_DeleteHashMap(&LinkHashMaps[0]); \
 AK_DeleteHashMap(&LinkHashMaps[1]); \
 } while(0)
+    
+    ak_arena* StringArena = AK_CreateArena();
     
     ak_pool<dev_entity> DevEntitiesArray[2];
     DevEntitiesArray[0] = AK_CreatePool<dev_entity>(Header->EntityCount[0]);
@@ -442,17 +426,17 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
     DevPointLightsArray[0] = AK_CreatePool<dev_point_light>(Header->PointLightCount[0]);
     DevPointLightsArray[1] = AK_CreatePool<dev_point_light>(Header->PointLightCount[1]);
     
-    ak_hash_map<ak_char*, ak_bool> EntityNameCollisionMaps[2] = {};
-    ak_hash_map<ak_char*, ak_bool> LightNameCollisionMaps[2] = {};
+    ak_hash_map<ak_string, ak_u64> EntityTables[2] = {};
+    ak_hash_map<ak_string, ak_u64> PointLightTables[2] = {};
     
-    ak_hash_map<ak_char*, ak_u64> LinkHashMaps[2] = {};
+    ak_hash_map<ak_string, ak_string> LinkHashMaps[2] = {};
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         ak_pool<dev_entity>* DevEntities = &DevEntitiesArray[WorldIndex];
-        ak_hash_map<ak_char*, ak_u64>* LinkHashMap = &LinkHashMaps[WorldIndex];
-        ak_hash_map<ak_char*, ak_bool>* EntityNameCollisionMap = &EntityNameCollisionMaps[WorldIndex];
-        ak_hash_map<ak_char*, ak_bool>* LightNameCollisionMap = &LightNameCollisionMaps[WorldIndex];
+        ak_hash_map<ak_string, ak_string>* LinkHashMap = &LinkHashMaps[WorldIndex];
+        ak_hash_map<ak_string, ak_u64>* EntityTable = &EntityTables[WorldIndex];
+        ak_hash_map<ak_string, ak_u64>* PointLightTable = &PointLightTables[WorldIndex];
         
         for(ak_u32 EntityIndex = 0; EntityIndex < Header->EntityCount[WorldIndex]; EntityIndex++)
         {
@@ -481,27 +465,27 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
                 return false;
             }
             
-            dev_entity* DevEntity = Internal__CreateDevEntity(DevEntities, Name.Data, Type, Position, Orientation, Scale, Material, *MeshID);
-            
-            EntityNameCollisionMap->Insert(DevEntity->Name, true);
+            ak_u64 ID =  Internal__CreateDevEntity(StringArena, DevEntities, Name.Data, Type, Position, Orientation, Scale, Material, *MeshID);
+            dev_entity* Entity = DevEntities->Get(ID);
+            EntityTable->Insert(Entity->Name, ID);
             if(!AK_StringIsNullOrEmpty(LinkName))
             {
-                LinkHashMap->Insert(LinkName.Data, DevEntity->ID);
+                LinkHashMap->Insert(LinkName, Entity->Name);
             }
             
             if(Type == ENTITY_TYPE_BUTTON)
-                DevEntity->IsToggled = WorldFileStream.CopyConsume<ak_bool>();
+                Entity->IsToggled = WorldFileStream.CopyConsume<ak_bool>();
         }
     }
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
-        ak_hash_map<ak_char*, ak_u64>* LinkHashMap = &LinkHashMaps[!WorldIndex];
+        ak_hash_map<ak_string, ak_string>* LinkHashMap = &LinkHashMaps[!WorldIndex];
         ak_pool<dev_entity>* DevEntities = &DevEntitiesArray[WorldIndex];
         AK_ForEach(DevEntity, DevEntities)
         {
-            ak_u64* LinkID = LinkHashMap->Find(DevEntity->Name);
-            if(LinkID) DevEntity->LinkID = *LinkID;
+            ak_string* LinkName = LinkHashMap->Find(DevEntity->Name);
+            if(LinkName) DevEntity->LinkName = AK_PushString(*LinkName, StringArena);
         }
     }
     
@@ -511,7 +495,7 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         ak_pool<dev_point_light>* DevPointLights = &DevPointLightsArray[WorldIndex];
-        ak_hash_map<ak_char*, ak_bool>* LightNameCollisionMap = &LightNameCollisionMaps[WorldIndex];
+        ak_hash_map<ak_string, ak_u64>* PointLightTable = &PointLightTables[WorldIndex];
         for(ak_u32 PointLightIndex = 0; PointLightIndex < Header->PointLightCount[WorldIndex]; 
             PointLightIndex++)
         {
@@ -520,9 +504,10 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
             ak_f32 Intensity = WorldFileStream.CopyConsume<ak_f32>();
             ak_v3f Position = WorldFileStream.CopyConsume<ak_v3f>();
             ak_f32 Radius = WorldFileStream.CopyConsume<ak_f32>();
-            LightNameCollisionMap->Insert(Name.Data, true);
             
-            Internal__CreateDevPointLight(DevPointLights, Name.Data, Position, Radius, Color, Intensity);
+            ak_u64 ID = Internal__CreateDevPointLight(StringArena, DevPointLights, Name.Data, Position, Radius, Color, Intensity);
+            dev_point_light* DevPointLight = DevPointLights->Get(ID);
+            PointLightTable->Insert(DevPointLight->Name, ID);
         }
     }
     
@@ -537,21 +522,24 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
         return false;
     }
     
+    EditRecordings->Clear();
+    
     WorldManagement->DeleteAll();
     
+    WorldManagement->StringArena = StringArena;
     
     WorldManagement->DevEntities[0] = DevEntitiesArray[0];
     WorldManagement->DevEntities[1] = DevEntitiesArray[1];
     WorldManagement->DevPointLights[0] = DevPointLightsArray[0];
     WorldManagement->DevPointLights[1] = DevPointLightsArray[1];
     
-    WorldManagement->EntityNameCollisionMap[0] = EntityNameCollisionMaps[0];
-    WorldManagement->EntityNameCollisionMap[1] = EntityNameCollisionMaps[1];
-    WorldManagement->LightNameCollisionMap[0] = LightNameCollisionMaps[0];
-    WorldManagement->LightNameCollisionMap[1] = LightNameCollisionMaps[1];
+    WorldManagement->EntityTables[0] = EntityTables[0];
+    WorldManagement->EntityTables[1] = EntityTables[1];
+    WorldManagement->PointLightTables[0] = PointLightTables[0];
+    WorldManagement->PointLightTables[1] = PointLightTables[1];
     
-    WorldManagement->CurrentWorldPath = AK_PushString(WorldDirectoryPath);
-    WorldManagement->CurrentWorldName = AK_PushString(WorldName);
+    WorldManagement->CurrentWorldPath = AK_PushString(WorldDirectoryPath, WorldManagement->StringArena);
+    WorldManagement->CurrentWorldName = AK_PushString(WorldName, WorldManagement->StringArena);
     
     ak_string ErrorMessage = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
     if(!AK_StringIsNullOrEmpty(ErrorMessage))
@@ -562,8 +550,6 @@ AK_DeleteHashMap(&LinkHashMaps[1]); \
         AK_MessageBoxOk("Failed to load world", Message);
         return false;
     }
-    
-    
     
 #undef DELETE_TEMP_DATA
     
@@ -702,7 +688,7 @@ void world_management::Update(editor* Editor, platform* Platform, dev_platform* 
                 if(ImGui::Button("Load"))
                 {
                     ak_string WorldName = Worlds[WorldSelectedIndex];
-                    if(Internal__LoadWorld(Scratch, this, WorldName, Assets, DevPlatform))
+                    if(Internal__LoadWorld(Editor, WorldName, Assets, DevPlatform))
                     {
                         Editor->GizmoState.SelectedObject = {};
                         NewState = WORLD_MANAGEMENT_STATE_NONE;
@@ -778,7 +764,10 @@ void world_management::Update(editor* Editor, platform* Platform, dev_platform* 
                     ImGui::CloseCurrentPopup();
                     
                     if(AK_StringEquals(WorldName, CurrentWorldName))
-                        DeleteStrings();
+                    {
+                        CurrentWorldName = AK_CreateEmptyString();
+                        CurrentWorldPath = AK_CreateEmptyString();
+                    }
                     
                     Editor->GizmoState.SelectedObject = {};
                 }
@@ -805,35 +794,31 @@ void world_management::DeleteIndices()
     AK_DeleteHashMap(&PointLightIndices[1]);
 }
 
-void world_management::DeleteStrings()
+void world_management::DeleteAll()
 {
-    AK_FreeString(CurrentWorldPath);
-    AK_FreeString(CurrentWorldName);
+    DeleteIndices();
+    AK_DeletePool(&DevEntities[0]);
+    AK_DeletePool(&DevEntities[1]);
+    AK_DeletePool(&DevPointLights[0]);
+    AK_DeletePool(&DevPointLights[1]);
+    AK_DeleteHashMap(&EntityTables[0]);
+    AK_DeleteHashMap(&EntityTables[1]);
+    AK_DeleteHashMap(&PointLightTables[0]);
+    AK_DeleteHashMap(&PointLightTables[1]);
+    
+    AK_DeleteArena(StringArena);
     
     CurrentWorldPath = AK_CreateEmptyString();
     CurrentWorldName = AK_CreateEmptyString();
 }
 
-void world_management::DeleteAll()
-{
-    DeleteIndices();
-    DeleteStrings();
-    AK_DeletePool(&DevEntities[0]);
-    AK_DeletePool(&DevEntities[1]);
-    AK_DeletePool(&DevPointLights[0]);
-    AK_DeletePool(&DevPointLights[1]);
-    AK_DeleteHashMap(&EntityNameCollisionMap[0]);
-    AK_DeleteHashMap(&EntityNameCollisionMap[1]);
-    AK_DeleteHashMap(&LightNameCollisionMap[0]);
-    AK_DeleteHashMap(&LightNameCollisionMap[1]);
-    
-}
-
-
 dev_entity* world_management::CreateDevEntity(ak_u32 WorldIndex, ak_char* Name, entity_type Type, ak_v3f Position, 
                                               ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID)
 {
-    return Internal__CreateDevEntity(&DevEntities[WorldIndex], Name, Type, Position, Axis, Angle, Scale, Material, MeshID);
+    ak_u64 ID = Internal__CreateDevEntity(StringArena, &DevEntities[WorldIndex], Name, Type, Position, Axis, Angle, Scale, Material, MeshID);
+    dev_entity* Entity = DevEntities[WorldIndex].Get(ID);
+    EntityTables[WorldIndex].Insert(Entity->Name, ID);
+    return Entity;
 }
 
 dual_dev_entity world_management::CreateDevEntityInBothWorlds(ak_char* Name, entity_type Type, ak_v3f Position, 
@@ -847,7 +832,10 @@ dual_dev_entity world_management::CreateDevEntityInBothWorlds(ak_char* Name, ent
 
 dev_point_light* world_management::CreateDevPointLight(ak_u32 WorldIndex, ak_char* Name, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity)
 {
-    return Internal__CreateDevPointLight(&DevPointLights[WorldIndex], Name, Position, Radius, Color, Intensity);
+    ak_u64 ID = Internal__CreateDevPointLight(StringArena, &DevPointLights[WorldIndex], Name, Position, Radius, Color, Intensity);
+    dev_point_light* PointLight = DevPointLights[WorldIndex].Get(ID);
+    PointLightTables[WorldIndex].Insert(PointLight->Name, ID);
+    return PointLight;
 }
 
 dual_dev_point_light world_management::CreateDevPointLightInBothWorlds(ak_char* Name, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity)
@@ -863,20 +851,60 @@ void world_management::SetState(world_management_state State)
     NewState = State;
 }
 
-void world_management::DeleteDevEntity(ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink)
+dev_entity* world_management::CopyDevEntity(dev_entity* CopyDevEntity, ak_u32 WorldIndex)
 {
-    dev_entity* DevEntity = DevEntities[WorldIndex].Get(ID);
-    if(ProcessLink)
+    ak_u64 IDDevEntity0 = DevEntities[WorldIndex].Allocate();
+    dev_entity* DevEntity0 = DevEntities[WorldIndex].Get(IDDevEntity0);
+    *DevEntity0 = CopyDevEntity[0];
+    EntityTables[WorldIndex].Insert(DevEntity0->Name, IDDevEntity0);
+    
+    if(!AK_StringIsNullOrEmpty(DevEntity0->LinkName))
     {
-        if(DevEntity->LinkID)
-        {
-            DeleteDevEntity(!WorldIndex, DevEntity->LinkID, false);
-        }
+        ak_u64 IDDevEntity1 = DevEntities[!WorldIndex].Allocate();
+        dev_entity* DevEntity1 = DevEntities[!WorldIndex].Get(IDDevEntity1);
+        *DevEntity1 = CopyDevEntity[1];
+        EntityTables[!WorldIndex].Insert(DevEntity1->Name, IDDevEntity1);
+        
+        DevEntity0->LinkName = DevEntity1->Name;
+        DevEntity1->LinkName = DevEntity0->Name;
     }
-    DevEntities[WorldIndex].Free(ID);
+    
+    return DevEntity0;
 }
 
-void world_management::DeleteDevPointLight(ak_u32 WorldIndex, ak_u64 ID)
+dev_point_light* world_management::CopyDevPointLight(dev_point_light* CopyPointLight, ak_u32 WorldIndex)
 {
-    DevPointLights[WorldIndex].Free(ID);
+    ak_u64 IDDevPointLight = DevPointLights[WorldIndex].Allocate();
+    dev_point_light* DevPointLight = DevPointLights[WorldIndex].Get(IDDevPointLight);
+    *DevPointLight = *CopyPointLight;
+    return DevPointLight;
+}
+
+void world_management::DeleteDevEntity(ak_u32 WorldIndex, ak_string Name, ak_bool ProcessLink)
+{
+    ak_u64* ID = EntityTables[WorldIndex].Find(Name);
+    
+    if(ID)
+    {
+        dev_entity* DevEntity = DevEntities[WorldIndex].Get(*ID);
+        if(ProcessLink)
+        {
+            if(!AK_StringIsNullOrEmpty(DevEntity->LinkName))
+            {
+                DeleteDevEntity(!WorldIndex, DevEntity->LinkName, false);
+            }
+        }
+        DevEntities[WorldIndex].Free(*ID);
+        EntityTables[WorldIndex].Remove(Name);
+    }
+}
+
+void world_management::DeleteDevPointLight(ak_u32 WorldIndex, ak_string Name)
+{
+    ak_u64* ID = PointLightTables[WorldIndex].Find(Name);
+    if(ID)
+    {
+        DevPointLights[WorldIndex].Free(*ID);
+        PointLightTables[WorldIndex].Remove(Name);
+    }
 }

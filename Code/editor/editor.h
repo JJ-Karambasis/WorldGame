@@ -24,13 +24,6 @@ struct editor;
 #define GIZMO_PLANE_DISTANCE 0.4f
 #define POINT_LIGHT_RADIUS 0.1f
 
-#include "include/dev_input.h"
-#include "include/ui.h"
-#include "include/world_management.h"
-#include "include/dev_mesh.h"
-#include "include/frame_playback.h"
-#include "include/generated_string_templates.h"
-
 #define EDITOR_RUN(name) ak_i32 name(graphics* Graphics, platform* Platform, dev_platform* DevPlatform, ImGuiContext* Context)
 typedef EDITOR_RUN(editor_run);
 
@@ -71,11 +64,19 @@ struct dev_platform
 #define MAX_WORLD_NAME 256
 #define MAX_MESH_NAME 256
 
-enum selected_object_type
+enum object_type
 {
-    SELECTED_OBJECT_TYPE_ENTITY, 
-    SELECTED_OBJECT_TYPE_LIGHT
+    OBJECT_TYPE_ENTITY,
+    OBJECT_TYPE_LIGHT
 };
+
+#include "include/dev_input.h"
+#include "include/ui.h"
+#include "include/world_management.h"
+#include "include/dev_mesh.h"
+#include "include/frame_playback.h"
+#include "include/generated_string_templates.h"
+#include "include/edit_recordings.h"
 
 enum selector_transform_mode
 {
@@ -86,12 +87,14 @@ enum selector_transform_mode
 
 struct selected_object
 {
-    selected_object_type Type;
-    ak_u64 ID;
+    object_type Type;
+    ak_string Name;
     
     dev_entity* GetEntity(world_management* WorldManagement, ak_u32 WorldIndex);
     dev_point_light* GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex);
     ak_v3f GetPosition(world_management* WorldManagement, ak_u32 WorldIndex);
+    
+    ak_bool IsAlive(world_management* WorldManagement, ak_u32 WorldIndex);
 };
 
 struct gizmo_selected_object
@@ -172,6 +175,13 @@ struct render_primitive
     };
 };
 
+struct game_context
+{
+    game* Game;
+    ak_array<ak_string> GameEntityNames[2];
+    ak_hash_map<ak_string, ak_u64> GameEntityNameHash[2];
+};
+
 struct editor
 {
     ak_arena* Scratch;
@@ -184,6 +194,7 @@ struct editor
     world_management WorldManagement;
     gizmo_state GizmoState;
     frame_playback FramePlayback;
+    edit_recordings EditRecordings;
     
     dev_capsule_mesh  LineCapsuleMesh;                
     dev_slim_mesh     LineBoxMesh;
@@ -199,11 +210,9 @@ struct editor
     dev_mesh          TrianglePlaneMesh;
     dev_slim_mesh*    ConvexHullMeshes[MESH_ASSET_COUNT];
     
-    game* Game;
-    ak_array<ak_char[MAX_OBJECT_NAME_LENGTH]> GameEntityNames[2];
-    ak_hash_map<ak_char*, ak_u64> GameEntityNameHash[2];
-    
     ak_u32 CurrentWorldIndex;
+    
+    game_context GameContext;
     
     ak_v2f ListerDim;
     ak_v2f DetailsDim;

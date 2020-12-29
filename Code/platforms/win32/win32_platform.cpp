@@ -292,7 +292,7 @@ DEV_PLATFORM_UPDATE(Win32_DevUpdate)
     {
         MSG Message = {};
         
-        input* Input = Editor->Game ? &Editor->Game->Input : NULL;
+        input* Input = Editor->GameContext.Game ? &Editor->GameContext.Game->Input : NULL;
         ak_i32 Status = Win32_ProcessMessage(Input, &Message);
         if(Status == -1) return false;
         else if(Status == 0) break;
@@ -524,7 +524,7 @@ int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineAr
     Global_DevPlatform.Update = Win32_DevUpdate;
     Global_DevPlatform.BuildWorld = Win32_BuildWorld;
     Global_DevPlatform.SetGameDebugEditor = Win32_SetGameDebugEditor;
-    
+     
     return Editor_Run(Graphics, &Global_Platform, &Global_DevPlatform, Context);
 }
 

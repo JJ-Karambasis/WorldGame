@@ -116,7 +116,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
                             if(AK_MessageBoxYesNo("Message", Message))
                             {
                                 Editor_StopGame(Editor, Platform);
-                                if(Internal__LoadWorld(Editor->Scratch, WorldManagement, 
+                                if(Internal__LoadWorld(Editor, 
                                                        Name, Assets, DevPlatform))
                                 {
                                     Editor_PlayGame(Editor, Graphics, Assets, Platform, DevPlatform);
@@ -270,7 +270,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
                     FileHeader->MajorVersion = RECORDING_FILE_MAJOR_VERSION;
                     FileHeader->MinorVersion = RECORDING_FILE_MINOR_VERSION;
                     
-                    Internal__WriteName(&Writer.HeaderBuilder, WorldManagement->CurrentWorldName.Data, (ak_u8)WorldManagement->CurrentWorldName.Length);
+                    Internal__WriteName(&Writer.HeaderBuilder, WorldManagement->CurrentWorldName);
                     
                     Writer.FileHeader = FileHeader;
                 }
@@ -307,7 +307,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
                 ak_buffer DataBuffer = Writer.DataBuilder.PushBuffer(Editor->Scratch);
                 
                 frame_header* FrameHeader = (frame_header*)(HeaderBuffer.Data + sizeof(recording_file_header) + 
-                                                            sizeof(ak_u8)+WorldManagement->CurrentWorldName.Length);
+                                                            sizeof(ak_u32)+WorldManagement->CurrentWorldName.Length);
                 
                 ak_u32 OffsetToData = AK_SafeU32(HeaderBuffer.Size);
                 for(ak_u32 FrameIndex = 0; FrameIndex < Writer.FileHeader->FrameCount; FrameIndex++)
@@ -349,7 +349,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
             }
             
             if(ImGui::Button("Stop Inspecting"))
-                NewState = FRAME_PLAYBACK_STATE_INSPECTING;
+                NewState = FRAME_PLAYBACK_STATE_PLAYING;
             
             if(NewState != FRAME_PLAYBACK_STATE_NONE)
             {
@@ -410,8 +410,8 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
 
 void frame_playback::RecordFrame(editor* Editor)
 {
-    game* Game = Editor->Game;
-    
+    game_context* GameContext = &Editor->GameContext;
+    game* Game = GameContext->Game;
     
     ak_binary_builder* HeaderBuilder = &Writer.HeaderBuilder;
     ak_binary_builder* DataBuilder = &Writer.DataBuilder;
@@ -427,10 +427,10 @@ void frame_playback::RecordFrame(editor* Editor)
             if(Entity->Type != ENTITY_TYPE_STATIC)
             {
                 ak_u32 Index = AK_PoolIndex(Entity->ID);
-                ak_char* Name = Editor->GameEntityNames[WorldIndex][Index];
+                ak_string Name = GameContext->GameEntityNames[WorldIndex][Index];
                 physics_object* PhysicsObject = &World->PhysicsObjects[WorldIndex][Index];
                 
-                ak_u32 NameSize = Internal__WriteName(DataBuilder, Name, (ak_u8)AK_StringLength(Name));
+                ak_u32 NameSize = Internal__WriteName(DataBuilder, Name);
                 
                 ak_u32* ObjectSize = DataBuilder->Allocate<ak_u32>();
                 *ObjectSize += DataBuilder->Write(PhysicsObject->Position);
@@ -461,12 +461,15 @@ void frame_playback::PlayFrame(editor* Editor)
     frame_header* FrameHeader = Reader.FrameHeaders + Reader.CurrentFrameIndex;
     ak_stream* Stream = &Reader.Stream;
     
+    game_context* GameContext = &Editor->GameContext;
+    game* Game = GameContext->Game;
+    
     world_management* WorldManagement = &Editor->WorldManagement;
     
     Stream->SetOffset(FrameHeader->OffsetToData);
     
-    Editor->Game->Input = FrameHeader->Input;
-    world* World = Editor->Game->World;
+    Game->Input = FrameHeader->Input;
+    world* World = Game->World;
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
@@ -475,7 +478,7 @@ void frame_playback::PlayFrame(editor* Editor)
             ak_string Name = Internal__ReadAssetName(Stream, Editor->Scratch);
             ak_u32 ObjectSize = Stream->CopyConsume<ak_u32>();
             
-            ak_u64* EntityID = Editor->GameEntityNameHash[WorldIndex].Find(Name.Data);
+            ak_u64* EntityID = GameContext->GameEntityNameHash[WorldIndex].Find(Name);
             if(!EntityID)
             {
                 Stream->Consume(ObjectSize);

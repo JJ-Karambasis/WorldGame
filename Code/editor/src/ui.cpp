@@ -1,3 +1,26 @@
+ak_string UI_GetDefaultStaticEntityName(ak_arena* Scratch, world_management* WorldManagement)
+{
+    ak_string Name = AK_CreateEmptyString();
+    for(;;)
+    {
+        Name = AK_FormatString(Scratch, StaticEntity_DefaultName, StaticEntity_HighestIndex);
+        
+        ak_bool Found = false;
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            if(WorldManagement->EntityTables[WorldIndex].Find(Name))
+                Found = true;
+        }
+        
+        if(Found)
+            StaticEntity_HighestIndex++;
+        else
+            break;
+    }
+    
+    return Name;
+}
+
 void UI_PushDisabledItem()
 {
     ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
@@ -157,6 +180,18 @@ void UI_ClearSpawner(entity_spawner* Spawner)
     Spawner->MeshID = (mesh_asset_id)0;
     Spawner->MaterialContext = {};
     Spawner->Mass = 1.0f;
+}
+
+void UI_SpawnerRefreshName(editor* Editor, entity_spawner* Spawner)
+{
+    switch(Spawner->EntityType)
+    {
+        case ENTITY_TYPE_STATIC:
+        {
+            ak_string Name = UI_GetDefaultStaticEntityName(Editor->Scratch, &Editor->WorldManagement);
+            AK_MemoryCopy(Spawner->Name, Name.Data, Name.Length);
+        } break;
+    }
 }
 
 void UI_ResetSpawner(ui* UI, entity_spawner* Spawner)
@@ -441,9 +476,11 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
     {
         Spawner->Init = true;
         UI_ClearSpawner(Spawner);                
+        UI_SpawnerRefreshName(Editor, Spawner);
     }
     
     world_management* WorldManagement = &Editor->WorldManagement;
+    edit_recordings* EditRecordings = &Editor->EditRecordings;
     ui* UI = &Editor->UI;
     
     ak_fixed_array<const ak_char*> EntityTypes = UI_GetAllEntityTypesNotPlayer();
@@ -457,14 +494,18 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
     UI_Combo(AK_HashFunction("Entity Type"), "", (int*)&SpawnType, EntityTypes.Data, EntityTypes.Size);            
     entity_type Type = (entity_type)(SpawnType+1);
     
+    
+    
     if(PrevType != Type)
     {
         UI_ClearSpawner(Spawner);
         Spawner->EntityType = Type;
+        UI_SpawnerRefreshName(Editor, Spawner);
     }
     
     ImGui::Separator();
     UI_NameTool(AK_HashFunction("Name Spawner"), Spawner->Name, MAX_OBJECT_NAME_LENGTH);
+    ImGui::SameLine();
     ImGui::Separator();
     switch(Type)
     {
@@ -504,29 +545,29 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
     
     if(UI_Button(AK_HashFunction("Create Entity Button"), "Create"))
     {
-        if(!AK_StringIsNullOrEmpty(AK_CreateString(Spawner->Name)))
+        ak_string Name = AK_CreateString(Spawner->Name);
+        if(!AK_StringIsNullOrEmpty(Name))
         {
             UI->ShowEntityNameNullErrorText = false;
             material Material = UI_MaterialFromContext(&Spawner->MaterialContext);
             if(Spawner->WorldIndex < 2)
             {
-                if(!WorldManagement->EntityNameCollisionMap[Spawner->WorldIndex].Find(Spawner->Name))
+                if(!WorldManagement->EntityTables[Spawner->WorldIndex].Find(Name))
                 {
                     UI->ShowEntityNameErrorText = false;
-                    WorldManagement->CreateDevEntity(Spawner->WorldIndex, Spawner->Name, 
-                                                     Spawner->EntityType, Spawner->Translation, 
-                                                     Spawner->Axis, Spawner->Angle, Spawner->Scale, 
-                                                     Material, Spawner->MeshID);
-                    
-                    WorldManagement->EntityNameCollisionMap[Spawner->WorldIndex].Insert(Spawner->Name, true);
+                    dev_entity* Entity = WorldManagement->CreateDevEntity(Spawner->WorldIndex, Name.Data, 
+                                                                          Spawner->EntityType, Spawner->Translation, 
+                                                                          Spawner->Axis, Spawner->Angle, Spawner->Scale, 
+                                                                          Material, Spawner->MeshID);
+                    EditRecordings->Push(EDIT_ENTRY_TYPE_CREATE, Spawner->WorldIndex, Entity);
                 }
                 else
                     UI->ShowEntityNameErrorText = true;
             }
             else
             {
-                if(WorldManagement->EntityNameCollisionMap[0].Find(Spawner->Name) ||
-                   WorldManagement->EntityNameCollisionMap[1].Find(Spawner->Name))
+                if(WorldManagement->EntityTables[0].Find(Name) ||
+                   WorldManagement->EntityTables[1].Find(Name))
                 {
                     UI->ShowEntityNameErrorText = true;
                 }
@@ -534,12 +575,12 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                 {
                     UI->ShowEntityNameErrorText = false;
                     
-                    dev_entity* Entity0 = WorldManagement->CreateDevEntity(0, Spawner->Name, 
+                    dev_entity* Entity0 = WorldManagement->CreateDevEntity(0, Name.Data, 
                                                                            Spawner->EntityType, Spawner->Translation, 
                                                                            Spawner->Axis, Spawner->Angle, 
                                                                            Spawner->Scale, Material, Spawner->MeshID);
                     
-                    dev_entity* Entity1 = WorldManagement->CreateDevEntity(1, Spawner->Name, 
+                    dev_entity* Entity1 = WorldManagement->CreateDevEntity(1, Name.Data, 
                                                                            Spawner->EntityType, Spawner->Translation, 
                                                                            Spawner->Axis, Spawner->Angle, 
                                                                            Spawner->Scale, Material,
@@ -547,18 +588,18 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                     
                     if(Spawner->WorldIndex == 3)
                     {
-                        Entity0->LinkID = Entity1->ID;
-                        Entity1->LinkID = Entity0->ID;
+                        Entity0->LinkName = Entity1->Name;
+                        Entity1->LinkName = Entity0->Name;
                     }
                     
-                    WorldManagement->EntityNameCollisionMap[0].Insert(Entity0->Name, true);
-                    WorldManagement->EntityNameCollisionMap[1].Insert(Entity1->Name, true);
+                    EditRecordings->Push(EDIT_ENTRY_TYPE_CREATE, 0, Entity0, Entity1);
                 }
             }
+            
+            UI_SpawnerRefreshName(Editor, Spawner);
         }
         else
             UI->ShowEntityNameNullErrorText = true;
-        
     }
     
     if(UI->ShowEntityNameErrorText)
@@ -601,7 +642,8 @@ void UI_LightSpawner(editor* Editor, light_spawner* Spawner)
     
     if(UI_Button(AK_HashFunction("Create Point Light Button"), "Create"))
     {
-        if(AK_StringIsNullOrEmpty(AK_CreateString(Spawner->Name)))
+        ak_string Name = AK_CreateString(Spawner->Name);
+        if(AK_StringIsNullOrEmpty(Name))
         {
             UI->ShowLightNameNullErrorText = true;
         }
@@ -611,8 +653,8 @@ void UI_LightSpawner(editor* Editor, light_spawner* Spawner)
             
             if(Spawner->WorldIndex == 2)
             {
-                if(WorldManagement->LightNameCollisionMap[0].Find(Spawner->Name) ||
-                   WorldManagement->LightNameCollisionMap[1].Find(Spawner->Name))
+                if(WorldManagement->PointLightTables[0].Find(Name) ||
+                   WorldManagement->PointLightTables[1].Find(Name))
                 {
                     UI->ShowLightNameErrorText = true;
                 }
@@ -623,17 +665,14 @@ void UI_LightSpawner(editor* Editor, light_spawner* Spawner)
             }
             else
             {
-                if(WorldManagement->LightNameCollisionMap[Spawner->WorldIndex].Find(Spawner->Name))
+                if(WorldManagement->PointLightTables[Spawner->WorldIndex].Find(Name))
                 {
                     UI->ShowLightNameErrorText = true;
                 }
                 else
                 {
                     UI->ShowLightNameErrorText = false;
-                    
-                    WorldManagement->CreateDevPointLight(Spawner->WorldIndex, Spawner->Name, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
-                    
-                    WorldManagement->LightNameCollisionMap[Spawner->WorldIndex].Insert(Spawner->Name, true);
+                    WorldManagement->CreateDevPointLight(Spawner->WorldIndex, Name.Data, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
                 }
             }
         }
@@ -678,17 +717,17 @@ ak_v2f UI_ListerWindow(editor* Editor)
                         AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
                         {
                             ak_bool Selected = false;
-                            if((WorldIndex == CurrentWorldIndex) && SelectedObject && SelectedObject->Type == SELECTED_OBJECT_TYPE_ENTITY)
+                            if((WorldIndex == CurrentWorldIndex) && SelectedObject && SelectedObject->Type == OBJECT_TYPE_ENTITY)
                             {
                                 dev_entity* SelectedEntity = SelectedObject->GetEntity(WorldManagement, WorldIndex);
                                 Selected = AK_StringEquals(SelectedEntity->Name, DevEntity->Name);
                             }
                             
-                            if(ImGui::Selectable(DevEntity->Name, Selected))
+                            if(ImGui::Selectable(DevEntity->Name.Data, Selected))
                             {
                                 if(WorldIndex == CurrentWorldIndex)
                                 {
-                                    GizmoState->SelectedObject = Editor_GizmoSelectedObject(DevEntity->ID, SELECTED_OBJECT_TYPE_ENTITY);
+                                    GizmoState->SelectedObject = Editor_GizmoSelectedObject(DevEntity->Name, OBJECT_TYPE_ENTITY);
                                 }
                             }
                         }
@@ -701,20 +740,20 @@ ak_v2f UI_ListerWindow(editor* Editor)
                         {
                             ak_bool Selected = false;
                             if((WorldIndex == CurrentWorldIndex) && SelectedObject &&
-                               SelectedObject->Type == SELECTED_OBJECT_TYPE_LIGHT)
+                               SelectedObject->Type == OBJECT_TYPE_LIGHT)
                             {
                                 dev_point_light* SelectedPointLight = 
                                     SelectedObject->GetPointLight(WorldManagement, WorldIndex);
                                 Selected = AK_StringEquals(SelectedPointLight->Name, DevLight->Name);
                             }
                             
-                            if(ImGui::Selectable(DevLight->Name, Selected))
+                            if(ImGui::Selectable(DevLight->Name.Data, Selected))
                             {
                                 if(WorldIndex == CurrentWorldIndex)
                                 {
                                     GizmoState->SelectedObject = 
-                                        Editor_GizmoSelectedObject(DevLight->ID, 
-                                                                   SELECTED_OBJECT_TYPE_LIGHT);
+                                        Editor_GizmoSelectedObject(DevLight->Name, 
+                                                                   OBJECT_TYPE_LIGHT);
                                 }
                             }
                         }
@@ -744,11 +783,11 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
         {
             switch(SelectedObject->Type)
             {
-                case SELECTED_OBJECT_TYPE_ENTITY:
+                case OBJECT_TYPE_ENTITY:
                 {
                     dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                     
-                    ImGui::Text("Name: %s", Entity->Name);
+                    ImGui::Text("Name: %.*s", Entity->Name.Length, Entity->Name.Data);
                     UI_TranslationTool("Position", AK_HashFunction("Edit Translation"), EDITOR_ITEM_WIDTH, &Entity->Transform.Translation);
                     UI_ScaleTool("Scale", AK_HashFunction("Edit Scale"), EDITOR_ITEM_WIDTH, 
                                  &Entity->Transform.Scale);
@@ -796,7 +835,7 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                     }
                 } break;
                 
-                case SELECTED_OBJECT_TYPE_LIGHT:
+                case OBJECT_TYPE_LIGHT:
                 {
                     dev_point_light* PointLight = SelectedObject->GetPointLight(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                     

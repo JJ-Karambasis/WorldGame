@@ -22,7 +22,7 @@ EDITOR_DEBUG_LOG(Editor_DebugLog)
 
 EDITOR_DRAW_POINT(Editor_DrawPoint)
 {
-    render_primitive Primitive = {};
+    render_primitive Primitive = {}; 
     Primitive.Type = RENDER_PRIMITIVE_TYPE_POINT;
     Primitive.Point.P = Position;
     Primitive.Point.Size = Size;
@@ -67,12 +67,12 @@ world_file_header Editor_GetWorldFileHeader(ak_u16 EntityCountA, ak_u16 EntityCo
     return Header;
 }
 
-gizmo_selected_object Editor_GizmoSelectedObject(ak_u64 ID, selected_object_type Type)
+gizmo_selected_object Editor_GizmoSelectedObject(ak_string Name, object_type Type)
 {
     gizmo_selected_object Result;
     Result.IsSelected = true;
     Result.SelectedObject.Type = Type;
-    Result.SelectedObject.ID = ID;
+    Result.SelectedObject.Name = Name;
     return Result;
 }
 
@@ -81,18 +81,23 @@ gizmo_selected_object Editor_GizmoSelectedObject(ak_u64 ID, selected_object_type
 #include "src/dev_mesh.cpp"
 #include "src/frame_playback.cpp"
 #include "src/generated_string_templates.cpp"
+#include "src/edit_recordings.cpp"
 
 dev_entity* selected_object::GetEntity(world_management* WorldManagement, ak_u32 WorldIndex)
 {
-    AK_Assert(Type == SELECTED_OBJECT_TYPE_ENTITY, "Cannot get entity of a selected object that is not an entity");
-    dev_entity* Entity = WorldManagement->DevEntities[WorldIndex].Get(ID);
+    AK_Assert(Type == OBJECT_TYPE_ENTITY, "Cannot get entity of a selected object that is not an entity");
+    AK_Assert(IsAlive(WorldManagement, WorldIndex), "Selected object must not have a deleted entity selected");
+    ak_u64* ID = WorldManagement->EntityTables[WorldIndex].Find(Name);
+    dev_entity* Entity = WorldManagement->DevEntities[WorldIndex].Get(*ID);
     return Entity;
 }
 
 dev_point_light* selected_object::GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex)
 {
-    AK_Assert(Type == SELECTED_OBJECT_TYPE_LIGHT, "Cannot get point light of a selected object that is not a point light");
-    dev_point_light* PointLight = WorldManagement->DevPointLights[WorldIndex].Get(ID);
+    AK_Assert(Type == OBJECT_TYPE_LIGHT, "Cannot get point light of a selected object that is not a point light");
+    AK_Assert(IsAlive(WorldManagement, WorldIndex), "Selected object must not have a deleted point light selected");
+    ak_u64* ID = WorldManagement->PointLightTables[WorldIndex].Find(Name);
+    dev_point_light* PointLight = WorldManagement->DevPointLights[WorldIndex].Get(*ID);
     return PointLight;
 }
 
@@ -101,13 +106,13 @@ ak_v3f selected_object::GetPosition(world_management* WorldManagement, ak_u32 Wo
     ak_v3f Result = {};
     switch(Type)
     {
-        case SELECTED_OBJECT_TYPE_ENTITY:
+        case OBJECT_TYPE_ENTITY:
         {
             dev_entity* Entity = GetEntity(WorldManagement, WorldIndex);
             Result = Entity->Transform.Translation;
         } break;
         
-        case SELECTED_OBJECT_TYPE_LIGHT:
+        case OBJECT_TYPE_LIGHT:
         {
             dev_point_light* PointLight = GetPointLight(WorldManagement, WorldIndex);
             Result = PointLight->Light.Position;
@@ -116,6 +121,26 @@ ak_v3f selected_object::GetPosition(world_management* WorldManagement, ak_u32 Wo
         AK_INVALID_DEFAULT_CASE;
     }
     return Result;
+}
+
+ak_bool selected_object::IsAlive(world_management* WorldManagement, ak_u32 WorldIndex)
+{
+    switch(Type)
+    {
+        case OBJECT_TYPE_ENTITY:
+        {
+            return WorldManagement->EntityTables[WorldIndex].Find(Name) != NULL;
+        } break;
+        
+        case OBJECT_TYPE_LIGHT:
+        {
+            return WorldManagement->PointLightTables[WorldIndex].Find(Name) != NULL;
+        } break;
+        
+        AK_INVALID_DEFAULT_CASE;
+    }
+    
+    return false;
 }
 
 ray Editor_GetRayCastFromMouse(editor* Editor, view_settings* ViewSettings, ak_v2i Resolution)
@@ -168,7 +193,7 @@ gizmo_intersection_result Editor_CastToGizmos(editor* Editor, gizmo_state* Gizmo
     return Result;
 }
 
-#define UPDATE_BEST_HIT(type, id) \
+#define UPDATE_BEST_HIT(type, name) \
 do \
 { \
 if(RayCast.Intersected) \
@@ -178,7 +203,7 @@ if((tBest > RayCast.t) && (RayCast.t > ZNear)) \
 tBest = RayCast.t; \
 Result.IsSelected = true; \
 Result.SelectedObject.Type = type; \
-Result.SelectedObject.ID = id; \
+Result.SelectedObject.Name = name; \
 } \
 } \
 } while(0)
@@ -214,14 +239,14 @@ gizmo_selected_object Editor_CastToAllObjects(editor* Editor, assets* Assets, ra
                                            AK_TransformM4(DevEntity->Transform));
         }
         
-        UPDATE_BEST_HIT(SELECTED_OBJECT_TYPE_ENTITY, DevEntity->ID);
+        UPDATE_BEST_HIT(OBJECT_TYPE_ENTITY, DevEntity->Name);
     }
     
     AK_ForEach(DevPointLight, DevPointLights)
     {
         ray_cast RayCast = Ray_SphereCast(Ray.Origin, Ray.Direction, DevPointLight->Light.Position,
                                           POINT_LIGHT_RADIUS);
-        UPDATE_BEST_HIT(SELECTED_OBJECT_TYPE_LIGHT, DevPointLight->ID);
+        UPDATE_BEST_HIT(OBJECT_TYPE_LIGHT, DevPointLight->Name);
     }
     
     
@@ -270,13 +295,13 @@ ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
             ak_v3f YAxis = AK_YAxis();
             ak_v3f ZAxis = AK_ZAxis();
             
-            if(SelectedObject->Type == SELECTED_OBJECT_TYPE_ENTITY)
+            if(SelectedObject->Type == OBJECT_TYPE_ENTITY)
             {
                 dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                 
                 if(GizmoState->UseLocalTransforms && GizmoState->TransformMode == SELECTOR_TRANSFORM_MODE_TRANSLATE)
                 {
-                    AK_Assert(SelectedObject->Type == SELECTED_OBJECT_TYPE_ENTITY, "Selector type must be an entity");
+                    AK_Assert(SelectedObject->Type == OBJECT_TYPE_ENTITY, "Selector type must be an entity");
                     
                     ak_m3f Orientation = AK_QuatToMatrix(Entity->Transform.Orientation);
                     XAxis = Orientation.XAxis;
@@ -404,7 +429,12 @@ ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
 
 selected_object* Editor_GetSelectedObject(editor* Editor)
 {
-    return Editor->GizmoState.SelectedObject.IsSelected ? &Editor->GizmoState.SelectedObject.SelectedObject : NULL;
+    gizmo_selected_object* SelectedObject = &Editor->GizmoState.SelectedObject;
+    if(SelectedObject->IsSelected)
+    {
+        SelectedObject->IsSelected = SelectedObject->SelectedObject.IsAlive(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+    }
+    return SelectedObject->IsSelected ? &SelectedObject->SelectedObject : NULL;
 }
 
 void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Resolution, ak_f32 ZNear)
@@ -439,7 +469,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                 
                 switch(SelectedObject->Type)
                 {
-                    case SELECTED_OBJECT_TYPE_ENTITY:
+                    case OBJECT_TYPE_ENTITY:
                     {
                         dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                         GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Entity->Transform.Orientation));
@@ -847,10 +877,14 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     graphics_camera* DevCamera = &Editor->Cameras[Editor->CurrentWorldIndex];
     ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;
     
-    if(Editor->WorldManagement.NewState == WORLD_MANAGEMENT_STATE_NONE)
+    game_context* GameContext = &Editor->GameContext;
+    game* Game = GameContext->Game;
+    world_management* WorldManagement = &Editor->WorldManagement;
+    edit_recordings* EditRecordings = &Editor->EditRecordings;
+    
+    if(WorldManagement->NewState == WORLD_MANAGEMENT_STATE_NONE)
     {
-        
-        if(!Editor->Game || Editor->UI.GameUseDevCamera)
+        if(!Game || Editor->UI.GameUseDevCamera)
         {
             ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;                
             
@@ -900,12 +934,21 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
             DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);        
         }
         
-        if(!Editor->Game)
+        if(!Game)
         {
             if(IsPressed(&DevInput->Q))
             {
                 Editor->CurrentWorldIndex = !Editor->CurrentWorldIndex;
                 Editor->GizmoState.SelectedObject = {};
+            }
+            
+            if(IsDown(&DevInput->Ctrl))
+            {
+                if(IsPressed(&DevInput->Z))
+                    EditRecordings->Undo(WorldManagement);
+                
+                if(IsPressed(&DevInput->Y))
+                    EditRecordings->Redo(WorldManagement);
             }
             
             view_settings ViewSettings = GetViewSettings(DevCamera);
@@ -916,7 +959,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
             selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
             if(SelectedObject)
             {
-                if(SelectedObject->Type != SELECTED_OBJECT_TYPE_ENTITY)
+                if(SelectedObject->Type != OBJECT_TYPE_ENTITY)
                     Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
                 else
                 {
@@ -932,9 +975,9 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 
                 switch(SelectedObject->Type)
                 {
-                    case SELECTED_OBJECT_TYPE_ENTITY:
+                    case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                        dev_entity* Entity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
                         
                         switch(Editor->GizmoState.TransformMode)
                         {
@@ -959,22 +1002,22 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 
                 if(IsPressed(&DevInput->F))
                 {
-                    DevCamera->Target = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                    DevCamera->Target = SelectedObject->GetPosition(WorldManagement, Editor->CurrentWorldIndex);
                 }
                 
                 if(IsPressed(&DevInput->Delete))
                 {
                     switch(SelectedObject->Type)
                     {
-                        case SELECTED_OBJECT_TYPE_ENTITY:
+                        case OBJECT_TYPE_ENTITY:
                         {
-                            Editor->WorldManagement.DeleteDevEntity(Editor->CurrentWorldIndex, SelectedObject->ID);
+                            WorldManagement->DeleteDevEntity(Editor->CurrentWorldIndex, SelectedObject->Name);
                         } break;
                         
-                        case SELECTED_OBJECT_TYPE_LIGHT:
+                        case OBJECT_TYPE_LIGHT:
                         {
-                            Editor->WorldManagement.DeleteDevPointLight(Editor->CurrentWorldIndex, 
-                                                                        SelectedObject->ID);
+                            WorldManagement->DeleteDevPointLight(Editor->CurrentWorldIndex, 
+                                                                 SelectedObject->Name);
                         } break;
                     }
                     
@@ -1006,7 +1049,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
     selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
     AK_Assert(SelectedObject, "Selected object must be present before rendering");
     
-    if(SelectedObject->Type == SELECTED_OBJECT_TYPE_ENTITY)
+    if(SelectedObject->Type == OBJECT_TYPE_ENTITY)
     {
         if(GizmoState->UseLocalTransforms || GizmoState->TransformMode == SELECTOR_TRANSFORM_MODE_SCALE)
         {
@@ -1328,28 +1371,31 @@ void Editor_Render(editor* Editor, graphics* Graphics, platform* Platform, asset
     
     ak_v2i Resolution = Platform->GetResolution();
     
+    game_context* GameContext = &Editor->GameContext;
+    game* Game = GameContext->Game;
+    
     ak_u32 CurrentWorldIndex;
-    if(Editor->Game)
-        CurrentWorldIndex = Editor->Game->CurrentWorldIndex;
+    if(Game)
+        CurrentWorldIndex = Game->CurrentWorldIndex;
     else
         CurrentWorldIndex = Editor->CurrentWorldIndex;
     
     UpdateRenderBuffer(Graphics, &Editor->RenderBuffers[CurrentWorldIndex], Resolution);
     UpdateRenderBuffer(Graphics, &Editor->RenderBuffers[!CurrentWorldIndex], Resolution/5);
     
-    if(Editor->Game)
+    if(Game)
     {
-        view_settings ViewSettings = Editor_RenderGameWorld(Editor, Graphics, Editor->Game, CurrentWorldIndex, tInterpolated);
+        view_settings ViewSettings = Editor_RenderGameWorld(Editor, Graphics, Game, CurrentWorldIndex, tInterpolated);
         if(Editor->UI.EditorDrawOtherWorld)
         {
-            Editor_RenderGameWorld(Editor, Graphics, Editor->Game, !CurrentWorldIndex, tInterpolated);
+            Editor_RenderGameWorld(Editor, Graphics, Game, !CurrentWorldIndex, tInterpolated);
             PushRenderBufferViewportScissorAndView(Graphics, Editor->RenderBuffers[CurrentWorldIndex], 
                                                    &ViewSettings);
         }
         
         if(Editor->UI.GameDrawColliders)
         {
-            world* World = Editor->Game->World;
+            world* World = Game->World;
             
             ak_u32 WorldIndex = CurrentWorldIndex;
             ak_array<graphics_object>* GraphicsObjects = &World->GraphicsObjects[WorldIndex];
@@ -1524,23 +1570,25 @@ ak_u64 GetEntryID(editor* Editor, dev_entity* DevEntity, ak_u32 WorldIndex)
 {
     ak_u64 Result = 0;
     
+    game_context* GameContext = &Editor->GameContext;
+    
     switch(DevEntity->Type)
     {
         case ENTITY_TYPE_PLAYER:
         {
-            Result = CreatePlayerEntity(Editor->Game, WorldIndex, DevEntity->Transform.Translation, 
+            Result = CreatePlayerEntity(GameContext->Game, WorldIndex, DevEntity->Transform.Translation, 
                                         DevEntity->Material)->ID;
         } break;
         
         case ENTITY_TYPE_BUTTON:
         {
-            Result = CreateButtonEntity(Editor->Game, WorldIndex, DevEntity->Transform.Translation, 
+            Result = CreateButtonEntity(GameContext->Game, WorldIndex, DevEntity->Transform.Translation, 
                                         DevEntity->Transform.Scale, DevEntity->Material, DevEntity->IsToggled)->ID;
         } break;
         
         case ENTITY_TYPE_STATIC:
         {
-            Result = CreateStaticEntity(Editor->Game, WorldIndex, DevEntity->Transform.Translation, DevEntity->Transform.Scale, DevEntity->Transform.Orientation, 
+            Result = CreateStaticEntity(GameContext->Game, WorldIndex, DevEntity->Transform.Translation, DevEntity->Transform.Scale, DevEntity->Transform.Orientation, 
                                         DevEntity->MeshID, DevEntity->Material)->ID;
         } break;
         
@@ -1549,25 +1597,24 @@ ak_u64 GetEntryID(editor* Editor, dev_entity* DevEntity, ak_u32 WorldIndex)
     
     ak_u32 Index = AK_PoolIndex(Result);
     ak_u32 IndexPlusOne = Index+1;
-    if(IndexPlusOne > Editor->GameEntityNames[WorldIndex].Size)
-        Editor->GameEntityNames[WorldIndex].Resize(IndexPlusOne*2);
+    if(IndexPlusOne > GameContext->GameEntityNames[WorldIndex].Size)
+        GameContext->GameEntityNames[WorldIndex].Resize(IndexPlusOne*2);
     
-    AK_MemoryCopy(Editor->GameEntityNames[WorldIndex][AK_PoolIndex(Result)], 
-                  DevEntity->Name, MAX_OBJECT_NAME_LENGTH);
-    Editor->GameEntityNameHash[WorldIndex].Insert(DevEntity->Name, Result);
+    GameContext->GameEntityNames[WorldIndex][AK_PoolIndex(Result)] = DevEntity->Name;
+    GameContext->GameEntityNameHash[WorldIndex].Insert(DevEntity->Name, Result);
     
     return Result;
 }
 
 ak_u64 GetEntryID(editor* Editor, dev_point_light* DevPointLight, ak_u32 WorldIndex)
 {
-    ak_u64 Result = CreatePointLight(Editor->Game, WorldIndex, DevPointLight->Light.Position, DevPointLight->Light.Radius, 
+    ak_u64 Result = CreatePointLight(Editor->GameContext.Game, WorldIndex, DevPointLight->Light.Position, DevPointLight->Light.Radius, 
                                      DevPointLight->Light.Color, DevPointLight->Light.Intensity)->ID;
     return Result;
 }
 
 template <typename type>
-ak_u32 Editor_BuildIDs(editor* Editor, ak_u64* WorldIDs, ak_pool<type>* Pool, ak_hash_map<ak_char*, ak_u32>* HashMap, ak_u32 WorldIndex)
+ak_u32 Editor_BuildIDs(editor* Editor, ak_u64* WorldIDs, ak_pool<type>* Pool, ak_hash_map<ak_string, ak_u32>* HashMap, ak_u32 WorldIndex)
 {
     AK_ForEach(Entry, Pool)
     {
@@ -1581,16 +1628,19 @@ ak_u32 Editor_BuildIDs(editor* Editor, ak_u64* WorldIDs, ak_pool<type>* Pool, ak
 
 void Editor_StopGame(editor* Editor, platform* Platform)
 {
-    Editor->Game->Shutdown(Editor->Game);
-    Editor->Game = NULL;
+    game_context* GameContext = &Editor->GameContext;
+    game* Game = GameContext->Game;
+    
+    Game->Shutdown(Game);
+    GameContext->Game = NULL;
     
     Editor->Cameras[0] = Editor->OldCameras[0];
     Editor->Cameras[1] = Editor->OldCameras[1];
     
-    AK_DeleteHashMap(&Editor->GameEntityNameHash[0]);
-    AK_DeleteHashMap(&Editor->GameEntityNameHash[1]);
-    AK_DeleteArray(&Editor->GameEntityNames[0]);
-    AK_DeleteArray(&Editor->GameEntityNames[1]);
+    AK_DeleteHashMap(&GameContext->GameEntityNameHash[0]);
+    AK_DeleteHashMap(&GameContext->GameEntityNameHash[1]);
+    AK_DeleteArray(&GameContext->GameEntityNames[0]);
+    AK_DeleteArray(&GameContext->GameEntityNames[1]);
     
     Editor->UI.GameUseDevCamera = false;
     
@@ -1601,6 +1651,7 @@ void Editor_StopGame(editor* Editor, platform* Platform)
 ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform, 
                         dev_platform* DevPlatform)
 {
+    game_context* GameContext = &Editor->GameContext;
     world_management* WorldManagement = &Editor->WorldManagement;
     
     game_startup* GameStartup = Platform->LoadGameCode();
@@ -1619,20 +1670,20 @@ ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, plat
         return false;
     }
     
-    Editor->Game = GameStartup(Graphics, Assets);
-    if(!Editor->Game)
+    GameContext->Game = GameStartup(Graphics, Assets);
+    if(!GameContext->Game)
     {
         //TODO(JJ): Diagnostic and error logging
         return false;
     }
     
-    if(!WorldStartup(Editor->Game))
+    if(!WorldStartup(GameContext->Game))
     {
         //TODO(JJ): Diagnostic and error logging
         return false;
     }
     
-    ak_u64* WorldIDs = (ak_u64*)(Editor->Game->World+1);
+    ak_u64* WorldIDs = (ak_u64*)(GameContext->Game->World+1);
     WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevEntities[0], &WorldManagement->EntityIndices[0], 0);
     WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevEntities[1], &WorldManagement->EntityIndices[1], 1);
     WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevPointLights[0], &WorldManagement->PointLightIndices[0], 0);
@@ -1672,10 +1723,11 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             return 0;
         ImGui::NewFrame();
         
+        game_context* GameContext = &Editor->GameContext;
         world_management* WorldManagement = &Editor->WorldManagement;
         
         ak_f32 LogHeight = 0;
-        if(!Editor->Game)
+        if(!GameContext->Game)
         {
             ak_v2i Resolution = Platform->GetResolution();
             
@@ -1700,8 +1752,6 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             }
             
             WorldManagement->Update(Editor, Platform, DevPlatform, Assets);
-            
-            
             
             ak_f32 MenuHeight = 0;
             if(ImGui::BeginMainMenuBar())
@@ -1815,9 +1865,9 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             Editor->DetailsDim = UI_DetailsWindow(Editor, Assets);
         }
         
-        if(Editor->Game)
+        if(GameContext->Game)
         {
-            game* Game = Editor->Game;
+            game* Game = GameContext->Game;
             frame_playback* FramePlayback = &Editor->FramePlayback;
             
             if(!((FramePlayback->NewState == FRAME_PLAYBACK_STATE_RECORDING) ||
