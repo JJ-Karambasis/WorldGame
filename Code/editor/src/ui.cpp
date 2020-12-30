@@ -1,19 +1,30 @@
-ak_string UI_GetDefaultStaticEntityName(ak_arena* Scratch, world_management* WorldManagement)
+global ak_u32 StaticEntity_HighestIndex;
+global ak_u32 ButtonEntity_HighestIndex;
+global ak_u32 PointLight_HighestIndex;
+
+global const ak_char* StaticEntity_DefaultName = "Static_%d";
+global const ak_char* ButtonEntity_DefaultName = "Button_%d";
+global const ak_char* PointLight_DefaultName = "PointLight_%d";
+
+ak_string UI_GetDefaultNames(ak_arena* Scratch, ak_hash_map<ak_string, ak_u64>* Tables, 
+                             const ak_char* DefaultName, ak_u32* HighestIndex)
 {
     ak_string Name = AK_CreateEmptyString();
     for(;;)
     {
-        Name = AK_FormatString(Scratch, StaticEntity_DefaultName, StaticEntity_HighestIndex);
+        Name = AK_FormatString(Scratch, DefaultName, *HighestIndex);
         
         ak_bool Found = false;
         for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
         {
-            if(WorldManagement->EntityTables[WorldIndex].Find(Name))
+            if(Tables[WorldIndex].Find(Name))
                 Found = true;
         }
         
         if(Found)
-            StaticEntity_HighestIndex++;
+        {
+            (*HighestIndex)++;
+        }
         else
             break;
     }
@@ -120,6 +131,15 @@ void UI_DragFloat(ak_u32 ID, const ak_char* Label, ak_f32* Value, ak_f32 Speed, 
 {
     ImGui::PushID(ID);
     ImGui::DragFloat(Label, Value, Speed, Min, Max);
+    
+    if(ImGui::IsItemActivated())
+    {
+    }
+    
+    if(ImGui::IsItemDeactivated())
+    {
+    }
+    
     ImGui::PopID();
 }
 
@@ -184,15 +204,36 @@ void UI_ClearSpawner(entity_spawner* Spawner)
 
 void UI_SpawnerRefreshName(editor* Editor, entity_spawner* Spawner)
 {
+    const ak_char* DefaultName = NULL;
+    ak_u32* DefaultIndex = NULL;
+    
     switch(Spawner->EntityType)
     {
         case ENTITY_TYPE_STATIC:
         {
-            ak_string Name = UI_GetDefaultStaticEntityName(Editor->Scratch, &Editor->WorldManagement);
-            AK_MemoryCopy(Spawner->Name, Name.Data, Name.Length);
+            DefaultIndex = &StaticEntity_HighestIndex;
+            DefaultName = StaticEntity_DefaultName;
+        } break;
+        
+        case ENTITY_TYPE_BUTTON:
+        {
+            DefaultIndex = &ButtonEntity_HighestIndex;
+            DefaultName = ButtonEntity_DefaultName;
         } break;
     }
+    
+    ak_string Name = UI_GetDefaultNames(Editor->Scratch, Editor->WorldManagement.EntityTables, 
+                                        DefaultName, DefaultIndex);
+    AK_MemoryCopy(Spawner->Name, Name.Data, Name.Length);
 }
+
+void UI_SpawnerRefreshName(editor* Editor, light_spawner* Spawner)
+{
+    ak_string Name = UI_GetDefaultNames(Editor->Scratch, Editor->WorldManagement.PointLightTables, 
+                                        PointLight_DefaultName, &PointLight_HighestIndex);
+    AK_MemoryCopy(Spawner->Name, Name.Data, Name.Length);
+}
+
 
 void UI_ResetSpawner(ui* UI, entity_spawner* Spawner)
 {
@@ -559,7 +600,8 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                                                                           Spawner->EntityType, Spawner->Translation, 
                                                                           Spawner->Axis, Spawner->Angle, Spawner->Scale, 
                                                                           Material, Spawner->MeshID);
-                    EditRecordings->Push(EDIT_ENTRY_TYPE_CREATE, Spawner->WorldIndex, Entity);
+                    
+                    EditRecordings->PushCreateEntry(Spawner->WorldIndex, Entity);
                 }
                 else
                     UI->ShowEntityNameErrorText = true;
@@ -592,7 +634,7 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                         Entity1->LinkName = Entity0->Name;
                     }
                     
-                    EditRecordings->Push(EDIT_ENTRY_TYPE_CREATE, 0, Entity0, Entity1);
+                    EditRecordings->PushCreateEntry(0, Entity0, Entity1);
                 }
             }
             
@@ -620,11 +662,13 @@ void UI_LightSpawner(editor* Editor, light_spawner* Spawner)
     if(!Spawner->Init)
     {
         UI_ClearSpawner(Spawner);
+        UI_SpawnerRefreshName(Editor, Spawner);
         Spawner->Init = true;
     }
     
     ui* UI = &Editor->UI;
     world_management* WorldManagement = &Editor->WorldManagement;
+    edit_recordings* EditRecordings = &Editor->EditRecordings;
     
     UI_NameTool(AK_HashFunction("Light Name Spawner"), Spawner->Name, MAX_OBJECT_NAME_LENGTH);
     ImGui::Separator();
@@ -661,6 +705,21 @@ void UI_LightSpawner(editor* Editor, light_spawner* Spawner)
                 else
                 {
                     UI->ShowLightNameErrorText = false;
+                    
+                    dev_point_light* PointLight0 = WorldManagement->CreateDevPointLight(0, Name.Data, 
+                                                                                        Spawner->Translation, 
+                                                                                        Spawner->Radius, 
+                                                                                        Spawner->Color, 
+                                                                                        Spawner->Intensity);
+                    
+                    dev_point_light* PointLight1 = 
+                        WorldManagement->CreateDevPointLight(1, Name.Data, 
+                                                             Spawner->Translation, 
+                                                             Spawner->Radius, 
+                                                             Spawner->Color, 
+                                                             Spawner->Intensity);
+                    
+                    EditRecordings->PushCreateEntry(0, PointLight0, PointLight1);
                 }
             }
             else
@@ -672,10 +731,14 @@ void UI_LightSpawner(editor* Editor, light_spawner* Spawner)
                 else
                 {
                     UI->ShowLightNameErrorText = false;
-                    WorldManagement->CreateDevPointLight(Spawner->WorldIndex, Name.Data, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
+                    dev_point_light* PointLight = WorldManagement->CreateDevPointLight(Spawner->WorldIndex, Name.Data, Spawner->Translation, Spawner->Radius, Spawner->Color, Spawner->Intensity);
+                    
+                    EditRecordings->PushCreateEntry(Spawner->WorldIndex, PointLight);
                 }
             }
         }
+        
+        UI_SpawnerRefreshName(Editor, Spawner);
     }
     
     if(UI->ShowLightNameErrorText)
@@ -701,7 +764,7 @@ ak_v2f UI_ListerWindow(editor* Editor)
     ak_u32 CurrentWorldIndex = Editor->CurrentWorldIndex;
     
     gizmo_state* GizmoState = &Editor->GizmoState;
-    selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
+    object* SelectedObject = Editor_GetSelectedObject(Editor);
     
     if(ImGui::Begin("Lister", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -772,11 +835,275 @@ ak_v2f UI_ListerWindow(editor* Editor)
     return Result;
 }
 
+void Details_ActiveEvents(editor* Editor, object* Object)
+{
+    if(ImGui::IsItemActivated())
+    {
+        Editor->UI.TempObject.Type = Object->Type;
+        switch(Object->Type)
+        {
+            case OBJECT_TYPE_ENTITY:
+            {
+                Editor->UI.TempObject.Entity = *Object->GetEntity(&Editor->WorldManagement, 
+                                                                  Editor->CurrentWorldIndex);
+            } break;
+            
+            case OBJECT_TYPE_LIGHT:
+            {
+                Editor->UI.TempObject.PointLight = *Object->GetPointLight(&Editor->WorldManagement, 
+                                                                          Editor->CurrentWorldIndex);
+            } break;
+            
+            AK_INVALID_DEFAULT_CASE;
+        }
+    }
+    
+    if(ImGui::IsItemDeactivated())
+    {
+        AK_Assert(Object->Type == Editor->UI.TempObject.Type, "Deactivated object cannot be a different type than the temp object");
+        switch(Object->Type)
+        {
+            case OBJECT_TYPE_ENTITY:
+            {
+                dev_entity* Entity = Object->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                
+                material NewMaterial = UI_MaterialFromContext(&Editor->UI.TempContext);
+                if(!Editor_AreEntitiesEqual(Entity, &Editor->UI.TempObject.Entity) ||
+                   !AreMaterialsEqual(Entity->Material, NewMaterial))
+                {
+                    Entity->Material = NewMaterial;
+                    Editor->EditRecordings.PushPropertyEntry(Editor->CurrentWorldIndex, &Editor->UI.TempObject.Entity, 
+                                                             Entity);
+                }
+            } break;
+            
+            case OBJECT_TYPE_LIGHT:
+            {
+                dev_point_light* PointLight = Object->GetPointLight(&Editor->WorldManagement, 
+                                                                    Editor->CurrentWorldIndex);
+                if(!Editor_ArePointLightsEqual(PointLight, &Editor->UI.TempObject.PointLight))
+                {
+                    Editor->EditRecordings.PushPropertyEntry(Editor->CurrentWorldIndex, 
+                                                             &Editor->UI.TempObject.PointLight, 
+                                                             PointLight);
+                }
+            } break;
+        }
+    }
+}
+
+void Details_DragInt(editor* Editor, object* Object, const ak_char* Label, 
+                     ak_i32* Data, ak_f32 Speed, ak_i32 Min, ak_i32 Max)
+{
+    UI_SameLineLabel(Label);
+    ImGui::PushItemWidth(40);
+    ImGui::DragInt("", Data, Speed, Min, Max);
+    Details_ActiveEvents(Editor, Object);
+    ImGui::PopItemWidth();
+}
+
+void Details_DragFloatTool(editor* Editor, object* Object, const ak_char* Label, 
+                           ak_f32* Data, ak_f32 Speed, ak_f32 Min, ak_f32 Max)
+{
+    ImGui::PushItemWidth(EDITOR_ITEM_WIDTH);
+    ImGui::DragFloat(Label, Data, Speed, Min, Max, "%.3f");
+    Details_ActiveEvents(Editor, Object);
+    ImGui::PopItemWidth();
+}
+
+void Details_DragAngleTool(editor* Editor, object* Object, const ak_char* Label, 
+                           ak_f32* Radians, ak_f32 Speed, ak_f32 Min, ak_f32 Max)
+{
+    ak_f32 Degree = AK_ToDegree(*Radians);
+    
+    ImGui::PushItemWidth(EDITOR_ITEM_WIDTH);
+    ImGui::DragFloat(Label, &Degree, Speed, Min, Max, "%.3f");
+    Details_ActiveEvents(Editor, Object);
+    ImGui::PopItemWidth();
+    
+    *Radians = AK_ToRadians(Degree);
+}
+
+void Details_TranslationTool(editor* Editor, object* Object, ak_v3f* Translation)
+{
+    UI_SameLineLabel("Position");
+    
+    ImGui::PushID(AK_HashFunction("Position X"));
+    Details_DragFloatTool(Editor, Object, "X", &Translation->x, 0.1f, -1000.0f, 1000.0f);
+    ImGui::PopID();
+    ImGui::SameLine();
+    
+    ImGui::PushID(AK_HashFunction("Position Y"));
+    Details_DragFloatTool(Editor, Object, "Y", &Translation->y, 0.1f, -1000.0f, 1000.0f);
+    ImGui::PopID();
+    ImGui::SameLine();
+    
+    ImGui::PushID(AK_HashFunction("Position Z"));
+    Details_DragFloatTool(Editor, Object, "Z", &Translation->z, 0.1f, -1000.0f, 1000.0f);
+    ImGui::PopID();
+}
+
+void Details_ScaleTool(editor* Editor, object* Object, ak_v3f* Scale)
+{
+    UI_SameLineLabel("Scale");
+    
+    ImGui::PushID(AK_HashFunction("Scale X"));
+    Details_DragFloatTool(Editor, Object, "X", &Scale->x, 0.1f, -1000.0f, 1000.0f);
+    ImGui::PopID();
+    ImGui::SameLine();
+    
+    ImGui::PushID(AK_HashFunction("Scale Y"));
+    Details_DragFloatTool(Editor, Object, "Y", &Scale->y, 0.1f, -1000.0f, 1000.0f);
+    ImGui::PopID();
+    ImGui::SameLine();
+    
+    ImGui::PushID(AK_HashFunction("Scale Z"));
+    Details_DragFloatTool(Editor, Object, "Z", &Scale->z, 0.1f, -1000.0f, 1000.0f);
+    ImGui::PopID();
+}
+
+void Details_RotationTool(editor* Editor, object* Object, ak_v3f* Rotation)
+{
+    UI_SameLineLabel("Rotation");
+    
+    ImGui::PushID(AK_HashFunction("Rotation X"));
+    Details_DragAngleTool(Editor, Object, "X", &Rotation->x, 0.1f, -180.0f, 180.0f);
+    ImGui::PopID();
+    ImGui::SameLine();
+    
+    ImGui::PushID(AK_HashFunction("Rotation Y"));
+    Details_DragAngleTool(Editor, Object, "Y", &Rotation->y, 0.1f, -180.0f, 180.0f);
+    ImGui::PopID();
+    ImGui::SameLine();
+    
+    ImGui::PushID(AK_HashFunction("Rotation Z"));
+    Details_DragAngleTool(Editor, Object, "Z", &Rotation->z, 0.1f, -180.0f, 180.0f);
+    ImGui::PopID();
+}
+
+void Details_Checkbox(editor* Editor, object* Object, const ak_char* Label, ak_bool* Flag)
+{
+    UI_SameLineLabel(Label);
+    ImGui::Checkbox("", (bool*)Flag);
+    Details_ActiveEvents(Editor, Object);
+}
+
+void Details_Combo(editor* Editor, object* Object, const ak_char* Label, int* Data, 
+                   const ak_char** Names, ak_u32 Size)
+{
+    UI_SameLineLabel(Label);
+    ImGui::Combo("", Data, Names, Size);
+    Details_ActiveEvents(Editor, Object);
+}
+
+void Details_Color3EditTool(editor* Editor, object* Object, const ak_char* Label, ak_f32* Data)
+{
+    UI_SameLineLabel(Label);
+    ImGui::ColorEdit3("", Data, ImGuiColorEditFlags_RGB);
+    Details_ActiveEvents(Editor, Object);
+}
+
+void Details_MaterialTool(editor* Editor, object* Object, assets* Assets, material_context* MaterialContext)
+{    
+    ak_fixed_array<const ak_char*> TextureNames = UI_GetAllTextureInfoNames(Assets);
+    
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Material");        
+    {        
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("Diffuse: "); ImGui::SameLine(); 
+        
+        ImGui::PushID(AK_HashFunction("Diffuse Is Texture"));
+        Details_Checkbox(Editor, Object, "Is Texture", &MaterialContext->DiffuseIsTexture);
+        ImGui::PopID();
+        ImGui::SameLine();
+        
+        if(MaterialContext->DiffuseIsTexture)
+        {
+            if((MaterialContext->DiffuseID == INVALID_TEXTURE_ID) || (MaterialContext->DiffuseID > TEXTURE_ASSET_COUNT))
+                MaterialContext->DiffuseID = (texture_asset_id)0;
+            
+            ImGui::PushID(AK_HashFunction("Diffuse Texture"));
+            Details_Combo(Editor, Object, "Texture", (int*)&MaterialContext->DiffuseID, TextureNames.Data, 
+                          TextureNames.Size);
+            ImGui::PopID();
+        }
+        else
+        {
+            ImGui::PushID(AK_HashFunction("Diffuse Color"));
+            Details_Color3EditTool(Editor, Object, "Color", MaterialContext->Diffuse.Data);
+            ImGui::PopID();
+        }
+    }
+    
+    {        
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("Specular: "); ImGui::SameLine();
+        
+        ImGui::PushID(AK_HashFunction("Specular In Use"));
+        Details_Checkbox(Editor, Object, "In Use", &MaterialContext->SpecularInUse);
+        ImGui::PopID();
+        
+        if(MaterialContext->SpecularInUse)
+        {
+            ImGui::PushID(AK_HashFunction("Specular Is Texture"));
+            Details_Checkbox(Editor, Object, "Is Texture", &MaterialContext->SpecularIsTexture);
+            ImGui::PopID();
+            if(MaterialContext->SpecularIsTexture)
+            {
+                if((MaterialContext->SpecularID == INVALID_TEXTURE_ID) || (MaterialContext->SpecularID > TEXTURE_ASSET_COUNT))
+                    MaterialContext->SpecularID = (texture_asset_id)0;
+                
+                ImGui::PushID(AK_HashFunction("Specular Texture"));
+                Details_Combo(Editor, Object, "Texture", (int*)&MaterialContext->SpecularID, 
+                              TextureNames.Data, TextureNames.Size);
+                ImGui::PopID();
+            }
+            else
+            {   
+                ImGui::PushID(AK_HashFunction("Specular Color"));
+                Details_DragFloatTool(Editor, Object, "Value", &MaterialContext->Specular, 0.01f, 0.0f, 1.0f);
+                ImGui::PopID();
+                ImGui::SameLine();
+                
+                ak_v3f SpecularDisplay = AK_V3(MaterialContext->Specular, MaterialContext->Specular, MaterialContext->Specular);
+                ImGui::PushID(AK_HashFunction("Specular Display"));
+                ImGui::ColorEdit3("", (ak_f32*)&SpecularDisplay, ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoPicker);                                                                
+                ImGui::PopID();
+            }
+            
+            ImGui::PushID(AK_HashFunction("Specular Shininess"));
+            Details_DragInt(Editor, Object, "Shininess", &MaterialContext->Shininess, 0.1f, 1, 512);
+            ImGui::PopID();
+        }                                                
+    }                    
+    
+    {        
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("Normal: "); ImGui::SameLine();
+        
+        ImGui::PushID(AK_HashFunction("Normal In Use"));
+        Details_Checkbox(Editor, Object, "In Use", &MaterialContext->NormalInUse);
+        ImGui::PopID();
+        
+        if(MaterialContext->NormalInUse)
+        {
+            if((MaterialContext->NormalID == INVALID_TEXTURE_ID) || (MaterialContext->NormalID > TEXTURE_ASSET_COUNT))
+                MaterialContext->NormalID = (texture_asset_id)0;
+            
+            ImGui::PushID(AK_HashFunction("Normal Texture"));
+            Details_Combo(Editor, Object, "Texture", (int*)&MaterialContext->NormalID, TextureNames.Data, TextureNames.Size);
+            ImGui::PopID();
+        }
+    }    
+}
+
 ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
 {
     ak_v2f Result = {};
     
-    selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
+    object* SelectedObject = Editor_GetSelectedObject(Editor);
+    
     if(SelectedObject)
     {
         if(ImGui::Begin("Details", NULL, ImGuiWindowFlags_AlwaysAutoResize))
@@ -787,35 +1114,21 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                 {
                     dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                     
+                    Editor->UI.TempContext = UI_ContextFromMaterial(&Entity->Material);
+                    
                     ImGui::Text("Name: %.*s", Entity->Name.Length, Entity->Name.Data);
-                    UI_TranslationTool("Position", AK_HashFunction("Edit Translation"), EDITOR_ITEM_WIDTH, &Entity->Transform.Translation);
-                    UI_ScaleTool("Scale", AK_HashFunction("Edit Scale"), EDITOR_ITEM_WIDTH, 
-                                 &Entity->Transform.Scale);
+                    Details_TranslationTool(Editor, SelectedObject, &Entity->Transform.Translation);
                     
+                    Details_ScaleTool(Editor, SelectedObject, &Entity->Transform.Scale);
+                    
+                    if(Entity->Type == ENTITY_TYPE_BUTTON) UI_PushDisabledItem();
                     ak_v3f Rotation = Entity->Euler;
-                    
-                    UI_SameLineLabel("Rotation");
-                    ImGui::PushItemWidth(EDITOR_ITEM_WIDTH);
-                    ak_u32 Hash = AK_HashFunction("Edit Rotation");
-                    
-                    ak_f32 HalfAngleMax = 180.0f;
-                    
-                    if(Entity->Type == ENTITY_TYPE_BUTTON)
-                        UI_PushDisabledItem();
-                    
-                    UI_DragAngle(Hash, "X", &Rotation.x, 0.1f, -HalfAngleMax, HalfAngleMax); 
-                    ImGui::SameLine();
-                    UI_DragAngle(Hash+1, "Y", &Rotation.y, 0.1f, -HalfAngleMax, HalfAngleMax); ImGui::SameLine();
-                    UI_DragAngle(Hash+2, "Z", &Rotation.z, 0.1f, -HalfAngleMax, HalfAngleMax);
-                    ImGui::PopItemWidth();
-                    
-                    if(Entity->Type == ENTITY_TYPE_BUTTON)
-                        UI_PopDisabledItem();
+                    Details_RotationTool(Editor, SelectedObject, &Rotation);
+                    if(Entity->Type == ENTITY_TYPE_BUTTON) UI_PopDisabledItem();
                     
                     ImGui::Text("Type: %s", UI_GetEntityType(Entity->Type));
-                    material_context MaterialContext = UI_ContextFromMaterial(&Entity->Material);
-                    UI_MaterialTool(Assets, &MaterialContext);
-                    Entity->Material = UI_MaterialFromContext(&MaterialContext);
+                    
+                    Details_MaterialTool(Editor, SelectedObject, Assets, &Editor->UI.TempContext);
                     
                     ak_v3f PointDiff = Rotation-Entity->Euler;
                     
@@ -831,7 +1144,9 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                     
                     if(Entity->Type == ENTITY_TYPE_BUTTON)
                     {
-                        UI_Checkbox(AK_HashFunction("Button IsToggled checkbox"), "Is Toggled", &Entity->IsToggled);
+                        ImGui::PushID(AK_HashFunction("Button IsToggled"));
+                        Details_Checkbox(Editor, SelectedObject, "Is Toggled", &Entity->IsToggled);
+                        ImGui::PopID();
                     }
                 } break;
                 
@@ -839,13 +1154,20 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                 {
                     dev_point_light* PointLight = SelectedObject->GetPointLight(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                     
-                    ImGui::Text("Name: %s", PointLight->Name);
-                    UI_TranslationTool("Position", AK_HashFunction("Edit Point Light Translation"), 
-                                       EDITOR_ITEM_WIDTH, &PointLight->Light.Position);
-                    UI_RadiusTool(AK_HashFunction("Edit Point Light Radius"), 
-                                  EDITOR_ITEM_WIDTH, &PointLight->Light.Radius);
-                    UI_IntensityTool(AK_HashFunction("Edit Point Light Intensity"), EDITOR_ITEM_WIDTH, &PointLight->Light.Intensity);
-                    UI_Color3EditTool("Color", AK_HashFunction("Edit Light Color"), (ak_f32*)&PointLight->Light.Color);
+                    ImGui::Text("Name: %.*s", PointLight->Name.Length, PointLight->Name.Data);
+                    Details_TranslationTool(Editor, SelectedObject, &PointLight->Light.Position);
+                    
+                    ImGui::PushID(AK_HashFunction("Edit Point Light Radius"));
+                    Details_DragFloatTool(Editor, SelectedObject, "Radius", &PointLight->Light.Radius, 0.01f, 0.0f, 100.0f);
+                    ImGui::PopID();
+                    
+                    ImGui::PushID(AK_HashFunction("Edit Point Light Intensity"));
+                    Details_DragFloatTool(Editor, SelectedObject, "Intensity", &PointLight->Light.Intensity, 0.01f, 1.0f, 100.0f);
+                    ImGui::PopID();
+                    
+                    ImGui::PushID(AK_HashFunction("Edit Light Color"));
+                    Details_Color3EditTool(Editor, SelectedObject, "Color", (ak_f32*)&PointLight->Light.Color);
+                    ImGui::PopID();
                 } break;
             }
         }

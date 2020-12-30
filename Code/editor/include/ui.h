@@ -1,9 +1,6 @@
 #ifndef UI_H
 #define UI_H
 
-global ak_u32 StaticEntity_HighestIndex;
-global const char* StaticEntity_DefaultName = "Static_%d";
-
 struct material_context
 {
     ak_bool DiffuseIsTexture;
@@ -46,6 +43,16 @@ struct light_spawner
     ak_color3f Color;
 };
 
+struct temp_object
+{
+    object_type Type;
+    union
+    {
+        dev_entity Entity;
+        dev_point_light PointLight;
+    };
+};
+
 struct ui
 {
     entity_spawner EntitySpawner;
@@ -65,6 +72,9 @@ struct ui
     
     ak_bool EditorDrawGrid;
     ak_bool EditorDrawOtherWorld;
+    
+    temp_object TempObject;
+    material_context TempContext;
 };
 
 

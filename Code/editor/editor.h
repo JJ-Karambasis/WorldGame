@@ -20,6 +20,9 @@ global const ak_char WORLD_FILE_CHECKSUM[] = "BA9018D12F370C08092345BE9E5BAB61";
 
 struct dev_platform;
 struct editor;
+struct world_management;
+struct dev_entity;
+struct dev_point_light;
 
 #define GIZMO_PLANE_DISTANCE 0.4f
 #define POINT_LIGHT_RADIUS 0.1f
@@ -70,9 +73,21 @@ enum object_type
     OBJECT_TYPE_LIGHT
 };
 
+struct object
+{
+    object_type Type;
+    ak_string Name;
+    
+    dev_entity* GetEntity(world_management* WorldManagement, ak_u32 WorldIndex);
+    dev_point_light* GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex);
+    ak_v3f GetPosition(world_management* WorldManagement, ak_u32 WorldIndex);
+    
+    ak_bool IsAlive(world_management* WorldManagement, ak_u32 WorldIndex);
+};
+
 #include "include/dev_input.h"
-#include "include/ui.h"
 #include "include/world_management.h"
+#include "include/ui.h"
 #include "include/dev_mesh.h"
 #include "include/frame_playback.h"
 #include "include/generated_string_templates.h"
@@ -85,22 +100,10 @@ enum selector_transform_mode
     SELECTOR_TRANSFORM_MODE_ROTATE
 };
 
-struct selected_object
-{
-    object_type Type;
-    ak_string Name;
-    
-    dev_entity* GetEntity(world_management* WorldManagement, ak_u32 WorldIndex);
-    dev_point_light* GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex);
-    ak_v3f GetPosition(world_management* WorldManagement, ak_u32 WorldIndex);
-    
-    ak_bool IsAlive(world_management* WorldManagement, ak_u32 WorldIndex);
-};
-
 struct gizmo_selected_object
 {
     ak_bool IsSelected;
-    selected_object SelectedObject;
+    object SelectedObject;
 };
 
 enum gizmo_movement_direction
@@ -129,6 +132,12 @@ struct gizmo_intersection_result
     ak_v3f HitMousePosition;
 };
 
+struct euler_transform
+{
+    ak_sqtf Transform;
+    ak_v3f Euler;
+};
+
 struct gizmo_state
 {
     selector_transform_mode TransformMode;
@@ -141,6 +150,7 @@ struct gizmo_state
     ak_m3f OriginalRotation;
     ak_bool UseLocalTransforms;
     
+    euler_transform OriginalTransform;
     gizmo_selected_object SelectedObject;
 };
 
@@ -252,8 +262,7 @@ typedef EDITOR_DELETE_WORLD_MODAL(editor_delete_world_modal);
 EDITOR_DELETE_WORLD_MODAL(DeleteWorldModal_Stub) {}
 EDITOR_DELETE_WORLD_MODAL(DeleteWorldModal);
 
-selected_object* Editor_GetSelectedObject(editor* Editor);
-ak_quatf Editor_GetOrientationDiff(ak_m3f OriginalRotation, ak_v3f SelectorDiff);
+
 void Editor_StopGame(editor* Editor, platform* Platform);
 ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform, dev_platform* DevPlatform);
 

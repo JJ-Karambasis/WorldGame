@@ -22,7 +22,6 @@ struct dual_dev_entity
 struct dev_point_light
 {
     ak_string Name;
-    ak_u64  ID;
     graphics_point_light Light;
 };
 

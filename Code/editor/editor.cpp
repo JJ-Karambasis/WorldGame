@@ -76,6 +76,53 @@ gizmo_selected_object Editor_GizmoSelectedObject(ak_string Name, object_type Typ
     return Result;
 }
 
+ak_bool Editor_AreEntitiesEqual(dev_entity* EntityA, dev_entity* EntityB)
+{
+    ak_bool Result = (AK_StringEquals(EntityA->Name, EntityB->Name) &&
+                      AK_StringEquals(EntityA->LinkName, EntityB->LinkName) &&
+                      (EntityA->Type == EntityB->Type) &&
+                      (EntityA->Euler == EntityB->Euler) &&
+                      (EntityA->Transform == EntityB->Transform) &&
+                      AreMaterialsEqual(EntityA->Material, EntityB->Material) &&
+                      (EntityA->MeshID == EntityB->MeshID) &&
+                      (EntityA->IsToggled == EntityB->IsToggled));
+    return Result;
+}
+
+ak_bool Editor_ArePointLightsEqual(dev_point_light* PointLightA, dev_point_light* PointLightB)
+{
+    ak_bool Result = (AK_StringEquals(PointLightA->Name, PointLightB->Name) &&
+                      PointLightA->Light.Color == PointLightB->Light.Color &&
+                      PointLightA->Light.Intensity == PointLightB->Light.Intensity &&
+                      PointLightA->Light.Position == PointLightB->Light.Position &&
+                      PointLightA->Light.Radius == PointLightB->Light.Radius);
+    return Result;
+}
+
+object* Editor_GetSelectedObject(editor* Editor)
+{
+    gizmo_selected_object* SelectedObject = &Editor->GizmoState.SelectedObject;
+    if(SelectedObject->IsSelected)
+    {
+        SelectedObject->IsSelected = SelectedObject->SelectedObject.IsAlive(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+    }
+    return SelectedObject->IsSelected ? &SelectedObject->SelectedObject : NULL;
+}
+
+ak_quatf Editor_GetOrientationDiff(ak_m3f OriginalRotation, ak_v3f SelectorDiff)
+{
+    ak_quatf XOrientation = AK_RotQuat(OriginalRotation.XAxis, -SelectorDiff.x);
+    ak_quatf YOrientation = AK_RotQuat(OriginalRotation.YAxis, -SelectorDiff.y);
+    ak_quatf ZOrientation = AK_RotQuat(OriginalRotation.ZAxis, -SelectorDiff.z);
+    
+    return AK_Normalize(XOrientation*YOrientation*ZOrientation);
+}
+
+ak_quatf Editor_GetOrientationDiff(editor* Editor, ak_v3f SelectorDiff)
+{
+    return Editor_GetOrientationDiff(Editor->GizmoState.OriginalRotation, SelectorDiff);
+}
+
 #include "src/ui.cpp"
 #include "src/world_management.cpp"
 #include "src/dev_mesh.cpp"
@@ -83,7 +130,7 @@ gizmo_selected_object Editor_GizmoSelectedObject(ak_string Name, object_type Typ
 #include "src/generated_string_templates.cpp"
 #include "src/edit_recordings.cpp"
 
-dev_entity* selected_object::GetEntity(world_management* WorldManagement, ak_u32 WorldIndex)
+dev_entity* object::GetEntity(world_management* WorldManagement, ak_u32 WorldIndex)
 {
     AK_Assert(Type == OBJECT_TYPE_ENTITY, "Cannot get entity of a selected object that is not an entity");
     AK_Assert(IsAlive(WorldManagement, WorldIndex), "Selected object must not have a deleted entity selected");
@@ -92,7 +139,7 @@ dev_entity* selected_object::GetEntity(world_management* WorldManagement, ak_u32
     return Entity;
 }
 
-dev_point_light* selected_object::GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex)
+dev_point_light* object::GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex)
 {
     AK_Assert(Type == OBJECT_TYPE_LIGHT, "Cannot get point light of a selected object that is not a point light");
     AK_Assert(IsAlive(WorldManagement, WorldIndex), "Selected object must not have a deleted point light selected");
@@ -101,7 +148,7 @@ dev_point_light* selected_object::GetPointLight(world_management* WorldManagemen
     return PointLight;
 }
 
-ak_v3f selected_object::GetPosition(world_management* WorldManagement, ak_u32 WorldIndex)
+ak_v3f object::GetPosition(world_management* WorldManagement, ak_u32 WorldIndex)
 {
     ak_v3f Result = {};
     switch(Type)
@@ -123,7 +170,7 @@ ak_v3f selected_object::GetPosition(world_management* WorldManagement, ak_u32 Wo
     return Result;
 }
 
-ak_bool selected_object::IsAlive(world_management* WorldManagement, ak_u32 WorldIndex)
+ak_bool object::IsAlive(world_management* WorldManagement, ak_u32 WorldIndex)
 {
     switch(Type)
     {
@@ -255,20 +302,6 @@ gizmo_selected_object Editor_CastToAllObjects(editor* Editor, assets* Assets, ra
 
 #undef UPDATE_BEST_HIT
 
-ak_quatf Editor_GetOrientationDiff(ak_m3f OriginalRotation, ak_v3f SelectorDiff)
-{
-    ak_quatf XOrientation = AK_RotQuat(OriginalRotation.XAxis, -SelectorDiff.x);
-    ak_quatf YOrientation = AK_RotQuat(OriginalRotation.YAxis, -SelectorDiff.y);
-    ak_quatf ZOrientation = AK_RotQuat(OriginalRotation.ZAxis, -SelectorDiff.z);
-    
-    return AK_Normalize(XOrientation*YOrientation*ZOrientation);
-}
-
-ak_quatf Editor_GetOrientationDiff(editor* Editor, ak_v3f SelectorDiff)
-{
-    return Editor_GetOrientationDiff(Editor->GizmoState.OriginalRotation, SelectorDiff);
-}
-
 ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
 {
     ak_v3f Result = {};
@@ -277,7 +310,7 @@ ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
     AK_Assert(GizmoState->SelectedObject.IsSelected, "Selected object must be selected to get selector diff");
     if(GizmoState->GizmoHit.Hit)
     {
-        selected_object* SelectedObject = &GizmoState->SelectedObject.SelectedObject;
+        object* SelectedObject = &GizmoState->SelectedObject.SelectedObject;
         
         ak_v3f SelectedObjectPosition = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
         
@@ -427,19 +460,11 @@ ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
     return Result;
 }
 
-selected_object* Editor_GetSelectedObject(editor* Editor)
-{
-    gizmo_selected_object* SelectedObject = &Editor->GizmoState.SelectedObject;
-    if(SelectedObject->IsSelected)
-    {
-        SelectedObject->IsSelected = SelectedObject->SelectedObject.IsAlive(&Editor->WorldManagement, Editor->CurrentWorldIndex);
-    }
-    return SelectedObject->IsSelected ? &SelectedObject->SelectedObject : NULL;
-}
-
 void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Resolution, ak_f32 ZNear)
 {
     gizmo_state* GizmoState = &Editor->GizmoState;
+    world_management* WorldManagement = &Editor->WorldManagement;
+    edit_recordings* EditRecordings = &Editor->EditRecordings;
     
     dev_input* Input = &Editor->Input;
     
@@ -447,7 +472,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
     for(ak_u32 GizmoIndex = 0; GizmoIndex < GizmoCount; GizmoIndex++)
         GizmoState->Gizmos[GizmoIndex].IsHighLighted = false;
     
-    if(!IsDown(&Input->Alt) && !ImGui::GetIO().WantCaptureMouse)
+    if(!IsDown(&Input->Alt) && !ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
     {
         gizmo_intersection_result GizmoHitTest = Editor_CastToGizmos(Editor, GizmoState, RayCast, ZNear);
         
@@ -465,7 +490,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                 AK_Assert(GizmoState->SelectedObject.IsSelected, "Cannot be selecting a gizmo without selecting an object");
                 GizmoState->GizmoHit = GizmoHitTest;
                 GizmoState->OriginalRotation = AK_IdentityM3<ak_f32>();
-                selected_object* SelectedObject = &GizmoState->SelectedObject.SelectedObject;
+                object* SelectedObject = &GizmoState->SelectedObject.SelectedObject;
                 
                 switch(SelectedObject->Type)
                 {
@@ -473,6 +498,17 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                     {
                         dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
                         GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Entity->Transform.Orientation));
+                        
+                        GizmoState->OriginalTransform.Transform = Entity->Transform;
+                        GizmoState->OriginalTransform.Euler = Entity->Euler;
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT:
+                    {
+                        dev_point_light* PointLight = 
+                            SelectedObject->GetPointLight(&Editor->WorldManagement, 
+                                                          Editor->CurrentWorldIndex);
+                        GizmoState->OriginalTransform.Transform.Translation = PointLight->Light.Position;
                     } break;
                 }
                 
@@ -481,6 +517,41 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
         
         if(IsReleased(&Input->LMB))
         {
+            object* SelectedObject = Editor_GetSelectedObject(Editor);
+            if(SelectedObject && GizmoState->GizmoHit.Hit)
+            {
+                switch(SelectedObject->Type)
+                {
+                    case OBJECT_TYPE_ENTITY:
+                    {
+                        dev_entity* Entity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                        
+                        ak_v3f TranslationDiff = Entity->Transform.Translation-GizmoState->OriginalTransform.Transform.Translation;
+                        ak_v3f ScaleDiff = Entity->Transform.Scale-GizmoState->OriginalTransform.Transform.Scale;
+                        ak_v3f EulerDiff = 
+                            Entity->Euler-GizmoState->OriginalTransform.Euler;
+                        ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->OriginalTransform.Transform.Orientation, 
+                                                               Entity->Transform.Orientation);
+                        
+                        object Object = {OBJECT_TYPE_ENTITY, Entity->Name};
+                        
+                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, OrientationDiff, EulerDiff);
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT:
+                    {
+                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                        
+                        ak_v3f TranslationDiff = DevPointLight->Light.Position-GizmoState->OriginalTransform.Transform.Translation;
+                        
+                        object Object = {OBJECT_TYPE_ENTITY, DevPointLight->Name};
+                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, 
+                                                           TranslationDiff, {}, AK_IdentityQuat<ak_f32>(), 
+                                                           {});
+                    } break;
+                }
+            }
+            
             GizmoState->GizmoHit = {};
         }
     }
@@ -956,7 +1027,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
             
             Editor_SelectObjects(Editor, Assets, RayCast, Resolution, ViewSettings.ZNear);
             
-            selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
+            object* SelectedObject = Editor_GetSelectedObject(Editor);
             if(SelectedObject)
             {
                 if(SelectedObject->Type != OBJECT_TYPE_ENTITY)
@@ -997,7 +1068,17 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                                 Entity->Transform.Orientation *= Editor_GetOrientationDiff(Editor, SelectorDiff);
                             } break;
                         }
+                        
                     } break;
+                    
+                    case OBJECT_TYPE_LIGHT:
+                    {
+                        AK_Assert(Editor->GizmoState.TransformMode == SELECTOR_TRANSFORM_MODE_TRANSLATE, "Cannot be in a transform mode that is not translation when selecting lights");
+                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                        DevPointLight->Light.Position -= SelectorDiff;
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
                 }
                 
                 if(IsPressed(&DevInput->F))
@@ -1011,11 +1092,16 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                     {
                         case OBJECT_TYPE_ENTITY:
                         {
+                            dev_entity* DevEntity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                            EditRecordings->PushDeleteEntry(Editor->CurrentWorldIndex, DevEntity);
                             WorldManagement->DeleteDevEntity(Editor->CurrentWorldIndex, SelectedObject->Name);
                         } break;
                         
                         case OBJECT_TYPE_LIGHT:
                         {
+                            dev_point_light* DevPointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                            EditRecordings->PushDeleteEntry(Editor->CurrentWorldIndex, 
+                                                            DevPointLight);
                             WorldManagement->DeleteDevPointLight(Editor->CurrentWorldIndex, 
                                                                  SelectedObject->Name);
                         } break;
@@ -1046,7 +1132,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
     ak_v3f Gizmo2 = AK_V3f(0, 0, 0);
     ak_v3f Gizmo3 = AK_V3f(0, 0, 0);
     
-    selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
+    object* SelectedObject = Editor_GetSelectedObject(Editor);
     AK_Assert(SelectedObject, "Selected object must be present before rendering");
     
     if(SelectedObject->Type == OBJECT_TYPE_ENTITY)
@@ -1214,7 +1300,7 @@ void Editor_PopulateRotationGizmos(gizmo_state* GizmoState, dev_mesh* TriangleTo
 
 void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
 {
-    selected_object* SelectedObject = Editor_GetSelectedObject(Editor);
+    object* SelectedObject = Editor_GetSelectedObject(Editor);
     if(SelectedObject)
     {
         PushDepth(Graphics, false);

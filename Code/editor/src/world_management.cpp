@@ -134,7 +134,6 @@ ak_u64 Internal__CreateDevPointLight(ak_arena* StringArena, ak_pool<dev_point_li
     PointLight->Light.Intensity = Intensity;
     PointLight->Light.Position = Position;
     PointLight->Light.Radius = Radius;
-    PointLight->ID = ID;
     
     return ID;
 }
