@@ -91,17 +91,36 @@ PLATFORM_PROCESS_MESSAGES(Win32_ProcessMessages)
     }
 }
 
+FILETIME Win32_GetFileCreationTime(ak_string FilePath)
+{
+    WIN32_FILE_ATTRIBUTE_DATA FindData;
+    GetFileAttributesEx(FilePath.Data, GetFileExInfoStandard, &FindData);
+    return FindData.ftLastWriteTime;
+}
+
+void Win32_UnloadLibrary(win32_hot_reloaded_library* Library)
+{
+    if(Library->Library)
+    {
+        FreeLibrary(Library->Library);
+        Library->Library = NULL;
+    }
+}
+
 PLATFORM_LOAD_GAME_CODE(Win32_LoadGameCode)
 {
-    Global_Platform.GameLibrary = LoadLibrary(Global_Platform.GameDLLPathName.Data);
-    if(!Global_Platform.GameLibrary)
+    win32_hot_reloaded_library* GameLibrary = &Global_Platform.GameLibrary;
+    
+    AK_FileCopy(Global_Platform.GameDLLPathName, Global_Platform.GameTempDLLPathName);
+    GameLibrary->Library = LoadLibrary(Global_Platform.GameTempDLLPathName.Data);
+    if(!GameLibrary->Library)
     {
         //TODO(JJ): Diagnostic and error logging
         AK_InvalidCode();
         return NULL;
     }
     
-    game_startup* Startup = (game_startup*)GetProcAddress(Global_Platform.GameLibrary, "Game_Startup");
+    game_startup* Startup = (game_startup*)GetProcAddress(GameLibrary->Library, "Game_Startup");
     if(!Startup)
     {
         //TODO(JJ): Diagnostic and error logging
@@ -109,19 +128,28 @@ PLATFORM_LOAD_GAME_CODE(Win32_LoadGameCode)
         return NULL;
     }
     
+    GameLibrary->LastWriteTime = Win32_GetFileCreationTime(Global_Platform.GameDLLPathName);
+    
     return Startup;
 }
 
 PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
 {
+    win32_hot_reloaded_library* WorldLibrary = &Global_Platform.WorldLibrary;
+    
     ak_temp_arena TempArena = Global_Platform.Arena->BeginTemp();
     
-    ak_string WorldDLLPath = AK_FormatString(Global_Platform.Arena, "%.*s\\lib\\%.*s.dll", 
-                                             WorldPath.Length, WorldPath.Data, 
-                                             WorldName.Length, WorldName.Data);
+    ak_string FilePrefix = AK_FormatString(Global_Platform.Arena, "%.*s\\lib\\%.*s", 
+                                           WorldPath.Length, WorldPath.Data, 
+                                           WorldName.Length, WorldName.Data);
     
-    Global_Platform.WorldLibrary = LoadLibrary(WorldDLLPath.Data);
-    if(!Global_Platform.WorldLibrary)
+    ak_string WorldDLLPath = AK_StringConcat(FilePrefix, ".dll", Global_Platform.Arena);
+    ak_string WorldTempDLLPath = AK_StringConcat(FilePrefix, "_tmp.dll", Global_Platform.Arena);
+    
+    AK_FileCopy(WorldDLLPath, WorldTempDLLPath);
+    
+    WorldLibrary->Library = LoadLibrary(WorldTempDLLPath.Data);
+    if(!WorldLibrary->Library)
     {
         //TODO(JJ): Diagnostic and error logging
         AK_InvalidCode();
@@ -130,7 +158,7 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
     }
     
     ak_string StartupCode = AK_StringConcat(WorldName, "_Startup", Global_Platform.Arena);
-    world_startup* Startup = (world_startup*)GetProcAddress(Global_Platform.WorldLibrary, StartupCode.Data);
+    world_startup* Startup = (world_startup*)GetProcAddress(WorldLibrary->Library, StartupCode.Data);
     
     if(!Startup)
     {
@@ -140,27 +168,21 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
         return NULL;
     }
     
+    WorldLibrary->LastWriteTime = Win32_GetFileCreationTime(WorldDLLPath);
+    
     Global_Platform.Arena->EndTemp(&TempArena);
     return Startup;
 }
 
 PLATFORM_UNLOAD_CODE(Win32_UnloadWorldCode)
 {
-    if(Global_Platform.WorldLibrary)
-    {
-        FreeLibrary(Global_Platform.WorldLibrary);
-        Global_Platform.WorldLibrary = NULL;
-    }
+    Win32_UnloadLibrary(&Global_Platform.WorldLibrary);
 }
 
 
 PLATFORM_UNLOAD_CODE(Win32_UnloadGameCode)
 {
-    if(Global_Platform.GameLibrary)
-    {
-        FreeLibrary(Global_Platform.GameLibrary);
-        Global_Platform.GameLibrary = NULL;
-    }
+    Win32_UnloadLibrary(&Global_Platform.GameLibrary);
 }
 
 PLATFORM_GET_RESOLUTION(Win32_GetResolution)
@@ -188,8 +210,10 @@ ak_bool Win32_InitPlatform()
     Global_Platform.GetResolution = Win32_GetResolution;
     
     Global_Platform.ProgramPath = AK_GetExecutablePath(Global_Platform.Arena);
-    Global_Platform.EngineDLLPathName = AK_StringConcat(Global_Platform.ProgramPath, "Engine.dll", Global_Platform.Arena);
     Global_Platform.GameDLLPathName = AK_StringConcat(Global_Platform.ProgramPath, GAME_NAME_DLL, Global_Platform.Arena);
+    Global_Platform.GameTempDLLPathName = 
+        AK_StringConcat(Global_Platform.ProgramPath, GAME_NAME_TEMP_ADLL, Global_Platform.Arena);
+    
     Global_Platform.AssetPath = AK_StringConcat(Global_Platform.ProgramPath, "WorldGame.assets", Global_Platform.Arena);
     
     Global_Platform.Window = AK_CreateWindow(1280, 720, GAME_NAME);
@@ -448,13 +472,114 @@ DEV_BUILD_WORLD(Win32_BuildWorld)
 
 DEV_SET_GAME_DEBUG_EDITOR(Win32_SetGameDebugEditor)
 {
-    editor** OutEditor = (editor**)GetProcAddress(Global_Platform.GameLibrary, "Internal__Editor");
-    if(OutEditor)
+    editor** OutEditor = (editor**)GetProcAddress(Global_Platform.GameLibrary.Library, "Internal__Editor");
+    if(!OutEditor)
+        return false;
+    *OutEditor = Editor;
+    
+    OutEditor = 
+        (editor**)GetProcAddress(Global_Platform.WorldLibrary.Library, "Internal__Editor");
+    if(!OutEditor)
+        return false;
+    *OutEditor = Editor;
+    
+    return true;
+}
+
+DEV_HANDLE_HOT_RELOAD(Win32_HandleHotReload)
+{
+    FILETIME GameDLLWriteTime = Win32_GetFileCreationTime(Global_Platform.GameDLLPathName);
+    if(CompareFileTime(&Global_Platform.GameLibrary.LastWriteTime, &GameDLLWriteTime) < 0)
     {
-        *OutEditor = Editor;
-        return true;
+        game* Game = Editor->GameContext.Game;
+        Win32_UnloadGameCode();
+        
+        win32_hot_reloaded_library* GameLibrary = &Global_Platform.GameLibrary;
+        
+        ak_high_res_clock Start = AK_WallClock();
+        ak_bool Succeeded = false;
+        while(AK_GetElapsedTime(AK_WallClock(), Start) < 2.0f)
+        {
+            if(!AK_FileCopy(Global_Platform.GameDLLPathName, Global_Platform.GameTempDLLPathName))
+                continue;
+            
+            GameLibrary->Library = LoadLibrary(Global_Platform.GameTempDLLPathName.Data);
+            if(!GameLibrary->Library)
+                continue;
+            
+            Game->Update = (game_update*)GetProcAddress(GameLibrary->Library, "Game_Update");
+            Game->Shutdown = (game_shutdown*)GetProcAddress(GameLibrary->Library, "Game_Shutdown");
+            
+            if(!Game->Update || !Game->Shutdown)
+            {
+                Win32_UnloadGameCode();
+                continue;
+            }
+            
+            if(!Win32_SetGameDebugEditor(Editor))
+            {
+                Win32_UnloadGameCode();
+                continue;
+            }
+            
+            GameLibrary->LastWriteTime = Win32_GetFileCreationTime(Global_Platform.GameDLLPathName);
+            Succeeded = true;
+        }
+        
+        AK_Assert(Succeeded, "Could not hot reload game library");
     }
-    return false;
+    
+    ak_string WorldPath = Editor->WorldManagement.CurrentWorldPath;
+    ak_string WorldName = Editor->WorldManagement.CurrentWorldName;
+    ak_string FilePrefix = AK_FormatString(Editor->Scratch, "%.*s\\lib\\%.*s", 
+                                           WorldPath.Length, WorldPath.Data, 
+                                           WorldName.Length, WorldName.Data);
+    ak_string WorldDLLPath = AK_StringConcat(FilePrefix, ".dll", Editor->Scratch);
+    ak_string WorldTempDLLPath = AK_StringConcat(FilePrefix, "_tmp.dll", Editor->Scratch);
+    
+    ak_string UpdateCode = AK_StringConcat(WorldName, "_Update", Editor->Scratch);
+    ak_string ShutdownCode = AK_StringConcat(WorldName, "_Shutdown", Editor->Scratch);
+    
+    FILETIME WorldDLLWriteTime = Win32_GetFileCreationTime(WorldDLLPath);
+    if(CompareFileTime(&Global_Platform.WorldLibrary.LastWriteTime, &WorldDLLWriteTime) < 0)
+    {
+        world* World = Editor->GameContext.Game->World;
+        Win32_UnloadWorldCode();
+        
+        win32_hot_reloaded_library* WorldLibrary = &Global_Platform.WorldLibrary;
+        
+        ak_high_res_clock Start = AK_WallClock();
+        ak_bool Succeeded = false;
+        while(AK_GetElapsedTime(AK_WallClock(), Start) < 2.0f)
+        {
+            if(!AK_FileCopy(WorldDLLPath, WorldTempDLLPath))
+                continue;
+            
+            WorldLibrary->Library = LoadLibrary(WorldTempDLLPath.Data);
+            if(!WorldLibrary->Library)
+                continue;
+            
+            World->Update = (world_update*)GetProcAddress(WorldLibrary->Library, UpdateCode.Data);
+            World->Shutdown = (world_shutdown*)GetProcAddress(WorldLibrary->Library, ShutdownCode.Data);
+            
+            if(!World->Update || !World->Shutdown)
+            {
+                Win32_UnloadWorldCode();
+                continue;
+            }
+            
+            if(!Win32_SetGameDebugEditor(Editor))
+            {
+                Win32_UnloadWorldCode();
+                continue;
+            }
+            
+            WorldLibrary->LastWriteTime = Win32_GetFileCreationTime(WorldDLLPath);
+            Succeeded = true;
+        }
+        
+        AK_Assert(Succeeded, "Could not hot reload world library");
+    }
 }
 
 int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
@@ -524,7 +649,8 @@ int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineAr
     Global_DevPlatform.Update = Win32_DevUpdate;
     Global_DevPlatform.BuildWorld = Win32_BuildWorld;
     Global_DevPlatform.SetGameDebugEditor = Win32_SetGameDebugEditor;
-     
+    Global_DevPlatform.HandleHotReload = Win32_HandleHotReload;
+    
     return Editor_Run(Graphics, &Global_Platform, &Global_DevPlatform, Context);
 }
 

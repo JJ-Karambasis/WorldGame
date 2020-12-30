@@ -5,8 +5,6 @@
 #include <game.h>
 #endif
 
-#include <imgui.h>
-
 #define BUILD_WORLD_LOG_FILE "build_world_log.txt"
 
 #ifdef _RECORDINGS_PATH_
@@ -23,6 +21,7 @@ struct editor;
 struct world_management;
 struct dev_entity;
 struct dev_point_light;
+struct ImGuiContext;
 
 #define GIZMO_PLANE_DISTANCE 0.4f
 #define POINT_LIGHT_RADIUS 0.1f
@@ -38,6 +37,9 @@ typedef DEV_BUILD_WORLD(dev_build_world);
 
 #define DEV_SET_GAME_DEBUG_EDITOR(name) ak_bool name(editor* Editor)
 typedef DEV_SET_GAME_DEBUG_EDITOR(dev_set_game_debug_editor);
+
+#define DEV_HANDLE_HOT_RELOAD(name) void name(editor* Editor)
+typedef DEV_HANDLE_HOT_RELOAD(dev_handle_hot_reload);
 
 #define EDITOR_DEBUG_LOG(name) void name(const ak_char* Format, ...)
 typedef EDITOR_DEBUG_LOG(editor_debug_log);
@@ -62,6 +64,7 @@ struct dev_platform
     dev_platform_update* Update;
     dev_build_world* BuildWorld;
     dev_set_game_debug_editor* SetGameDebugEditor;
+    dev_handle_hot_reload* HandleHotReload;
 };
 
 #define MAX_WORLD_NAME 256

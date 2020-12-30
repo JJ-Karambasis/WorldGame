@@ -12,21 +12,25 @@ set AKCommonPath=-I%%GameCodePath%%\AKCommon
 set GamePath=-I%%GameCodePath%%\game
 set AssetPath=-I%%GameCodePath%%\assets
 set GraphicsPath=-I%%GameCodePath%%\graphics
+set EditorPath=-I%%GameCodePath%%\editor
 
 set DLL_NAME=%%WorldName%%.dll
 set PDB_NAME=%%WorldName%%_%%RANDOM%%.pdb
 
 set SharedCommon=-DDEVELOPER_BUILD=1 -Od -FC -Zi
 set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533 -wd4334 -wd4127
-set Common=%%SharedCommon%% %%Warnings%% -nologo -EHsc- %%AKCommonPath%% %%AssetPath%% %%GamePath%% %%GraphicsPath%%
+set Common=%%SharedCommon%% %%Warnings%% -nologo -EHsc- %%AKCommonPath%% %%AssetPath%% %%GamePath%% %%GraphicsPath%% %%EditorPath%% -DGAME_COMPILED
 
-IF NOT EXIST lib (
-    mkdir lib
+set LibPath=%%~dp0\lib
+set SourcePath=%%~dp0\%%WorldName%%.cpp
+
+IF NOT EXIST %%LibPath%% (
+    mkdir %%LibPath%%
 )
 
-pushd lib
+pushd %%LibPath%%
 del *.pdb > NUL 2> NUL
-cl %%Common%% %%Warnings%% -LD ..\%%WorldName%%.cpp -link -opt:ref -incremental:no -pdb:%%PDB_NAME%% -out:%%DLL_NAME%%
+cl %%Common%% %%Warnings%% -LD %%SourcePath%% -link -opt:ref -incremental:no -pdb:%%PDB_NAME%% -out:%%DLL_NAME%%
 
 )";
 

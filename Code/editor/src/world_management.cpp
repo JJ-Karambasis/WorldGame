@@ -304,6 +304,29 @@ ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagem
     return AK_CreateEmptyString();
 }
 
+void Internal__CreateBuildAllWorldsFile(ak_arena* Scratch)
+{
+    ak_string BuildAllWorldPath = AK_StringConcat(WORLDS_PATH, "build_all.bat", Scratch);
+    
+    ak_string_builder StringBuilder = {};
+    
+    StringBuilder.WriteLine("@echo off");
+    
+    ak_array<ak_string> WorldNames = Internal__GetAllWorldNames(Scratch);
+    
+    AK_ForEach(World, &WorldNames)
+    {
+        StringBuilder.WriteLine("call %.*s/build.bat", World->Length, World->Data);
+        StringBuilder.WriteLine("popd");
+    }
+    
+    ak_string String = StringBuilder.PushString(Scratch);
+    AK_WriteEntireFile(BuildAllWorldPath, String.Data, String.Length);
+    
+    AK_DeleteArray(&WorldNames);
+    StringBuilder.ReleaseMemory();
+}
+
 ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManagement, ak_string WorldName, dev_platform* DevPlatform, assets* Assets, 
                                  platform* Platform)
 {
@@ -354,6 +377,10 @@ ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManag
         WorldManagement->DeleteAll();
         
         AK_DirectoryRemoveRecursively(NewWorldDirectoryPath);
+    }
+    else
+    {
+        Internal__CreateBuildAllWorldsFile(Scratch);
     }
     
     return AK_StringIsNullOrEmpty(ErrorMessage);
@@ -559,6 +586,7 @@ void Internal__DeleteWorld(ak_arena* Scratch, ak_string WorldName)
 {
     ak_string WorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
     AK_DirectoryRemoveRecursively(WorldDirectoryPath);
+    Internal__CreateBuildAllWorldsFile(Scratch);
 }
 
 void world_management::Update(editor* Editor, platform* Platform, dev_platform* DevPlatform, assets* Assets)

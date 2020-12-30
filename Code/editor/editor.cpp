@@ -1956,6 +1956,8 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             game* Game = GameContext->Game;
             frame_playback* FramePlayback = &Editor->FramePlayback;
             
+            DevPlatform->HandleHotReload(Editor);
+            
             if(!((FramePlayback->NewState == FRAME_PLAYBACK_STATE_RECORDING) ||
                  (FramePlayback->NewState == FRAME_PLAYBACK_STATE_NONE)))
             {

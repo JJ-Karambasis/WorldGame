@@ -175,6 +175,7 @@ void Game_GravityMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_v3f
 extern "C"
 AK_EXPORT GAME_UPDATE(Game_Update)
 {
+    Game->WorldShutdownCommon = Game_WorldShutdownCommon;
     world* World = Game->World;
     
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
