@@ -20,6 +20,24 @@ EDITOR_DEBUG_LOG(Editor_DebugLog)
     va_end(Args);
 }
 
+void Editor_AddEntity(editor* Editor, ak_u32 WorldIndex, ak_u64 ID, ak_string Name)
+{
+    game_context* GameContext = &Editor->GameContext;
+    ak_u32 Index = AK_PoolIndex(ID);
+    ak_u32 IndexPlusOne = Index+1;
+    if(IndexPlusOne > GameContext->GameEntityNames[WorldIndex].Size)
+        GameContext->GameEntityNames[WorldIndex].Resize(IndexPlusOne*2);
+    
+    GameContext->GameEntityNames[WorldIndex][Index] = Name;
+    GameContext->GameEntityNameHash[WorldIndex].Insert(Name, ID);
+}
+
+EDITOR_ADD_ENTITY(Editor_AddEntity)
+{
+    ak_string StringName = AK_PushString(Name, Editor->WorldManagement.StringArena);
+    Editor_AddEntity(Editor, WorldIndex, ID, StringName);
+}
+
 EDITOR_DRAW_POINT(Editor_DrawPoint)
 {
     render_primitive Primitive = {}; 
@@ -50,10 +68,6 @@ void Editor_DebugLog(ak_string String)
 
 #define EDITOR_ITEM_WIDTH 80.0f
 
-global editor_create_new_world_modal* Editor_CreateNewWorldModal;
-global editor_load_world_modal* Editor_LoadWorldModal;
-global editor_delete_world_modal* Editor_DeleteWorldModal;
-
 world_file_header Editor_GetWorldFileHeader(ak_u16 EntityCountA, ak_u16 EntityCountB, ak_u16 PointLightCountA, ak_u16 PointLightCountB)
 {
     world_file_header Header = {};
@@ -67,12 +81,12 @@ world_file_header Editor_GetWorldFileHeader(ak_u16 EntityCountA, ak_u16 EntityCo
     return Header;
 }
 
-gizmo_selected_object Editor_GizmoSelectedObject(ak_string Name, object_type Type)
+gizmo_selected_object Editor_GizmoSelectedObject(ak_u64 ID, object_type Type)
 {
     gizmo_selected_object Result;
     Result.IsSelected = true;
     Result.SelectedObject.Type = Type;
-    Result.SelectedObject.Name = Name;
+    Result.SelectedObject.ID = ID;
     return Result;
 }
 
@@ -97,6 +111,14 @@ ak_bool Editor_ArePointLightsEqual(dev_point_light* PointLightA, dev_point_light
                       PointLightA->Light.Position == PointLightB->Light.Position &&
                       PointLightA->Light.Radius == PointLightB->Light.Radius);
     return Result;
+}
+
+void Editor_SetSelectedObject(editor* Editor, object_type Type, ak_u64 ID)
+{
+    gizmo_selected_object* SelectedObject = &Editor->GizmoState.SelectedObject;
+    SelectedObject->IsSelected = true;
+    SelectedObject->SelectedObject.Type = Type;
+    SelectedObject->SelectedObject.ID = ID;
 }
 
 object* Editor_GetSelectedObject(editor* Editor)
@@ -133,18 +155,16 @@ ak_quatf Editor_GetOrientationDiff(editor* Editor, ak_v3f SelectorDiff)
 dev_entity* object::GetEntity(world_management* WorldManagement, ak_u32 WorldIndex)
 {
     AK_Assert(Type == OBJECT_TYPE_ENTITY, "Cannot get entity of a selected object that is not an entity");
-    AK_Assert(IsAlive(WorldManagement, WorldIndex), "Selected object must not have a deleted entity selected");
-    ak_u64* ID = WorldManagement->EntityTables[WorldIndex].Find(Name);
-    dev_entity* Entity = WorldManagement->DevEntities[WorldIndex].Get(*ID);
+    dev_entity* Entity = WorldManagement->DevEntities[WorldIndex].Get(ID);
+    AK_Assert(Entity, "Entity is not alive");
     return Entity;
 }
 
 dev_point_light* object::GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex)
 {
     AK_Assert(Type == OBJECT_TYPE_LIGHT, "Cannot get point light of a selected object that is not a point light");
-    AK_Assert(IsAlive(WorldManagement, WorldIndex), "Selected object must not have a deleted point light selected");
-    ak_u64* ID = WorldManagement->PointLightTables[WorldIndex].Find(Name);
-    dev_point_light* PointLight = WorldManagement->DevPointLights[WorldIndex].Get(*ID);
+    dev_point_light* PointLight = WorldManagement->DevPointLights[WorldIndex].Get(ID);
+    AK_Assert(PointLight, "Point Light is not alive");
     return PointLight;
 }
 
@@ -176,12 +196,12 @@ ak_bool object::IsAlive(world_management* WorldManagement, ak_u32 WorldIndex)
     {
         case OBJECT_TYPE_ENTITY:
         {
-            return WorldManagement->EntityTables[WorldIndex].Find(Name) != NULL;
+            return GetEntity(WorldManagement, WorldIndex) != NULL;
         } break;
         
         case OBJECT_TYPE_LIGHT:
         {
-            return WorldManagement->PointLightTables[WorldIndex].Find(Name) != NULL;
+            return GetPointLight(WorldManagement, WorldIndex) != NULL;
         } break;
         
         AK_INVALID_DEFAULT_CASE;
@@ -240,7 +260,7 @@ gizmo_intersection_result Editor_CastToGizmos(editor* Editor, gizmo_state* Gizmo
     return Result;
 }
 
-#define UPDATE_BEST_HIT(type, name) \
+#define UPDATE_BEST_HIT(type, name, tables) \
 do \
 { \
 if(RayCast.Intersected) \
@@ -250,7 +270,8 @@ if((tBest > RayCast.t) && (RayCast.t > ZNear)) \
 tBest = RayCast.t; \
 Result.IsSelected = true; \
 Result.SelectedObject.Type = type; \
-Result.SelectedObject.Name = name; \
+ak_u64 ID = *tables[Editor->CurrentWorldIndex].Find(name); \
+Result.SelectedObject.ID = ID; \
 } \
 } \
 } while(0)
@@ -286,14 +307,14 @@ gizmo_selected_object Editor_CastToAllObjects(editor* Editor, assets* Assets, ra
                                            AK_TransformM4(DevEntity->Transform));
         }
         
-        UPDATE_BEST_HIT(OBJECT_TYPE_ENTITY, DevEntity->Name);
+        UPDATE_BEST_HIT(OBJECT_TYPE_ENTITY, DevEntity->Name, WorldManagement->EntityTables);
     }
     
     AK_ForEach(DevPointLight, DevPointLights)
     {
         ray_cast RayCast = Ray_SphereCast(Ray.Origin, Ray.Direction, DevPointLight->Light.Position,
                                           POINT_LIGHT_RADIUS);
-        UPDATE_BEST_HIT(OBJECT_TYPE_LIGHT, DevPointLight->Name);
+        UPDATE_BEST_HIT(OBJECT_TYPE_LIGHT, DevPointLight->Name, WorldManagement->PointLightTables);
     }
     
     
@@ -533,7 +554,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                         ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->OriginalTransform.Transform.Orientation, 
                                                                Entity->Transform.Orientation);
                         
-                        object Object = {OBJECT_TYPE_ENTITY, Entity->Name};
+                        object Object = {OBJECT_TYPE_ENTITY, SelectedObject->ID};
                         
                         EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, OrientationDiff, EulerDiff);
                     } break;
@@ -544,7 +565,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                         
                         ak_v3f TranslationDiff = DevPointLight->Light.Position-GizmoState->OriginalTransform.Transform.Translation;
                         
-                        object Object = {OBJECT_TYPE_ENTITY, DevPointLight->Name};
+                        object Object = {OBJECT_TYPE_ENTITY, SelectedObject->ID};
                         EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, 
                                                            TranslationDiff, {}, AK_IdentityQuat<ak_f32>(), 
                                                            {});
@@ -776,7 +797,29 @@ void Editor_RenderGizmoState(editor* Editor, graphics* Graphics, gizmo_state* Gi
     Editor_DrawSphere(Editor, Graphics, Position, 0.04f, AK_White3());    
 }
 
-editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* Platform, assets* Assets)
+void Editor_SetDefaultWorld(editor* Editor)
+{
+    ak_string DefaultWorldPath = AK_StringConcat(WORLDS_PATH, "default_world.txt", Editor->Scratch);
+    AK_WriteEntireFile(DefaultWorldPath, Editor->WorldManagement.CurrentWorldName.Data, 
+                       Editor->WorldManagement.CurrentWorldName.Length);
+}
+
+void Editor_LoadDefaultWorld(editor* Editor, assets* Assets, dev_platform* DevPlatform)
+{
+    ak_string DefaultWorldPath = AK_StringConcat(WORLDS_PATH, "default_world.txt", Editor->Scratch);
+    ak_buffer Buffer = AK_ReadEntireFile(DefaultWorldPath, Editor->Scratch);
+    if(Buffer.IsValid())
+    {
+        ak_string WorldName = AK_CreateString((ak_char*)Buffer.Data, AK_SafeU32(Buffer.Size));
+        if(!Editor->WorldManagement.LoadWorld(WorldName, Editor, Assets, DevPlatform))
+        {
+            AK_MessageBoxOk("Error loading", "Could not load default world, clearing configuration");
+            AK_FileRemove(DefaultWorldPath);
+        }
+    }
+}
+
+editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* Platform, dev_platform* DevPlatform, assets* Assets)
 {
     editor* Editor = (editor*)AK_Allocate(sizeof(editor));
     if(!Editor)
@@ -793,6 +836,8 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
         AK_InvalidCode();
         return NULL;
     }
+    
+    ak_temp_arena TempArena = Editor->Scratch->BeginTemp();
     
     ImGui::SetCurrentContext(Context);
     
@@ -812,16 +857,8 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
     
     Editor->Cameras[0].SphericalCoordinates.radius = Editor->Cameras[1].SphericalCoordinates.radius = 5.0f;
     
-    ak_temp_arena TempArena = Editor->Scratch->BeginTemp();
-    
     Editor->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
     Editor->Cameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
-    
-    Editor->Scratch->EndTemp(&TempArena);
-    
-    Editor_LoadWorldModal = LoadWorldModal_Stub;
-    Editor_CreateNewWorldModal = CreateNewWorldModal_Stub;
-    Editor_DeleteWorldModal = DeleteWorldModal_Stub;
     
     Editor->WorldSelectedIndex = (ak_u32)-1;
     
@@ -866,6 +903,11 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
     Editor->DebugLog = Editor_DebugLog;
     Editor->DrawPoint = Editor_DrawPoint;
     Editor->DrawSegment = Editor_DrawSegment;
+    Editor->AddEntity = Editor_AddEntity;
+    
+    Editor->Scratch->EndTemp(&TempArena);
+    
+    Editor_LoadDefaultWorld(Editor, Assets, DevPlatform);
     
     return Editor;
 }
@@ -1094,7 +1136,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                         {
                             dev_entity* DevEntity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
                             EditRecordings->PushDeleteEntry(Editor->CurrentWorldIndex, DevEntity);
-                            WorldManagement->DeleteDevEntity(Editor->CurrentWorldIndex, SelectedObject->Name);
+                            WorldManagement->DeleteDevEntity(Editor->CurrentWorldIndex, DevEntity->Name);
                         } break;
                         
                         case OBJECT_TYPE_LIGHT:
@@ -1103,11 +1145,67 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                             EditRecordings->PushDeleteEntry(Editor->CurrentWorldIndex, 
                                                             DevPointLight);
                             WorldManagement->DeleteDevPointLight(Editor->CurrentWorldIndex, 
-                                                                 SelectedObject->Name);
+                                                                 DevPointLight->Name);
                         } break;
+                        
+                        AK_INVALID_DEFAULT_CASE;
                     }
                     
                     Editor->GizmoState.SelectedObject = {};
+                }
+                
+                if(IsDown(&DevInput->Ctrl))
+                {
+                    if(IsPressed(&DevInput->D))
+                    {
+                        switch(SelectedObject->Type)
+                        {
+                            case OBJECT_TYPE_ENTITY:
+                            {
+                                dev_entity* DevEntity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                                
+                                dev_entity* DuplicateEntity = 
+                                    WorldManagement->DuplicateEntity(Editor->Scratch, DevEntity, 
+                                                                     Editor->CurrentWorldIndex);
+                                ak_u64 ID = *WorldManagement->EntityTables[Editor->CurrentWorldIndex].Find(DuplicateEntity->Name);
+                                
+                                if(!AK_StringIsNullOrEmpty(DuplicateEntity->LinkName))
+                                {
+                                    ak_u32 WorldIndex = !Editor->CurrentWorldIndex;
+                                    ak_u64* LinkID = WorldManagement->EntityTables[WorldIndex].Find(DuplicateEntity->LinkName);
+                                    AK_Assert(LinkID, "Cannot have an entity with a linked object that is deleted");
+                                    dev_entity* LinkEntity = WorldManagement->DevEntities[WorldIndex].Get(*LinkID);
+                                    
+                                    EditRecordings->PushCreateEntry(Editor->CurrentWorldIndex, 
+                                                                    DuplicateEntity, LinkEntity);
+                                    
+                                }
+                                else
+                                {
+                                    EditRecordings->PushCreateEntry(Editor->CurrentWorldIndex, DuplicateEntity);
+                                }
+                                
+                                Editor_SetSelectedObject(Editor, SelectedObject->Type, ID);
+                            } break;
+                            
+                            case OBJECT_TYPE_LIGHT:
+                            {
+                                dev_point_light* DevPointLight = 
+                                    SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                                dev_point_light* DuplicatePointLight = WorldManagement->DuplicatePointLight(Editor->Scratch, 
+                                                                                                            DevPointLight, 
+                                                                                                            Editor->CurrentWorldIndex);
+                                
+                                EditRecordings->PushCreateEntry(Editor->CurrentWorldIndex, 
+                                                                DuplicatePointLight);
+                                
+                                ak_u64 ID = *WorldManagement->PointLightTables[Editor->CurrentWorldIndex].Find(DuplicatePointLight->Name);
+                                Editor_SetSelectedObject(Editor, SelectedObject->Type, ID);
+                            } break;
+                            
+                            AK_INVALID_DEFAULT_CASE;
+                        }
+                    }
                 }
             }
         }
@@ -1681,14 +1779,7 @@ ak_u64 GetEntryID(editor* Editor, dev_entity* DevEntity, ak_u32 WorldIndex)
         AK_INVALID_DEFAULT_CASE;
     }
     
-    ak_u32 Index = AK_PoolIndex(Result);
-    ak_u32 IndexPlusOne = Index+1;
-    if(IndexPlusOne > GameContext->GameEntityNames[WorldIndex].Size)
-        GameContext->GameEntityNames[WorldIndex].Resize(IndexPlusOne*2);
-    
-    GameContext->GameEntityNames[WorldIndex][AK_PoolIndex(Result)] = DevEntity->Name;
-    GameContext->GameEntityNameHash[WorldIndex].Insert(DevEntity->Name, Result);
-    
+    Editor_AddEntity(Editor, WorldIndex, Result, DevEntity->Name);
     return Result;
 }
 
@@ -1710,6 +1801,48 @@ ak_u32 Editor_BuildIDs(editor* Editor, ak_u64* WorldIDs, ak_pool<type>* Pool, ak
             WorldIDs[*Index] = EntityID;
     }
     return HashMap->Size;
+}
+
+void Editor_UpdateGame(editor* Editor, platform* Platform, ak_f32* tInterpolated)
+{
+    frame_playback* FramePlayback = &Editor->FramePlayback;
+    game* Game = Editor->GameContext.Game;
+    
+    if(!((FramePlayback->NewState == FRAME_PLAYBACK_STATE_RECORDING) ||
+         (FramePlayback->NewState == FRAME_PLAYBACK_STATE_NONE)))
+    {
+        Game->Input = {};
+    }
+    
+    Game->LoopAccum.IncrementAccum();
+    while(Game->LoopAccum.ShouldUpdate())
+    {
+        if(FramePlayback->NewState == FRAME_PLAYBACK_STATE_RECORDING)
+            FramePlayback->RecordFrame(Editor);
+        
+        if((FramePlayback->NewState == FRAME_PLAYBACK_STATE_PLAYING) ||
+           (FramePlayback->NewState == FRAME_PLAYBACK_STATE_INSPECTING))
+            FramePlayback->PlayFrame(Editor);
+        
+        __try
+        {
+            ak_temp_arena GameTemp = Game->Scratch->BeginTemp();
+            Game->Update(Game);
+            Game->Scratch->EndTemp(&GameTemp);
+        }
+        __except(EXCEPTION_EXECUTE_HANDLER)
+        {
+            //TODO(JJ): Stack trace exception handling
+            AK_MessageBoxOk("Error", "Unhandled exception occurred when running the game. Game must be stopped");
+            Editor_StopGame(Editor, Platform);
+            return;
+        }
+        
+        Game->LoopAccum.DecrementAccum();
+    }
+    
+    UpdateButtons(Game->Input.Buttons, AK_Count(Game->Input.Buttons));
+    *tInterpolated = Game->LoopAccum.GetRemainder();
 }
 
 void Editor_StopGame(editor* Editor, platform* Platform)
@@ -1742,45 +1875,68 @@ ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, plat
     
     game_startup* GameStartup = Platform->LoadGameCode();
     world_startup* WorldStartup = Platform->LoadWorldCode(WorldManagement->CurrentWorldPath, WorldManagement->CurrentWorldName);
-    if(!GameStartup || !WorldStartup)
+    if(!GameStartup || !WorldStartup || !DevPlatform->SetGameDebugEditor(Editor))
     {
-        //TODO(JJ): Diagnostic and error logging
-        AK_InvalidCode();
+        AK_MessageBoxOk("Error", "Could not start the game. Please save the world and try again. Game/World libraries are missing or corrupted.");
+        
+        if(GameStartup)
+            Platform->UnloadGameCode();
+        
+        if(WorldStartup)
+            Platform->UnloadWorldCode();
+        
         return false;
     }
     
-    if(!DevPlatform->SetGameDebugEditor(Editor))
+    __try
     {
-        //TODO(JJ): Diagnostic and error logging
-        AK_InvalidCode();
+        
+        GameContext->Game = GameStartup(Graphics, Assets);
+        if(!GameContext->Game)
+        {
+            //TODO(JJ): Diagnostic and error logging
+            return false;
+        }
+        
+        if(!WorldStartup(GameContext->Game))
+        {
+            //TODO(JJ): Diagnostic and error logging
+            return false;
+        }
+        
+        ak_u64* WorldIDs = (ak_u64*)(GameContext->Game->World+1);
+        WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevEntities[0], &WorldManagement->EntityIndices[0], 0);
+        WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevEntities[1], &WorldManagement->EntityIndices[1], 1);
+        WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevPointLights[0], &WorldManagement->PointLightIndices[0], 0);
+        WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevPointLights[1], &WorldManagement->PointLightIndices[1], 1);
+        
+        Editor->OldCameras[0] = Editor->Cameras[0];
+        Editor->OldCameras[1] = Editor->Cameras[1];
+        
+        Editor->GizmoState.SelectedObject = {};
+        
+        return true;
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER)
+    {
+        //TODO(JJ): Stack trace exception handling
+        AK_MessageBoxOk("Error", "Could not start the game. An unhandled exception occurred during startup.");
+        
+        //TODO(JJ): We want a more sophisticated cleanup when our actual editor/game allocators are created
+        if(GameContext->Game)
+        {
+            if(GameContext->Game->World)
+                AK_Free(GameContext->Game->World);
+            AK_Free(GameContext->Game);
+        }
+        
+        Editor->UI.GameUseDevCamera = false;
+        
+        Platform->UnloadWorldCode();
+        Platform->UnloadGameCode();
+        
         return false;
     }
-    
-    GameContext->Game = GameStartup(Graphics, Assets);
-    if(!GameContext->Game)
-    {
-        //TODO(JJ): Diagnostic and error logging
-        return false;
-    }
-    
-    if(!WorldStartup(GameContext->Game))
-    {
-        //TODO(JJ): Diagnostic and error logging
-        return false;
-    }
-    
-    ak_u64* WorldIDs = (ak_u64*)(GameContext->Game->World+1);
-    WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevEntities[0], &WorldManagement->EntityIndices[0], 0);
-    WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevEntities[1], &WorldManagement->EntityIndices[1], 1);
-    WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevPointLights[0], &WorldManagement->PointLightIndices[0], 0);
-    WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevPointLights[1], &WorldManagement->PointLightIndices[1], 1);
-    
-    Editor->OldCameras[0] = Editor->Cameras[0];
-    Editor->OldCameras[1] = Editor->Cameras[1];
-    
-    Editor->GizmoState.SelectedObject = {};
-    
-    return true;
 }
 
 extern "C" 
@@ -1790,7 +1946,7 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
     if(!Assets)
         return -1;
     
-    editor* Editor = Editor_Initialize(Graphics, Context, Platform, Assets);
+    editor* Editor = Editor_Initialize(Graphics, Context, Platform, DevPlatform, Assets);
     if(!Editor)
         return -1;
     
@@ -1855,6 +2011,12 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                     
                     if(ImGui::MenuItem("Delete World", "ALT-D")) 
                         WorldManagement->SetState(WORLD_MANAGEMENT_STATE_DELETE);
+                    
+                    if(ImGui::MenuItem("Set Default World"))
+                        Editor_SetDefaultWorld(Editor);
+                    
+                    if(ImGui::MenuItem("Load Default World"))
+                        Editor_LoadDefaultWorld(Editor, Assets, DevPlatform);
                     
                     ImGui::EndMenu();
                 }
@@ -1953,39 +2115,11 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
         
         if(GameContext->Game)
         {
-            game* Game = GameContext->Game;
             frame_playback* FramePlayback = &Editor->FramePlayback;
             
             DevPlatform->HandleHotReload(Editor);
             
-            if(!((FramePlayback->NewState == FRAME_PLAYBACK_STATE_RECORDING) ||
-                 (FramePlayback->NewState == FRAME_PLAYBACK_STATE_NONE)))
-            {
-                Game->Input = {};
-            }
-            
-            Game->LoopAccum.IncrementAccum();
-            while(Game->LoopAccum.ShouldUpdate())
-            {
-                ak_temp_arena GameTemp = Game->Scratch->BeginTemp();
-                
-                if(FramePlayback->NewState == FRAME_PLAYBACK_STATE_RECORDING)
-                    FramePlayback->RecordFrame(Editor);
-                
-                if((FramePlayback->NewState == FRAME_PLAYBACK_STATE_PLAYING) ||
-                   (FramePlayback->NewState == FRAME_PLAYBACK_STATE_INSPECTING))
-                    FramePlayback->PlayFrame(Editor);
-                
-                Game->Update(Game);
-                
-                Game->LoopAccum.DecrementAccum();
-                Game->Scratch->EndTemp(&GameTemp);
-            }
-            
-            tInterpolated = Game->LoopAccum.GetRemainder();
-            
-            UpdateButtons(Game->Input.Buttons, AK_Count(Game->Input.Buttons));
-            
+            Editor_UpdateGame(Editor, Platform, &tInterpolated);
             
             ak_v2i Resolution = Platform->GetResolution();
             
@@ -2009,8 +2143,12 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                 {
                     if(Editor->UI.GameUseDevCamera)
                     {
-                        Editor->Cameras[0] = Game->Cameras[0];
-                        Editor->Cameras[1] = Game->Cameras[1];
+                        game* Game = Editor->GameContext.Game;
+                        if(Game)
+                        {
+                            Editor->Cameras[0] = Game->Cameras[0];
+                            Editor->Cameras[1] = Game->Cameras[1];
+                        }
                     }
                 }
                 

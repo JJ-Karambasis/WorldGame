@@ -10,6 +10,7 @@
 extern "C"
 AK_EXPORT GAME_STARTUP(Game_Startup)
 {
+    //TODO(JJ): We do not want to use AK_Allocate, we want to use something that we can control a bit better just in case an exception occurs during startup and we want to free the memory
     game* Game = (game*)AK_Allocate(sizeof(game));
     if(!Game)
     {
@@ -37,20 +38,27 @@ AK_EXPORT GAME_STARTUP(Game_Startup)
     return Game;
 }
 
-BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_FilterStaticEntitiesFunc)
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_PlayerFilter)
 {
     ak_pool<entity>* EntityStorage = &BroadPhase->World->EntityStorage[BroadPhase->WorldIndex];
-    ak_bool AreStatic = (EntityStorage->Get(Pair.EntityA)->Type == ENTITY_TYPE_STATIC ||
-                         EntityStorage->Get(Pair.EntityB)->Type == ENTITY_TYPE_STATIC);
-    return !AreStatic;
+    entity* EntityB = EntityStorage->Get(Pair.EntityB);
+    return !(EntityB->Type == ENTITY_TYPE_BUTTON);
 }
 
-BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_FilterOnlyStaticEntitiesFunc)
+struct movable_filter_user_data
 {
+    ak_u64 IgnoreID;
+};
+
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_MovableFilter)
+{
+    movable_filter_user_data* Filter = (movable_filter_user_data*)UserData;
     ak_pool<entity>* EntityStorage = &BroadPhase->World->EntityStorage[BroadPhase->WorldIndex];
-    ak_bool AreStatic = (EntityStorage->Get(Pair.EntityA)->Type == ENTITY_TYPE_STATIC ||
-                         EntityStorage->Get(Pair.EntityB)->Type == ENTITY_TYPE_STATIC);
-    return AreStatic;
+    if(Filter->IgnoreID == Pair.EntityB)
+        return false;
+    
+    entity* EntityB = EntityStorage->Get(Pair.EntityB);
+    return !(EntityB->Type == ENTITY_TYPE_BUTTON);
 }
 
 inline ak_f32 GetDeltaClamped(ak_f32 Delta)
@@ -61,6 +69,97 @@ inline ak_f32 GetDeltaClamped(ak_f32 Delta)
 inline ak_f32 GetDeltaClamped(ak_f32 Delta, ak_f32 t)
 {
     return AK_Max(Delta*t-VERY_CLOSE_DISTANCE, 0.0f);
+}
+
+toi_normal Game_PushableMovementUpdate(game* Game, collision_detection* CollisionDetection, 
+                                       ccd_contact AContactTOI)
+{
+    world* World = CollisionDetection->BroadPhase.World;
+    ak_u32 WorldIndex = CollisionDetection->BroadPhase.WorldIndex;
+    ak_pool<entity>* EntityStorage = &World->EntityStorage[WorldIndex];
+    ak_array<physics_object>* PhysicsObjects = &World->PhysicsObjects[WorldIndex];
+    entity* EntityB = EntityStorage->Get(AContactTOI.EntityB);
+    
+    if(EntityB->Type == ENTITY_TYPE_MOVABLE)
+    {
+        ak_u32 BIndex = AK_PoolIndex(EntityB->ID);
+        physics_object* PhysicsObjectB = PhysicsObjects->Get(BIndex);
+        
+        ak_v3f LocalX = AK_QuatToXAxis(PhysicsObjectB->Orientation);
+        ak_v3f LocalY = AK_QuatToYAxis(PhysicsObjectB->Orientation);
+        ak_f32 XTest = AK_Abs(AK_Dot(LocalX, AContactTOI.Contact.Normal)); 
+        ak_f32 YTest = AK_Abs(AK_Dot(LocalY, AContactTOI.Contact.Normal));
+        if((XTest > 0.999f && XTest < 1.001f) || (YTest > 0.999f && YTest < 1.001f))
+        {
+            ak_u32 AIndex = AK_PoolIndex(AContactTOI.EntityA);
+            physics_object* PhysicsObjectA = PhysicsObjects->Get(AIndex);
+            
+            ak_f32 MoveDeltaDistanceA = AK_Magnitude(PhysicsObjectA->MoveDelta);
+            ak_v3f MoveDirectionA = PhysicsObjectA->MoveDelta/MoveDeltaDistanceA;
+            ak_v3f MoveDirectionB = AK_Normalize(AK_V3(AContactTOI.Contact.Normal.xy));
+            
+            ak_f32 RemainderDeltaDistanceA = MoveDeltaDistanceA-(MoveDeltaDistanceA*AContactTOI.t);
+            
+            PhysicsObjectB->MoveDelta = AK_Dot(MoveDirectionB, MoveDirectionA*RemainderDeltaDistanceA)*MoveDirectionB;
+            
+            movable_filter_user_data* MovableFilter = Game->Scratch->Push<movable_filter_user_data>();
+            MovableFilter->IgnoreID = AContactTOI.EntityA;
+            
+            ccd_contact BContactTOI = CCD_GetEarliestContact(CollisionDetection, EntityB->ID, 
+                                                             BroadPhase_MovableFilter, 
+                                                             MovableFilter);
+            if(!BContactTOI.Intersected)
+            {
+                PhysicsObjectB->Position += PhysicsObjectB->MoveDelta;
+                PhysicsObjectB->MoveDelta = {};
+                
+                MoveDeltaDistanceA = GetDeltaClamped(MoveDeltaDistanceA);
+                PhysicsObjectA->MoveDelta = MoveDirectionA*MoveDeltaDistanceA;
+                
+                MovableFilter->IgnoreID = 0;
+                ccd_contact CContactTOI = CCD_GetEarliestContact(CollisionDetection, AContactTOI.EntityA, 
+                                                                 BroadPhase_MovableFilter, 
+                                                                 MovableFilter);
+                if(CContactTOI.Intersected)
+                {
+                    if(CContactTOI.EntityB == AContactTOI.EntityB)
+                        Debug_Log("Hit");
+                    return MakeTOINormal(CContactTOI.t, CContactTOI.Contact.Normal);
+                }
+            }
+            else
+            {
+                ak_f32 MoveDeltaDistanceB = AK_Magnitude(PhysicsObjectB->MoveDelta);
+                MoveDeltaDistanceB = GetDeltaClamped(MoveDeltaDistanceB, BContactTOI.t);
+                
+                PhysicsObjectB->Position += MoveDirectionB*MoveDeltaDistanceB;
+                PhysicsObjectB->MoveDelta = {};
+                
+                MoveDeltaDistanceA = GetDeltaClamped(MoveDeltaDistanceA);
+                PhysicsObjectA->MoveDelta = MoveDirectionA*MoveDeltaDistanceA;
+                
+                MovableFilter->IgnoreID = 0;
+                ccd_contact CContactTOI = 
+                    CCD_GetEarliestContact(CollisionDetection, AContactTOI.EntityA, 
+                                           BroadPhase_MovableFilter, 
+                                           MovableFilter);
+                if(CContactTOI.Intersected)
+                {
+                    return MakeTOINormal(CContactTOI.t, CContactTOI.Contact.Normal);
+                }
+            }
+        }
+        else
+        {
+            return MakeTOINormal(AContactTOI.t, AContactTOI.Contact.Normal);
+        }
+    }
+    else
+    {
+        return MakeTOINormal(AContactTOI.t, AContactTOI.Contact.Normal);
+    }
+    
+    return {};
 }
 
 void Game_PlayerMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_f32 dt)
@@ -77,38 +176,45 @@ void Game_PlayerMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_f32 
         for(ak_u32 Iterations = 0; Iterations < 4; Iterations++)
         {
             ccd_contact ContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID, 
-                                                            BroadPhase_FilterOnlyStaticEntitiesFunc);
+                                                            BroadPhase_PlayerFilter);
             if(!ContactCCD.Intersected)
             {
                 PhysicsObject->Position += PhysicsObject->MoveDelta;
                 break;
             }
             
-            contact* Contact = &ContactCCD.Contact;
-            
-            ak_v3f Normal = -Contact->Normal;
-            ak_f32 tHit = ContactCCD.t;
-            
-            PhysicsObject->Velocity -= AK_Dot(Normal, PhysicsObject->Velocity)*Normal;
-            
-            ak_f32 MoveDeltaDistance = AK_Magnitude(PhysicsObject->MoveDelta);
-            if(AK_EqualZeroEps(MoveDeltaDistance))
+            toi_normal TOINormal = Game_PushableMovementUpdate(Game, &CollisionDetection, ContactCCD); 
+            if(TOINormal.Intersected)
+            {
+                ak_v3f Normal = -TOINormal.Normal;
+                ak_f32 tHit = TOINormal.tHit;
+                
+                PhysicsObject->Velocity -= AK_Dot(Normal, PhysicsObject->Velocity)*Normal;
+                
+                ak_f32 MoveDeltaDistance = AK_Magnitude(PhysicsObject->MoveDelta);
+                if(AK_EqualZeroEps(MoveDeltaDistance))
+                    break;
+                
+                ak_v3f MoveDirection = PhysicsObject->MoveDelta/MoveDeltaDistance;                                                                                                        
+                ak_f32 HitDeltaDistance = GetDeltaClamped(MoveDeltaDistance, tHit);
+                
+                ak_v3f Destination = PhysicsObject->Transform.Translation + PhysicsObject->MoveDelta;
+                ak_v3f NewBasePoint = PhysicsObject->Transform.Translation + MoveDirection*HitDeltaDistance;                        
+                
+                ak_planef SlidingPlane = AK_Plane(NewBasePoint, Normal);
+                ak_v3f NewDestination = Destination - AK_SignDistance(SlidingPlane, Destination)*SlidingPlane.Normal;  
+                
+                PhysicsObject->MoveDelta = NewDestination - NewBasePoint;        
+                
+                PhysicsObject->Transform.Translation = NewBasePoint;
+                if(AK_Magnitude(PhysicsObject->MoveDelta) < VERY_CLOSE_DISTANCE)                                                    
+                    break;        
+            }
+            else
+            {
+                PhysicsObject->Transform.Translation += PhysicsObject->MoveDelta;
                 break;
-            
-            ak_v3f MoveDirection = PhysicsObject->MoveDelta/MoveDeltaDistance;                                                                                                        
-            ak_f32 HitDeltaDistance = GetDeltaClamped(MoveDeltaDistance, tHit);
-            
-            ak_v3f Destination = PhysicsObject->Transform.Translation + PhysicsObject->MoveDelta;
-            ak_v3f NewBasePoint = PhysicsObject->Transform.Translation + MoveDirection*HitDeltaDistance;                        
-            
-            ak_planef SlidingPlane = AK_Plane(NewBasePoint, Normal);
-            ak_v3f NewDestination = Destination - AK_SignDistance(SlidingPlane, Destination)*SlidingPlane.Normal;  
-            
-            PhysicsObject->MoveDelta = NewDestination - NewBasePoint;        
-            
-            PhysicsObject->Transform.Translation = NewBasePoint;
-            if(AK_Magnitude(PhysicsObject->MoveDelta) < VERY_CLOSE_DISTANCE)                                                    
-                break;                                    
+            }
         }
     }
     
@@ -170,6 +276,19 @@ void Game_GravityMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_v3f
     }
     
     PhysicsObject->MoveDelta = {};
+}
+
+void Game_ClearAllMovableChildren(world* World)
+{
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {        
+        ak_pool<entity>* EntityStorage = &World->EntityStorage[WorldIndex];         
+        AK_ForEach(Movable, &World->Movables[WorldIndex])
+        {
+            Movable->ChildID = 0;
+            Movable->ParentID = 0;
+        }
+    }
 }
 
 extern "C"
@@ -246,6 +365,8 @@ AK_EXPORT GAME_UPDATE(Game_Update)
         }
     }
     
+    Game_ClearAllMovableChildren(World);
+    
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         ak_pool<entity>* EntityStorage =  &World->EntityStorage[WorldIndex];
@@ -262,6 +383,16 @@ AK_EXPORT GAME_UPDATE(Game_Update)
                     Player->GravityVelocity *= (1.0f/(1.0f+3.0f*dt));
                     
                     Game_GravityMovementUpdate(Game, WorldIndex, Entity->ID, Player->GravityVelocity, dt);
+                } break;
+                
+                case ENTITY_TYPE_MOVABLE:
+                {
+                    movable* Movable = World->Movables[WorldIndex].Get(AK_PoolIndex(Entity->ID));
+                    Movable->GravityVelocity.z -= Gravity*dt;
+                    Movable->GravityVelocity *= (1.0f/(1.0f+3.0f*dt));
+                    
+                    Game_GravityMovementUpdate(Game, WorldIndex, Entity->ID, 
+                                               Movable->GravityVelocity, dt);
                 } break;
             }
         }

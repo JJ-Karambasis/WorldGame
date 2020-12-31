@@ -19,7 +19,7 @@ void ResizeWorld(world* World, ak_u32 WorldIndex, ak_u32 Size)
         World->Movables[WorldIndex].Resize(Size*2);
 }
 
-void DeleteEntity(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true)
+void DeleteEntity(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink)
 {
     world* World = Game->World;
     ak_u32 Index = AK_PoolIndex(ID);
@@ -98,6 +98,16 @@ entity* CreateButtonEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3
     button_state* ButtonState = Game->World->ButtonStates[WorldIndex].Get(AK_PoolIndex(Entity->ID));
     *ButtonState = {};
     ButtonState->IsToggled = IsToggled;
+    return Entity;
+}
+
+entity* CreateMovableEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, 
+                            material Material)
+{
+    entity* Entity = CreateEntity(Game, WorldIndex, ENTITY_TYPE_MOVABLE, Position, Dimensions, 
+                                  AK_IdentityQuat<ak_f32>(), MESH_ASSET_ID_BOX, Material);
+    movable* Movable = Game->World->Movables[WorldIndex].Get(AK_PoolIndex(Entity->ID));
+    *Movable = {};
     return Entity;
 }
 

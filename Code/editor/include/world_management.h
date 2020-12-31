@@ -80,6 +80,14 @@ struct world_management
     
     void SetState(world_management_state State);    void Update(editor* Editor, platform* Platform, dev_platform* DevPlatform, assets* Assets);
     
+    ak_string BuildWorld(ak_arena* Scratch, dev_platform* DevPlatform, assets* Assets);
+    ak_bool LoadWorld(ak_string WorldName, editor* Editor, assets* Assets, dev_platform* DevPlatform);
+    
+    ak_bool CreateWorld(ak_string WorldName, editor* Editor, dev_platform* DevPlatform, assets* Assets, platform* Platform);
+    void DeleteWorld(ak_arena* Scratch, ak_string WorldName);
+    
+    dev_entity* DuplicateEntity(ak_arena* Scratch, dev_entity* Entity, ak_u32 WorldIndex);
+    dev_point_light* DuplicatePointLight(ak_arena* Scratch, dev_point_light* PointLight, ak_u32 WorldIndex);
     void DeleteAll();
     void DeleteIndices();
 };

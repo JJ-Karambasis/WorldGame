@@ -197,113 +197,6 @@ void Internal__InsertIndices(ak_pool<type>* Pool, ak_hash_map<ak_string, ak_u32>
         HashMap->Insert(Entry->Name, Index++);
 }
 
-ak_string Internal__BuildWorld(ak_arena* Scratch, world_management* WorldManagement, dev_platform* DevPlatform, assets* Assets)
-{
-    ak_string_builder HeaderFile = {};
-    
-    HeaderFile.WriteLine("#ifndef GENERATED_H");
-    HeaderFile.WriteLine("#define GENERATED_H");
-    
-    Internal__WriteStruct(&HeaderFile, &WorldManagement->DevEntities[0], "entities_a");
-    Internal__WriteStruct(&HeaderFile, &WorldManagement->DevEntities[1], "entities_b");
-    Internal__WriteStruct(&HeaderFile, &WorldManagement->DevPointLights[0], "point_lights_a");
-    Internal__WriteStruct(&HeaderFile, &WorldManagement->DevPointLights[1], "point_lights_b");
-    
-    HeaderFile.WriteLine("#endif");
-    
-    WorldManagement->DeleteIndices();
-    
-    Internal__InsertIndices(&WorldManagement->DevEntities[0], &WorldManagement->EntityIndices[0]);
-    Internal__InsertIndices(&WorldManagement->DevEntities[1], &WorldManagement->EntityIndices[1]);
-    Internal__InsertIndices(&WorldManagement->DevPointLights[0], &WorldManagement->PointLightIndices[0]);
-    Internal__InsertIndices(&WorldManagement->DevPointLights[1], &WorldManagement->PointLightIndices[1]);
-    
-    ak_string HeaderFileString = HeaderFile.PushString(Scratch);
-    ak_string HeaderPath = AK_StringConcat(WorldManagement->CurrentWorldPath, "generated.h", Scratch);
-    ak_string RenameHeaderPath = AK_StringConcat(WorldManagement->CurrentWorldPath, "generated_rename.h", Scratch);
-    
-    ak_string BuildWorldLogFilePath = 
-        AK_StringConcat(WorldManagement->CurrentWorldPath, BUILD_WORLD_LOG_FILE, Scratch);
-    
-    if(AK_FileExists(HeaderPath))
-        AK_FileRename(HeaderPath, RenameHeaderPath);
-    
-    AK_WriteEntireFile(HeaderPath, HeaderFileString.Data, HeaderFileString.Length);
-    
-    if(!DevPlatform->BuildWorld(WorldManagement->CurrentWorldPath))
-    {
-        ak_string Message = AK_CreateString(AK_ReadEntireFile(BuildWorldLogFilePath, Scratch));
-        AK_FileRemove(BuildWorldLogFilePath);
-        
-        AK_FileRemove(HeaderPath);
-        if(AK_FileExists(RenameHeaderPath))
-            AK_FileRename(RenameHeaderPath, HeaderPath);
-        return Message;
-    }
-    else
-    {
-        Editor_DebugLog("Successfully built game!");
-        AK_FileRemove(BuildWorldLogFilePath);
-        if(AK_FileExists(RenameHeaderPath))
-            AK_FileRemove(RenameHeaderPath);
-    }
-    
-    //TODO(JJ): Task to actual build the world file (make it async if it takes awhile)
-    ak_string WorldFilePath = AK_FormatString(Scratch, "%s%s.world", WorldManagement->CurrentWorldPath.Data, WorldManagement->CurrentWorldName.Data);
-    
-    ak_binary_builder BinaryBuilder = {};
-    
-    world_file_header WorldFileHeader = Editor_GetWorldFileHeader(AK_SafeU16(WorldManagement->DevEntities[0].Size), AK_SafeU16(WorldManagement->DevEntities[1].Size), 
-                                                                  AK_SafeU16(WorldManagement->DevPointLights[0].Size), AK_SafeU16(WorldManagement->DevPointLights[1].Size));
-    
-    
-    BinaryBuilder.Write(WorldFileHeader);
-    
-    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-    {
-        ak_pool<dev_entity>* DevEntities = &WorldManagement->DevEntities[WorldIndex];
-        AK_ForEach(DevEntity, DevEntities)
-        {
-            Internal__WriteName(&BinaryBuilder, DevEntity->Name);
-            Internal__WriteName(&BinaryBuilder, DevEntity->LinkName);
-            
-            BinaryBuilder.Write(DevEntity->Type);
-            BinaryBuilder.Write(DevEntity->Transform.Translation);
-            BinaryBuilder.Write(DevEntity->Transform.Orientation);
-            BinaryBuilder.Write(DevEntity->Transform.Scale);
-            Internal__WriteMaterial(&BinaryBuilder, Assets, &DevEntity->Material);
-            
-            mesh_info* MeshInfo = GetMeshInfo(Assets, DevEntity->MeshID);
-            Internal__WriteName(&BinaryBuilder, AK_CreateString(MeshInfo->Name, MeshInfo->Header.NameLength));
-            
-            if(DevEntity->Type == ENTITY_TYPE_BUTTON)
-                BinaryBuilder.Write(DevEntity->IsToggled);
-        }
-    }
-    
-    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-    {
-        ak_pool<dev_point_light>* DevPointLights = &WorldManagement->DevPointLights[WorldIndex];
-        AK_ForEach(DevPointLight, DevPointLights)
-        {
-            Internal__WriteName(&BinaryBuilder, DevPointLight->Name);
-            BinaryBuilder.Write(DevPointLight->Light.Color);
-            BinaryBuilder.Write(DevPointLight->Light.Intensity);
-            BinaryBuilder.Write(DevPointLight->Light.Position);
-            BinaryBuilder.Write(DevPointLight->Light.Radius);
-        }
-    }
-    
-    BinaryBuilder.WriteString(WORLD_FILE_CHECKSUM);
-    
-    ak_buffer BinaryBuffer = BinaryBuilder.PushBuffer(Scratch);
-    AK_WriteEntireFile(WorldFilePath, BinaryBuffer.Data, AK_SafeU32(BinaryBuffer.Size));
-    
-    BinaryBuilder.ReleaseMemory();
-    
-    return AK_CreateEmptyString();
-}
-
 void Internal__CreateBuildAllWorldsFile(ak_arena* Scratch)
 {
     ak_string BuildAllWorldPath = AK_StringConcat(WORLDS_PATH, "build_all.bat", Scratch);
@@ -325,268 +218,6 @@ void Internal__CreateBuildAllWorldsFile(ak_arena* Scratch)
     
     AK_DeleteArray(&WorldNames);
     StringBuilder.ReleaseMemory();
-}
-
-ak_bool Internal__CreateNewWorld(ak_arena* Scratch, world_management* WorldManagement, ak_string WorldName, dev_platform* DevPlatform, assets* Assets, 
-                                 platform* Platform)
-{
-    AK_Assert(!AK_StringIsNullOrEmpty(WorldName), "WorldName cannot be null or empty");
-    
-    WorldManagement->DeleteAll();
-    
-    WorldManagement->StringArena = AK_CreateArena();
-    
-    material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
-    dual_dev_entity DualPlayerEntity = WorldManagement->CreateDevEntityInBothWorlds("Player", ENTITY_TYPE_PLAYER, AK_V3(0.0f, 0.0f, 0.0f), AK_XAxis(), 0.0f, AK_V3(1.0f, 1.0f, 1.0f), PlayerMaterial, MESH_ASSET_ID_PLAYER);
-    
-    material FloorMaterial = { CreateDiffuse(AK_White3()) };
-    dual_dev_entity DualStaticEntity = WorldManagement->CreateDevEntityInBothWorlds("Default_Floor", ENTITY_TYPE_STATIC, AK_V3(0.0f, 0.0f, -1.0f), AK_XAxis(), 0.0f, AK_V3(10.0f, 10.0f, 1.0f), FloorMaterial, MESH_ASSET_ID_BOX);
-    
-    dual_dev_point_light DualPointLights = WorldManagement->CreateDevPointLightInBothWorlds("Default_Light", AK_V3(0.0f, 0.0f, 10.0f), 20.0f, AK_White3(), 1.0f);
-    
-    ak_string NewWorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
-    
-    ak_string GameCodePath = AK_FormatString(Scratch, "%.*s..%cCode%c", 
-                                             Platform->ProgramPath.Length, Platform->ProgramPath.Data, AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER);
-    
-    ak_string WorldHeaderString = GetWorldHeaderFile(Scratch, WorldName);
-    ak_string WorldSourceString = GetWorldSourceFile(Scratch, WorldName);
-    ak_string WorldBuildString = GetWorldBuildFile(Scratch, GameCodePath, WorldName);
-    
-    ak_string WorldHeaderPath = AK_FormatString(Scratch, "%.*s%.*s.h", NewWorldDirectoryPath.Length, NewWorldDirectoryPath.Data, WorldName.Length, WorldName.Data);
-    ak_string WorldSourcePath = AK_FormatString(Scratch, "%.*s%.*s.cpp", NewWorldDirectoryPath.Length, NewWorldDirectoryPath.Data, WorldName.Length, WorldName.Data);
-    ak_string WorldBuildPath = AK_StringConcat(NewWorldDirectoryPath, "build.bat", Scratch);
-    
-    
-    if(!AK_DirectoryExists(NewWorldDirectoryPath))
-        AK_CreateDirectory(NewWorldDirectoryPath);
-    
-    AK_WriteEntireFile(WorldHeaderPath, WorldHeaderString.Data, WorldHeaderString.Length);
-    AK_WriteEntireFile(WorldSourcePath, WorldSourceString.Data, WorldSourceString.Length);
-    AK_WriteEntireFile(WorldBuildPath, WorldBuildString.Data, WorldBuildString.Length);
-    
-    WorldManagement->CurrentWorldName = AK_PushString(WorldName, WorldManagement->StringArena);
-    WorldManagement->CurrentWorldPath = AK_PushString(NewWorldDirectoryPath, WorldManagement->StringArena);
-    
-    ak_string ErrorMessage = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
-    if(!AK_StringIsNullOrEmpty(ErrorMessage))
-    {
-        ak_string Message = AK_FormatString(Scratch, "Failed to create world. Building of the world failed.\n Compiler errors: \n%.*s", ErrorMessage.Length, ErrorMessage.Data);
-        AK_MessageBoxOk("Failed to create world", Message);
-        Editor_DebugLog(ErrorMessage);
-        WorldManagement->DeleteAll();
-        
-        AK_DirectoryRemoveRecursively(NewWorldDirectoryPath);
-    }
-    else
-    {
-        Internal__CreateBuildAllWorldsFile(Scratch);
-    }
-    
-    return AK_StringIsNullOrEmpty(ErrorMessage);
-}
-
-ak_bool Internal__LoadWorld(editor* Editor, ak_string WorldName, assets* Assets, dev_platform* DevPlatform)
-{
-    ak_arena* Scratch = Editor->Scratch;
-    world_management* WorldManagement = &Editor->WorldManagement;
-    edit_recordings* EditRecordings = &Editor->EditRecordings;
-    
-    Editor->UI.EntitySpawner.Init = false;
-    Editor->UI.LightSpawner.Init = false;
-    
-    ak_string WorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
-    ak_string WorldAssetFilename = AK_StringConcat(WorldName, ".world", Scratch);
-    ak_string WorldFilePath = AK_StringConcat(WorldDirectoryPath, WorldAssetFilename, Scratch);
-    
-    ak_buffer WorldFileBuffer = AK_ReadEntireFile(WorldFilePath, Scratch);
-    if(!WorldFileBuffer.IsValid())
-    {
-        ak_string Message = AK_FormatString(Scratch, "Failed to load world. World '%.*s' does not exist", WorldName.Length, WorldName.Data);
-        AK_MessageBoxOk("Failed to load world", Message);
-        return false;
-    }
-    
-    ak_stream WorldFileStream = AK_BeginStream(WorldFileBuffer);
-    
-    world_file_header* Header = WorldFileStream.PeekConsume<world_file_header>();
-    
-    if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))
-    {
-        AK_MessageBoxOk("Failed to load world", "Failed to load world. World file is corrupted. Signatures do not match");
-        return false;
-    }
-    
-    if(Header->MajorVersion != WORLD_FILE_MAJOR_VERSION ||
-       Header->MinorVersion != WORLD_FILE_MINOR_VERSION)
-    {
-        ak_string Message = AK_FormatString(Scratch, "Failed to load world. Editor does not support version %d.%d, it only supports %d.%d", Header->MajorVersion, Header->MinorVersion, WORLD_FILE_MAJOR_VERSION, 
-                                            WORLD_FILE_MINOR_VERSION);
-        AK_MessageBoxOk("Failed to load world", Message);
-        return false;
-    }
-    
-#define DELETE_TEMP_DATA() \
-do \
-{ \
-AK_DeleteArena(StringArena); \
-AK_DeletePool(&DevEntitiesArray[0]); \
-AK_DeletePool(&DevEntitiesArray[1]); \
-AK_DeletePool(&DevPointLightsArray[0]); \
-AK_DeletePool(&DevPointLightsArray[1]); \
-AK_DeleteHashMap(&EntityTables[0]); \
-AK_DeleteHashMap(&EntityTables[1]); \
-AK_DeleteHashMap(&PointLightTables[0]); \
-AK_DeleteHashMap(&PointLightTables[1]); \
-AK_DeleteHashMap(&LinkHashMaps[0]); \
-AK_DeleteHashMap(&LinkHashMaps[1]); \
-} while(0)
-    
-    ak_arena* StringArena = AK_CreateArena();
-    
-    ak_pool<dev_entity> DevEntitiesArray[2];
-    DevEntitiesArray[0] = AK_CreatePool<dev_entity>(Header->EntityCount[0]);
-    DevEntitiesArray[1] = AK_CreatePool<dev_entity>(Header->EntityCount[1]);
-    
-    ak_pool<dev_point_light> DevPointLightsArray[2];
-    DevPointLightsArray[0] = AK_CreatePool<dev_point_light>(Header->PointLightCount[0]);
-    DevPointLightsArray[1] = AK_CreatePool<dev_point_light>(Header->PointLightCount[1]);
-    
-    ak_hash_map<ak_string, ak_u64> EntityTables[2] = {};
-    ak_hash_map<ak_string, ak_u64> PointLightTables[2] = {};
-    
-    ak_hash_map<ak_string, ak_string> LinkHashMaps[2] = {};
-    
-    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-    {
-        ak_pool<dev_entity>* DevEntities = &DevEntitiesArray[WorldIndex];
-        ak_hash_map<ak_string, ak_string>* LinkHashMap = &LinkHashMaps[WorldIndex];
-        ak_hash_map<ak_string, ak_u64>* EntityTable = &EntityTables[WorldIndex];
-        ak_hash_map<ak_string, ak_u64>* PointLightTable = &PointLightTables[WorldIndex];
-        
-        for(ak_u32 EntityIndex = 0; EntityIndex < Header->EntityCount[WorldIndex]; EntityIndex++)
-        {
-            ak_string Name = Internal__ReadAssetName(&WorldFileStream, Scratch);
-            ak_string LinkName = Internal__ReadAssetName(&WorldFileStream, Scratch);
-            
-            entity_type Type = WorldFileStream.CopyConsume<entity_type>();
-            ak_v3f Position = WorldFileStream.CopyConsume<ak_v3f>();
-            ak_quatf Orientation = WorldFileStream.CopyConsume<ak_quatf>();
-            ak_v3f Scale = WorldFileStream.CopyConsume<ak_v3f>();
-            
-            material Material;
-            if(!Internal__ReadMaterial(&WorldFileStream, Assets, Scratch, &Material))
-            {
-                DELETE_TEMP_DATA();
-                AK_MessageBoxOk("Failed to load world", "Failed to load world. Could not read entity material. Textures were not found in asset file");
-                return false;
-            }
-            
-            mesh_asset_id* MeshID = Assets->MeshNameMap.Find(Internal__ReadAssetName(&WorldFileStream, Scratch).Data);
-            if(!MeshID)
-            {
-                
-                DELETE_TEMP_DATA();
-                AK_MessageBoxOk("Failed to load world", "Failed to load world. Could not read mesh asset. Mesh was not found in asset file");
-                return false;
-            }
-            
-            ak_u64 ID =  Internal__CreateDevEntity(StringArena, DevEntities, Name.Data, Type, Position, Orientation, Scale, Material, *MeshID);
-            dev_entity* Entity = DevEntities->Get(ID);
-            EntityTable->Insert(Entity->Name, ID);
-            if(!AK_StringIsNullOrEmpty(LinkName))
-            {
-                LinkHashMap->Insert(LinkName, Entity->Name);
-            }
-            
-            if(Type == ENTITY_TYPE_BUTTON)
-                Entity->IsToggled = WorldFileStream.CopyConsume<ak_bool>();
-        }
-    }
-    
-    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-    {
-        ak_hash_map<ak_string, ak_string>* LinkHashMap = &LinkHashMaps[!WorldIndex];
-        ak_pool<dev_entity>* DevEntities = &DevEntitiesArray[WorldIndex];
-        AK_ForEach(DevEntity, DevEntities)
-        {
-            ak_string* LinkName = LinkHashMap->Find(DevEntity->Name);
-            if(LinkName) DevEntity->LinkName = AK_PushString(*LinkName, StringArena);
-        }
-    }
-    
-    AK_DeleteHashMap(&LinkHashMaps[0]);
-    AK_DeleteHashMap(&LinkHashMaps[1]);
-    
-    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
-    {
-        ak_pool<dev_point_light>* DevPointLights = &DevPointLightsArray[WorldIndex];
-        ak_hash_map<ak_string, ak_u64>* PointLightTable = &PointLightTables[WorldIndex];
-        for(ak_u32 PointLightIndex = 0; PointLightIndex < Header->PointLightCount[WorldIndex]; 
-            PointLightIndex++)
-        {
-            ak_string Name = Internal__ReadAssetName(&WorldFileStream, Scratch);
-            ak_color3f Color = WorldFileStream.CopyConsume<ak_color3f>();
-            ak_f32 Intensity = WorldFileStream.CopyConsume<ak_f32>();
-            ak_v3f Position = WorldFileStream.CopyConsume<ak_v3f>();
-            ak_f32 Radius = WorldFileStream.CopyConsume<ak_f32>();
-            
-            ak_u64 ID = Internal__CreateDevPointLight(StringArena, DevPointLights, Name.Data, Position, Radius, Color, Intensity);
-            dev_point_light* DevPointLight = DevPointLights->Get(ID);
-            PointLightTable->Insert(DevPointLight->Name, ID);
-        }
-    }
-    
-    ak_u32 ChecksumCount = AK_Count(WORLD_FILE_CHECKSUM)-1;
-    ak_char Checksum[AK_Count(WORLD_FILE_CHECKSUM)];
-    AK_MemoryCopy(Checksum, WorldFileStream.PeekConsume(ChecksumCount), ChecksumCount);
-    Checksum[ChecksumCount] = 0;
-    if(!AK_StringEquals(Checksum, ChecksumCount, WORLD_FILE_CHECKSUM, ChecksumCount))
-    {
-        DELETE_TEMP_DATA();
-        AK_MessageBoxOk("Failed to load world", "Failed to load world. File is corrupted. Checksums do not match");
-        return false;
-    }
-    
-    EditRecordings->Clear();
-    
-    WorldManagement->DeleteAll();
-    
-    WorldManagement->StringArena = StringArena;
-    
-    WorldManagement->DevEntities[0] = DevEntitiesArray[0];
-    WorldManagement->DevEntities[1] = DevEntitiesArray[1];
-    WorldManagement->DevPointLights[0] = DevPointLightsArray[0];
-    WorldManagement->DevPointLights[1] = DevPointLightsArray[1];
-    
-    WorldManagement->EntityTables[0] = EntityTables[0];
-    WorldManagement->EntityTables[1] = EntityTables[1];
-    WorldManagement->PointLightTables[0] = PointLightTables[0];
-    WorldManagement->PointLightTables[1] = PointLightTables[1];
-    
-    WorldManagement->CurrentWorldPath = AK_PushString(WorldDirectoryPath, WorldManagement->StringArena);
-    WorldManagement->CurrentWorldName = AK_PushString(WorldName, WorldManagement->StringArena);
-    
-    ak_string ErrorMessage = Internal__BuildWorld(Scratch, WorldManagement, DevPlatform, Assets);
-    if(!AK_StringIsNullOrEmpty(ErrorMessage))
-    {
-        ak_string Message = AK_FormatString(Scratch, "Failed to load world. Building of the world failed.\n Compiler errors: \n%.*s", ErrorMessage.Length, ErrorMessage.Data);
-        WorldManagement->DeleteAll();
-        Editor_DebugLog(ErrorMessage);
-        AK_MessageBoxOk("Failed to load world", Message);
-        return false;
-    }
-    
-#undef DELETE_TEMP_DATA
-    
-    return true;
-}
-
-void Internal__DeleteWorld(ak_arena* Scratch, ak_string WorldName)
-{
-    ak_string WorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
-    AK_DirectoryRemoveRecursively(WorldDirectoryPath);
-    Internal__CreateBuildAllWorldsFile(Scratch);
 }
 
 void world_management::Update(editor* Editor, platform* Platform, dev_platform* DevPlatform, assets* Assets)
@@ -641,7 +272,7 @@ void world_management::Update(editor* Editor, platform* Platform, dev_platform* 
                 
                 if(ImGui::Button("Create"))
                 {
-                    if(Internal__CreateNewWorld(Scratch, this, WorldName, DevPlatform, Assets, Platform))
+                    if(CreateWorld(WorldName, Editor, DevPlatform, Assets, Platform))
                     {
                         Editor->GizmoState.SelectedObject = {};
                         NewState = WORLD_MANAGEMENT_STATE_NONE;
@@ -715,7 +346,7 @@ void world_management::Update(editor* Editor, platform* Platform, dev_platform* 
                 if(ImGui::Button("Load"))
                 {
                     ak_string WorldName = Worlds[WorldSelectedIndex];
-                    if(Internal__LoadWorld(Editor, WorldName, Assets, DevPlatform))
+                    if(LoadWorld(WorldName, Editor, Assets, DevPlatform))
                     {
                         Editor->GizmoState.SelectedObject = {};
                         NewState = WORLD_MANAGEMENT_STATE_NONE;
@@ -742,7 +373,7 @@ void world_management::Update(editor* Editor, platform* Platform, dev_platform* 
         
         case WORLD_MANAGEMENT_STATE_SAVE:
         {
-            ak_string ErrorMessage = Internal__BuildWorld(Scratch, this, DevPlatform, Assets);
+            ak_string ErrorMessage = BuildWorld(Scratch, DevPlatform, Assets);
             if(!AK_StringIsNullOrEmpty(ErrorMessage))
                 Editor_DebugLog(ErrorMessage);
             NewState = WORLD_MANAGEMENT_STATE_NONE;
@@ -785,7 +416,7 @@ void world_management::Update(editor* Editor, platform* Platform, dev_platform* 
                 if(ImGui::Button("Delete"))
                 {
                     ak_string WorldName = Worlds[WorldSelectedIndex];
-                    Internal__DeleteWorld(Scratch, WorldName);
+                    DeleteWorld(Scratch, WorldName);
                     
                     NewState = WORLD_MANAGEMENT_STATE_NONE;
                     ImGui::CloseCurrentPopup();
@@ -907,6 +538,55 @@ dev_point_light* world_management::CopyDevPointLight(dev_point_light* CopyPointL
     return DevPointLight;
 }
 
+template <typename type>
+type* Internal__CopyObject(world_management* WorldManagement, ak_arena* Scratch, 
+                           ak_pool<type>* Objects, ak_hash_map<ak_string, ak_u64>* Tables,
+                           ak_u32 WorldIndex, type* Object)
+{
+    ak_u64 ID = Objects[WorldIndex].Allocate();
+    type* DuplicateObject = Objects[WorldIndex].Get(ID);
+    *DuplicateObject = *Object;
+    
+    ak_u32 Index = 1;
+    ak_string Name = AK_CreateEmptyString();
+    for(;;)
+    {
+        Name = AK_FormatString(Scratch, "%.*s_copy_%d", DuplicateObject->Name.Length, DuplicateObject->Name.Data, Index++);
+        if(!Tables[WorldIndex].Find(Name))
+            break;
+    }
+    
+    DuplicateObject->Name = AK_PushString(Name, WorldManagement->StringArena);
+    Tables[WorldIndex].Insert(DuplicateObject->Name, ID);
+    return DuplicateObject;
+}
+
+
+dev_entity* world_management::DuplicateEntity(ak_arena* Scratch, dev_entity* Entity, ak_u32 WorldIndex)
+{
+    dev_entity* Result = Internal__CopyObject(this, Scratch, DevEntities, EntityTables, 
+                                              WorldIndex, Entity);
+    
+    if(!AK_StringIsNullOrEmpty(Entity->LinkName))
+    {
+        ak_u64* LinkID = EntityTables[!WorldIndex].Find(Entity->LinkName);
+        AK_Assert(LinkID, "Cannot have an entity with a linked object that is deleted");
+        dev_entity* LinkEntity = DevEntities[!WorldIndex].Get(*LinkID);
+        dev_entity* LinkResult = Internal__CopyObject(this, Scratch, DevEntities, EntityTables, !WorldIndex, LinkEntity);
+        
+        LinkResult->LinkName = Result->Name;
+        Result->LinkName = LinkResult->Name;
+    }
+    
+    return Result;
+}
+
+dev_point_light* world_management::DuplicatePointLight(ak_arena* Scratch, dev_point_light* PointLight, ak_u32 WorldIndex)
+{
+    dev_point_light* Result = Internal__CopyObject(this, Scratch, DevPointLights, PointLightTables, WorldIndex, PointLight);
+    return Result;
+}
+
 void world_management::DeleteDevEntity(ak_u32 WorldIndex, ak_string Name, ak_bool ProcessLink)
 {
     ak_u64* ID = EntityTables[WorldIndex].Find(Name);
@@ -934,4 +614,375 @@ void world_management::DeleteDevPointLight(ak_u32 WorldIndex, ak_string Name)
         DevPointLights[WorldIndex].Free(*ID);
         PointLightTables[WorldIndex].Remove(Name);
     }
+}
+
+ak_string world_management::BuildWorld(ak_arena* Scratch, dev_platform* DevPlatform, assets* Assets)
+{
+    ak_string_builder HeaderFile = {};
+    
+    HeaderFile.WriteLine("#ifndef GENERATED_H");
+    HeaderFile.WriteLine("#define GENERATED_H");
+    
+    Internal__WriteStruct(&HeaderFile, &DevEntities[0], "entities_a");
+    Internal__WriteStruct(&HeaderFile, &DevEntities[1], "entities_b");
+    Internal__WriteStruct(&HeaderFile, &DevPointLights[0], "point_lights_a");
+    Internal__WriteStruct(&HeaderFile, &DevPointLights[1], "point_lights_b");
+    
+    HeaderFile.WriteLine("#endif");
+    
+    DeleteIndices();
+    
+    Internal__InsertIndices(&DevEntities[0], &EntityIndices[0]);
+    Internal__InsertIndices(&DevEntities[1], &EntityIndices[1]);
+    Internal__InsertIndices(&DevPointLights[0], &PointLightIndices[0]);
+    Internal__InsertIndices(&DevPointLights[1], &PointLightIndices[1]);
+    
+    ak_string HeaderFileString = HeaderFile.PushString(Scratch);
+    ak_string HeaderPath = AK_StringConcat(CurrentWorldPath, "generated.h", Scratch);
+    ak_string RenameHeaderPath = AK_StringConcat(CurrentWorldPath, "generated_rename.h", Scratch);
+    
+    ak_string BuildWorldLogFilePath = 
+        AK_StringConcat(CurrentWorldPath, BUILD_WORLD_LOG_FILE, Scratch);
+    
+    if(AK_FileExists(HeaderPath))
+        AK_FileRename(HeaderPath, RenameHeaderPath);
+    
+    AK_WriteEntireFile(HeaderPath, HeaderFileString.Data, HeaderFileString.Length);
+    
+    if(!DevPlatform->BuildWorld(CurrentWorldPath))
+    {
+        ak_string Message = AK_CreateString(AK_ReadEntireFile(BuildWorldLogFilePath, Scratch));
+        AK_FileRemove(BuildWorldLogFilePath);
+        
+        AK_FileRemove(HeaderPath);
+        if(AK_FileExists(RenameHeaderPath))
+            AK_FileRename(RenameHeaderPath, HeaderPath);
+        return Message;
+    }
+    else
+    {
+        Editor_DebugLog("Successfully built game!");
+        AK_FileRemove(BuildWorldLogFilePath);
+        if(AK_FileExists(RenameHeaderPath))
+            AK_FileRemove(RenameHeaderPath);
+    }
+    
+    //TODO(JJ): Task to actual build the world file (make it async if it takes awhile)
+    ak_string WorldFilePath = AK_FormatString(Scratch, "%s%s.world", CurrentWorldPath.Data, CurrentWorldName.Data);
+    
+    ak_binary_builder BinaryBuilder = {};
+    
+    world_file_header WorldFileHeader = Editor_GetWorldFileHeader(AK_SafeU16(DevEntities[0].Size), AK_SafeU16(DevEntities[1].Size), 
+                                                                  AK_SafeU16(DevPointLights[0].Size), AK_SafeU16(DevPointLights[1].Size));
+    
+    
+    BinaryBuilder.Write(WorldFileHeader);
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_pool<dev_entity>* LocalDevEntities = &DevEntities[WorldIndex];
+        AK_ForEach(DevEntity, LocalDevEntities)
+        {
+            Internal__WriteName(&BinaryBuilder, DevEntity->Name);
+            Internal__WriteName(&BinaryBuilder, DevEntity->LinkName);
+            
+            BinaryBuilder.Write(DevEntity->Type);
+            BinaryBuilder.Write(DevEntity->Transform.Translation);
+            BinaryBuilder.Write(DevEntity->Transform.Orientation);
+            BinaryBuilder.Write(DevEntity->Transform.Scale);
+            Internal__WriteMaterial(&BinaryBuilder, Assets, &DevEntity->Material);
+            
+            mesh_info* MeshInfo = GetMeshInfo(Assets, DevEntity->MeshID);
+            Internal__WriteName(&BinaryBuilder, AK_CreateString(MeshInfo->Name, MeshInfo->Header.NameLength));
+            
+            if(DevEntity->Type == ENTITY_TYPE_BUTTON)
+                BinaryBuilder.Write(DevEntity->IsToggled);
+        }
+    }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_pool<dev_point_light>* LocalDevPointLights = &DevPointLights[WorldIndex];
+        AK_ForEach(DevPointLight, LocalDevPointLights)
+        {
+            Internal__WriteName(&BinaryBuilder, DevPointLight->Name);
+            BinaryBuilder.Write(DevPointLight->Light.Color);
+            BinaryBuilder.Write(DevPointLight->Light.Intensity);
+            BinaryBuilder.Write(DevPointLight->Light.Position);
+            BinaryBuilder.Write(DevPointLight->Light.Radius);
+        }
+    }
+    
+    BinaryBuilder.WriteString(WORLD_FILE_CHECKSUM);
+    
+    ak_buffer BinaryBuffer = BinaryBuilder.PushBuffer(Scratch);
+    AK_WriteEntireFile(WorldFilePath, BinaryBuffer.Data, AK_SafeU32(BinaryBuffer.Size));
+    
+    BinaryBuilder.ReleaseMemory();
+    
+    return AK_CreateEmptyString();
+}
+
+ak_bool world_management::LoadWorld(ak_string WorldName, editor* Editor, assets* Assets, dev_platform* DevPlatform)
+{
+    ak_arena* Scratch = Editor->Scratch;
+    edit_recordings* EditRecordings = &Editor->EditRecordings;
+    
+    Editor->UI.EntitySpawner.Init = false;
+    Editor->UI.LightSpawner.Init = false;
+    
+    ak_string WorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
+    ak_string WorldAssetFilename = AK_StringConcat(WorldName, ".world", Scratch);
+    ak_string WorldFilePath = AK_StringConcat(WorldDirectoryPath, WorldAssetFilename, Scratch);
+    
+    ak_buffer WorldFileBuffer = AK_ReadEntireFile(WorldFilePath, Scratch);
+    if(!WorldFileBuffer.IsValid())
+    {
+        ak_string Message = AK_FormatString(Scratch, "Failed to load world. World '%.*s' does not exist", WorldName.Length, WorldName.Data);
+        AK_MessageBoxOk("Failed to load world", Message);
+        return false;
+    }
+    
+    ak_stream WorldFileStream = AK_BeginStream(WorldFileBuffer);
+    
+    world_file_header* Header = WorldFileStream.PeekConsume<world_file_header>();
+    
+    if(!AK_StringEquals(Header->Signature, WORLD_FILE_SIGNATURE))
+    {
+        AK_MessageBoxOk("Failed to load world", "Failed to load world. World file is corrupted. Signatures do not match");
+        return false;
+    }
+    
+    if(Header->MajorVersion != WORLD_FILE_MAJOR_VERSION ||
+       Header->MinorVersion != WORLD_FILE_MINOR_VERSION)
+    {
+        ak_string Message = AK_FormatString(Scratch, "Failed to load world. Editor does not support version %d.%d, it only supports %d.%d", Header->MajorVersion, Header->MinorVersion, WORLD_FILE_MAJOR_VERSION, 
+                                            WORLD_FILE_MINOR_VERSION);
+        AK_MessageBoxOk("Failed to load world", Message);
+        return false;
+    }
+    
+#define DELETE_TEMP_DATA() \
+do \
+{ \
+AK_DeleteArena(LocalStringArena); \
+AK_DeletePool(&DevEntitiesArray[0]); \
+AK_DeletePool(&DevEntitiesArray[1]); \
+AK_DeletePool(&DevPointLightsArray[0]); \
+AK_DeletePool(&DevPointLightsArray[1]); \
+AK_DeleteHashMap(&LocalEntityTables[0]); \
+AK_DeleteHashMap(&LocalEntityTables[1]); \
+AK_DeleteHashMap(&LocalPointLightTables[0]); \
+AK_DeleteHashMap(&LocalPointLightTables[1]); \
+AK_DeleteHashMap(&LinkHashMaps[0]); \
+AK_DeleteHashMap(&LinkHashMaps[1]); \
+} while(0)
+    
+    ak_arena* LocalStringArena = AK_CreateArena();
+    
+    ak_pool<dev_entity> DevEntitiesArray[2];
+    DevEntitiesArray[0] = AK_CreatePool<dev_entity>(Header->EntityCount[0]);
+    DevEntitiesArray[1] = AK_CreatePool<dev_entity>(Header->EntityCount[1]);
+    
+    ak_pool<dev_point_light> DevPointLightsArray[2];
+    DevPointLightsArray[0] = AK_CreatePool<dev_point_light>(Header->PointLightCount[0]);
+    DevPointLightsArray[1] = AK_CreatePool<dev_point_light>(Header->PointLightCount[1]);
+    
+    ak_hash_map<ak_string, ak_u64> LocalEntityTables[2] = {};
+    ak_hash_map<ak_string, ak_u64> LocalPointLightTables[2] = {};
+    
+    ak_hash_map<ak_string, ak_string> LinkHashMaps[2] = {};
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_pool<dev_entity>* LocalDevEntities = &DevEntitiesArray[WorldIndex];
+        ak_hash_map<ak_string, ak_string>* LinkHashMap = &LinkHashMaps[WorldIndex];
+        ak_hash_map<ak_string, ak_u64>* EntityTable = &LocalEntityTables[WorldIndex];
+        ak_hash_map<ak_string, ak_u64>* PointLightTable = &LocalPointLightTables[WorldIndex];
+        
+        for(ak_u32 EntityIndex = 0; EntityIndex < Header->EntityCount[WorldIndex]; EntityIndex++)
+        {
+            ak_string Name = Internal__ReadAssetName(&WorldFileStream, Scratch);
+            ak_string LinkName = Internal__ReadAssetName(&WorldFileStream, Scratch);
+            
+            entity_type Type = WorldFileStream.CopyConsume<entity_type>();
+            ak_v3f Position = WorldFileStream.CopyConsume<ak_v3f>();
+            ak_quatf Orientation = WorldFileStream.CopyConsume<ak_quatf>();
+            ak_v3f Scale = WorldFileStream.CopyConsume<ak_v3f>();
+            
+            material Material;
+            if(!Internal__ReadMaterial(&WorldFileStream, Assets, Scratch, &Material))
+            {
+                DELETE_TEMP_DATA();
+                AK_MessageBoxOk("Failed to load world", "Failed to load world. Could not read entity material. Textures were not found in asset file");
+                return false;
+            }
+            
+            mesh_asset_id* MeshID = Assets->MeshNameMap.Find(Internal__ReadAssetName(&WorldFileStream, Scratch).Data);
+            if(!MeshID)
+            {
+                
+                DELETE_TEMP_DATA();
+                AK_MessageBoxOk("Failed to load world", "Failed to load world. Could not read mesh asset. Mesh was not found in asset file");
+                return false;
+            }
+            
+            ak_u64 ID =  Internal__CreateDevEntity(LocalStringArena, LocalDevEntities, Name.Data, Type, Position, Orientation, Scale, Material, *MeshID);
+            dev_entity* Entity = LocalDevEntities->Get(ID);
+            EntityTable->Insert(Entity->Name, ID);
+            if(!AK_StringIsNullOrEmpty(LinkName))
+            {
+                LinkHashMap->Insert(LinkName, Entity->Name);
+            }
+            
+            if(Type == ENTITY_TYPE_BUTTON)
+                Entity->IsToggled = WorldFileStream.CopyConsume<ak_bool>();
+        }
+    }
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_hash_map<ak_string, ak_string>* LinkHashMap = &LinkHashMaps[!WorldIndex];
+        ak_pool<dev_entity>* LocalDevEntities = &DevEntitiesArray[WorldIndex];
+        AK_ForEach(DevEntity, LocalDevEntities)
+        {
+            ak_string* LinkName = LinkHashMap->Find(DevEntity->Name);
+            if(LinkName) DevEntity->LinkName = AK_PushString(*LinkName, LocalStringArena);
+        }
+    }
+    
+    AK_DeleteHashMap(&LinkHashMaps[0]);
+    AK_DeleteHashMap(&LinkHashMaps[1]);
+    
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {
+        ak_pool<dev_point_light>* LocalDevPointLights = &DevPointLightsArray[WorldIndex];
+        ak_hash_map<ak_string, ak_u64>* PointLightTable = &LocalPointLightTables[WorldIndex];
+        for(ak_u32 PointLightIndex = 0; PointLightIndex < Header->PointLightCount[WorldIndex]; 
+            PointLightIndex++)
+        {
+            ak_string Name = Internal__ReadAssetName(&WorldFileStream, Scratch);
+            ak_color3f Color = WorldFileStream.CopyConsume<ak_color3f>();
+            ak_f32 Intensity = WorldFileStream.CopyConsume<ak_f32>();
+            ak_v3f Position = WorldFileStream.CopyConsume<ak_v3f>();
+            ak_f32 Radius = WorldFileStream.CopyConsume<ak_f32>();
+            
+            ak_u64 ID = Internal__CreateDevPointLight(LocalStringArena, LocalDevPointLights, Name.Data, Position, Radius, Color, Intensity);
+            dev_point_light* DevPointLight = LocalDevPointLights->Get(ID);
+            PointLightTable->Insert(DevPointLight->Name, ID);
+        }
+    }
+    
+    ak_u32 ChecksumCount = AK_Count(WORLD_FILE_CHECKSUM)-1;
+    ak_char Checksum[AK_Count(WORLD_FILE_CHECKSUM)];
+    AK_MemoryCopy(Checksum, WorldFileStream.PeekConsume(ChecksumCount), ChecksumCount);
+    Checksum[ChecksumCount] = 0;
+    if(!AK_StringEquals(Checksum, ChecksumCount, WORLD_FILE_CHECKSUM, ChecksumCount))
+    {
+        DELETE_TEMP_DATA();
+        AK_MessageBoxOk("Failed to load world", "Failed to load world. File is corrupted. Checksums do not match");
+        return false;
+    }
+    
+    EditRecordings->Clear();
+    
+    DeleteAll();
+    
+    StringArena = LocalStringArena;
+    
+    DevEntities[0] = DevEntitiesArray[0];
+    DevEntities[1] = DevEntitiesArray[1];
+    DevPointLights[0] = DevPointLightsArray[0];
+    DevPointLights[1] = DevPointLightsArray[1];
+    
+    EntityTables[0] = LocalEntityTables[0];
+    EntityTables[1] = LocalEntityTables[1];
+    PointLightTables[0] = LocalPointLightTables[0];
+    PointLightTables[1] = LocalPointLightTables[1];
+    
+    CurrentWorldPath = AK_PushString(WorldDirectoryPath, StringArena);
+    CurrentWorldName = AK_PushString(WorldName, StringArena);
+    
+    ak_string ErrorMessage = BuildWorld(Scratch, DevPlatform, Assets);
+    if(!AK_StringIsNullOrEmpty(ErrorMessage))
+    {
+        ak_string Message = AK_FormatString(Scratch, "Failed to load world. Building of the world failed.\n Compiler errors: \n%.*s", ErrorMessage.Length, ErrorMessage.Data);
+        DeleteAll();
+        Editor_DebugLog(ErrorMessage);
+        AK_MessageBoxOk("Failed to load world", Message);
+        return false;
+    }
+    
+#undef DELETE_TEMP_DATA
+    
+    return true;
+}
+
+ak_bool world_management::CreateWorld(ak_string WorldName, editor* Editor, dev_platform* DevPlatform, assets* Assets, platform* Platform)
+{
+    AK_Assert(!AK_StringIsNullOrEmpty(WorldName), "WorldName cannot be null or empty");
+    
+    ak_arena* Scratch = Editor->Scratch;
+    
+    Editor->EditRecordings.Clear();
+    
+    DeleteAll();
+    
+    StringArena = AK_CreateArena();
+    
+    material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
+    dual_dev_entity DualPlayerEntity = CreateDevEntityInBothWorlds("Player", ENTITY_TYPE_PLAYER, AK_V3(0.0f, 0.0f, 0.0f), AK_XAxis(), 0.0f, AK_V3(1.0f, 1.0f, 1.0f), PlayerMaterial, MESH_ASSET_ID_PLAYER);
+    
+    material FloorMaterial = { CreateDiffuse(AK_White3()) };
+    dual_dev_entity DualStaticEntity = CreateDevEntityInBothWorlds("Default_Floor", ENTITY_TYPE_STATIC, AK_V3(0.0f, 0.0f, -1.0f), AK_XAxis(), 0.0f, AK_V3(10.0f, 10.0f, 1.0f), FloorMaterial, MESH_ASSET_ID_BOX);
+    
+    dual_dev_point_light DualPointLights = CreateDevPointLightInBothWorlds("Default_Light", AK_V3(0.0f, 0.0f, 10.0f), 20.0f, AK_White3(), 1.0f);
+    
+    ak_string NewWorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
+    
+    ak_string GameCodePath = AK_FormatString(Scratch, "%.*s..%cCode%c", 
+                                             Platform->ProgramPath.Length, Platform->ProgramPath.Data, AK_OS_PATH_DELIMITER, AK_OS_PATH_DELIMITER);
+    
+    ak_string WorldHeaderString = GetWorldHeaderFile(Scratch, WorldName);
+    ak_string WorldSourceString = GetWorldSourceFile(Scratch, WorldName);
+    ak_string WorldBuildString = GetWorldBuildFile(Scratch, GameCodePath, WorldName);
+    
+    ak_string WorldHeaderPath = AK_FormatString(Scratch, "%.*s%.*s.h", NewWorldDirectoryPath.Length, NewWorldDirectoryPath.Data, WorldName.Length, WorldName.Data);
+    ak_string WorldSourcePath = AK_FormatString(Scratch, "%.*s%.*s.cpp", NewWorldDirectoryPath.Length, NewWorldDirectoryPath.Data, WorldName.Length, WorldName.Data);
+    ak_string WorldBuildPath = AK_StringConcat(NewWorldDirectoryPath, "build.bat", Scratch);
+    
+    
+    if(!AK_DirectoryExists(NewWorldDirectoryPath))
+        AK_CreateDirectory(NewWorldDirectoryPath);
+    
+    AK_WriteEntireFile(WorldHeaderPath, WorldHeaderString.Data, WorldHeaderString.Length);
+    AK_WriteEntireFile(WorldSourcePath, WorldSourceString.Data, WorldSourceString.Length);
+    AK_WriteEntireFile(WorldBuildPath, WorldBuildString.Data, WorldBuildString.Length);
+    
+    CurrentWorldName = AK_PushString(WorldName, StringArena);
+    CurrentWorldPath = AK_PushString(NewWorldDirectoryPath, StringArena);
+    
+    ak_string ErrorMessage = BuildWorld(Scratch, DevPlatform, Assets);
+    if(!AK_StringIsNullOrEmpty(ErrorMessage))
+    {
+        ak_string Message = AK_FormatString(Scratch, "Failed to create world. Building of the world failed.\n Compiler errors: \n%.*s", ErrorMessage.Length, ErrorMessage.Data);
+        AK_MessageBoxOk("Failed to create world", Message);
+        Editor_DebugLog(ErrorMessage);
+        DeleteAll();
+        
+        AK_DirectoryRemoveRecursively(NewWorldDirectoryPath);
+    }
+    else
+    {
+        Internal__CreateBuildAllWorldsFile(Scratch);
+    }
+    
+    return AK_StringIsNullOrEmpty(ErrorMessage);
+}
+
+void world_management::DeleteWorld(ak_arena* Scratch, ak_string WorldName)
+{
+    ak_string WorldDirectoryPath = Internal__GetWorldDirectoryPath(Scratch, WorldName);
+    AK_DirectoryRemoveRecursively(WorldDirectoryPath);
+    Internal__CreateBuildAllWorldsFile(Scratch);
 }

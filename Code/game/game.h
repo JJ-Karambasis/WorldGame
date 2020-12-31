@@ -85,6 +85,13 @@ struct game
     ak_u32 CurrentWorldIndex;
 };
 
+struct toi_normal
+{
+    ak_bool Intersected;
+    ak_v3f  Normal;
+    ak_f32  tHit;
+};
+
 struct world
 {
     ak_pool<entity> EntityStorage[2];
@@ -118,10 +125,22 @@ extern "C"
 #define Debug_Log(format, ...) Internal__Editor->DebugLog(format, __VA_ARGS__)
 #define Debug_DrawPoint(position, size, color) Internal__Editor->DrawPoint(Internal__Editor, position, size, color)
 #define Debug_DrawSegment(position0, position1, size, color) Internal__Editor->DrawSegment(Internal__Editor, position0, position1, size, color)
+#define Debug_AddEntity(world_index, id, name) Internal__Editor->AddEntity(Internal__Editor, world_index, id, name)
 #else
 #define Debug_Log(format, ...)
 #define Debug_DrawPoint(position, size, color)
 #define Debug_DrawSegment(position0, position1, size, color)
+#define Debug_AddEntity(world_index, id, name)
 #endif
+
+
+inline toi_normal MakeTOINormal(ak_f32 tHit, ak_v3f Normal)
+{
+    toi_normal Result = {};
+    Result.Intersected = true;
+    Result.Normal = Normal;
+    Result.tHit = tHit;
+    return Result;
+}
 
 #endif

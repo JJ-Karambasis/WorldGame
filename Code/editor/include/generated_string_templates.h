@@ -57,12 +57,15 @@ extern "C" AK_EXPORT WORLD_SHUTDOWN(%.*s_Shutdown);
 
 )";
 
+//TODO(JJ): We do not want to use AK_Allocate, we want to use something that we can control a bit better just in case an exception occurs during startup and we want to free the memory
 global const char* Global_WorldSourceFileTemplate =
 R"(#include "%.*s.h"
 
 extern "C"
 AK_EXPORT WORLD_STARTUP(%.*s_Startup)
 {
+//TODO(JJ): We do not want to use AK_Allocate, we want to use something that we can control a
+//bit better just in case an exception occurs during startup and we want to free the memory
     %.*s* World = (%.*s*)AK_Allocate(sizeof(%.*s));
     World->Update = %.*s_Update;
     World->Shutdown = %.*s_Shutdown;

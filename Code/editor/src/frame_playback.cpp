@@ -116,8 +116,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
                             if(AK_MessageBoxYesNo("Message", Message))
                             {
                                 Editor_StopGame(Editor, Platform);
-                                if(Internal__LoadWorld(Editor, 
-                                                       Name, Assets, DevPlatform))
+                                if(WorldManagement->LoadWorld(Name, Editor, Assets, DevPlatform))
                                 {
                                     Editor_PlayGame(Editor, Graphics, Assets, Platform, DevPlatform);
                                     NewState = FRAME_PLAYBACK_STATE_PLAYING;
@@ -445,6 +444,12 @@ void frame_playback::RecordFrame(editor* Editor)
                         player* Player = World->Players + WorldIndex;
                         *ObjectSize += DataBuilder->Write(Player->GravityVelocity);
                     } break;
+                    
+                    case ENTITY_TYPE_MOVABLE:
+                    {
+                        movable* Movable = &World->Movables[WorldIndex][Index];
+                        *ObjectSize += DataBuilder->Write(Movable->GravityVelocity);
+                    } break;
                 }
                 
                 FrameHeader->DataSize += *ObjectSize + NameSize + sizeof(ak_u32);
@@ -500,6 +505,12 @@ void frame_playback::PlayFrame(editor* Editor)
                     {
                         player* Player = World->Players + WorldIndex;
                         Player->GravityVelocity = Stream->CopyConsume<ak_v3f>();
+                    } break;
+                    
+                    case ENTITY_TYPE_MOVABLE:
+                    {
+                        movable* Movable = World->Movables[WorldIndex].Get(Index);
+                        Movable->GravityVelocity = Stream->CopyConsume<ak_v3f>();
                     } break;
                 }
             }

@@ -73,6 +73,8 @@ struct ui
     ak_bool EditorDrawGrid;
     ak_bool EditorDrawOtherWorld;
     
+    ak_bool RenameModalState;
+    
     temp_object TempObject;
     material_context TempContext;
 };

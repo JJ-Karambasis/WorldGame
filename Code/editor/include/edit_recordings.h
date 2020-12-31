@@ -7,7 +7,8 @@ enum edit_entry_type
     EDIT_ENTRY_TYPE_CREATE,
     EDIT_ENTRY_TYPE_DELETE, 
     EDIT_ENTRY_TYPE_TRANSFORM,
-    EDIT_ENTRY_TYPE_PROPERTIES
+    EDIT_ENTRY_TYPE_PROPERTIES,
+    EDIT_ENTRY_TYPE_RENAME
 };
 
 struct dev_entity_pair
@@ -56,6 +57,14 @@ struct property_edit_entry
     };
 };
 
+struct rename_edit_entry
+{
+    object_type Type;
+    ak_u32 WorldIndex;
+    ak_string OldName;
+    ak_string NewName;
+};
+
 struct edit_entry
 {
     edit_entry_type Type;
@@ -64,6 +73,7 @@ struct edit_entry
         create_delete_edit_entry CreateDelete;
         transform_edit_entry Transform;
         property_edit_entry Properties;
+        rename_edit_entry Rename;
     };
 };
 
@@ -91,6 +101,8 @@ struct edit_recordings
     
     void PushPropertyEntry(ak_u32 WorldIndex, dev_entity* OldState, dev_entity* NewState);
     void PushPropertyEntry(ak_u32 WorldIndex, dev_point_light* OldState, dev_point_light* NewState);
+    
+    void PushRenameEntry(ak_u32 WorldIndex, object_type Type, ak_string OldName, ak_string NewName);
     
     void Undo(world_management* WorldManagement);
     void Redo(world_management* WorldManagement);

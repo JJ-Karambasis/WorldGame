@@ -111,22 +111,17 @@ PLATFORM_LOAD_GAME_CODE(Win32_LoadGameCode)
 {
     win32_hot_reloaded_library* GameLibrary = &Global_Platform.GameLibrary;
     
+    if(!AK_FileExists(Global_Platform.GameDLLPathName))
+        return NULL;
+    
     AK_FileCopy(Global_Platform.GameDLLPathName, Global_Platform.GameTempDLLPathName);
     GameLibrary->Library = LoadLibrary(Global_Platform.GameTempDLLPathName.Data);
     if(!GameLibrary->Library)
-    {
-        //TODO(JJ): Diagnostic and error logging
-        AK_InvalidCode();
         return NULL;
-    }
     
     game_startup* Startup = (game_startup*)GetProcAddress(GameLibrary->Library, "Game_Startup");
     if(!Startup)
-    {
-        //TODO(JJ): Diagnostic and error logging
-        AK_InvalidCode();
         return NULL;
-    }
     
     GameLibrary->LastWriteTime = Win32_GetFileCreationTime(Global_Platform.GameDLLPathName);
     
@@ -146,13 +141,14 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
     ak_string WorldDLLPath = AK_StringConcat(FilePrefix, ".dll", Global_Platform.Arena);
     ak_string WorldTempDLLPath = AK_StringConcat(FilePrefix, "_tmp.dll", Global_Platform.Arena);
     
+    if(!AK_FileExists(WorldDLLPath))
+        return NULL;
+    
     AK_FileCopy(WorldDLLPath, WorldTempDLLPath);
     
     WorldLibrary->Library = LoadLibrary(WorldTempDLLPath.Data);
     if(!WorldLibrary->Library)
     {
-        //TODO(JJ): Diagnostic and error logging
-        AK_InvalidCode();
         Global_Platform.Arena->EndTemp(&TempArena);
         return NULL;
     }
@@ -162,8 +158,6 @@ PLATFORM_LOAD_WORLD_CODE(Win32_LoadWorldCode)
     
     if(!Startup)
     {
-        //TODO(JJ): Diagnostic and error logging
-        AK_InvalidCode();
         Global_Platform.Arena->EndTemp(&TempArena);
         return NULL;
     }
@@ -669,7 +663,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLi
 #endif
     }
     __except(EXCEPTION_EXECUTE_HANDLER)
-    {        
+    {
+        //TODO(JJ): Stack trace exception handling
         //TODO(JJ): When errors occur (like failed assertions or any unhandled exceptions occur) lets output the last set of frames (about 30 seconds worth) 
         //to a file so we can playback later
         Result = -1;

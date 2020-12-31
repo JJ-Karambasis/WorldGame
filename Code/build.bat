@@ -1,6 +1,6 @@
 @echo off
 
-set WORLDS_PATH={YOUR_PATH_TO_WORLD_HERE}
+set WORLDS_PATH={YOUR_PATH_TO_WORLDS_HERE}
 set RECORDINGS_PATH={YOUR_PATH_TO_RECORDINGS_HERE}
 set GAME_NAME=World_Game
 
@@ -12,7 +12,7 @@ set GamePath=-I..\code\game
 set GraphicsPath=-I..\code\graphics
 
 set SharedCommon=-DDEVELOPER_BUILD=1 -Od -FC -Zi
-set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533 -wd4334 -wd4127
+set Warnings=-W4 -wd4100 -wd4201 -wd4805 -wd4189 -wd4291 -wd4996 -wd4706 -wd4533 -wd4334 -wd4800 -wd4127
 set Common=%SharedCommon% %Warnings% -nologo -EHsc- %AKCommonPath% %AssetPath% %GraphicsPath%
 set Compiler=cl
 

@@ -11,6 +11,22 @@ BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_DefaultFilterFunc)
     return true;
 }
 
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_FilterStaticEntitiesFunc)
+{
+    ak_pool<entity>* EntityStorage = &BroadPhase->World->EntityStorage[BroadPhase->WorldIndex];
+    ak_bool AreStatic = (EntityStorage->Get(Pair.EntityA)->Type == ENTITY_TYPE_STATIC ||
+                         EntityStorage->Get(Pair.EntityB)->Type == ENTITY_TYPE_STATIC);
+    return !AreStatic;
+}
+
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_FilterOnlyStaticEntitiesFunc)
+{
+    ak_pool<entity>* EntityStorage = &BroadPhase->World->EntityStorage[BroadPhase->WorldIndex];
+    ak_bool AreStatic = (EntityStorage->Get(Pair.EntityA)->Type == ENTITY_TYPE_STATIC ||
+                         EntityStorage->Get(Pair.EntityB)->Type == ENTITY_TYPE_STATIC);
+    return AreStatic;
+}
+
 broad_phase BroadPhase_Begin(world* World, ak_u32 WorldIndex)
 {
     broad_phase Result;

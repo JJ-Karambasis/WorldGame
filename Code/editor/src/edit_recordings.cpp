@@ -4,6 +4,22 @@ void Internal__PushToUndo(edit_recordings* Recordings, edit_entry Entry)
     Recordings->RedoStack.Clear();
 }
 
+template <typename type>
+type* Internal__ChangeObjectName(ak_u32 WorldIndex, ak_hash_map<ak_string, ak_u64>* Tables, ak_pool<type>* Objects, ak_string OldName, ak_string NewName)
+{
+    ak_u64* pID = Tables[WorldIndex].Find(NewName);
+    AK_Assert(pID, "Entity cannot be deleted when on undo stack");
+    ak_u64 ID = *pID;
+    
+    type* Object = Objects[WorldIndex].Get(ID);
+    
+    Tables[WorldIndex].Remove(NewName);
+    Object->Name = OldName;
+    Tables[WorldIndex].Insert(Object->Name, ID);
+    
+    return Object;
+}
+
 void edit_recordings::ClearUndo()
 {
     UndoStack.Clear();
@@ -142,6 +158,16 @@ void edit_recordings::PushPropertyEntry(ak_u32 WorldIndex, dev_point_light* OldS
     Internal__PushToUndo(this, Entry);
 }
 
+void edit_recordings::PushRenameEntry(ak_u32 WorldIndex, object_type Type, ak_string OldName, ak_string NewName)
+{
+    edit_entry Entry = {};
+    Entry.Type = EDIT_ENTRY_TYPE_RENAME;
+    Entry.Rename.Type = Type;
+    Entry.Rename.WorldIndex = WorldIndex;
+    Entry.Rename.OldName = OldName;
+    Entry.Rename.NewName = NewName;
+    Internal__PushToUndo(this, Entry);
+}
 
 void edit_recordings::Undo(world_management* WorldManagement)
 {
@@ -231,6 +257,8 @@ void edit_recordings::Undo(world_management* WorldManagement)
                             Object->GetPointLight(WorldManagement, TransformEntry->WorldIndex);
                         DevPointLight->Light.Position -= TransformEntry->Translation;
                     } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
                 }
                 
             } break;
@@ -257,6 +285,44 @@ void edit_recordings::Undo(world_management* WorldManagement)
                         dev_point_light* DevPointLight = WorldManagement->DevPointLights[WorldIndex].Get(*ID);
                         *DevPointLight = PropertyEntry->PointLights[0];
                     } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
+                }
+                
+            } break;
+            
+            case EDIT_ENTRY_TYPE_RENAME:
+            {
+                rename_edit_entry* RenameEntry = &Entry->Rename;
+                ak_u32 WorldIndex = RenameEntry->WorldIndex;
+                
+                switch(RenameEntry->Type)
+                {
+                    case OBJECT_TYPE_ENTITY:
+                    {
+                        dev_entity* Entity = Internal__ChangeObjectName(WorldIndex, WorldManagement->EntityTables, 
+                                                                        WorldManagement->DevEntities, 
+                                                                        RenameEntry->OldName, RenameEntry->NewName);
+                        if(!AK_StringIsNullOrEmpty(Entity->LinkName))
+                        {
+                            ak_u64* ID = WorldManagement->EntityTables[!WorldIndex].Find(Entity->LinkName);
+                            AK_Assert(ID, "Link entity cannot be deleted without the other link entity as well");
+                            
+                            dev_entity* LinkEntity = WorldManagement->DevEntities[!WorldIndex].Get(*ID);
+                            LinkEntity->LinkName = Entity->Name;
+                        }
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT:
+                    {
+                        Internal__ChangeObjectName(WorldIndex, 
+                                                   WorldManagement->PointLightTables, 
+                                                   WorldManagement->DevPointLights, 
+                                                   RenameEntry->OldName, 
+                                                   RenameEntry->NewName);
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
                 }
                 
             } break;
@@ -385,6 +451,41 @@ void edit_recordings::Redo(world_management* WorldManagement)
                 
             } break;
             
+            case EDIT_ENTRY_TYPE_RENAME:
+            {
+                rename_edit_entry* RenameEntry = &Entry->Rename;
+                ak_u32 WorldIndex = RenameEntry->WorldIndex;
+                
+                switch(RenameEntry->Type)
+                {
+                    case OBJECT_TYPE_ENTITY:
+                    {
+                        dev_entity* Entity = Internal__ChangeObjectName(WorldIndex, WorldManagement->EntityTables, 
+                                                                        WorldManagement->DevEntities, RenameEntry->NewName, 
+                                                                        RenameEntry->OldName);
+                        if(!AK_StringIsNullOrEmpty(Entity->LinkName))
+                        {
+                            ak_u64* ID = WorldManagement->EntityTables[!WorldIndex].Find(Entity->LinkName);
+                            AK_Assert(ID, "Link entity cannot be deleted without the other link entity as well");
+                            
+                            dev_entity* LinkEntity = WorldManagement->DevEntities[!WorldIndex].Get(*ID);
+                            LinkEntity->LinkName = Entity->Name;
+                        }
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT:
+                    {
+                        Internal__ChangeObjectName(WorldIndex, 
+                                                   WorldManagement->PointLightTables, 
+                                                   WorldManagement->DevPointLights,  
+                                                   RenameEntry->NewName, 
+                                                   RenameEntry->OldName);
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
+                }
+                
+            } break;
             
             AK_INVALID_DEFAULT_CASE;
         }

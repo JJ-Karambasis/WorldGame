@@ -1,3 +1,4 @@
+
 #ifndef ENTITY_H
 #define ENTITY_H
 
@@ -69,5 +70,15 @@ struct movable
     ak_u64 ParentID;
     ak_v3f GravityVelocity;
 };
+
+
+void DeleteEntity(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true);
+entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
+                     mesh_asset_id MeshID, material Material);
+entity* CreateStaticEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, mesh_asset_id MeshID, material Material);
+entity* CreateButtonEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, 
+                           material Material, ak_bool IsToggled);
+entity* CreateMovableEntity(game* Game, ak_u32 WorldIndex, ak_v3f Position, ak_v3f Dimensions, 
+                            material Material);
 
 #endif

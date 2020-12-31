@@ -146,22 +146,6 @@ ak_bool CanPushMovable(rigid_body* Pushable, ak_v3f Normal)
     return (XTest > 0.999f && XTest < 1.001f) || (YTest > 0.999f && YTest < 1.001f);
 }
 
-struct toi_normal
-{
-    ak_bool Intersected;
-    ak_v3f  Normal;
-    ak_f32  tHit;
-};
-
-inline toi_normal MakeTOINormal(ak_f32 tHit, ak_v3f Normal)
-{
-    toi_normal Result = {};
-    Result.Intersected = true;
-    Result.Normal = Normal;
-    Result.tHit = tHit;
-    return Result;
-}
-
 inline ak_f32 GetDeltaClamped(ak_f32 Delta)
 {
     return AK_Max(Delta-VERY_CLOSE_DISTANCE, 0.0f);

@@ -790,7 +790,8 @@ ak_v2f UI_ListerWindow(editor* Editor)
                             {
                                 if(WorldIndex == CurrentWorldIndex)
                                 {
-                                    GizmoState->SelectedObject = Editor_GizmoSelectedObject(DevEntity->Name, OBJECT_TYPE_ENTITY);
+                                    ak_u64 ID = *WorldManagement->EntityTables[WorldIndex].Find(DevEntity->Name);
+                                    GizmoState->SelectedObject = Editor_GizmoSelectedObject(ID, OBJECT_TYPE_ENTITY);
                                 }
                             }
                         }
@@ -814,8 +815,9 @@ ak_v2f UI_ListerWindow(editor* Editor)
                             {
                                 if(WorldIndex == CurrentWorldIndex)
                                 {
+                                    ak_u64 ID = *WorldManagement->PointLightTables[WorldIndex].Find(DevLight->Name);
                                     GizmoState->SelectedObject = 
-                                        Editor_GizmoSelectedObject(DevLight->Name, 
+                                        Editor_GizmoSelectedObject(ID, 
                                                                    OBJECT_TYPE_LIGHT);
                                 }
                             }
@@ -835,60 +837,70 @@ ak_v2f UI_ListerWindow(editor* Editor)
     return Result;
 }
 
+void Details_SetTempObject(editor* Editor, object* Object)
+{
+    Editor->UI.TempObject.Type = Object->Type;
+    switch(Object->Type)
+    {
+        case OBJECT_TYPE_ENTITY:
+        {
+            Editor->UI.TempObject.Entity = *Object->GetEntity(&Editor->WorldManagement, 
+                                                              Editor->CurrentWorldIndex);
+        } break;
+        
+        case OBJECT_TYPE_LIGHT:
+        {
+            Editor->UI.TempObject.PointLight = *Object->GetPointLight(&Editor->WorldManagement, 
+                                                                      Editor->CurrentWorldIndex);
+        } break;
+        
+        AK_INVALID_DEFAULT_CASE;
+    }
+}
+
+void Details_CheckObjectChange(editor* Editor, object* Object)
+{
+    AK_Assert(Object->Type == Editor->UI.TempObject.Type, "Deactivated object cannot be a different type than the temp object");
+    switch(Object->Type)
+    {
+        case OBJECT_TYPE_ENTITY:
+        {
+            dev_entity* Entity = Object->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+            
+            material NewMaterial = UI_MaterialFromContext(&Editor->UI.TempContext);
+            if(!Editor_AreEntitiesEqual(Entity, &Editor->UI.TempObject.Entity) ||
+               !AreMaterialsEqual(Entity->Material, NewMaterial))
+            {
+                Entity->Material = NewMaterial;
+                Editor->EditRecordings.PushPropertyEntry(Editor->CurrentWorldIndex, &Editor->UI.TempObject.Entity, 
+                                                         Entity);
+            }
+        } break;
+        
+        case OBJECT_TYPE_LIGHT:
+        {
+            dev_point_light* PointLight = Object->GetPointLight(&Editor->WorldManagement, 
+                                                                Editor->CurrentWorldIndex);
+            if(!Editor_ArePointLightsEqual(PointLight, &Editor->UI.TempObject.PointLight))
+            {
+                Editor->EditRecordings.PushPropertyEntry(Editor->CurrentWorldIndex, 
+                                                         &Editor->UI.TempObject.PointLight, 
+                                                         PointLight);
+            }
+        } break;
+    }
+}
+
 void Details_ActiveEvents(editor* Editor, object* Object)
 {
     if(ImGui::IsItemActivated())
     {
-        Editor->UI.TempObject.Type = Object->Type;
-        switch(Object->Type)
-        {
-            case OBJECT_TYPE_ENTITY:
-            {
-                Editor->UI.TempObject.Entity = *Object->GetEntity(&Editor->WorldManagement, 
-                                                                  Editor->CurrentWorldIndex);
-            } break;
-            
-            case OBJECT_TYPE_LIGHT:
-            {
-                Editor->UI.TempObject.PointLight = *Object->GetPointLight(&Editor->WorldManagement, 
-                                                                          Editor->CurrentWorldIndex);
-            } break;
-            
-            AK_INVALID_DEFAULT_CASE;
-        }
+        Details_SetTempObject(Editor, Object);
     }
     
     if(ImGui::IsItemDeactivated())
     {
-        AK_Assert(Object->Type == Editor->UI.TempObject.Type, "Deactivated object cannot be a different type than the temp object");
-        switch(Object->Type)
-        {
-            case OBJECT_TYPE_ENTITY:
-            {
-                dev_entity* Entity = Object->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
-                
-                material NewMaterial = UI_MaterialFromContext(&Editor->UI.TempContext);
-                if(!Editor_AreEntitiesEqual(Entity, &Editor->UI.TempObject.Entity) ||
-                   !AreMaterialsEqual(Entity->Material, NewMaterial))
-                {
-                    Entity->Material = NewMaterial;
-                    Editor->EditRecordings.PushPropertyEntry(Editor->CurrentWorldIndex, &Editor->UI.TempObject.Entity, 
-                                                             Entity);
-                }
-            } break;
-            
-            case OBJECT_TYPE_LIGHT:
-            {
-                dev_point_light* PointLight = Object->GetPointLight(&Editor->WorldManagement, 
-                                                                    Editor->CurrentWorldIndex);
-                if(!Editor_ArePointLightsEqual(PointLight, &Editor->UI.TempObject.PointLight))
-                {
-                    Editor->EditRecordings.PushPropertyEntry(Editor->CurrentWorldIndex, 
-                                                             &Editor->UI.TempObject.PointLight, 
-                                                             PointLight);
-                }
-            } break;
-        }
+        Details_CheckObjectChange(Editor, Object);
     }
 }
 
@@ -1098,11 +1110,87 @@ void Details_MaterialTool(editor* Editor, object* Object, assets* Assets, materi
     }    
 }
 
+template <typename type>
+void Details_ObjectName(editor* Editor, object_type Type, ak_hash_map<ak_string, ak_u64>* Tables, type* Object)
+{
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Name: %.*s", Object->Name.Length, Object->Name.Data);
+    ImGui::SameLine();
+    
+    ui* UI = &Editor->UI;
+    ak_u32 WorldIndex = Editor->CurrentWorldIndex;
+    edit_recordings* EditRecordings = &Editor->EditRecordings;
+    
+    ak_bool OldRenameModalState = UI->RenameModalState;
+    if(ImGui::Button("Rename"))
+        UI->RenameModalState = true; 
+    
+    if(UI->RenameModalState)
+    {
+        if(!ImGui::IsPopupOpen("Rename Modal"))
+            ImGui::OpenPopup("Rename Modal");
+        
+        if(ImGui::BeginPopupModal("Rename Modal"))
+        {
+            local ak_char Name[MAX_OBJECT_NAME_LENGTH];
+            if(OldRenameModalState != UI->RenameModalState)
+                AK_MemoryCopy(Name, Object->Name.Data, Object->Name.Length);
+            
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("New Name");
+            ImGui::InputText("", Name, MAX_OBJECT_NAME_LENGTH, 
+                             ImGuiInputTextFlags_CharsNoBlank);
+            
+            ak_string NewName = AK_CreateString(Name);
+            
+            ak_u64* ID = Tables[WorldIndex].Find(NewName);
+            
+            ak_bool Disabled = ID || AK_StringIsNullOrEmpty(NewName);
+            
+            if(Disabled) UI_PushDisabledItem();
+            
+            if(ImGui::Button("Rename"))
+            {
+                ak_string OldName = Object->Name;
+                
+                ak_u64* pEntityID = Tables[WorldIndex].Find(Object->Name);
+                AK_Assert(pEntityID, "Object must be allocated for it to be renamed");
+                ak_u64 EntityID = *pEntityID;
+                Tables[WorldIndex].Remove(Object->Name);
+                Object->Name = AK_PushString(NewName, Editor->WorldManagement.StringArena);
+                Tables[WorldIndex].Insert(Object->Name, EntityID);
+                ImGui::CloseCurrentPopup();
+                UI->RenameModalState = false;
+                
+                EditRecordings->PushRenameEntry(Editor->CurrentWorldIndex, Type, OldName, Object->Name);
+            }
+            
+            ImGui::SameLine();
+            
+            if(Disabled) UI_PopDisabledItem();
+            
+            if(ImGui::Button("Close"))
+            {
+                ImGui::CloseCurrentPopup();
+                UI->RenameModalState = false;
+            }
+            
+            if(ID)
+            {
+                UI_ErrorText("Entity with name '%.*s' already exists", NewName.Length, NewName.Data);
+            }
+            
+            ImGui::EndPopup();
+        }
+    }
+}
+
 ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
 {
     ak_v2f Result = {};
     
     object* SelectedObject = Editor_GetSelectedObject(Editor);
+    world_management* WorldManagement = &Editor->WorldManagement;
     
     if(SelectedObject)
     {
@@ -1112,23 +1200,56 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
             {
                 case OBJECT_TYPE_ENTITY:
                 {
-                    dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                    dev_entity* Entity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
                     
                     Editor->UI.TempContext = UI_ContextFromMaterial(&Entity->Material);
                     
-                    ImGui::Text("Name: %.*s", Entity->Name.Length, Entity->Name.Data);
+                    ak_bool DisableName = (Entity->Type == ENTITY_TYPE_PLAYER);
+                    if(DisableName) UI_PushDisabledItem();
+                    
+                    Details_ObjectName(Editor, SelectedObject->Type, WorldManagement->EntityTables, Entity);
+                    if(!AK_StringIsNullOrEmpty(Entity->LinkName))
+                    {
+                        ak_u32 WorldIndex = !Editor->CurrentWorldIndex;
+                        ak_u64* ID = WorldManagement->EntityTables[WorldIndex].Find(Entity->LinkName);
+                        AK_Assert(ID, "Linked entity cannot be deleted without the other linked entry as well");
+                        
+                        dev_entity* LinkObject = WorldManagement->DevEntities[WorldIndex].Get(*ID);
+                        LinkObject->LinkName = Entity->Name;
+                    }
+                    
+                    if(DisableName) UI_PopDisabledItem();
+                    
                     Details_TranslationTool(Editor, SelectedObject, &Entity->Transform.Translation);
                     
                     Details_ScaleTool(Editor, SelectedObject, &Entity->Transform.Scale);
                     
-                    if(Entity->Type == ENTITY_TYPE_BUTTON) UI_PushDisabledItem();
+                    ak_bool DisableRotation = (Entity->Type == ENTITY_TYPE_BUTTON ||
+                                               Entity->Type == ENTITY_TYPE_MOVABLE);
+                    
+                    if(DisableRotation) UI_PushDisabledItem();
                     ak_v3f Rotation = Entity->Euler;
                     Details_RotationTool(Editor, SelectedObject, &Rotation);
-                    if(Entity->Type == ENTITY_TYPE_BUTTON) UI_PopDisabledItem();
+                    if(DisableRotation) UI_PopDisabledItem();
                     
                     ImGui::Text("Type: %s", UI_GetEntityType(Entity->Type));
                     
                     Details_MaterialTool(Editor, SelectedObject, Assets, &Editor->UI.TempContext);
+                    Entity->Material = UI_MaterialFromContext(&Editor->UI.TempContext);
+                    
+                    ak_bool DisableMeshEdit = (Entity->Type == ENTITY_TYPE_BUTTON ||
+                                               Entity->Type == ENTITY_TYPE_MOVABLE ||
+                                               Entity->Type == ENTITY_TYPE_PLAYER);
+                    
+                    if(DisableMeshEdit) UI_PushDisabledItem();
+                    
+                    ak_fixed_array<const ak_char*> MeshNames = UI_GetAllMeshInfoNames(Assets);
+                    ImGui::PushID(AK_HashFunction("Mesh Edit"));
+                    Details_Combo(Editor, SelectedObject, "Mesh", (int*)&Entity->MeshID, MeshNames.Data, 
+                                  MeshNames.Size);
+                    ImGui::PopID();
+                    
+                    if(DisableMeshEdit) UI_PopDisabledItem();
                     
                     ak_v3f PointDiff = Rotation-Entity->Euler;
                     
@@ -1152,9 +1273,10 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                 
                 case OBJECT_TYPE_LIGHT:
                 {
-                    dev_point_light* PointLight = SelectedObject->GetPointLight(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                    dev_point_light* PointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
                     
-                    ImGui::Text("Name: %.*s", PointLight->Name.Length, PointLight->Name.Data);
+                    Details_ObjectName(Editor, SelectedObject->Type, WorldManagement->PointLightTables, PointLight);
+                    
                     Details_TranslationTool(Editor, SelectedObject, &PointLight->Light.Position);
                     
                     ImGui::PushID(AK_HashFunction("Edit Point Light Radius"));
@@ -1181,7 +1303,7 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
 void UI_Logs(ak_f32 LogHeight)
 {
     ImGui::SetNextWindowPos(ImVec2(0, LogHeight));
-    if(ImGui::Begin("Logs", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if(ImGui::Begin("Logs"))
     {
         if(ImGui::Button("Clear"))
         {
@@ -1192,12 +1314,20 @@ void UI_Logs(ak_f32 LogHeight)
         ImGui::SameLine();
         
         if(ImGui::Button("Copy")) ImGui::LogToClipboard();
+        ImGui::Separator();
+        
+        ImGui::BeginChild("Scrolling", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysAutoResize);
         
         for(ak_u32 LogIndex = 0; LogIndex < Internal__Logs.Size; LogIndex++)
         {
             ak_string Log = Internal__Logs[LogIndex];
             ImGui::TextUnformatted(Log.Data, Log.Data+Log.Length);
         }
+        
+        if(ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+            ImGui::SetScrollHereY(1.0f);
+        
+        ImGui::EndChild();
     }
     ImGui::End();
 }

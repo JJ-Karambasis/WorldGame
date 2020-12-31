@@ -50,6 +50,9 @@ typedef EDITOR_DRAW_POINT(editor_draw_point);
 #define EDITOR_DRAW_SEGMENT(name) void name(editor* Editor, ak_v3f P0, ak_v3f P1, ak_f32 Size, ak_color3f Color)
 typedef EDITOR_DRAW_SEGMENT(editor_draw_segment);
 
+#define EDITOR_ADD_ENTITY(name) void name(editor* Editor, ak_u32 WorldIndex, ak_u64 ID, const ak_char* Name)
+typedef EDITOR_ADD_ENTITY(editor_add_entity);
+
 struct world_file_header
 {
     ak_char Signature[AK_Count(WORLD_FILE_SIGNATURE)];
@@ -79,7 +82,7 @@ enum object_type
 struct object
 {
     object_type Type;
-    ak_string Name;
+    ak_u64      ID;
     
     dev_entity* GetEntity(world_management* WorldManagement, ak_u32 WorldIndex);
     dev_point_light* GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex);
@@ -242,29 +245,8 @@ struct editor
     editor_debug_log* DebugLog;
     editor_draw_point* DrawPoint;
     editor_draw_segment* DrawSegment;
+    editor_add_entity* AddEntity;
 };
-
-#define EDITOR_CREATE_NEW_WORLD_MODAL(name) void name(editor* Editor, dev_platform* DevPlatform, \
-assets* Assets, \
-ak_bool HasCloseButton,\
-ak_bool HasLoadWorldButton)
-typedef EDITOR_CREATE_NEW_WORLD_MODAL(editor_create_new_world_modal);
-EDITOR_CREATE_NEW_WORLD_MODAL(CreateNewWorldModal_Stub) {}
-EDITOR_CREATE_NEW_WORLD_MODAL(CreateNewWorldModal);
-
-#define EDITOR_LOAD_WORLD_MODAL(name) void name(editor* Editor, dev_platform* DevPlatform, \
-assets* Assets, \
-ak_bool HasCloseButton)
-
-typedef EDITOR_LOAD_WORLD_MODAL(editor_load_world_modal);
-EDITOR_LOAD_WORLD_MODAL(LoadWorldModal_Stub) {}
-EDITOR_LOAD_WORLD_MODAL(LoadWorldModal);
-
-#define EDITOR_DELETE_WORLD_MODAL(name) void name(editor* Editor, dev_platform* DevPlatform)
-typedef EDITOR_DELETE_WORLD_MODAL(editor_delete_world_modal);
-EDITOR_DELETE_WORLD_MODAL(DeleteWorldModal_Stub) {}
-EDITOR_DELETE_WORLD_MODAL(DeleteWorldModal);
-
 
 void Editor_StopGame(editor* Editor, platform* Platform);
 ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform, dev_platform* DevPlatform);
