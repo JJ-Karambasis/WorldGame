@@ -54,14 +54,11 @@ ak_u32 ConvexHullSupport(convex_hull* ConvexHull, ak_v3f Direction)
     return BestVertexIndex;
 }
 
-ak_v3f ConvexHullSupportPoint(convex_hull* ConvexHull, ak_sqtf Transform, ak_v3f D)
-{            
-    ak_quatf InverseOrientation = AK_Conjugate(Transform.Orientation);
-    D = AK_Rotate(D*Transform.Scale, InverseOrientation);        
-    
-    ak_u32 VertexID = ConvexHullSupport(ConvexHull, D);                
-    ak_v3f Result = AK_Transform(ConvexHull->Vertices[VertexID].V, Transform);
-    
+ak_v3f ConvexHullSupportPoint(convex_hull* ConvexHull, ak_m4f T, ak_m3f BTransposed, ak_v3f D)
+{   
+    D = D*BTransposed;
+    ak_u32 VertexID = ConvexHullSupport(ConvexHull, D);
+    ak_v3f Result = AK_TransformPoint(ConvexHull->Vertices[VertexID].V, T);
     return Result;
 }
 
@@ -73,11 +70,12 @@ ak_u32 LineSegmentSupport(ak_v3f* LineSegment, ak_v3f Direction)
 struct convex_hull_support
 {
     convex_hull* Hull;
-    ak_sqtf Transform;
+    ak_m4f T;
+    ak_m3f BTransposed;
     
     ak_v3f Support(ak_v3f D)
     {
-        ak_v3f Result = ConvexHullSupportPoint(Hull, Transform, D);        
+        ak_v3f Result = ConvexHullSupportPoint(Hull, T, BTransposed, D);        
         return Result;        
     }
 };
@@ -85,12 +83,13 @@ struct convex_hull_support
 struct moving_convex_hull_support
 {
     convex_hull* Hull;
-    ak_sqtf Transform;
+    ak_m4f T;
+    ak_m3f BTransposed;
     ak_v3f Delta;
     
     ak_v3f Support(ak_v3f D)
     {        
-        ak_v3f Result = ConvexHullSupportPoint(Hull, Transform, D);        
+        ak_v3f Result = ConvexHullSupportPoint(Hull, T, BTransposed, D);        
         if(AK_Dot(D, Delta) > 0) Result += Delta;
         return Result;
     }
@@ -99,7 +98,8 @@ struct moving_convex_hull_support
 struct margin_convex_hull_support
 {
     convex_hull* Hull;
-    ak_sqtf Transform;
+    ak_m4f T;
+    ak_m3f BTransposed;
     ak_f32 Margin;
     
     ak_v3f Support(ak_v3f D)
@@ -107,7 +107,7 @@ struct margin_convex_hull_support
         if(AK_SqrMagnitude(D) < AK_Square(AK_EPSILON32))
             D = AK_V3f(-1, -1, -1);
         D = AK_Normalize(D);
-        ak_v3f Result = ConvexHullSupportPoint(Hull, Transform, D);
+        ak_v3f Result = ConvexHullSupportPoint(Hull, T, BTransposed, D);
         Result += (Margin*D);
         return Result;
     }

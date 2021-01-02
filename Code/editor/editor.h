@@ -198,6 +198,22 @@ struct game_context
     ak_hash_map<ak_string, ak_u64> GameEntityNameHash[2];
 };
 
+enum timed_block_entry
+{
+    TIMED_BLOCK_ENTRY_Game_Update, 
+    TIMED_BLOCK_ENTRY_Game_GravityMovementUpdate, 
+    TIMED_BLOCK_ENTRY_Game_PlayerMovementUpdate,
+    TIMED_BLOCK_ENTRY_COUNT
+};
+
+struct timed_entry
+{
+    const ak_char* Name;
+    ak_u64 Cycles;
+    ak_f64 ElapsedTime;
+    ak_u64 Count;
+};
+
 struct editor
 {
     ak_arena* Scratch;
@@ -240,12 +256,14 @@ struct editor
     
     ak_u32 WorldSelectedIndex;
     
-    ak_array<render_primitive> RenderPrimitives;
-    
-    editor_debug_log* DebugLog;
     editor_draw_point* DrawPoint;
     editor_draw_segment* DrawSegment;
     editor_add_entity* AddEntity;
+    editor_debug_log* DebugLog;
+    
+    timed_entry TimedBlockEntries[TIMED_BLOCK_ENTRY_COUNT];
+    
+    ak_array<render_primitive> RenderPrimitives;
 };
 
 void Editor_StopGame(editor* Editor, platform* Platform);

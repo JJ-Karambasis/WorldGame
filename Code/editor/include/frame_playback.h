@@ -71,6 +71,9 @@ struct frame_playback
     
     void Update(editor* Editor, graphics* Graphics, assets* Assets, platform* Platform, dev_platform* DevPlatform);
     
+    void StopRecording(editor* Editor);
+    void StopPlaying(editor* Editor);
+    
     void PlayFrame(editor* Editor);
     void RecordFrame(editor* Editor);
 };

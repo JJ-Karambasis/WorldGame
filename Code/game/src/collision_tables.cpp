@@ -25,7 +25,7 @@ TOI_FUNCTION(CollisionTable_SphereHullTOI)
     ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
     ak_v3f  MoveDeltaA = ObjectA->MoveDelta;
     ak_v3f  MoveDeltaB = ObjectB->MoveDelta;
-    return SphereHullTOI(t, &SphereA, MoveDeltaA, &VolumeB->ConvexHull, HullTransformB, MoveDeltaB);    
+    return SphereHullTOI(t, &SphereA, MoveDeltaA, &VolumeB->ConvexHull, AK_TransformM4(HullTransformB), MoveDeltaB);    
 }
 
 TOI_FUNCTION(CollisionTable_CapsuleSphereTOI)
@@ -52,7 +52,7 @@ TOI_FUNCTION(CollisionTable_CapsuleHullTOI)
     ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
     ak_v3f MoveDeltaA = ObjectA->MoveDelta;
     ak_v3f MoveDeltaB = ObjectB->MoveDelta;
-    return CapsuleHullTOI(t, &CapsuleA, MoveDeltaA, &VolumeB->ConvexHull, HullTransformB, MoveDeltaB);
+    return CapsuleHullTOI(t, &CapsuleA, MoveDeltaA, &VolumeB->ConvexHull, AK_TransformM4(HullTransformB), MoveDeltaB);
 }
 
 TOI_FUNCTION(CollisionTable_HullSphereTOI)
@@ -61,7 +61,7 @@ TOI_FUNCTION(CollisionTable_HullSphereTOI)
     sphere SphereB = TransformSphere(&VolumeB->Sphere, ObjectB->Transform);
     ak_v3f MoveDeltaA = ObjectA->MoveDelta;
     ak_v3f MoveDeltaB = ObjectB->MoveDelta;
-    return SphereHullTOI(t, &SphereB, MoveDeltaB, &VolumeA->ConvexHull, HullTransformA, MoveDeltaA);
+    return SphereHullTOI(t, &SphereB, MoveDeltaB, &VolumeA->ConvexHull, AK_TransformM4(HullTransformA), MoveDeltaA);
 }
 
 TOI_FUNCTION(CollisionTable_HullCapsuleTOI)
@@ -70,7 +70,7 @@ TOI_FUNCTION(CollisionTable_HullCapsuleTOI)
     capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, ObjectB->Transform);
     ak_v3f MoveDeltaA = ObjectA->MoveDelta;
     ak_v3f MoveDeltaB = ObjectB->MoveDelta;
-    return CapsuleHullTOI(t, &CapsuleB, MoveDeltaB, &VolumeA->ConvexHull, HullTransformA, MoveDeltaA);
+    return CapsuleHullTOI(t, &CapsuleB, MoveDeltaB, &VolumeA->ConvexHull, AK_TransformM4(HullTransformA), MoveDeltaA);
 }
 
 TOI_FUNCTION(CollisionTable_HullHullTOI)
@@ -79,7 +79,7 @@ TOI_FUNCTION(CollisionTable_HullHullTOI)
     ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
     ak_v3f MoveDeltaA = ObjectA->MoveDelta;
     ak_v3f MoveDeltaB = ObjectB->MoveDelta;
-    return HullHullTOI(t, &VolumeA->ConvexHull, HullTransformA, MoveDeltaA, &VolumeB->ConvexHull, HullTransformB, MoveDeltaB);
+    return HullHullTOI(t, &VolumeA->ConvexHull, AK_TransformM4(HullTransformA), MoveDeltaA, &VolumeB->ConvexHull, AK_TransformM4(HullTransformB), MoveDeltaB);
 }
 
 global toi_function* TOIFunctions[3][3] = 
@@ -116,7 +116,7 @@ CCD_CONTACT_FUNCTION(CollisionTable_SphereHullContactCCD)
     ak_sqtf ConvexHullTransform = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
     SphereA.CenterP += ObjectA->MoveDelta*tHit;
     ConvexHullTransform.Translation += ObjectB->MoveDelta*tHit;    
-    return GetSphereHullDeepestContact(&SphereA, &VolumeB->ConvexHull, ConvexHullTransform);
+    return GetSphereHullDeepestContact(&SphereA, &VolumeB->ConvexHull, AK_TransformM4(ConvexHullTransform));
 }
 
 CCD_CONTACT_FUNCTION(CollisionTable_CapsuleSphereContactCCD)
@@ -145,7 +145,7 @@ CCD_CONTACT_FUNCTION(CollisionTable_CapsuleHullContactCCD)
     ak_sqtf ConvexHullTransform = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
     TranslateCapsule(&CapsuleA, ObjectA->MoveDelta*tHit);
     ConvexHullTransform.Translation += ObjectB->MoveDelta*tHit;    
-    return GetCapsuleHullDeepestContact(&CapsuleA, &VolumeB->ConvexHull, ConvexHullTransform);
+    return GetCapsuleHullDeepestContact(&CapsuleA, &VolumeB->ConvexHull, AK_TransformM4(ConvexHullTransform));
 }
 
 CCD_CONTACT_FUNCTION(CollisionTable_HullSphereContactCCD)
@@ -154,7 +154,7 @@ CCD_CONTACT_FUNCTION(CollisionTable_HullSphereContactCCD)
     sphere SphereB = TransformSphere(&VolumeB->Sphere, ObjectB->Transform);
     ConvexHullTransform.Translation += ObjectA->MoveDelta*tHit;
     SphereB.CenterP += ObjectB->MoveDelta*tHit;
-    contact Contact = GetSphereHullDeepestContact(&SphereB, &VolumeA->ConvexHull, ConvexHullTransform);
+    contact Contact = GetSphereHullDeepestContact(&SphereB, &VolumeA->ConvexHull, AK_TransformM4(ConvexHullTransform));
     Contact.Normal = -Contact.Normal;
     return Contact;
 }
@@ -165,7 +165,7 @@ CCD_CONTACT_FUNCTION(CollisionTable_HullCapsuleContactCCD)
     capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, ObjectB->Transform);
     ConvexHullTransform.Translation += ObjectA->MoveDelta*tHit;        
     TranslateCapsule(&CapsuleB, ObjectB->MoveDelta*tHit);    
-    contact Contact = GetCapsuleHullDeepestContact(&CapsuleB, &VolumeA->ConvexHull, ConvexHullTransform);
+    contact Contact = GetCapsuleHullDeepestContact(&CapsuleB, &VolumeA->ConvexHull, AK_TransformM4(ConvexHullTransform));
     Contact.Normal = -Contact.Normal;
     return Contact;
 }
@@ -177,7 +177,7 @@ CCD_CONTACT_FUNCTION(CollisionTable_HullHullContactCCD)
     ak_sqtf ConvexHullTransformB = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
     ConvexHullTransformA.Translation += ObjectA->MoveDelta*tHit;
     ConvexHullTransformB.Translation += ObjectB->MoveDelta*tHit;
-    contact Contact = GetHullHullDeepestContact(&VolumeA->ConvexHull, ConvexHullTransformA, &VolumeB->ConvexHull, ConvexHullTransformB);        
+    contact Contact = GetHullHullDeepestContact(&VolumeA->ConvexHull, AK_TransformM4(ConvexHullTransformA), &VolumeB->ConvexHull, AK_TransformM4(ConvexHullTransformB));        
     return Contact;
 }
 
@@ -209,7 +209,7 @@ INTERSECTION_FUNCTION(CollisionTable_SphereHullIntersection)
 {
     sphere  SphereA = TransformSphere(&VolumeA->Sphere, ObjectA->Transform);
     ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
-    return SphereHullOverlap(&SphereA, &VolumeB->ConvexHull, HullTransformB);
+    return SphereHullOverlap(&SphereA, &VolumeB->ConvexHull, AK_TransformM4(HullTransformB));
 }
 
 INTERSECTION_FUNCTION(CollisionTable_CapsuleSphereIntersection)
@@ -230,28 +230,28 @@ INTERSECTION_FUNCTION(CollisionTable_CapsuleHullIntersection)
 {
     capsule CapsuleA = TransformCapsule(&VolumeA->Capsule, ObjectA->Transform);
     ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;
-    return CapsuleHullOverlap(&CapsuleA, &VolumeB->ConvexHull, HullTransformB);
+    return CapsuleHullOverlap(&CapsuleA, &VolumeB->ConvexHull, AK_TransformM4(HullTransformB));
 }
 
 INTERSECTION_FUNCTION(CollisionTable_HullSphereIntersection)
 {
     ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*ObjectA->Transform;
     sphere SphereB = TransformSphere(&VolumeB->Sphere, ObjectB->Transform);
-    return HullSphereOverlap(&VolumeA->ConvexHull, HullTransformA, &SphereB);
+    return HullSphereOverlap(&VolumeA->ConvexHull, AK_TransformM4(HullTransformA), &SphereB);
 }
 
 INTERSECTION_FUNCTION(CollisionTable_HullCapsuleIntersection)
 {
     ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*ObjectA->Transform;
     capsule CapsuleB = TransformCapsule(&VolumeB->Capsule, ObjectB->Transform);
-    return HullCapsuleOverlap(&VolumeA->ConvexHull, HullTransformA, &CapsuleB);
+    return HullCapsuleOverlap(&VolumeA->ConvexHull, AK_TransformM4(HullTransformA), &CapsuleB);
 }
 
 INTERSECTION_FUNCTION(CollisionTable_HullHullIntersection)
 {
     ak_sqtf HullTransformA = VolumeA->ConvexHull.Header.Transform*ObjectA->Transform;
     ak_sqtf HullTransformB = VolumeB->ConvexHull.Header.Transform*ObjectB->Transform;    
-    return HullHullOverlap(&VolumeA->ConvexHull, HullTransformA, &VolumeB->ConvexHull, HullTransformB);
+    return HullHullOverlap(&VolumeA->ConvexHull, AK_TransformM4(HullTransformA), &VolumeB->ConvexHull, AK_TransformM4(HullTransformB));
 }
 
 global intersection_function* IntersectionFunctions[3][3] = 

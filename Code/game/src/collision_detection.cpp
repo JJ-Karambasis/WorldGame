@@ -99,10 +99,11 @@ Internal__GetBisectionMid(ak_v3f DeltaA, ak_v3f DeltaB, ak_f32 tStart, ak_f32 tE
     return (tStart+tEnd)*0.5f;    
 }
 
-ak_bool HullHullTOI(ak_f32* t, convex_hull* HullA, ak_sqtf TransformA, ak_v3f DeltaA, convex_hull* HullB, ak_sqtf TransformB, ak_v3f DeltaB)
+ak_bool HullHullTOI(ak_f32* t, convex_hull* HullA, ak_m4f TransformA, ak_v3f DeltaA, convex_hull* HullB, ak_m4f TransformB, ak_v3f DeltaB)
 {
-    moving_convex_hull_support A = {HullA, TransformA, DeltaA};
-    moving_convex_hull_support B = {HullB, TransformB, DeltaB};
+    moving_convex_hull_support A = {HullA, TransformA, AK_Transpose(AK_M3(TransformA)), DeltaA};
+    
+    moving_convex_hull_support B = {HullB, TransformB, AK_Transpose(AK_M3(TransformB)), DeltaB};
     
     if(GJK_Intersected(&A, &B))    
     {
@@ -117,34 +118,48 @@ ak_bool HullHullTOI(ak_f32* t, convex_hull* HullA, ak_sqtf TransformA, ak_v3f De
                 return true;
             }
             
-            moving_convex_hull_support StartA = {HullA, AK_SQT(TransformA.Translation+(DeltaA*tStart), TransformA.Orientation, TransformA.Scale), DeltaA*tMid};
-            moving_convex_hull_support StartB = {HullB, AK_SQT(TransformB.Translation+(DeltaB*tStart), TransformB.Orientation, TransformB.Scale), DeltaB*tMid};
-            if(GJK_Intersected(&StartA, &StartB))
+            ak_f32 tDiff = tMid-tStart;
+            
+            A.T.Translation.xyz = TransformA.Translation.xyz + (DeltaA*tStart);
+            A.Delta = DeltaA*tDiff;
+            B.T.Translation.xyz = TransformB.Translation.xyz + (DeltaB*tStart);
+            B.Delta = DeltaB*tDiff;
+            
+            gjk_distance Distance0 = GJK_Distance(&A, &B);
+            if(Distance0.SquareDistance < 1e-5f)
             {
                 tEnd = tMid;
                 continue;
             }
             
-            moving_convex_hull_support EndA = {HullA, AK_SQT(TransformA.Translation+(DeltaA*tMid), TransformA.Orientation, TransformA.Scale), DeltaA*tEnd};
-            moving_convex_hull_support EndB = {HullB, AK_SQT(TransformB.Translation+(DeltaB*tMid), TransformB.Orientation, TransformB.Scale), DeltaB*tEnd};
-            if(GJK_Intersected(&EndA, &EndB))
+            tDiff = tEnd-tMid;
+            
+            A.T.Translation.xyz = TransformA.Translation.xyz + (DeltaA*tMid);
+            A.Delta = DeltaA*tDiff;
+            B.T.Translation.xyz = TransformB.Translation.xyz + (DeltaB*tMid);
+            B.Delta = DeltaB*tDiff;
+            
+            gjk_distance Distance1 = GJK_Distance(&A, &B);
+            if(Distance1.SquareDistance < 1e-5f)
             {
-                tStart = tMid;
+                tEnd = tMid;
                 continue;
             }
             
-            *t = tStart;
-            return true;
+            if(Distance0.SquareDistance < Distance1.SquareDistance)
+                tEnd = tMid;
+            else
+                tStart = tMid;
         }        
     }
     
     return false;
 }
 
-ak_bool CapsuleHullTOI(ak_f32* t, capsule* Capsule, ak_v3f DeltaA, convex_hull* Hull, ak_sqtf Transform, ak_v3f DeltaB)
+ak_bool CapsuleHullTOI(ak_f32* t, capsule* Capsule, ak_v3f DeltaA, convex_hull* Hull, ak_m4f Transform, ak_v3f DeltaB)
 {
     moving_line_segment_support A = {Capsule->P0, Capsule->P1, DeltaA};
-    moving_convex_hull_support  B = {Hull, Transform, DeltaB};
+    moving_convex_hull_support  B = {Hull, Transform, AK_Transpose(AK_M3(Transform)), DeltaB};
     
     if(GJK_QuadraticIntersected(&A, &B, Capsule->Radius))
     {
@@ -159,34 +174,52 @@ ak_bool CapsuleHullTOI(ak_f32* t, capsule* Capsule, ak_v3f DeltaA, convex_hull* 
                 return true;
             }
             
-            moving_line_segment_support StartA = {Capsule->P0+DeltaA*tStart, Capsule->P1+DeltaA*tStart, DeltaA*tMid};
-            moving_convex_hull_support StartB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tStart), Transform.Orientation, Transform.Scale), DeltaB*tMid};
-            if(GJK_QuadraticIntersected(&StartA, &StartB, Capsule->Radius))
+            ak_f32 tDiff = tMid-tStart;
+            
+            A.P0 = Capsule->P0 + DeltaA*tStart;
+            A.P1 = Capsule->P1 + DeltaA*tStart;
+            A.Delta = DeltaA*tDiff;
+            
+            B.T.Translation.xyz = Transform.Translation.xyz + DeltaB*tStart;
+            B.Delta = DeltaB*tDiff;
+            
+            gjk_distance Distance0 = GJK_Distance(&A, &B);
+            if(GJK_QuadraticIntersected(Distance0, Capsule->Radius))
             {
                 tEnd = tMid;
                 continue;
             }
             
-            moving_line_segment_support EndA = {Capsule->P0+DeltaA*tMid, Capsule->P1+DeltaA*tMid, DeltaA*tEnd};
-            moving_convex_hull_support EndB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tMid), Transform.Orientation, Transform.Scale), DeltaB*tEnd};
-            if(GJK_QuadraticIntersected(&EndA, &EndB, Capsule->Radius))
+            tDiff = tEnd-tMid;
+            
+            A.P0 = Capsule->P0 + DeltaA*tMid;
+            A.P1 = Capsule->P1 + DeltaA*tMid;
+            A.Delta = DeltaA*tDiff;
+            
+            B.T.Translation.xyz = Transform.Translation.xyz + DeltaB*tMid;
+            B.Delta = DeltaB*tDiff;
+            
+            gjk_distance Distance1 = GJK_Distance(&A, &B);
+            if(GJK_QuadraticIntersected(Distance1, Capsule->Radius))
             {
                 tStart = tMid;
                 continue;
             }
             
-            *t = tStart;
-            return true;
+            if(Distance0.SquareDistance < Distance1.SquareDistance)
+                tEnd = tMid;
+            else
+                tStart = tMid;
         }        
     }
     
     return false;    
 }
 
-ak_bool SphereHullTOI(ak_f32* t, sphere* Sphere, ak_v3f DeltaA, convex_hull* Hull, ak_sqtf Transform, ak_v3f DeltaB)
+ak_bool SphereHullTOI(ak_f32* t, sphere* Sphere, ak_v3f DeltaA, convex_hull* Hull, ak_m4f Transform, ak_v3f DeltaB)
 {
     moving_point_support A = {Sphere->CenterP, DeltaA};
-    moving_convex_hull_support B = {Hull, Transform, DeltaB};
+    moving_convex_hull_support B = {Hull, Transform, AK_Transpose(AK_M3(Transform)), DeltaB};
     
     if(GJK_QuadraticIntersected(&A, &B, Sphere->Radius))
     {
@@ -202,17 +235,24 @@ ak_bool SphereHullTOI(ak_f32* t, sphere* Sphere, ak_v3f DeltaA, convex_hull* Hul
                 return true;
             }
             
-            moving_point_support StartA = {Sphere->CenterP+DeltaA*tStart, DeltaA*tMid};
-            moving_convex_hull_support StartB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tStart), Transform.Orientation, Transform.Scale), DeltaB*tMid};
-            if(GJK_QuadraticIntersected(&StartA, &StartB, Sphere->Radius))
+            A.P = Sphere->CenterP+DeltaA*tStart;
+            A.Delta = DeltaA*tMid;
+            
+            B.T.Translation.xyz = Transform.Translation.xyz + DeltaB*tStart;
+            B.Delta = DeltaB*tMid;
+            if(GJK_QuadraticIntersected(&A, &B, Sphere->Radius))
             {
                 tEnd = tMid;
                 continue;
             }
             
-            moving_point_support EndA = {Sphere->CenterP+DeltaA*tMid, DeltaA*tEnd};
-            moving_convex_hull_support EndB = {Hull, AK_SQT(Transform.Translation+(DeltaB*tMid), Transform.Orientation, Transform.Scale), DeltaB*tEnd};
-            if(GJK_QuadraticIntersected(&EndA, &EndB, Sphere->Radius))
+            A.P = Sphere->CenterP+DeltaA*tMid;
+            A.Delta = DeltaA*tEnd;
+            
+            B.T.Translation.xyz = Transform.Translation.xyz + DeltaB*tMid;
+            B.Delta = DeltaB*tEnd;
+            
+            if(GJK_QuadraticIntersected(&A, &B, Sphere->Radius))
             {
                 tStart = tMid;
                 continue;
@@ -325,10 +365,10 @@ contact GetSphereCapsuleDeepestContact(sphere* SphereA, capsule* CapsuleB)
     return Result;
 }
 
-contact GetSphereHullDeepestContact(sphere* Sphere, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
+contact GetSphereHullDeepestContact(sphere* Sphere, convex_hull* ConvexHull, ak_m4f ConvexHullTransform)
 {
     point_support PointGJK = {Sphere->CenterP};
-    convex_hull_support ConvexHullGJK = {ConvexHull, ConvexHullTransform};
+    convex_hull_support ConvexHullGJK = {ConvexHull, ConvexHullTransform, AK_Transpose(AK_M3(ConvexHullTransform))};
     
     gjk_distance Distance = GJK_Distance(&PointGJK, &ConvexHullGJK);
     
@@ -357,10 +397,10 @@ contact GetCapsuleCapsuleDeepestContact(capsule* CapsuleA, capsule* CapsuleB)
     return Result;
 }
 
-contact GetCapsuleHullDeepestContact(capsule* Capsule, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
+contact GetCapsuleHullDeepestContact(capsule* Capsule, convex_hull* ConvexHull, ak_m4f ConvexHullTransform)
 {
     line_segment_support AGJK = {Capsule->P0, Capsule->P1};
-    convex_hull_support  BGJK = {ConvexHull, ConvexHullTransform};
+    convex_hull_support  BGJK = {ConvexHull, ConvexHullTransform, AK_Transpose(AK_M3(ConvexHullTransform))};
     
     gjk_distance Distance = GJK_Distance(&AGJK, &BGJK);
     
@@ -382,10 +422,13 @@ contact GetCapsuleHullDeepestContact(capsule* Capsule, convex_hull* ConvexHull, 
 }
 
 
-ak_bool Internal__EPATest(contact* Contact, convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB)
+ak_bool Internal__EPATest(contact* Contact, convex_hull* ConvexHullA, ak_m4f ConvexHullTransformA, convex_hull* ConvexHullB, ak_m4f ConvexHullTransformB)
 {
-    margin_convex_hull_support AEPA = {ConvexHullA, ConvexHullTransformA, 0.005f};
-    margin_convex_hull_support BEPA = {ConvexHullB, ConvexHullTransformB, 0.005f};
+    margin_convex_hull_support AEPA = {ConvexHullA, ConvexHullTransformA, AK_Transpose(AK_M3(ConvexHullTransformA)), 0.005f};
+    
+    margin_convex_hull_support BEPA = {ConvexHullB, ConvexHullTransformB, 
+        AK_Transpose(AK_M3(ConvexHullTransformB)), 0.005f};
+    
     epa_result EPAResult = EPA(&AEPA, &BEPA);        
     if(!EPAResult.IsValid)
         return false;    
@@ -398,10 +441,11 @@ ak_bool Internal__EPATest(contact* Contact, convex_hull* ConvexHullA, ak_sqtf Co
     return true;
 }
 
-contact GetHullHullDeepestContact(convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB)
+contact GetHullHullDeepestContact(convex_hull* ConvexHullA, ak_m4f ConvexHullTransformA, convex_hull* ConvexHullB, ak_m4f ConvexHullTransformB)
 {
-    convex_hull_support AGJK = {ConvexHullA, ConvexHullTransformA};
-    convex_hull_support BGJK = {ConvexHullB, ConvexHullTransformB};
+    convex_hull_support AGJK = {ConvexHullA, ConvexHullTransformA, AK_Transpose(AK_M3(ConvexHullTransformA))};
+    convex_hull_support BGJK = {ConvexHullB, ConvexHullTransformB, 
+        AK_Transpose(AK_M3(ConvexHullTransformB))};
     
     ak_bool Intersecting = GJK_Intersected(&AGJK, &BGJK);
     gjk_distance DistanceResult = GJK_Distance(&AGJK, &BGJK);                                                                                                               
@@ -436,10 +480,10 @@ ak_bool SphereCapsuleOverlap(sphere* Sphere, capsule* Capsule)
     return AK_SqrMagnitude(ClosestPoints.PointA-ClosestPoints.PointB) <= AK_Square(Radius);
 }
 
-ak_bool SphereHullOverlap(sphere* Sphere, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
+ak_bool SphereHullOverlap(sphere* Sphere, convex_hull* ConvexHull, ak_m4f ConvexHullTransform)
 {
     point_support APoint = {Sphere->CenterP};
-    convex_hull_support BHull = {ConvexHull, ConvexHullTransform};
+    convex_hull_support BHull = {ConvexHull, ConvexHullTransform, AK_Transpose(AK_M3(ConvexHullTransform))};
     gjk_distance Distance = GJK_Distance(&APoint, &BHull);    
     return Distance.SquareDistance <= AK_Square(Sphere->Radius);        
 }
@@ -456,27 +500,27 @@ ak_bool CapsuleCapsuleOverlap(capsule* CapsuleA, capsule* CapsuleB)
     return AK_SqrMagnitude(ClosestPoints.PointA-ClosestPoints.PointB) <= AK_Square(Radius);
 }
 
-ak_bool CapsuleHullOverlap(capsule* Capsule, convex_hull* ConvexHull, ak_sqtf ConvexHullTransform)
+ak_bool CapsuleHullOverlap(capsule* Capsule, convex_hull* ConvexHull, ak_m4f ConvexHullTransform)
 {
     line_segment_support ASupport = {Capsule->P[0], Capsule->P[1]};    
-    convex_hull_support BSupport = {ConvexHull, ConvexHullTransform};    
+    convex_hull_support BSupport = {ConvexHull, ConvexHullTransform, AK_Transpose(AK_M3(ConvexHullTransform))};    
     gjk_distance Distance = GJK_Distance(&ASupport, &BSupport);
     return Distance.SquareDistance <= AK_Square(Capsule->Radius);
 }
 
-ak_bool HullSphereOverlap(convex_hull* ConvexHull, ak_sqtf ConvexHullTransform, sphere* Sphere)
+ak_bool HullSphereOverlap(convex_hull* ConvexHull, ak_m4f ConvexHullTransform, sphere* Sphere)
 {
     return SphereHullOverlap(Sphere, ConvexHull, ConvexHullTransform);
 }
 
-ak_bool HullCapsuleOverlap(convex_hull* ConvexHull, ak_sqtf ConvexHullTransform, capsule* Capsule)
+ak_bool HullCapsuleOverlap(convex_hull* ConvexHull, ak_m4f ConvexHullTransform, capsule* Capsule)
 {
     return CapsuleHullOverlap(Capsule, ConvexHull, ConvexHullTransform);
 }
 
-ak_bool HullHullOverlap(convex_hull* ConvexHullA, ak_sqtf ConvexHullTransformA, convex_hull* ConvexHullB, ak_sqtf ConvexHullTransformB)
+ak_bool HullHullOverlap(convex_hull* ConvexHullA, ak_m4f ConvexHullTransformA, convex_hull* ConvexHullB, ak_m4f ConvexHullTransformB)
 {
-    convex_hull_support ASupport = {ConvexHullA, ConvexHullTransformA};
-    convex_hull_support BSupport = {ConvexHullB, ConvexHullTransformB};
+    convex_hull_support ASupport = {ConvexHullA, ConvexHullTransformA, AK_Transpose(AK_M3(ConvexHullTransformA))};
+    convex_hull_support BSupport = {ConvexHullB, ConvexHullTransformB, AK_Transpose(AK_M3(ConvexHullTransformB))};
     return GJK_Intersected(&ASupport, &BSupport);
 }

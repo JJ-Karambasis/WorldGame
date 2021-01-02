@@ -126,11 +126,22 @@ extern "C"
 #define Debug_DrawPoint(position, size, color) Internal__Editor->DrawPoint(Internal__Editor, position, size, color)
 #define Debug_DrawSegment(position0, position1, size, color) Internal__Editor->DrawSegment(Internal__Editor, position0, position1, size, color)
 #define Debug_AddEntity(world_index, id, name) Internal__Editor->AddEntity(Internal__Editor, world_index, id, name)
+
+#define BeginTimedBlock(name) ak_u64 Internal__##name__CycleStart = AK_Cycles(); \
+ak_high_res_clock Internal__##name__TimeStart = AK_WallClock()
+
+#define EndTimedBlock(name) Internal__Editor->TimedBlockEntries[TIMED_BLOCK_ENTRY_##name].Name = #name; \
+Internal__Editor->TimedBlockEntries[TIMED_BLOCK_ENTRY_##name].Cycles += AK_Cycles()-Internal__##name__CycleStart; \
+Internal__Editor->TimedBlockEntries[TIMED_BLOCK_ENTRY_##name].ElapsedTime += AK_GetElapsedTime(AK_WallClock(), Internal__##name__TimeStart); \
+Internal__Editor->TimedBlockEntries[TIMED_BLOCK_ENTRY_##name].Count++
+
 #else
 #define Debug_Log(format, ...)
 #define Debug_DrawPoint(position, size, color)
 #define Debug_DrawSegment(position0, position1, size, color)
 #define Debug_AddEntity(world_index, id, name)
+#define BeginTimedBlock(name)
+#define EndTimedBlock(name)
 #endif
 
 

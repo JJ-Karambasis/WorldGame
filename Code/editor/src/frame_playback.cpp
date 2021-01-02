@@ -298,33 +298,9 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
         {
             AK_Assert(!AK_StringIsNullOrEmpty(CurrentRecordingName), "Recording name must be present in order to be in the recording state");
             
-            ak_string Filepath = Internal__GetRecordingPathFromName(Editor->Scratch, CurrentRecordingName);
-            
             if(ImGui::Button("Stop Recording"))
             {
-                ak_buffer HeaderBuffer = Writer.HeaderBuilder.PushBuffer(Editor->Scratch);
-                ak_buffer DataBuffer = Writer.DataBuilder.PushBuffer(Editor->Scratch);
-                
-                frame_header* FrameHeader = (frame_header*)(HeaderBuffer.Data + sizeof(recording_file_header) + 
-                                                            sizeof(ak_u32)+WorldManagement->CurrentWorldName.Length);
-                
-                ak_u32 OffsetToData = AK_SafeU32(HeaderBuffer.Size);
-                for(ak_u32 FrameIndex = 0; FrameIndex < Writer.FileHeader->FrameCount; FrameIndex++)
-                {
-                    FrameHeader[FrameIndex].OffsetToData = OffsetToData;
-                    OffsetToData += FrameHeader->DataSize;
-                }
-                
-                ak_file_handle* FileHandle = AK_OpenFile(Filepath, AK_FILE_ATTRIBUTES_WRITE);
-                AK_WriteFile(FileHandle, HeaderBuffer.Data, AK_SafeU32(HeaderBuffer.Size));
-                AK_WriteFile(FileHandle, DataBuffer.Data, AK_SafeU32(DataBuffer.Size));
-                AK_WriteFile(FileHandle, RECORDING_FILE_CHECKSUM, sizeof(RECORDING_FILE_CHECKSUM));
-                AK_CloseFile(FileHandle);
-                
-                Writer.HeaderBuilder.ReleaseMemory();
-                Writer.DataBuilder.ReleaseMemory();
-                
-                NewState = FRAME_PLAYBACK_STATE_NONE;
+                StopRecording(Editor);
             }
             
             if(NewState != FRAME_PLAYBACK_STATE_NONE)
@@ -339,12 +315,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
         {
             if(ImGui::Button("Stop Playing"))
             {
-                Reader.CurrentFrameIndex = 0;
-                PlayFrame(Editor);
-                
-                NewState = FRAME_PLAYBACK_STATE_NONE;
-                AK_DeleteArena(Reader.Arena);
-                Reader.Arena = NULL;
+                StopPlaying(Editor);
             }
             
             if(ImGui::Button("Stop Inspecting"))
@@ -382,12 +353,7 @@ void frame_playback::Update(editor* Editor, graphics* Graphics, assets* Assets, 
         {
             if(ImGui::Button("Stop Playing"))
             {
-                Reader.CurrentFrameIndex = 0;
-                PlayFrame(Editor);
-                
-                NewState = FRAME_PLAYBACK_STATE_NONE;
-                AK_DeleteArena(Reader.Arena);
-                Reader.Arena = NULL;
+                StopPlaying(Editor);
             }
             
             if(ImGui::Button("Start Inspecting"))
@@ -523,4 +489,44 @@ void frame_playback::PlayFrame(editor* Editor)
         if(Reader.CurrentFrameIndex == Reader.FileHeader->FrameCount)
             Reader.CurrentFrameIndex = 0;
     }
+}
+
+void frame_playback::StopRecording(editor* Editor)
+{
+    ak_string Filepath = Internal__GetRecordingPathFromName(Editor->Scratch, CurrentRecordingName);
+    
+    world_management* WorldManagement = &Editor->WorldManagement;
+    ak_buffer HeaderBuffer = Writer.HeaderBuilder.PushBuffer(Editor->Scratch);
+    ak_buffer DataBuffer = Writer.DataBuilder.PushBuffer(Editor->Scratch);
+    
+    frame_header* FrameHeader = (frame_header*)(HeaderBuffer.Data + sizeof(recording_file_header) + 
+                                                sizeof(ak_u32)+WorldManagement->CurrentWorldName.Length);
+    
+    ak_u32 OffsetToData = AK_SafeU32(HeaderBuffer.Size);
+    for(ak_u32 FrameIndex = 0; FrameIndex < Writer.FileHeader->FrameCount; FrameIndex++)
+    {
+        FrameHeader[FrameIndex].OffsetToData = OffsetToData;
+        OffsetToData += FrameHeader->DataSize;
+    }
+    
+    ak_file_handle* FileHandle = AK_OpenFile(Filepath, AK_FILE_ATTRIBUTES_WRITE);
+    AK_WriteFile(FileHandle, HeaderBuffer.Data, AK_SafeU32(HeaderBuffer.Size));
+    AK_WriteFile(FileHandle, DataBuffer.Data, AK_SafeU32(DataBuffer.Size));
+    AK_WriteFile(FileHandle, RECORDING_FILE_CHECKSUM, sizeof(RECORDING_FILE_CHECKSUM));
+    AK_CloseFile(FileHandle);
+    
+    Writer.HeaderBuilder.ReleaseMemory();
+    Writer.DataBuilder.ReleaseMemory();
+    
+    NewState = FRAME_PLAYBACK_STATE_NONE;
+}
+
+void frame_playback::StopPlaying(editor* Editor)
+{
+    Reader.CurrentFrameIndex = 0;
+    PlayFrame(Editor);
+    
+    NewState = FRAME_PLAYBACK_STATE_NONE;
+    AK_DeleteArena(Reader.Arena);
+    Reader.Arena = NULL;
 }

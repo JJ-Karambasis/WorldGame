@@ -1776,6 +1776,14 @@ ak_u64 GetEntryID(editor* Editor, dev_entity* DevEntity, ak_u32 WorldIndex)
                                         DevEntity->MeshID, DevEntity->Material)->ID;
         } break;
         
+        case ENTITY_TYPE_MOVABLE:
+        {
+            Result = CreateMovableEntity(GameContext->Game, WorldIndex, 
+                                         DevEntity->Transform.Translation, 
+                                         DevEntity->Transform.Scale, 
+                                         DevEntity->Material)->ID;
+        } break;
+        
         AK_INVALID_DEFAULT_CASE;
     }
     
@@ -1827,6 +1835,7 @@ void Editor_UpdateGame(editor* Editor, platform* Platform, ak_f32* tInterpolated
         __try
         {
             ak_temp_arena GameTemp = Game->Scratch->BeginTemp();
+            AK_ClearArray(Editor->TimedBlockEntries, TIMED_BLOCK_ENTRY_COUNT);
             Game->Update(Game);
             Game->Scratch->EndTemp(&GameTemp);
         }
@@ -1834,6 +1843,14 @@ void Editor_UpdateGame(editor* Editor, platform* Platform, ak_f32* tInterpolated
         {
             //TODO(JJ): Stack trace exception handling
             AK_MessageBoxOk("Error", "Unhandled exception occurred when running the game. Game must be stopped");
+            
+            if(FramePlayback->NewState == FRAME_PLAYBACK_STATE_RECORDING)
+                FramePlayback->StopRecording(Editor);
+            
+            if((FramePlayback->NewState == FRAME_PLAYBACK_STATE_PLAYING) ||
+               (FramePlayback->NewState == FRAME_PLAYBACK_STATE_INSPECTING))
+                FramePlayback->StopPlaying(Editor);
+            
             Editor_StopGame(Editor, Platform);
             return;
         }
@@ -1842,7 +1859,11 @@ void Editor_UpdateGame(editor* Editor, platform* Platform, ak_f32* tInterpolated
     }
     
     UpdateButtons(Game->Input.Buttons, AK_Count(Game->Input.Buttons));
-    *tInterpolated = Game->LoopAccum.GetRemainder();
+    
+    if(FramePlayback->NewState == FRAME_PLAYBACK_STATE_NONE)
+        *tInterpolated = Game->LoopAccum.GetRemainder();
+    else
+        *tInterpolated = 1.0f;
 }
 
 void Editor_StopGame(editor* Editor, platform* Platform)
@@ -1862,6 +1883,7 @@ void Editor_StopGame(editor* Editor, platform* Platform)
     AK_DeleteArray(&GameContext->GameEntityNames[1]);
     
     Editor->UI.GameUseDevCamera = false;
+    AK_ClearArray(Editor->TimedBlockEntries, TIMED_BLOCK_ENTRY_COUNT);
     
     Platform->UnloadGameCode();
     Platform->UnloadWorldCode();
@@ -1909,6 +1931,24 @@ ak_bool Editor_PlayGame(editor* Editor, graphics* Graphics, assets* Assets, plat
         WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevEntities[1], &WorldManagement->EntityIndices[1], 1);
         WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevPointLights[0], &WorldManagement->PointLightIndices[0], 0);
         WorldIDs += Editor_BuildIDs(Editor, WorldIDs, &WorldManagement->DevPointLights[1], &WorldManagement->PointLightIndices[1], 1);
+        
+        for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+        {
+            AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
+            {
+                if(!AK_StringIsNullOrEmpty(DevEntity->LinkName))
+                {
+                    ak_u64* EntityID = GameContext->GameEntityNameHash[WorldIndex].Find(DevEntity->Name);
+                    AK_Assert(EntityID, "Dev Entity has no game entity associated at startup");
+                    
+                    ak_u64* LinkID = GameContext->GameEntityNameHash[!WorldIndex].Find(DevEntity->LinkName);
+                    AK_Assert(LinkID, "Dev Entity has a link dev entity that has no game entity associated at startup");
+                    
+                    entity* Entity = GameContext->Game->World->EntityStorage[WorldIndex].Get(*EntityID);
+                    Entity->LinkID = *LinkID;
+                }
+            }
+        }
         
         Editor->OldCameras[0] = Editor->Cameras[0];
         Editor->OldCameras[1] = Editor->Cameras[1];
@@ -2158,6 +2198,7 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             ImGui::End(); 
         }
         
+        UI_Timers(Editor->TimedBlockEntries);
         UI_Logs(LogHeight);
         
         ImGui::Render();

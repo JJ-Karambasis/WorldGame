@@ -1,9 +1,11 @@
 global ak_u32 StaticEntity_HighestIndex;
 global ak_u32 ButtonEntity_HighestIndex;
+global ak_u32 MovableEntity_HighestIndex;
 global ak_u32 PointLight_HighestIndex;
 
 global const ak_char* StaticEntity_DefaultName = "Static_%d";
 global const ak_char* ButtonEntity_DefaultName = "Button_%d";
+global const ak_char* MovableEntity_DefaultName = "Movable_%d";
 global const ak_char* PointLight_DefaultName = "PointLight_%d";
 
 ak_string UI_GetDefaultNames(ak_arena* Scratch, ak_hash_map<ak_string, ak_u64>* Tables, 
@@ -220,6 +222,14 @@ void UI_SpawnerRefreshName(editor* Editor, entity_spawner* Spawner)
             DefaultIndex = &ButtonEntity_HighestIndex;
             DefaultName = ButtonEntity_DefaultName;
         } break;
+        
+        case ENTITY_TYPE_MOVABLE:
+        {
+            DefaultIndex = &MovableEntity_HighestIndex;
+            DefaultName = MovableEntity_DefaultName;
+        } break;
+        
+        AK_INVALID_DEFAULT_CASE;
     }
     
     ak_string Name = UI_GetDefaultNames(Editor->Scratch, Editor->WorldManagement.EntityTables, 
@@ -566,6 +576,23 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             
         } break;
         
+        case ENTITY_TYPE_MOVABLE:
+        {
+            UI_TranslationTool(AK_HashFunction("Translation Spawner"), EDITOR_ITEM_WIDTH, 
+                               &Spawner->Translation);
+            ImGui::Separator();
+            UI_ScaleTool(AK_HashFunction("Scale Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Scale);
+            ImGui::Separator();
+            const ak_char* WorldIndexList[] = {"World A", "World B", "Both", "Linked"};
+            UI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex,
+                              WorldIndexList, AK_Count(WorldIndexList));
+            ImGui::Separator();
+            Spawner->MeshID = MESH_ASSET_ID_BOX;
+            UI_MaterialTool(Assets, &Spawner->MaterialContext);
+            ImGui::Separator();
+            
+        } break;
+        
         case ENTITY_TYPE_STATIC:
         {
             UI_TranslationTool(AK_HashFunction("Translation Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Translation);
@@ -582,6 +609,8 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             UI_MaterialTool(Assets, &Spawner->MaterialContext);
             ImGui::Separator();
         } break;
+        
+        AK_INVALID_DEFAULT_CASE;
     } 
     
     if(UI_Button(AK_HashFunction("Create Entity Button"), "Create"))
@@ -1328,6 +1357,42 @@ void UI_Logs(ak_f32 LogHeight)
             ImGui::SetScrollHereY(1.0f);
         
         ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
+void UI_Timers(timed_entry* TimeEntries)
+{
+    if(ImGui::Begin("Performance Timers"))
+    {
+        ImGui::Columns(5, NULL, false);
+        ImGui::Text("Name");
+        ImGui::NextColumn();
+        ImGui::Text("Cycles");
+        ImGui::NextColumn();
+        ImGui::Text("Calls");
+        ImGui::NextColumn();
+        ImGui::Text("Cycles/Call");
+        ImGui::NextColumn();
+        ImGui::Text("Time");
+        ImGui::NextColumn();
+        for(ak_u32 TimerIndex = 0; TimerIndex < TIMED_BLOCK_ENTRY_COUNT; TimerIndex++)
+        {
+            timed_entry* Entry = TimeEntries + TimerIndex;
+            if(Entry->Count > 0)
+            {
+                ImGui::Text(Entry->Name);
+                ImGui::NextColumn();
+                ImGui::Text("%dhz", Entry->Cycles);
+                ImGui::NextColumn();
+                ImGui::Text("%d", Entry->Count);
+                ImGui::NextColumn();
+                ImGui::Text("%dhz", Entry->Cycles/Entry->Count);
+                ImGui::NextColumn();
+                ImGui::Text("%fms", Entry->ElapsedTime*1000.0);
+                ImGui::NextColumn();
+            }
+        }
     }
     ImGui::End();
 }

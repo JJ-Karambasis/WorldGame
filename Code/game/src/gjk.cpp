@@ -877,7 +877,7 @@ ak_bool GJK_Intersected(typeA* ObjectA, typeB* ObjectB, gjk_simplex* Simplex)
             return false;
         
         if(AK_EqualZeroEps(AK_SqrMagnitude(V)))
-            return false;
+            return true;
         
         if(Iterations > 100)
         {
@@ -893,11 +893,15 @@ ak_bool GJK_Intersected(typeA* ObjectA, typeB* ObjectB)
     return GJK_Intersected(ObjectA, ObjectB, &Simplex);
 }
 
+ak_bool GJK_QuadraticIntersected(gjk_distance Distance, ak_f32 Radius)
+{
+    ak_bool Result = Distance.SquareDistance-AK_Square(Radius) <= 0;
+    return Result;
+}
+
 template <typename typeA, typename typeB>
 ak_bool GJK_QuadraticIntersected(typeA* ObjectA, typeB* ObjectB, ak_f32 Radius)
 {
     gjk_distance Distance = GJK_Distance(ObjectA, ObjectB);
-    ak_bool Result = Distance.SquareDistance <= AK_Square(Radius);
-    
-    return Result;
+    return GJK_QuadraticIntersected(Distance, Radius);
 }
