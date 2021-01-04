@@ -64,10 +64,18 @@ struct button_state : public button
     ak_bool IsToggled;    
 };
 
+struct id_list
+{
+    ak_u32  Capacity;
+    ak_u32  Size;
+    ak_u64* IDs; 
+    ak_bool* IndexAllocated;
+};
+
 struct movable
 {
-    ak_u64 ChildID;
-    ak_u64 ParentID;
+    id_list ChildIDs;
+    id_list ParentIDs;
     ak_v3f GravityVelocity;
 };
 

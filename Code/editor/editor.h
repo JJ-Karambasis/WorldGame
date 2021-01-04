@@ -202,7 +202,8 @@ enum timed_block_entry
 {
     TIMED_BLOCK_ENTRY_Game_Update, 
     TIMED_BLOCK_ENTRY_Game_GravityMovementUpdate, 
-    TIMED_BLOCK_ENTRY_Game_PlayerMovementUpdate,
+    TIMED_BLOCK_ENTRY_GravityUpdate_Iterations, 
+    TIMED_BLOCK_ENTRY_CCD,
     TIMED_BLOCK_ENTRY_COUNT
 };
 
