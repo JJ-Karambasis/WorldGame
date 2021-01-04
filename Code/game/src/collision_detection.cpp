@@ -75,6 +75,7 @@ ccd_contact CCD_ComputeContact(collision_detection* CollisionDetection, ak_u64 A
                     BHitVolume = BVolume;
                 }
             }
+            BVolume = World->CollisionVolumeStorage.Get(BVolume->NextID);
         }
         AVolume = World->CollisionVolumeStorage.Get(AVolume->NextID);
     }
@@ -167,7 +168,7 @@ ak_bool HullHullTOI(ak_f32* t, convex_hull* HullA, ak_m4f TransformA, ak_v3f Del
         ak_f32 tStart = 0.0f;
         ak_f32 tEnd = 1.0f;
         for(;;)
-        {        
+        {
             ak_f32 tMid = Internal__GetBisectionMid(DeltaA, DeltaB, tStart, tEnd);
             if(tMid == tStart)
             {
@@ -518,7 +519,7 @@ contact GetHullHullDeepestContact(convex_hull* ConvexHullA, ak_m4f ConvexHullTra
     
     ak_v3f Witness0, Witness1;
     DistanceResult.GetClosestPoints(&Witness0, &Witness1);                            
-    Contact.Normal = AK_Normalize(Witness0-Witness1);
+    Contact.Normal = AK_Normalize(Witness1-Witness0);
     Contact.Penetration = 0;
     Contact.Position = Witness0 + ((Witness1-Witness0)*0.5f);
     return Contact;    

@@ -210,7 +210,7 @@ ak_bool Win32_InitPlatform()
     
     Global_Platform.AssetPath = AK_StringConcat(Global_Platform.ProgramPath, "WorldGame.assets", Global_Platform.Arena);
     
-    Global_Platform.Window = AK_CreateWindow(1280, 720, GAME_NAME);
+    Global_Platform.Window = AK_CreateWindow(1920, 1080, GAME_NAME);
     if(!Global_Platform.Window)
     {
         //TODO(JJ): Diagnostic and error logging

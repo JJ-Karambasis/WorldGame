@@ -484,7 +484,8 @@ struct gjk_distance
 
 template <typename typeA, typename typeB>
 gjk_distance GJK_Distance(typeA* ObjectA, typeB* ObjectB)
-{    
+{   
+    BeginTimedBlock(GJK_Distance);
     ak_v3f V = AK_XAxis();
     
     gjk_distance_simplex Simplex = {};    

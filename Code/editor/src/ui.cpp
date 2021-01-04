@@ -1416,8 +1416,8 @@ void UI_GameLister(editor* Editor)
                 {
                     AK_ForEach(Entity, Entities)
                     {
-                        ak_u32 Index = AK_PoolIndex(Entity->ID);
-                        ak_string Name = *GameEntityNames->Get(Index);
+                        ak_u32 EntityIndex = AK_PoolIndex(Entity->ID);
+                        ak_string Name = *GameEntityNames->Get(EntityIndex);
                         if(AK_StringIsNullOrEmpty(Name))
                             Name = AK_CreateString("Unknown");
                         
@@ -1426,7 +1426,7 @@ void UI_GameLister(editor* Editor)
                         ImGui::NextColumn();
                         if(Open)
                         {
-                            physics_object* PhysicsObject = PhysicsObjects->Get(Index);
+                            physics_object* PhysicsObject = PhysicsObjects->Get(EntityIndex);
                             
                             ImGui::Text("Type: %s", UI_GetEntityType(Entity->Type));
                             ImGui::Text("Position (%.3f, %.3f, %.3f)", PhysicsObject->Position.x, PhysicsObject->Position.y, 
@@ -1454,46 +1454,35 @@ void UI_GameLister(editor* Editor)
                                 
                                 case ENTITY_TYPE_MOVABLE:
                                 {
-                                    movable* Movable = Movables->Get(Index);
+                                    movable* Movable = Movables->Get(EntityIndex);
                                     ImGui::Text("Gravity Velocity (%.3f, %.3f, %.3f)", 
                                                 Movable->GravityVelocity.x, 
                                                 Movable->GravityVelocity.y, 
                                                 Movable->GravityVelocity.z);
                                     
-#if 0 
-                                    ImGui::Text("Children: ");
-                                    if(Movable->ChildID)
+                                    ImGui::Text("Children: (%d)", Movable->ChildIDs.Size);
+                                    for(ak_u32 Index = 0; Index < Movable->ChildIDs.Size; Index++)
                                     {
-                                        ak_u64 ChildID = Movable->ChildID;
-                                        while(ChildID)
-                                        {
-                                            ak_u32 ChildIndex = AK_PoolIndex(ChildID);
-                                            movable* ChildMovable = Movables->Get(ChildIndex);
-                                            ak_string ChildName = *GameEntityNames->Get(ChildIndex);
-                                            ImGui::Text("\t%.*s", ChildName.Length, ChildName.Data);
-                                            ChildID = ChildMovable->NextID;
-                                        }
+                                        ak_u32 ChildIndex = AK_PoolIndex(Movable->ChildIDs.IDs[Index]);
+                                        movable* ChildMovable = Movables->Get(ChildIndex);
+                                        ak_string ChildName = *GameEntityNames->Get(ChildIndex);
+                                        ImGui::Text("\t%.*s", ChildName.Length, ChildName.Data);
                                     }
                                     
-                                    ImGui::Text("Parent: ");
-                                    if(Movable->ParentID)
+                                    ImGui::Text("Parents: (%d)", Movable->ParentIDs.Size);
+                                    for(ak_u32 Index = 0; Index < Movable->ParentIDs.Size; Index++)
                                     {
-                                        ak_u64 ParentID = Movable->ParentID;
-                                        while(ParentID)
-                                        {
-                                            ak_u32 ParentIndex = AK_PoolIndex(Movable->ParentID);
-                                            movable* ParentMovable = Movables->Get(ParentIndex);
-                                            ak_string ParentName = *GameEntityNames->Get(ParentIndex);
-                                            ImGui::Text("\t%.*s", ParentName.Length, ParentName.Data);
-                                            ParentID = ParentMovable->NextID;
-                                        }
+                                        ak_u32 ParentIndex = AK_PoolIndex(Movable->ParentIDs.IDs[Index]);
+                                        movable* ParentMovable = Movables->Get(ParentIndex);
+                                        ak_string ParentName = *GameEntityNames->Get(ParentIndex);
+                                        ImGui::Text("\t%.*s", ParentName.Length, ParentName.Data);
                                     }
-#endif
+                                    
                                 } break;
                                 
                                 case ENTITY_TYPE_BUTTON:
                                 {
-                                    button_state* ButtonState = ButtonStates->Get(Index);
+                                    button_state* ButtonState = ButtonStates->Get(EntityIndex);
                                     ImGui::Text("Is Down %s", ButtonState->IsDown ? "true" : "false");
                                     ImGui::Text("Was Down %s", ButtonState->WasDown ? "true" : "false");
                                     ImGui::Text("Is Toggled %s", ButtonState->IsToggled ? "true" : "false");
