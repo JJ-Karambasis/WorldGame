@@ -640,6 +640,8 @@ AK_EXPORT GAME_FIXED_TICK(FixedTick)
         }
     }
     
+    AK_Assert(Game_ValidateAllMovables(World), "Failed to validate movables");
+    
     for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
     {
         simulation* Simulation = &World->Simulations[WorldIndex];                

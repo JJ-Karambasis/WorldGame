@@ -1396,3 +1396,120 @@ void UI_Timers(timed_entry* TimeEntries)
     }
     ImGui::End();
 }
+
+void UI_GameLister(editor* Editor)
+{
+    game* Game = Editor->GameContext.Game;
+    if(ImGui::Begin("Game Lister"))
+    {
+        if(ImGui::TreeNode("Entities"))
+        {
+            for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+            {
+                ak_array<ak_string>* GameEntityNames = &Editor->GameContext.GameEntityNames[WorldIndex];
+                ak_pool<entity>* Entities = &Game->World->EntityStorage[WorldIndex];
+                ak_array<physics_object>* PhysicsObjects = &Game->World->PhysicsObjects[WorldIndex];
+                ak_array<button_state>* ButtonStates = &Game->World->ButtonStates[WorldIndex];
+                ak_array<movable>* Movables = &Game->World->Movables[WorldIndex];
+                
+                if(ImGui::TreeNode((void*)(ak_uaddr)WorldIndex, "World %c", WorldIndex == 0 ? 'A' : 'B'))
+                {
+                    AK_ForEach(Entity, Entities)
+                    {
+                        ak_u32 Index = AK_PoolIndex(Entity->ID);
+                        ak_string Name = *GameEntityNames->Get(Index);
+                        if(AK_StringIsNullOrEmpty(Name))
+                            Name = AK_CreateString("Unknown");
+                        
+                        ImGui::Columns(2, "", false);
+                        ak_bool Open = ImGui::TreeNode((void*)(ak_uaddr)Entity->ID, "%.*s", Name.Length, Name.Data);
+                        ImGui::NextColumn();
+                        if(Open)
+                        {
+                            physics_object* PhysicsObject = PhysicsObjects->Get(Index);
+                            
+                            ImGui::Text("Type: %s", UI_GetEntityType(Entity->Type));
+                            ImGui::Text("Position (%.3f, %.3f, %.3f)", PhysicsObject->Position.x, PhysicsObject->Position.y, 
+                                        PhysicsObject->Position.z);
+                            ImGui::Text("Scale (%.3f, %.3f, %.3f)", 
+                                        PhysicsObject->Scale.x, PhysicsObject->Scale.y, 
+                                        PhysicsObject->Scale.z);
+                            ImGui::Text("Orientation (%.3f, %.3f, %.3f, %.3f)",
+                                        PhysicsObject->Orientation.x, PhysicsObject->Orientation.y, PhysicsObject->Orientation.z, PhysicsObject->Orientation.w);
+                            ImGui::Text("Velocity (%.3f, %.3f, %.3f)", 
+                                        PhysicsObject->Velocity.x, 
+                                        PhysicsObject->Velocity.y, 
+                                        PhysicsObject->Velocity.z);
+                            
+                            switch(Entity->Type)
+                            {
+                                case ENTITY_TYPE_PLAYER:
+                                {
+                                    player* Player = &Game->World->Players[WorldIndex];
+                                    ImGui::Text("Gravity Velocity (%.3f, %.3f, %.3f)", 
+                                                Player->GravityVelocity.x, 
+                                                Player->GravityVelocity.y, 
+                                                Player->GravityVelocity.z);
+                                } break;
+                                
+                                case ENTITY_TYPE_MOVABLE:
+                                {
+                                    movable* Movable = Movables->Get(Index);
+                                    ImGui::Text("Gravity Velocity (%.3f, %.3f, %.3f)", 
+                                                Movable->GravityVelocity.x, 
+                                                Movable->GravityVelocity.y, 
+                                                Movable->GravityVelocity.z);
+                                    
+#if 0 
+                                    ImGui::Text("Children: ");
+                                    if(Movable->ChildID)
+                                    {
+                                        ak_u64 ChildID = Movable->ChildID;
+                                        while(ChildID)
+                                        {
+                                            ak_u32 ChildIndex = AK_PoolIndex(ChildID);
+                                            movable* ChildMovable = Movables->Get(ChildIndex);
+                                            ak_string ChildName = *GameEntityNames->Get(ChildIndex);
+                                            ImGui::Text("\t%.*s", ChildName.Length, ChildName.Data);
+                                            ChildID = ChildMovable->NextID;
+                                        }
+                                    }
+                                    
+                                    ImGui::Text("Parent: ");
+                                    if(Movable->ParentID)
+                                    {
+                                        ak_u64 ParentID = Movable->ParentID;
+                                        while(ParentID)
+                                        {
+                                            ak_u32 ParentIndex = AK_PoolIndex(Movable->ParentID);
+                                            movable* ParentMovable = Movables->Get(ParentIndex);
+                                            ak_string ParentName = *GameEntityNames->Get(ParentIndex);
+                                            ImGui::Text("\t%.*s", ParentName.Length, ParentName.Data);
+                                            ParentID = ParentMovable->NextID;
+                                        }
+                                    }
+#endif
+                                } break;
+                                
+                                case ENTITY_TYPE_BUTTON:
+                                {
+                                    button_state* ButtonState = ButtonStates->Get(Index);
+                                    ImGui::Text("Is Down %s", ButtonState->IsDown ? "true" : "false");
+                                    ImGui::Text("Was Down %s", ButtonState->WasDown ? "true" : "false");
+                                    ImGui::Text("Is Toggled %s", ButtonState->IsToggled ? "true" : "false");
+                                } break;
+                            }
+                            
+                        }
+                        ImGui::NextColumn();
+                        if(Open)
+                            ImGui::TreePop();
+                    }
+                    ImGui::TreePop();
+                }
+            }
+            ImGui::TreePop();
+        }
+    }
+    ImGui::End();
+}

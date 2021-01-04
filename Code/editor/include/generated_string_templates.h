@@ -64,12 +64,15 @@ R"(#include "%.*s.h"
 extern "C"
 AK_EXPORT WORLD_STARTUP(%.*s_Startup)
 {
-//TODO(JJ): We do not want to use AK_Allocate, we want to use something that we can control a
-//bit better just in case an exception occurs during startup and we want to free the memory
-    %.*s* World = (%.*s*)AK_Allocate(sizeof(%.*s));
+    ak_arena* Storage = AK_CreateArena(AK_Megabyte(4));
+    %.*s* World = Storage->Push<%.*s>();
+    World->Storage = Storage;
     World->Update = %.*s_Update;
     World->Shutdown = %.*s_Shutdown;
     Game->World = World;
+    //NOTE(EVERYONE): Write custom startup code here
+
+    ////////////////////////////////////////////////
     return true;
 }
 
@@ -83,6 +86,10 @@ extern "C"
 AK_EXPORT WORLD_SHUTDOWN(%.*s_Shutdown)
 {
     Game->WorldShutdownCommon(Game);
+    //NOTE(EVERYONE): write custom shutdown code here
+    
+    /////////////////////////////////////////////////
+    AK_DeleteArena(Game->World->Storage);
     Game->World = NULL;
 }
 

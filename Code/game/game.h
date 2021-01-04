@@ -65,6 +65,7 @@ struct platform
 
 struct game
 {
+    ak_arena* Storage;
     ak_arena* Scratch;
     ak_f32 dtFixed;
     
@@ -94,6 +95,7 @@ struct toi_normal
 
 struct world
 {
+    ak_arena* Storage;
     ak_pool<entity> EntityStorage[2];
     ak_pool<point_light> PointLightStorage[2];
     ak_array<ak_sqtf> OldTransforms[2];

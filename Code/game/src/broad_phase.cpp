@@ -1,9 +1,17 @@
 #define INTERNAL__BROADPHASE_MAX_CAPACITY 1024
 
-void Internal__AddPairEntry(broad_phase_pair_list* List, broad_phase_pair Pair)
+
+void BroadPhase_AddPair(broad_phase_pair_list* List, broad_phase_pair Pair)
 {
     AK_Assert(List->Size < INTERNAL__BROADPHASE_MAX_CAPACITY, "Index out of bounds");
     List->Data[List->Size++] = Pair;
+}
+
+broad_phase_pair_list BroadPhase_AllocateList(ak_arena* Arena)
+{
+    broad_phase_pair_list Result = {};
+    Result.Data = Arena->PushArray<broad_phase_pair>(INTERNAL__BROADPHASE_MAX_CAPACITY);
+    return Result;
 }
 
 BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_DefaultFilterFunc)
@@ -50,8 +58,7 @@ broad_phase_pair_list broad_phase::GetAllPairs(ak_arena* Arena, broad_phase_pair
     if(FilterFunc == NULL)
         FilterFunc = BroadPhase_DefaultFilterFunc;
     
-    broad_phase_pair_list Result = {};
-    Result.Data = Arena->PushArray<broad_phase_pair>(INTERNAL__BROADPHASE_MAX_CAPACITY);
+    broad_phase_pair_list Result = BroadPhase_AllocateList(Arena);;
     
     for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
     {
@@ -84,7 +91,7 @@ broad_phase_pair_list broad_phase::GetAllPairs(ak_arena* Arena, broad_phase_pair
                                 {
                                     broad_phase_pair BPPair = {TestID, ID, AVolume->ID, BVolume->ID};
                                     if(FilterFunc(this, BPPair, UserData))
-                                        Internal__AddPairEntry(&Result, BPPair);
+                                        BroadPhase_AddPair(&Result, BPPair);
                                     
                                     BVolume = World->CollisionVolumeStorage.Get(BVolume->NextID);
                                 }
@@ -132,7 +139,7 @@ broad_phase_pair_list broad_phase::GetPairs(ak_arena* Arena, ak_u64 TestID, broa
                 {
                     broad_phase_pair Pair = {TestID, ID, AVolume->ID, BVolume->ID};
                     if(FilterFunc(this, Pair, UserData))
-                        Internal__AddPairEntry(&Result, Pair);
+                        BroadPhase_AddPair(&Result, Pair);
                     
                     BVolume = World->CollisionVolumeStorage.Get(BVolume->NextID);
                 }
@@ -153,7 +160,7 @@ broad_phase_pair_list broad_phase::FilterPairs(ak_arena* Arena, broad_phase_pair
     AK_ForEach(Pair, &List)
     {
         if(FilterFunc(this, *Pair, UserData))
-            Internal__AddPairEntry(&Result, *Pair);
+            BroadPhase_AddPair(&Result, *Pair);
     }
     
     return Result;

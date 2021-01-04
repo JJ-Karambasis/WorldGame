@@ -41,18 +41,67 @@ ak_bool CollisionDetection_Intersect(collision_detection* CollisionDetection, br
     
 }
 
-ccd_contact CCD_GetEarliestContact(collision_detection* CollisionDetection, ak_u64 ID, 
-                                   broad_phase_pair_filter_func* FilterFunc, void* UserData)
+ccd_contact CCD_ComputeContact(collision_detection* CollisionDetection, ak_u64 AID, ak_u64 BID)
 {
     broad_phase* BroadPhase = &CollisionDetection->BroadPhase;
     world* World = BroadPhase->World;
     ak_u32 WorldIndex = BroadPhase->WorldIndex;
-    broad_phase_pair_list Pairs = BroadPhase->GetPairs(CollisionDetection->Arena, ID, FilterFunc, UserData);
+    
+    physics_object* PhysicsObjectA = World->PhysicsObjects[WorldIndex].Get(AK_PoolIndex(AID));
+    physics_object* PhysicsObjectB = World->PhysicsObjects[WorldIndex].Get(AK_PoolIndex(BID));
+    
+    ccd_contact Result = {};
+    
+    collision_volume* AHitVolume = NULL;
+    collision_volume* BHitVolume = NULL;
+    
+    collision_volume* AVolume = World->CollisionVolumeStorage.Get(PhysicsObjectA->CollisionVolumeID);
+    while(AVolume)
+    {
+        collision_volume* BVolume = 
+            World->CollisionVolumeStorage.Get(PhysicsObjectB->CollisionVolumeID);
+        while(BVolume)
+        {
+            toi_function* TOIFunction = TOIFunctions[AVolume->Type][BVolume->Type];
+            ak_f32 t;
+            if(TOIFunction(&t, PhysicsObjectA, PhysicsObjectB, AVolume, BVolume))
+            {
+                if(!Result.Intersected || (Result.t > t))
+                {
+                    Result.Intersected = true;
+                    Result.t = t;
+                    
+                    AHitVolume = AVolume;
+                    BHitVolume = BVolume;
+                }
+            }
+        }
+        AVolume = World->CollisionVolumeStorage.Get(AVolume->NextID);
+    }
+    
+    if(Result.Intersected)
+    {
+        Result.EntityA = AID;
+        Result.EntityB = BID;
+        
+        ccd_contact_function* CCDContactFunction = CCDContactFunctions[AHitVolume->Type][BHitVolume->Type];
+        Result.Contact = CCDContactFunction(PhysicsObjectA, PhysicsObjectB, AHitVolume, BHitVolume, Result.t);
+    }
+    
+    return Result;
+}
+
+ccd_contact CCD_GetEarliestContact(collision_detection* CollisionDetection, ak_u64 ID, 
+                                   broad_phase_pair_list* Pairs)
+{
+    broad_phase* BroadPhase = &CollisionDetection->BroadPhase;
+    world* World = BroadPhase->World;
+    ak_u32 WorldIndex = BroadPhase->WorldIndex;
     
     ak_array<physics_object>* PhysicsObjects = &World->PhysicsObjects[WorldIndex];
     
     toi_result TOIResult = {};
-    AK_ForEach(Pair, &Pairs)
+    AK_ForEach(Pair, Pairs)
     {
         collision_volume* VolumeA = World->CollisionVolumeStorage.Get(Pair->VolumeA);
         collision_volume* VolumeB = World->CollisionVolumeStorage.Get(Pair->VolumeB);
@@ -84,6 +133,14 @@ ccd_contact CCD_GetEarliestContact(collision_detection* CollisionDetection, ak_u
     }
     
     return Result;
+}
+
+ccd_contact CCD_GetEarliestContact(collision_detection* CollisionDetection, ak_u64 ID, 
+                                   broad_phase_pair_filter_func* FilterFunc, void* UserData)
+{
+    broad_phase* BroadPhase = &CollisionDetection->BroadPhase;
+    broad_phase_pair_list Pairs = BroadPhase->GetPairs(CollisionDetection->Arena, ID, FilterFunc, UserData);
+    return CCD_GetEarliestContact(CollisionDetection, ID, &Pairs);
 }
 
 #undef UPDATE_HIT

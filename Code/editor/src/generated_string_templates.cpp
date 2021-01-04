@@ -24,7 +24,6 @@ ak_string GetWorldSourceFile(ak_arena* Scratch, ak_string WorldName)
                            WorldName.Length, WorldName.Data, 
                            WorldNameLower.Length, WorldNameLower.Data, 
                            WorldNameLower.Length, WorldNameLower.Data, 
-                           WorldNameLower.Length, WorldNameLower.Data, 
                            WorldName.Length, WorldName.Data, 
                            WorldName.Length, WorldName.Data, 
                            WorldName.Length, WorldName.Data, 

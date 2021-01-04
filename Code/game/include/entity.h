@@ -71,7 +71,6 @@ struct movable
     ak_v3f GravityVelocity;
 };
 
-
 void DeleteEntity(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true);
 entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
                      mesh_asset_id MeshID, material Material);

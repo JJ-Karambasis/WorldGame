@@ -2005,6 +2005,11 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             return 0;
         ImGui::NewFrame();
         
+#if SHOW_IMGUI_DEMO_WINDOW
+        local ak_bool Internal__DemoWindow;
+        ImGui::ShowDemoWindow((bool*)&Internal__DemoWindow);
+#endif
+        
         game_context* GameContext = &Editor->GameContext;
         world_management* WorldManagement = &Editor->WorldManagement;
         
@@ -2160,42 +2165,47 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             DevPlatform->HandleHotReload(Editor);
             
             Editor_UpdateGame(Editor, Platform, &tInterpolated);
-            
-            ak_v2i Resolution = Platform->GetResolution();
-            
-            ImGui::SetNextWindowPos(ImVec2(0, 0));
-            if(ImGui::Begin("Options", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+            if(GameContext->Game)
             {
-                if(UI_Button(AK_HashFunction("Stop Game Button"), "Stop"))
+                ak_v2i Resolution = Platform->GetResolution();
+                
+                ImGui::SetNextWindowPos(ImVec2(0, 0));
+                if(ImGui::Begin("Options", NULL, ImGuiWindowFlags_AlwaysAutoResize))
                 {
-                    Editor_StopGame(Editor, Platform);
-                }
-                
-                UI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", 
-                            &Editor->UI.EditorDrawOtherWorld);
-                
-                UI_Checkbox(AK_HashFunction("Game Draw Colliders"), "Draw Colliders", &Editor->UI.GameDrawColliders);
-                
-                ak_bool OldUseDevCamera = Editor->UI.GameUseDevCamera;
-                UI_Checkbox(AK_HashFunction("Use Dev Camera"), "Use Dev Camera", 
-                            &Editor->UI.GameUseDevCamera);
-                if(OldUseDevCamera != Editor->UI.GameUseDevCamera)
-                {
-                    if(Editor->UI.GameUseDevCamera)
+                    if(UI_Button(AK_HashFunction("Stop Game Button"), "Stop"))
                     {
-                        game* Game = Editor->GameContext.Game;
-                        if(Game)
-                        {
-                            Editor->Cameras[0] = Game->Cameras[0];
-                            Editor->Cameras[1] = Game->Cameras[1];
-                        }
+                        Editor_StopGame(Editor, Platform);
                     }
+                    else
+                    {
+                        
+                        UI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", 
+                                    &Editor->UI.EditorDrawOtherWorld);
+                        
+                        UI_Checkbox(AK_HashFunction("Game Draw Colliders"), "Draw Colliders", &Editor->UI.GameDrawColliders);
+                        
+                        ak_bool OldUseDevCamera = Editor->UI.GameUseDevCamera;
+                        UI_Checkbox(AK_HashFunction("Use Dev Camera"), "Use Dev Camera", 
+                                    &Editor->UI.GameUseDevCamera);
+                        if(OldUseDevCamera != Editor->UI.GameUseDevCamera)
+                        {
+                            if(Editor->UI.GameUseDevCamera)
+                            {
+                                game* Game = Editor->GameContext.Game;
+                                Editor->Cameras[0] = Game->Cameras[0];
+                                Editor->Cameras[1] = Game->Cameras[1];
+                            }
+                        }
+                        
+                        FramePlayback->Update(Editor, Graphics, Assets, Platform, DevPlatform);
+                        LogHeight = ImGui::GetWindowHeight();
+                    }
+                    ImGui::End(); 
                 }
                 
-                FramePlayback->Update(Editor, Graphics, Assets, Platform, DevPlatform);
+                if(GameContext->Game)
+                    UI_GameLister(Editor);
             }
-            LogHeight = ImGui::GetWindowHeight();
-            ImGui::End(); 
         }
         
         UI_Timers(Editor->TimedBlockEntries);

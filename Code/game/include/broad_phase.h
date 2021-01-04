@@ -28,4 +28,7 @@ struct broad_phase
                                       broad_phase_pair_filter_func* FilterFunc, void* UserData=NULL);
 };
 
+broad_phase_pair_list BroadPhase_AllocateList(ak_arena* Arena);
+void BroadPhase_AddPair(broad_phase_pair_list* List, broad_phase_pair Pair);
+
 #endif

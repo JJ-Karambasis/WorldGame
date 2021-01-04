@@ -10,14 +10,9 @@
 extern "C"
 AK_EXPORT GAME_STARTUP(Game_Startup)
 {
-    //TODO(JJ): We do not want to use AK_Allocate, we want to use something that we can control a bit better just in case an exception occurs during startup and we want to free the memory
-    game* Game = (game*)AK_Allocate(sizeof(game));
-    if(!Game)
-    {
-        //TODO(JJ): Diagnostic and error logging
-        AK_InvalidCode();
-        return NULL;
-    }
+    ak_arena* Storage = AK_CreateArena(AK_Megabyte(4));
+    game* Game = Storage->Push<game>();
+    Game->Storage = Storage;
     
     Debug_Log("Game Started!");
     
@@ -61,6 +56,26 @@ BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_MovableFilter)
     return !(EntityB->Type == ENTITY_TYPE_BUTTON);
 }
 
+struct gravity_filter_user_data
+{
+    broad_phase_pair_list* Movables;
+};
+
+BROAD_PHASE_PAIR_FILTER_FUNC(BroadPhase_GravityFilter)
+{
+    gravity_filter_user_data* Filter = (gravity_filter_user_data*)UserData;
+    ak_pool<entity>* EntityStorage = &BroadPhase->World->EntityStorage[BroadPhase->WorldIndex];
+    entity* EntityB = EntityStorage->Get(Pair.EntityB);
+    
+    if(EntityB->Type == ENTITY_TYPE_MOVABLE)
+    {
+        BroadPhase_AddPair(Filter->Movables, Pair);
+        return false;
+    }
+    
+    return !(EntityB->Type == ENTITY_TYPE_BUTTON);
+}
+
 inline ak_f32 GetDeltaClamped(ak_f32 Delta)
 {
     return AK_Max(Delta-VERY_CLOSE_DISTANCE, 0.0f);
@@ -71,6 +86,16 @@ inline ak_f32 GetDeltaClamped(ak_f32 Delta, ak_f32 t)
     return AK_Max(Delta*t-VERY_CLOSE_DISTANCE, 0.0f);
 }
 
+inline ak_bool ValidateMovable(movable* Movable)
+{
+    if(Movable->ParentID && Movable->ChildID)
+        return Movable->ParentID != Movable->ChildID;
+    return true;
+}
+
+#define MOVABLE_MIN_BOUNDS 0.999f
+#define MOVABLE_MAX_BOUNDS 1.001f
+
 ccd_contact Game_MovableMovementUpdate(game* Game, collision_detection* CollisionDetection, 
                                        ccd_contact AContactTOI, ak_u64 IgnoreID)
 {
@@ -78,18 +103,33 @@ ccd_contact Game_MovableMovementUpdate(game* Game, collision_detection* Collisio
     ak_u32 WorldIndex = CollisionDetection->BroadPhase.WorldIndex;
     ak_pool<entity>* EntityStorage = &World->EntityStorage[WorldIndex];
     ak_array<physics_object>* PhysicsObjects = &World->PhysicsObjects[WorldIndex];
+    ak_array<movable>* Movables = &World->Movables[WorldIndex];
     entity* EntityB = EntityStorage->Get(AContactTOI.EntityB);
     
     if(EntityB->Type == ENTITY_TYPE_MOVABLE)
     {
         ak_u32 BIndex = AK_PoolIndex(EntityB->ID);
         physics_object* PhysicsObjectB = PhysicsObjects->Get(BIndex);
+        movable* MovableB = Movables->Get(BIndex);
+        if(MovableB->ParentID)
+        {
+            //Probably need to loop until we get to a parent that has no children
+            ccd_contact ParentContactTOI = CCD_ComputeContact(CollisionDetection, AContactTOI.EntityA, MovableB->ParentID);
+            if(ParentContactTOI.Intersected && (ParentContactTOI.t <= AContactTOI.t))
+            {
+                EntityB = EntityStorage->Get(ParentContactTOI.EntityB);
+                BIndex = AK_PoolIndex(EntityB->ID);
+                PhysicsObjectB = PhysicsObjects->Get(BIndex);
+                MovableB = Movables->Get(BIndex);
+                AContactTOI = ParentContactTOI;
+            }
+        }
         
         ak_v3f LocalX = AK_QuatToXAxis(PhysicsObjectB->Orientation);
         ak_v3f LocalY = AK_QuatToYAxis(PhysicsObjectB->Orientation);
         ak_f32 XTest = AK_Abs(AK_Dot(LocalX, AContactTOI.Contact.Normal)); 
         ak_f32 YTest = AK_Abs(AK_Dot(LocalY, AContactTOI.Contact.Normal));
-        if((XTest > 0.999f && XTest < 1.001f) || (YTest > 0.999f && YTest < 1.001f))
+        if((XTest > MOVABLE_MIN_BOUNDS && XTest < MOVABLE_MAX_BOUNDS) || (YTest > MOVABLE_MIN_BOUNDS && YTest < MOVABLE_MAX_BOUNDS))
         {
             ak_u32 AIndex = AK_PoolIndex(AContactTOI.EntityA);
             physics_object* PhysicsObjectA = PhysicsObjects->Get(AIndex);
@@ -263,6 +303,7 @@ void Game_GravityMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_v3f
     BeginTimedBlock(Game_GravityMovementUpdate);
     world* World = Game->World;
     physics_object* PhysicsObject = World->PhysicsObjects[WorldIndex].Get(AK_PoolIndex(ID));
+    ak_array<movable>* Movables = &World->Movables[WorldIndex];
     
     broad_phase BroadPhase = BroadPhase_Begin(World, WorldIndex);
     collision_detection CollisionDetection = CollisionDetection_Begin(BroadPhase, Game->Scratch);
@@ -277,18 +318,75 @@ void Game_GravityMovementUpdate(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_v3f
             ak_f32 MoveDeltaDistance = AK_Magnitude(PhysicsObject->MoveDelta);
             if(MoveDeltaDistance < VERY_CLOSE_DISTANCE) break;
             
-            ccd_contact ContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID, BroadPhase_FilterOnlyStaticEntitiesFunc);
-            if(!ContactCCD.Intersected)
+            broad_phase_pair_list MovablePairs = BroadPhase_AllocateList(Game->Scratch);
+            gravity_filter_user_data* Filter = Game->Scratch->Push<gravity_filter_user_data>();
+            
+            Filter->Movables = &MovablePairs;
+            broad_phase_pair_list NonMovablePairs = BroadPhase.GetPairs(Game->Scratch, ID, BroadPhase_GravityFilter, Filter);
+            
+            ccd_contact MovableContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID, 
+                                                                   &MovablePairs);
+            ccd_contact NonMovableContactCCD = CCD_GetEarliestContact(&CollisionDetection, ID, 
+                                                                      &NonMovablePairs);
+            
+            if(!MovableContactCCD.Intersected && !NonMovableContactCCD.Intersected)
             {
-                PhysicsObject->Position += PhysicsObject->MoveDelta;
+                PhysicsObject->Transform.Translation += PhysicsObject->MoveDelta;
                 break;
             }
             
-            ak_v3f Normal = -ContactCCD.Contact.Normal;
-            ak_f32 tHit = ContactCCD.t;
-            if(tHit == 0 && ContactCCD.Contact.Penetration > 0.0f)
+            ccd_contact BestContactCCD = NonMovableContactCCD;
+            
+            if(!BestContactCCD.Intersected)
+                BestContactCCD = MovableContactCCD;
+            else
             {
-                PhysicsObject->Position += Normal*(ContactCCD.Contact.Penetration+VERY_CLOSE_DISTANCE);
+                if(MovableContactCCD.Intersected && (BestContactCCD.t >= MovableContactCCD.t))
+                    BestContactCCD = MovableContactCCD;
+            }
+            
+            entity* EntityB = World->EntityStorage[WorldIndex].Get(BestContactCCD.EntityB); 
+            if(EntityB->Type == ENTITY_TYPE_MOVABLE)
+            {
+                ak_f32 ZTest = AK_Abs(AK_Dot(AK_ZAxis(), BestContactCCD.Contact.Normal));
+                if(ZTest > MOVABLE_MIN_BOUNDS && ZTest < MOVABLE_MAX_BOUNDS)
+                {
+                    ak_u32 IndexA = AK_PoolIndex(BestContactCCD.EntityA);
+                    ak_u32 IndexB = AK_PoolIndex(BestContactCCD.EntityB);
+                    movable* MovableB = Movables->Get(IndexB);
+                    
+                    entity* EntityA = World->EntityStorage[WorldIndex].Get(BestContactCCD.EntityA);
+                    if(BestContactCCD.Contact.Normal.z > 0)
+                    {
+                        
+                        MovableB->ChildID = EntityA->ID;
+                        if(EntityA->Type == ENTITY_TYPE_MOVABLE)
+                        {
+                            movable* MovableA = World->Movables[WorldIndex].Get(IndexA);
+                            MovableA->ParentID = EntityB->ID;
+                            //AK_Assert(ValidateMovable(MovableA), "Corrupted movable");
+                        }
+                    }
+                    else
+                    {
+                        MovableB->ParentID = EntityA->ID;
+                        if(EntityA->Type == ENTITY_TYPE_MOVABLE)
+                        {
+                            movable* MovableA = World->Movables[WorldIndex].Get(IndexA);
+                            MovableA->ChildID = EntityB->ID;
+                            //AK_Assert(ValidateMovable(MovableA), "Corrupted movable");
+                        }
+                    }
+                    //AK_Assert(ValidateMovable(MovableB), "Corrupted movable");
+                }
+            }
+            
+            
+            ak_v3f Normal = -BestContactCCD.Contact.Normal;
+            ak_f32 tHit = BestContactCCD.t;
+            if(tHit == 0 && BestContactCCD.Contact.Penetration > 0.0f)
+            {
+                PhysicsObject->Position += Normal*(BestContactCCD.Contact.Penetration+VERY_CLOSE_DISTANCE);
             }
             
             ak_f32 HitDeltaDistance = GetDeltaClamped(MoveDeltaDistance, tHit);
@@ -324,6 +422,20 @@ void Game_ClearAllMovableChildren(world* World)
         }
     }
 }
+
+ak_bool Game_ValidateAllMovables(world* World)
+{
+    for(ak_u32 WorldIndex = 0; WorldIndex < 2; WorldIndex++)
+    {        
+        AK_ForEach(Movable, &World->Movables[WorldIndex])
+        {
+            if(!ValidateMovable(Movable))
+                return false;
+        }
+    }
+    return true;
+}
+
 
 extern "C"
 AK_EXPORT GAME_UPDATE(Game_Update)
@@ -517,7 +629,7 @@ AK_EXPORT GAME_SHUTDOWN(Game_Shutdown)
 {
     Game->World->Shutdown(Game);
     AK_DeleteArena(Game->Scratch);
-    AK_Free(Game);
+    AK_DeleteArena(Game->Storage);
 }
 
 #define AK_COMMON_IMPLEMENTATION
