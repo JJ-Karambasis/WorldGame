@@ -326,18 +326,17 @@ void PushViewportAndScissor(graphics* Graphics, ak_i32 X, ak_i32 Y, ak_i32 Width
     PushScissor(Graphics, X, Y, Width, Height);
 }
 
-void PushViewCommands(graphics* Graphics, ak_v2i Resolution, ak_v3f ViewPosition, ak_m3f ViewOrientation, ak_f32 FieldOfView, ak_f32 ZNear, ak_f32 ZFar)
+void PushViewCommands(graphics* Graphics, ak_v2i Resolution, ak_v3f ViewPosition, ak_m3f ViewOrientation, ak_m4f Projection)
 {    
-    ak_m4f Perspective = AK_Perspective(FieldOfView, AK_SafeRatio(Resolution.w, Resolution.h), ZNear, ZFar);
     ak_m4f View = AK_InvTransformM4(ViewPosition, ViewOrientation);
     
     PushViewPosition(Graphics, ViewPosition);
-    PushViewProjection(Graphics, View*Perspective);    
+    PushViewProjection(Graphics, View*Projection);    
 }
 
 void PushViewCommands(graphics* Graphics, ak_v2i Resolution, view_settings* CameraSettings)
 {    
-    PushViewCommands(Graphics, Resolution, CameraSettings->Position, CameraSettings->Orientation, CameraSettings->FieldOfView, CameraSettings->ZNear, CameraSettings->ZFar);    
+    PushViewCommands(Graphics, Resolution, CameraSettings->Transform.Position, CameraSettings->Transform.Orientation, CameraSettings->Projection);    
 }
 
 void PushRenderBufferViewportAndScissor(graphics* Graphics, graphics_render_buffer* RenderBuffer)

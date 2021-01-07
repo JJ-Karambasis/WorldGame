@@ -43,12 +43,32 @@ struct light_spawner
     ak_color3f Color;
 };
 
+enum render_mode_type
+{
+    RENDER_MODE_TYPE_LIT,
+    RENDER_MODE_TYPE_UNLIT,
+    RENDER_MODE_TYPE_WIREFRAME,
+    RENDER_MODE_TYPE_LIT_WIREFRAME,
+    RENDER_MODE_TYPE_COUNT
+};
+
+enum view_mode_type
+{
+    VIEW_MODE_TYPE_PERSPECTIVE, 
+    VIEW_MODE_TYPE_TOP, 
+    VIEW_MODE_TYPE_BOTTOM, 
+    VIEW_MODE_TYPE_LEFT, 
+    VIEW_MODE_TYPE_RIGHT, 
+    VIEW_MODE_TYPE_NEAR, 
+    VIEW_MODE_TYPE_FAR
+};
+
 struct temp_object
 {
     object_type Type;
     union
     {
-        dev_entity Entity;
+        dev_entity Entity;				
         dev_point_light PointLight;
     };
 };
@@ -74,6 +94,9 @@ struct ui
     ak_bool EditorDrawOtherWorld;
     
     ak_bool RenameModalState;
+    
+    render_mode_type RenderModeType;
+    view_mode_type ViewModeType;
     
     temp_object TempObject;
     material_context TempContext;

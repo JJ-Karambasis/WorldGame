@@ -77,7 +77,7 @@ struct game
     
     game_loop_accum LoopAccum;
     
-    graphics_camera Cameras[2];
+    perspective_camera Cameras[2];
     
     game_update* Update;
     game_shutdown* Shutdown;

@@ -79,6 +79,16 @@ struct movable
     ak_v3f GravityVelocity;
 };
 
+#define ZNEAR 0.01f
+#define ZFAR 100.0f
+#define FIELD_OF_VIEW (AK_PI*0.3f)
+
+struct perspective_camera
+{
+    ak_v3f Target;
+    ak_v3f SphericalCoordinates;    
+};
+
 void DeleteEntity(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true);
 entity* CreateEntity(game* Game, ak_u32 WorldIndex, entity_type Type, ak_v3f Position, ak_v3f Scale, ak_quatf Orientation, 
                      mesh_asset_id MeshID, material Material);

@@ -209,7 +209,7 @@ ccd_contact Game_MovableMovementUpdate(game* Game, collision_detection* Collisio
         EntityB = EntityStorage->GetByIndex(BIndex);
         physics_object* PhysicsObjectB = PhysicsObjects->Get(BIndex);
         
-        ak_v3f LocalX = AK_QwuatToXAxis(PhysicsObjectB->Orientation);
+        ak_v3f LocalX = AK_QuatToXAxis(PhysicsObjectB->Orientation);
         ak_v3f LocalY = AK_QuatToYAxis(PhysicsObjectB->Orientation);
         ak_f32 XTest = AK_Abs(AK_Dot(LocalX, AContactTOI.Contact.Normal)); 
         ak_f32 YTest = AK_Abs(AK_Dot(LocalY, AContactTOI.Contact.Normal));

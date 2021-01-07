@@ -9,6 +9,31 @@
 #include <game_common_source.cpp>
 #include <src/graphics_state.cpp>
 
+global const ak_char* Global_RenderModeStrings[] = 
+{
+    "Lit", 
+    "Unlit", 
+    "Wireframe", 
+    "Lit Wireframe"
+};
+
+global const ak_char* Global_ViewModeStrings[] = 
+{
+    "Perspective", 
+    "Top (Ortho)", 
+    "Bottom (Ortho)", 
+    "Left (Ortho)", 
+    "Right (Ortho)", 
+    "Near (Ortho)", 
+    "Far (Ortho)"
+};
+
+global const ak_f32 Global_GridSizes[] = {0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f};
+global const ak_char* Global_GridSizesText[] = {"0.1", "0.25", "0.5", "1.0", "2.0", "5.0", "10.0"};
+global const ak_f32 RotateAngleSnaps[] = {1.0f, 5.0f, 10.0f, 20.0f, 45.0f, 90.0f, 180.0f};
+global const ak_char* RotateAngleSnapsText[] = {"1", "5", "10", "20", "45", "90", "180"};
+
+
 EDITOR_DEBUG_LOG(Editor_DebugLog)
 {
     if(!Internal__LogArena)
@@ -212,14 +237,13 @@ ak_bool object::IsAlive(world_management* WorldManagement, ak_u32 WorldIndex)
 
 ray Editor_GetRayCastFromMouse(editor* Editor, view_settings* ViewSettings, ak_v2i Resolution)
 {
-    ak_m4f Perspective = AK_Perspective(ViewSettings->FieldOfView, AK_SafeRatio(Resolution.w, Resolution.h), ViewSettings->ZNear, ViewSettings->ZFar);
-    ak_m4f View = AK_InvTransformM4(ViewSettings->Position, ViewSettings->Orientation);
+    ak_m4f View = AK_InvTransformM4(ViewSettings->Transform.Position, ViewSettings->Transform.Orientation);
     
     dev_input* Input = &Editor->Input;
     
     ray RayCast;
-    RayCast.Origin = ViewSettings->Position;
-    RayCast.Direction = Ray_PixelToWorld(Editor->Input.MouseCoordinates, Resolution, Perspective, View);
+    RayCast.Origin = ViewSettings->Transform.Position;
+    RayCast.Direction = Ray_PixelToWorld(Editor->Input.MouseCoordinates, Resolution, ViewSettings->Projection, View);
     
     return RayCast;
 }
@@ -481,7 +505,7 @@ ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
     return Result;
 }
 
-void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Resolution, ak_f32 ZNear)
+void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Resolution)
 {
     gizmo_state* GizmoState = &Editor->GizmoState;
     world_management* WorldManagement = &Editor->WorldManagement;
@@ -495,7 +519,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
     
     if(!IsDown(&Input->Alt) && !ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
     {
-        gizmo_intersection_result GizmoHitTest = Editor_CastToGizmos(Editor, GizmoState, RayCast, ZNear);
+        gizmo_intersection_result GizmoHitTest = Editor_CastToGizmos(Editor, GizmoState, RayCast, ZNEAR);
         
         if(GizmoHitTest.Hit) GizmoHitTest.Gizmo->IsHighLighted = true;
         
@@ -504,7 +528,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
             if(!GizmoHitTest.Hit)
             {
                 GizmoState->GizmoHit = {};
-                GizmoState->SelectedObject = Editor_CastToAllObjects(Editor, Assets, RayCast, ZNear);
+                GizmoState->SelectedObject = Editor_CastToAllObjects(Editor, Assets, RayCast, ZNEAR);
             }
             else
             {
@@ -679,43 +703,111 @@ void Editor_DrawFrame(editor* Editor, graphics* Graphics, ak_v3f Position, ak_v3
     Editor_DrawSphere(Editor, Graphics, Position, 0.04f, AK_White3());    
 }
 
-void Editor_DrawGrid(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color, ak_f32 GridDistance)
+#define GRID_EDGE_THICKNESS 0.025f
+
+void Editor_DrawGridX(editor* Editor, graphics* Graphics, ak_i32 zLeftBound, ak_i32 zRightBound, 
+                      ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color, ak_f32 GridDistance)
 {
-    const ak_f32 EdgeThickness = 0.025f;
-    for(ak_f32 x = 0; x <= xRightBound; x+= GridDistance)
+    ak_f32 MinZ = (ak_f32)zLeftBound;
+    ak_f32 MaxZ = (ak_f32)zRightBound;
+    ak_f32 MinY = (ak_f32)yBottomBound;
+    ak_f32 MaxY = (ak_f32)yTopBound;
+    
+    if(MinZ > MaxZ) AK_Swap(MinZ, MaxZ);
+    if(MinY > MaxY) AK_Swap(MinY, MaxY);
+    
+    ak_i32 ZCount = (ak_i32)(MaxZ-MinZ);
+    ak_i32 YCount = (ak_i32)(MaxY-MinY);
+    
+    for(ak_i32 ZIndex = 0; ZIndex < ZCount; ZIndex++)
     {
-        if(x != 0)
-        {
-            Editor_DrawEdge(Editor, Graphics, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), EdgeThickness, Color);
-        }
+        ak_f32 z = MinZ + ZIndex*GridDistance;
+        ak_v3f P0 = AK_V3(0.0f, MinY, z);
+        ak_v3f P1 = AK_V3(0.0f, MaxY, z);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
     }
     
-    for(ak_f32 x = 0; x >= xLeftBound; x-=GridDistance)
+    for(ak_i32 YIndex = 0; YIndex < YCount; YIndex++)
     {
-        if(x != 0)
-        {
-            Editor_DrawEdge(Editor, Graphics, AK_V3f(x, (ak_f32)yTopBound, 0.0f), AK_V3f(x, (ak_f32)yBottomBound, 0.0f), EdgeThickness, Color);
-        }
+        ak_f32 y = MinY + YIndex*GridDistance;
+        ak_v3f P0 = AK_V3(0.0f, y, MinZ);
+        ak_v3f P1 = AK_V3(0.0f, y, MaxZ);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
     }
     
-    for(ak_f32 y = 0; y <= yBottomBound; y+=GridDistance)
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, MinY, 0.0f), AK_V3f(0.0f, MaxY, 0.0f), 
+                    GRID_EDGE_THICKNESS, AK_Green3());
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, 0.0f, MinZ), AK_V3f(0.0f, 0.0f, MaxZ), 
+                    GRID_EDGE_THICKNESS, AK_Red3());
+}
+
+void Editor_DrawGridY(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_i32 xRightBound, 
+                      ak_i32 zTopBound, ak_i32 zBottomBound, ak_color3f Color, ak_f32 GridDistance)
+{
+    ak_f32 MinX = (ak_f32)xLeftBound;
+    ak_f32 MaxX = (ak_f32)xRightBound;
+    ak_f32 MinZ = (ak_f32)zBottomBound;
+    ak_f32 MaxZ = (ak_f32)zTopBound;
+    
+    if(MinX > MaxX) AK_Swap(MinX, MaxX);
+    if(MinZ > MaxZ) AK_Swap(MinZ, MaxZ);
+    
+    ak_i32 XCount = (ak_i32)(MaxX-MinX);
+    ak_i32 ZCount = (ak_i32)(MaxZ-MinZ);
+    
+    for(ak_i32 XIndex = 0; XIndex < XCount; XIndex++)
     {
-        if(y != 0)
-        {
-            Editor_DrawEdge(Editor, Graphics, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), EdgeThickness, Color);
-        }
+        ak_f32 x = MinX + XIndex*GridDistance;
+        ak_v3f P0 = AK_V3(x, 0.0f, MinZ);
+        ak_v3f P1 = AK_V3(x, 0.0f, MaxZ);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
     }
     
-    for(ak_f32 y = 0; y >= yTopBound; y-=GridDistance)
+    for(ak_i32 ZIndex = 0; ZIndex < ZCount; ZIndex++)
     {
-        if(y != 0)
-        {
-            Editor_DrawEdge(Editor, Graphics, AK_V3f((ak_f32)xLeftBound, y, 0.0f), AK_V3f((ak_f32)xRightBound, y, 0.0f), EdgeThickness, Color);
-        }
+        ak_f32 z = MinZ + ZIndex*GridDistance;
+        ak_v3f P0 = AK_V3(MinX, 0.0f, z);
+        ak_v3f P1 = AK_V3(MaxX, 0.0f, z);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
     }
     
-    Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, (ak_f32)yTopBound, 0.0f), AK_V3f(0.0f, (ak_f32)yBottomBound, 0.0f), EdgeThickness, AK_Green3());
-    Editor_DrawEdge(Editor, Graphics, AK_V3f((ak_f32)xLeftBound, 0.0f, 0.0f), AK_V3f((ak_f32)xRightBound, 0.0f, 0.0f), EdgeThickness, AK_Red3());
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(MinX, 0.0f, 0.0f), AK_V3f(MaxX, 0.0f, 0.0f), 
+                    GRID_EDGE_THICKNESS, AK_Green3());
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, 0.0f, MinZ), AK_V3f(0.0f, 0.0f, MaxZ), 
+                    GRID_EDGE_THICKNESS, AK_Red3());
+}
+
+void Editor_DrawGridZ(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color, ak_f32 GridDistance)
+{
+    ak_f32 MinX = (ak_f32)xLeftBound;
+    ak_f32 MaxX = (ak_f32)xRightBound;
+    ak_f32 MinY = (ak_f32)yBottomBound;
+    ak_f32 MaxY = (ak_f32)yTopBound;
+    
+    if(MinX > MaxX) AK_Swap(MinX, MaxX);
+    if(MinY > MaxY) AK_Swap(MinY, MaxY);
+    
+    ak_i32 XCount = (ak_i32)(MaxX-MinX);
+    ak_i32 YCount = (ak_i32)(MaxY-MinY);
+    
+    for(ak_i32 XIndex = 0; XIndex < XCount; XIndex++)
+    {
+        ak_f32 x = MinX + XIndex*GridDistance;
+        ak_v3f P0 = AK_V3(x, MinY, 0.0f);
+        ak_v3f P1 = AK_V3(x, MaxY, 0.0f);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+    }
+    
+    for(ak_i32 YIndex = 0; YIndex < YCount; YIndex++)
+    {
+        ak_f32 y = MinY + YIndex*GridDistance;
+        ak_v3f P0 = AK_V3(MinX, y, 0.0f);
+        ak_v3f P1 = AK_V3(MaxX, y, 0.0f);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+    }
+    
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, MinY, 0.0f), AK_V3f(0.0f, MaxY, 0.0f), GRID_EDGE_THICKNESS, AK_Red3());
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(MinX, 0.0f, 0.0f), AK_V3f(MaxX, 0.0f, 0.0f), GRID_EDGE_THICKNESS, AK_Green3());
 }
 
 ak_color3f Editor_GetGizmoColor(gizmo Gizmo)
@@ -907,29 +999,101 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
     
     Editor->Scratch->EndTemp(&TempArena);
     
+    ortho_camera* OrthoCamera = NULL;
+    
+    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_TOP-1];
+    OrthoCamera->Target = AK_V3<ak_f32>();
+    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Z = -AK_YAxis();
+    OrthoCamera->Y =  AK_ZAxis();
+    OrthoCamera->X = -AK_XAxis();
+    
+    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_BOTTOM-1];
+    OrthoCamera->Target = AK_V3<ak_f32>();
+    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Z =  AK_YAxis();
+    OrthoCamera->Y =  AK_ZAxis();
+    OrthoCamera->X =  AK_XAxis();
+    
+    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_LEFT-1];
+    OrthoCamera->Target = AK_V3<ak_f32>();
+    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Z = AK_XAxis();
+    OrthoCamera->Y = AK_ZAxis();
+    OrthoCamera->X = -AK_YAxis();
+    
+    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_RIGHT-1];
+    OrthoCamera->Target = AK_V3<ak_f32>();
+    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Z = -AK_XAxis();
+    OrthoCamera->Y =  AK_ZAxis();
+    OrthoCamera->X =  AK_YAxis();
+    
+    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_NEAR-1];
+    OrthoCamera->Target = AK_V3<ak_f32>();
+    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Z = -AK_ZAxis();
+    OrthoCamera->Y =  AK_YAxis();
+    OrthoCamera->X =  AK_XAxis();
+    
+    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_FAR-1];
+    OrthoCamera->Target = AK_V3<ak_f32>();
+    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Z = AK_ZAxis();
+    OrthoCamera->Y = -AK_YAxis();
+    OrthoCamera->X = -AK_XAxis();
+    
     Editor_LoadDefaultWorld(Editor, Assets, DevPlatform);
     
     return Editor;
 }
 
-void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSettings, ak_v2i Resolution)
+void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSettings, ak_v2i Resolution, view_mode_type ViewMode)
 {
     ak_v3f* FrustumCorners = GetFrustumCorners(ViewSettings, Resolution);
+    
+    ray FrustumRays[4] = 
+    {
+        {FrustumCorners[0], AK_Normalize(FrustumCorners[5]-FrustumCorners[0])},
+        {FrustumCorners[1], AK_Normalize(FrustumCorners[4]-FrustumCorners[1])},
+        {FrustumCorners[2], AK_Normalize(FrustumCorners[7]-FrustumCorners[2])},
+        {FrustumCorners[3], AK_Normalize(FrustumCorners[6]-FrustumCorners[3])}
+    };
+    
+    ak_v3f PlaneNormal = {};
+    switch(ViewMode)
+    {
+        case VIEW_MODE_TYPE_PERSPECTIVE:
+        case VIEW_MODE_TYPE_NEAR:
+        case VIEW_MODE_TYPE_FAR:
+        {
+            PlaneNormal = AK_ZAxis();
+        } break;
+        
+        case VIEW_MODE_TYPE_TOP:
+        case VIEW_MODE_TYPE_BOTTOM:
+        {
+            PlaneNormal = AK_YAxis();
+        } break;
+        
+        case VIEW_MODE_TYPE_RIGHT:
+        case VIEW_MODE_TYPE_LEFT:
+        {
+            PlaneNormal = AK_XAxis();
+        } break;
+    }
     
     ak_v3f FrustumPlaneIntersectionPoints[4];
     ak_i8 IntersectedCount = 0;
     for(int i = 0; i < 4; i++)
     {
-        ray FrustumRay = {};
-        FrustumRay.Origin = FrustumCorners[i];
-        FrustumRay.Direction = AK_Normalize(FrustumCorners[i + 4] - FrustumCorners[i]);
-        
-        ray_cast RayCast = Ray_PlaneCast(FrustumRay.Origin, FrustumRay.Direction, AK_ZAxis(), AK_V3<ak_f32>());
+        ray FrustumRay = FrustumRays[i];
+        ray_cast RayCast = Ray_PlaneCast(FrustumRay.Origin, FrustumRay.Direction, PlaneNormal, AK_V3<ak_f32>());
         
         if(RayCast.Intersected)
         {
             IntersectedCount++;            
-            RayCast.t = AK_Min(RayCast.t, ViewSettings->ZFar);
+            RayCast.t = AK_Min(RayCast.t, ZFAR);
             FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * RayCast.t);
         }
         else
@@ -938,44 +1102,139 @@ void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSe
         }
     }
     
+    if(ViewMode != VIEW_MODE_TYPE_PERSPECTIVE)
+        PushDepth(Graphics, false);
+    
     if(IntersectedCount != 0)
     {
-        //if not all frustum rays intersected, we want to use the less efficient method for getting grid bounds
-        ak_f32 MinX;
-        ak_f32 MaxX;
-        ak_f32 MinY;
-        ak_f32 MaxY;
-        if(IntersectedCount == 4)
+        switch(ViewMode)
         {
-            MinX = FrustumPlaneIntersectionPoints[0].x;
-            MaxX = FrustumPlaneIntersectionPoints[0].x;
-            MinY = FrustumPlaneIntersectionPoints[0].y;
-            MaxY = FrustumPlaneIntersectionPoints[0].y;
-            for(int i = 0; i < 4; i++)
+            case VIEW_MODE_TYPE_PERSPECTIVE:
+            case VIEW_MODE_TYPE_NEAR:
+            case VIEW_MODE_TYPE_FAR:
             {
-                MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
-                MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
-                MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
-                MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
-            }
-        }
-        else
-        {
-            MinX = FrustumCorners[0].x;
-            MaxX = FrustumCorners[0].x;
-            MinY = FrustumCorners[0].y;
-            MaxY = FrustumCorners[0].y;
-            for(int i = 0; i < 8; i++)
+                ak_f32 MinX;
+                ak_f32 MaxX;
+                ak_f32 MinY;
+                ak_f32 MaxY;
+                if(IntersectedCount == 4)
+                {
+                    MinX = FrustumPlaneIntersectionPoints[0].x;
+                    MaxX = FrustumPlaneIntersectionPoints[0].x;
+                    MinY = FrustumPlaneIntersectionPoints[0].y;
+                    MaxY = FrustumPlaneIntersectionPoints[0].y;
+                    for(int i = 0; i < 4; i++)
+                    {
+                        MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);                                             
+                        MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
+                        MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
+                        MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+                    }
+                }
+                else
+                {
+                    MinX = FrustumCorners[0].x;
+                    MaxX = FrustumCorners[0].x;
+                    MinY = FrustumCorners[0].y;
+                    MaxY = FrustumCorners[0].y;
+                    for(int i = 0; i < 8; i++)
+                    {
+                        MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
+                        MaxX = AK_Max(FrustumCorners[i].x, MaxX);
+                        MinY = AK_Min(FrustumCorners[i].y, MinY);
+                        MaxY = AK_Max(FrustumCorners[i].y, MaxY);
+                    }
+                }
+                
+                Editor_DrawGridZ(Editor, Graphics, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f), Editor->GizmoState.GridDistance);
+            } break;
+            
+            case VIEW_MODE_TYPE_LEFT:
+            case VIEW_MODE_TYPE_RIGHT:
             {
-                MinX = AK_Min(FrustumCorners[i].x, MinX);                                             
-                MaxX = AK_Max(FrustumCorners[i].x, MaxX);
-                MinY = AK_Min(FrustumCorners[i].y, MinY);
-                MaxY = AK_Max(FrustumCorners[i].y, MaxY);
-            }
+                ak_f32 MinZ;
+                ak_f32 MaxZ;
+                ak_f32 MinY;
+                ak_f32 MaxY;
+                
+                if(IntersectedCount == 4)
+                {
+                    MinZ = FrustumPlaneIntersectionPoints[0].z;
+                    MaxZ = FrustumPlaneIntersectionPoints[0].z;
+                    MinY = FrustumPlaneIntersectionPoints[0].y;
+                    MaxY = FrustumPlaneIntersectionPoints[0].y;
+                    for(int i = 0; i < 4; i++)
+                    {
+                        MinZ = AK_Min(FrustumPlaneIntersectionPoints[i].z, MinZ);                                             
+                        MaxZ = AK_Max(FrustumPlaneIntersectionPoints[i].z, MaxZ);
+                        MinY = AK_Min(FrustumPlaneIntersectionPoints[i].y, MinY);
+                        MaxY = AK_Max(FrustumPlaneIntersectionPoints[i].y, MaxY);
+                    }
+                }
+                else
+                {
+                    MinZ = FrustumCorners[0].z;
+                    MaxZ = FrustumCorners[0].z;
+                    MinY = FrustumCorners[0].y;
+                    MaxY = FrustumCorners[0].y;
+                    for(int i = 0; i < 8; i++)
+                    {
+                        MinZ = AK_Min(FrustumCorners[i].z, MinZ);                                             
+                        MaxZ = AK_Max(FrustumCorners[i].z, MaxZ);
+                        MinY = AK_Min(FrustumCorners[i].y, MinY);
+                        MaxY = AK_Max(FrustumCorners[i].y, MaxY);
+                    }
+                }
+                
+                Editor_DrawGridX(Editor, Graphics, AK_Floor(MinZ), AK_Ceil(MaxZ), AK_Floor(MinY), 
+                                 AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f), Editor->GizmoState.GridDistance);
+            } break;
+            
+            case VIEW_MODE_TYPE_TOP:
+            case VIEW_MODE_TYPE_BOTTOM:
+            {
+                ak_f32 MinX;
+                ak_f32 MaxX;
+                ak_f32 MinZ;
+                ak_f32 MaxZ;
+                
+                if(IntersectedCount == 4)
+                {
+                    MinZ = FrustumPlaneIntersectionPoints[0].z;
+                    MaxZ = FrustumPlaneIntersectionPoints[0].z;
+                    MinX = FrustumPlaneIntersectionPoints[0].x;
+                    MaxX = FrustumPlaneIntersectionPoints[0].x;
+                    for(int i = 0; i < 4; i++)
+                    {
+                        MinZ = AK_Min(FrustumPlaneIntersectionPoints[i].z, MinZ);                                             
+                        MaxZ = AK_Max(FrustumPlaneIntersectionPoints[i].z, MaxZ);
+                        MinX = AK_Min(FrustumPlaneIntersectionPoints[i].x, MinX);
+                        MaxX = AK_Max(FrustumPlaneIntersectionPoints[i].x, MaxX);
+                    }
+                }
+                else
+                {
+                    MinZ = FrustumCorners[0].z;
+                    MaxZ = FrustumCorners[0].z;
+                    MinX = FrustumCorners[0].x;
+                    MaxX = FrustumCorners[0].x;
+                    for(int i = 0; i < 8; i++)
+                    {
+                        MinZ = AK_Min(FrustumCorners[i].z, MinZ);                                             
+                        MaxZ = AK_Max(FrustumCorners[i].z, MaxZ);
+                        MinX = AK_Min(FrustumCorners[i].x, MinX);
+                        MaxX = AK_Max(FrustumCorners[i].x, MaxX);
+                    }
+                }
+                
+                Editor_DrawGridY(Editor, Graphics, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinZ), 
+                                 AK_Ceil(MaxZ), AK_RGB(0.1f, 0.1f, 0.1f), Editor->GizmoState.GridDistance);
+            } break;
         }
-        
-        Editor_DrawGrid(Editor, Graphics, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f), Editor->GizmoState.GridDistance);
     }    
+    
+    if(ViewMode != VIEW_MODE_TYPE_PERSPECTIVE)
+        PushDepth(Graphics, true);
 }
 
 ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_platform* DevPlatform, ak_f32 dt)
@@ -987,7 +1246,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     
     dev_input* DevInput = &Editor->Input;
     
-    graphics_camera* DevCamera = &Editor->Cameras[Editor->CurrentWorldIndex];
+    perspective_camera* DevCamera = &Editor->Cameras[Editor->CurrentWorldIndex];
     ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;
     
     game_context* GameContext = &Editor->GameContext;
@@ -1043,8 +1302,8 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
             if(SphericalCoordinates->radius < 1e-3f)
                 SphericalCoordinates->radius = 1e-3f;
             
-            view_settings ViewSettings = GetViewSettings(DevCamera);    
-            DevCamera->Target += (ViewSettings.Orientation.XAxis*PanDelta.x - ViewSettings.Orientation.YAxis*PanDelta.y);        
+            ak_rigid_transformf CameraTransform = GetCameraTransform(DevCamera);
+            DevCamera->Target += (CameraTransform.Orientation.XAxis*PanDelta.x - CameraTransform.Orientation.YAxis*PanDelta.y);        
         }
         
         if(!Game)
@@ -1064,10 +1323,13 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                     EditRecordings->Redo(WorldManagement);
             }
             
-            view_settings ViewSettings = GetViewSettings(DevCamera);
+            view_settings ViewSettings = {};
+            ViewSettings.Transform = GetCameraTransform(DevCamera);
+            ViewSettings.Projection = AK_Perspective(FIELD_OF_VIEW, AK_SafeRatio(Resolution.w, Resolution.h), ZNEAR, ZFAR);
+            
             ray RayCast = Editor_GetRayCastFromMouse(Editor, &ViewSettings, Resolution);
             
-            Editor_SelectObjects(Editor, Assets, RayCast, Resolution, ViewSettings.ZNear);
+            Editor_SelectObjects(Editor, Assets, RayCast, Resolution);
             
             object* SelectedObject = Editor_GetSelectedObject(Editor);
             if(SelectedObject)
@@ -1432,15 +1694,24 @@ void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
 view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* Assets, ak_u32 WorldIndex)
 {
     graphics_render_buffer* RenderBuffer = Editor->RenderBuffers[WorldIndex];
-    view_settings ViewSettings = GetViewSettings(&Editor->Cameras[WorldIndex]);
-    graphics_light_buffer LightBuffer = {};
+    view_settings ViewSettings = {};
     
     world_management* WorldManagement = &Editor->WorldManagement;
     
-    AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
+    switch(Editor->UI.ViewModeType)
     {
-        AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
-        LightBuffer.PointLights[LightBuffer.PointLightCount++] = DevLight->Light;
+        case VIEW_MODE_TYPE_PERSPECTIVE:
+        {
+            ViewSettings.Transform = GetCameraTransform(&Editor->Cameras[WorldIndex]);
+            ViewSettings.Projection = AK_Perspective(FIELD_OF_VIEW, AK_SafeRatio(RenderBuffer->Resolution.x, RenderBuffer->Resolution.y), 
+                                                     ZNEAR, ZFAR);
+        } break;
+        
+        default:
+        {
+            ViewSettings.Transform = GetCameraTransform(&Editor->OrthoCameras[Editor->UI.ViewModeType-1]);
+            ViewSettings.Projection = AK_Orthographic(-16.0f, 16.0f, 9.0f, -9.0f, 0.01f, 50.0f);
+        } break;
     }
     
     PushDepth(Graphics, true);
@@ -1449,14 +1720,81 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
     PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
-    PushLightBuffer(Graphics, &LightBuffer);
-    AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
+    
+    switch(Editor->UI.RenderModeType)
     {
-        graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &DevEntity->Material);
-        graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, DevEntity->MeshID);
+        case RENDER_MODE_TYPE_LIT:
+        {
+            graphics_light_buffer LightBuffer = {};
+            AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
+            {
+                AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
+                LightBuffer.PointLights[LightBuffer.PointLightCount++] = DevLight->Light;
+            }
+            
+            PushLightBuffer(Graphics, &LightBuffer);
+            AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
+            {
+                graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &DevEntity->Material);
+                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, DevEntity->MeshID);
+                
+                PushMaterial(Graphics, Material);
+                PushDrawMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+            }
+        } break;
         
-        PushMaterial(Graphics, Material);
-        PushDrawMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+        case RENDER_MODE_TYPE_UNLIT:
+        {
+            AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
+            {
+                graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &DevEntity->Material);
+                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, DevEntity->MeshID);
+                
+                PushDrawUnlitMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), Material.Diffuse, 
+                                  GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+            }
+        } break;
+        
+        case RENDER_MODE_TYPE_WIREFRAME:
+        {
+            PushWireframe(Graphics, true);
+            AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
+            {
+                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, DevEntity->MeshID);
+                PushDrawUnlitMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), CreateDiffuseMaterialSlot(AK_Blue3()), 
+                                  GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+            }
+            PushWireframe(Graphics, false);
+        } break;
+        
+        case RENDER_MODE_TYPE_LIT_WIREFRAME:
+        {
+            graphics_light_buffer LightBuffer = {};
+            AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
+            {
+                AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
+                LightBuffer.PointLights[LightBuffer.PointLightCount++] = DevLight->Light;
+            }
+            
+            PushLightBuffer(Graphics, &LightBuffer);
+            AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
+            {
+                graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &DevEntity->Material);
+                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, DevEntity->MeshID);
+                
+                PushMaterial(Graphics, Material);
+                PushDrawMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+            }
+            
+            PushWireframe(Graphics, true);
+            AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
+            {
+                graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, DevEntity->MeshID);
+                PushDrawUnlitMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), CreateDiffuseMaterialSlot(AK_Blue3()), 
+                                  GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+            }
+            PushWireframe(Graphics, false);
+        } break;
     }
     
     AK_ForEach(PointLight, &WorldManagement->DevPointLights[WorldIndex])
@@ -1468,7 +1806,7 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
     {
         Editor_RenderSelectedObjectGizmos(Editor, Graphics);
         if(Editor->UI.EditorDrawGrid)
-            Editor_RenderGrid(Editor, Graphics, &ViewSettings, RenderBuffer->Resolution);
+            Editor_RenderGrid(Editor, Graphics, &ViewSettings, RenderBuffer->Resolution, Editor->UI.ViewModeType);
     }
     
     return ViewSettings;
@@ -1479,7 +1817,7 @@ view_settings Editor_RenderGameWorld(editor* Editor, graphics* Graphics, game* G
     assets* Assets = Game->Assets;
     world* World = Game->World;
     
-    graphics_camera* Camera = &Game->Cameras[WorldIndex];
+    perspective_camera* Camera = &Game->Cameras[WorldIndex];
     ak_pool<entity>* EntityStorage = &World->EntityStorage[WorldIndex];
     ak_pool<point_light>* PointLightStorage = &World->PointLightStorage[WorldIndex];
     ak_array<ak_sqtf>* OldTransforms = &World->OldTransforms[WorldIndex];
@@ -1513,14 +1851,11 @@ view_settings Editor_RenderGameWorld(editor* Editor, graphics* Graphics, game* G
     if(Editor->UI.GameUseDevCamera)
         Camera = &Editor->Cameras[WorldIndex];
     
-    view_settings ViewSettings = GetViewSettings(Camera);
+    view_settings ViewSettings = {};
+    ViewSettings.Transform = GetCameraTransform(Camera);
+    ViewSettings.Projection = AK_Perspective(FIELD_OF_VIEW, AK_SafeRatio(RenderBuffer->Resolution.x, RenderBuffer->Resolution.y), 
+                                             ZNEAR, ZFAR);
     
-    graphics_light_buffer LightBuffer = {};
-    AK_ForEach(Light, PointLightStorage)
-    {
-        AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
-        LightBuffer.PointLights[LightBuffer.PointLightCount++] = ToGraphicsPointLight(Light);
-    }
     
     PushDepth(Graphics, true);
     PushSRGBRenderBufferWrites(Graphics, true);
@@ -1528,22 +1863,109 @@ view_settings Editor_RenderGameWorld(editor* Editor, graphics* Graphics, game* G
     PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
-    PushLightBuffer(Graphics, &LightBuffer);
-    
-    
-    for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
+    switch(Editor->UI.RenderModeType)
     {
-        ak_u64 ID = EntityStorage->IDs[EntityIndex];
-        if(AK_PoolIsAllocatedID(ID))
+        case RENDER_MODE_TYPE_LIT:
         {
-            ak_u32 Index = AK_PoolIndex(ID);
-            graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
-            graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &GraphicsObject->Material);
-            graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
+            graphics_light_buffer LightBuffer = {};
+            AK_ForEach(Light, PointLightStorage)
+            {
+                AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
+                LightBuffer.PointLights[LightBuffer.PointLightCount++] = ToGraphicsPointLight(Light);
+            }
             
-            PushMaterial(Graphics, Material);
-            PushDrawMesh(Graphics, MeshHandle, GraphicsObject->Transform, GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
-        }
+            PushLightBuffer(Graphics, &LightBuffer);
+            for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
+            {
+                ak_u64 ID = EntityStorage->IDs[EntityIndex];
+                if(AK_PoolIsAllocatedID(ID))
+                {
+                    ak_u32 Index = AK_PoolIndex(ID);
+                    graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
+                    graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &GraphicsObject->Material);
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
+                    
+                    PushMaterial(Graphics, Material);
+                    PushDrawMesh(Graphics, MeshHandle, GraphicsObject->Transform, GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
+                }
+            }
+        } break;
+        
+        case RENDER_MODE_TYPE_UNLIT:
+        {
+            for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
+            {
+                ak_u64 ID = EntityStorage->IDs[EntityIndex];
+                if(AK_PoolIsAllocatedID(ID))
+                {
+                    ak_u32 Index = AK_PoolIndex(ID);
+                    graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
+                    graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &GraphicsObject->Material);
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
+                    PushDrawUnlitMesh(Graphics, MeshHandle, GraphicsObject->Transform, Material.Diffuse, 
+                                      GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
+                }
+            }
+        } break;
+        
+        case RENDER_MODE_TYPE_WIREFRAME:
+        {
+            PushWireframe(Graphics, true);
+            for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
+            {
+                ak_u64 ID = EntityStorage->IDs[EntityIndex];
+                if(AK_PoolIsAllocatedID(ID))
+                {
+                    ak_u32 Index = AK_PoolIndex(ID);
+                    graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
+                    PushDrawUnlitMesh(Graphics, MeshHandle, GraphicsObject->Transform, CreateDiffuseMaterialSlot(AK_Blue3()), 
+                                      GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
+                }
+            }
+            PushWireframe(Graphics, false);
+        } break;
+        
+        case RENDER_MODE_TYPE_LIT_WIREFRAME:
+        {
+            graphics_light_buffer LightBuffer = {};
+            AK_ForEach(Light, PointLightStorage)
+            {
+                AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
+                LightBuffer.PointLights[LightBuffer.PointLightCount++] = ToGraphicsPointLight(Light);
+            }
+            
+            PushLightBuffer(Graphics, &LightBuffer);
+            for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
+            {
+                ak_u64 ID = EntityStorage->IDs[EntityIndex];
+                if(AK_PoolIsAllocatedID(ID))
+                {
+                    ak_u32 Index = AK_PoolIndex(ID);
+                    graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
+                    graphics_material Material = ConvertToGraphicsMaterial(Assets, Graphics, &GraphicsObject->Material);
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
+                    
+                    PushMaterial(Graphics, Material);
+                    PushDrawMesh(Graphics, MeshHandle, GraphicsObject->Transform, GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
+                }
+            }
+            
+            PushWireframe(Graphics, true);
+            for(ak_u32 EntityIndex = 0; EntityIndex < EntityStorage->MaxUsed; EntityIndex++)
+            {
+                ak_u64 ID = EntityStorage->IDs[EntityIndex];
+                if(AK_PoolIsAllocatedID(ID))
+                {
+                    ak_u32 Index = AK_PoolIndex(ID);
+                    graphics_object* GraphicsObject = GraphicsObjects->Get(Index);
+                    graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Assets, Graphics, GraphicsObject->MeshID);
+                    PushDrawUnlitMesh(Graphics, MeshHandle, GraphicsObject->Transform, CreateDiffuseMaterialSlot(AK_Blue3()), 
+                                      GetMeshIndexCount(Assets, GraphicsObject->MeshID), 0, 0);
+                }
+            }
+            PushWireframe(Graphics, false);
+        } break;
     }
     
     return ViewSettings;
@@ -1613,7 +2035,7 @@ void Editor_Render(editor* Editor, graphics* Graphics, platform* Platform, asset
                         } break;
                         
                         case COLLISION_VOLUME_TYPE_CAPSULE:
-                        {
+                        { 
                             capsule Capsule = TransformCapsule(&Volume->Capsule, Transform);
                             Editor_DrawLineCapsule(Editor, Graphics, Capsule.P0, Capsule.P1, Capsule.Radius, AK_Blue3());                                                
                         } break;
@@ -2088,29 +2510,38 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                 UI_Checkbox(AK_HashFunction("Editor Draw Grid"), "Draw Grid", 
                             &Editor->UI.EditorDrawGrid);
                 
+                ImGui::PushID(AK_HashFunction("Editor Render Modes"));
+                UI_Combo("Render Modes", (ak_i32*)&Editor->UI.RenderModeType, Global_RenderModeStrings, AK_Count(Global_RenderModeStrings));
+                ImGui::PopID();
+                
+                ImGui::PushID(AK_HashFunction("Editor View Modes"));
+                UI_Combo("View Modes", (ak_i32*)&Editor->UI.ViewModeType, Global_ViewModeStrings, AK_Count(Global_ViewModeStrings));
+                ImGui::PopID();
+                
                 ImGui::Text("Snap Settings");
                 
                 UI_Checkbox(AK_HashFunction("Snap Checkbox"),  "Snap", &Editor->GizmoState.ShouldSnap);
                 
-                UI_SameLineLabel("Grid Size");
-                const ak_f32 GridSizes[] = {0.1f, 0.25f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f};
-                const ak_char* GridSizesText[] = {"0.1", "0.25", "0.5", "1", "2", "5", "10"}; 
-                UI_Combo(AK_HashFunction("Grid Size"), "", (int*)&Editor->UI.EditorGridSizeIndex, GridSizesText, AK_Count(GridSizesText));
-                Editor->GizmoState.GridDistance = GridSizes[Editor->UI.EditorGridSizeIndex];
+                ImGui::PushID(AK_HashFunction("Grid Size"));
+                UI_Combo("Grid Size", (ak_i32*)&Editor->UI.EditorGridSizeIndex, Global_GridSizesText, AK_Count(Global_GridSizesText));
+                ImGui::PopID();
+                
+                Editor->GizmoState.GridDistance = Global_GridSizes[Editor->UI.EditorGridSizeIndex];
                 
                 if(!Editor->GizmoState.ShouldSnap)
                     UI_PushDisabledItem();
                 
-                UI_SameLineLabel("Scale Snap");
-                UI_Combo(AK_HashFunction("Scale Snap"), "", (int*)&Editor->UI.EditorScaleSnapIndex, 
-                         GridSizesText, AK_Count(GridSizesText));
-                Editor->GizmoState.ScaleSnap = GridSizes[Editor->UI.EditorScaleSnapIndex];
+                ImGui::PushID(AK_HashFunction("Scale Snap"));
+                UI_Combo("Scale Snap", (ak_i32*)&Editor->UI.EditorScaleSnapIndex, Global_GridSizesText, AK_Count(Global_GridSizesText));
+                ImGui::PopID();
+                
+                Editor->GizmoState.ScaleSnap = Global_GridSizes[Editor->UI.EditorScaleSnapIndex];
                 
                 UI_SameLineLabel("Rotate Angle Snap");
-                const ak_f32 RotateAngleSnaps[] = {1.0f, 5.0f, 10.0f, 20.0f, 45.0f, 90.0f, 180.0f};
-                const ak_char* RotateAngleSnapsText[] = {"1", "5", "10", "20", "45", "90", "180"};
-                UI_Combo(AK_HashFunction("Rotate Angle Snap"), "", (int*)&Editor->UI.EditorRotateSnapIndex, 
-                         RotateAngleSnapsText, AK_Count(RotateAngleSnapsText));
+                
+                ImGui::PushID(AK_HashFunction("Rotate Angle Snap"));
+                UI_Combo("Rotate Angle Snap", (ak_i32*)&Editor->UI.EditorRotateSnapIndex, RotateAngleSnapsText, AK_Count(RotateAngleSnapsText));
+                ImGui::PopID();
                 
                 Editor->GizmoState.RotationAngleSnap = RotateAngleSnaps[Editor->UI.EditorRotateSnapIndex];
                 
@@ -2196,6 +2627,10 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                                 Editor->Cameras[1] = Game->Cameras[1];
                             }
                         }
+                        
+                        ImGui::PushID(AK_HashFunction("Editor Render Modes"));
+                        UI_Combo("Render Modes", (ak_i32*)&Editor->UI.RenderModeType, Global_RenderModeStrings, AK_Count(Global_RenderModeStrings));
+                        ImGui::PopID();
                         
                         FramePlayback->Update(Editor, Graphics, Assets, Platform, DevPlatform);
                         LogHeight = ImGui::GetWindowHeight();

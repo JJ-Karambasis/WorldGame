@@ -24,11 +24,8 @@ typedef ak_u64 graphics_mesh_id;
 
 struct view_settings
 {
-    ak_v3f Position;
-    ak_m3f Orientation;
-    ak_f32 FieldOfView;
-    ak_f32 ZNear;
-    ak_f32 ZFar;
+    ak_rigid_transformf Transform;
+    ak_m4f Projection;
 };
 
 enum graphics_vertex_format

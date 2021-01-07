@@ -5,9 +5,8 @@ GetFrustumCorners(view_settings* ViewSettings, ak_v2i RenderDim)
 {
     ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_v3f* Result = GlobalArena->PushArray<ak_v3f>(8);
-    ak_m4f Perspective = AK_Perspective(ViewSettings->FieldOfView, AK_SafeRatio(RenderDim.w, RenderDim.h), ViewSettings->ZNear, ViewSettings->ZFar);    
-    AK_GetFrustumCorners(Result, Perspective);
-    AK_TransformPoints(Result, 8, AK_TransformM4(ViewSettings->Position, ViewSettings->Orientation));    
+    AK_GetFrustumCorners(Result, ViewSettings->Projection);
+    AK_TransformPoints(Result, 8, AK_TransformM4(ViewSettings->Transform.Position, ViewSettings->Transform.Orientation));    
     return Result;
 }
 
@@ -159,9 +158,9 @@ graphics_material ConvertToGraphicsMaterial(assets* Assets, graphics* Graphics, 
     return GraphicsMaterial;
 }
 
-view_settings GetViewSettings(graphics_camera* Camera)
-{    
-    view_settings ViewSettings = {};
+ak_rigid_transformf GetCameraTransform(perspective_camera* Camera)
+{
+    ak_rigid_transformf CameraTransform = {};
     ak_v3f Up = AK_ZAxis();        
     ak_f32 Degree = AK_ToDegree(Camera->SphericalCoordinates.inclination);                    
     if(Degree > 0)
@@ -173,45 +172,17 @@ view_settings GetViewSettings(graphics_camera* Camera)
     if(AK_EqualEps(AK_Abs(Degree), 180.0f))
         Up = -AK_YAxis();        
     
-    ViewSettings.Position = Camera->Target + AK_SphericalToCartesian(Camera->SphericalCoordinates);            
-    ViewSettings.Orientation = AK_OrientAt(ViewSettings.Position, Camera->Target, Up);       
-    
-    ViewSettings.ZNear = 0.01f;
-    ViewSettings.ZFar = 50.0f;
-    ViewSettings.FieldOfView = AK_PI*0.3f;
-    return ViewSettings;
+    CameraTransform.Position = Camera->Target + AK_SphericalToCartesian(Camera->SphericalCoordinates);            
+    CameraTransform.Orientation = AK_OrientAt(CameraTransform.Position, Camera->Target, Up);       
+    return CameraTransform;
 }
 
-void Game_Render(game* Game, graphics_state* GraphicsState)
+ak_rigid_transformf GetCameraTransform(ortho_camera* Camera)
 {
-    graphics_light_buffer LightBuffer = {};
-    
-    LightBuffer.PointLightCount = GraphicsState->PointLightArray.Count;
-    AK_CopyArray(LightBuffer.PointLights, GraphicsState->PointLightArray.Ptr, LightBuffer.PointLightCount);
-    
-    view_settings ViewSettings = GetViewSettings(&GraphicsState->Camera);
-    
-    PushDepth(Game->Graphics, true);
-    PushSRGBRenderBufferWrites(Game->Graphics, true);
-    PushRenderBufferViewportScissorAndView(Game->Graphics, Game->RenderBuffer, &ViewSettings);    
-    PushClearColorAndDepth(Game->Graphics, AK_Black4(), 1.0f);
-    PushCull(Game->Graphics, GRAPHICS_CULL_MODE_BACK);
-    
-    PushLightBuffer(Game->Graphics, &LightBuffer);
-    graphics_entity_array* EntityArray = &GraphicsState->EntityArray;
-    for(ak_u32 EntityIndex = 0; EntityIndex < EntityArray->Count; EntityIndex++)
-    {
-        graphics_entity* GraphicsEntity = EntityArray->Ptr + EntityIndex;
-        AK_Assert(GraphicsEntity->MeshID != INVALID_MESH_ID, "Cannot draw an invalid mesh");            
-        
-        graphics_material Material = ConvertToGraphicsMaterial(Game->Assets, Game->Graphics, &GraphicsEntity->Material);            
-        PushMaterial(Game->Graphics, Material);
-        
-        graphics_mesh_id MeshHandle = GetOrLoadGraphicsMesh(Game->Assets, Game->Graphics, GraphicsEntity->MeshID);            
-        PushDrawMesh(Game->Graphics, MeshHandle, GraphicsEntity->Transform, GetMeshIndexCount(Game->Assets, GraphicsEntity->MeshID), 0, 0);                        
-    }
-    
-    PushCopyToOutput(Game->Graphics, Game->RenderBuffer, AK_V2(0, 0), Game->RenderBuffer->Resolution);
+    ak_rigid_transformf CameraTransform = {};
+    CameraTransform.Position = Camera->Target - Camera->Z*Camera->Distance;
+    CameraTransform.Orientation = AK_M3(Camera->X, Camera->Y, Camera->Z);
+    return CameraTransform;
 }
 
 graphics_point_light ToGraphicsPointLight(point_light* PointLight)

@@ -215,6 +215,15 @@ struct timed_entry
     ak_u64 Count;
 };
 
+struct ortho_camera
+{
+    ak_v3f Target;
+    ak_v3f Z;
+    ak_v3f Y;
+    ak_v3f X;
+    ak_f32 Distance;
+};
+
 struct editor
 {
     ak_arena* Scratch;
@@ -250,8 +259,10 @@ struct editor
     ak_v2f ListerDim;
     ak_v2f DetailsDim;
     
-    graphics_camera Cameras[2];
-    graphics_camera OldCameras[2];
+    perspective_camera Cameras[2];
+    perspective_camera OldCameras[2];
+    
+    ortho_camera OrthoCameras[6];
     
     ak_bool ShowCloseButtonInModals;
     

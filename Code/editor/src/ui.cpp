@@ -164,14 +164,11 @@ void UI_DragAngle(ak_u32 ID, const ak_char* Label, ak_f32* Radians, ak_f32 Speed
     *Radians = AK_ToRadians(Degree);
 }
 
-ak_bool UI_Combo(ak_u32 ID, const ak_char* Label, ak_i32* Data, const ak_char** List, ak_i32 ListCount)
+ak_bool UI_Combo(const ak_char* Label, ak_i32* Data, const ak_char** List, ak_i32 ListCount)
 {
-    ImGui::PushID(ID);
-    ak_bool Result = ImGui::Combo(Label, Data, List, ListCount);
-    ImGui::PopID();
-    return Result;
+    UI_SameLineLabel(Label);
+    return ImGui::Combo("", Data, List, ListCount);
 }
-
 
 ak_bool UI_ColorEdit3(ak_u32 ID, const ak_char* Label, ak_f32* Data, ImGuiColorEditFlags Flags)
 {
@@ -339,23 +336,6 @@ void UI_ScaleTool2D(ak_u32 Hash, ak_f32 ItemWidth, ak_v2f* Scale)
     UI_ScaleTool2D("Scale", Hash, ItemWidth, Scale);
 }
 
-void UI_WorldIndexTool(ak_u32 Hash, ak_u32* WorldIndex, const ak_char** WorldIndexList, ak_u32 WorldIndexCount)
-{
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("World Index");
-    ImGui::SameLine();
-    UI_Combo(Hash, "", (int*)WorldIndex, WorldIndexList, WorldIndexCount);    
-}
-
-void UI_MeshTool(assets* Assets, mesh_asset_id* MeshID)
-{
-    ak_fixed_array<const ak_char*> MeshNames = UI_GetAllMeshInfoNames(Assets);
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("Mesh");
-    ImGui::SameLine();
-    UI_Combo(AK_HashFunction("Mesh"), "", (int*)MeshID, MeshNames.Data, MeshNames.Size);
-}
-
 void UI_NameTool(ak_u32 Hash, ak_char* Name, ak_u32 MaxLength)
 {
     ImGui::AlignTextToFramePadding();
@@ -400,10 +380,9 @@ void UI_MaterialTool(assets* Assets, material_context* MaterialContext)
             if((MaterialContext->DiffuseID == INVALID_TEXTURE_ID) || (MaterialContext->DiffuseID > TEXTURE_ASSET_COUNT))
                 MaterialContext->DiffuseID = (texture_asset_id)0;
             
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Texture");
-            ImGui::SameLine();
-            UI_Combo(AK_HashFunction("Diffuse Texture"), "", (int*)&MaterialContext->DiffuseID, TextureNames.Data, TextureNames.Size);
+            ImGui::PushID(AK_HashFunction("Diffuse Texture"));
+            UI_Combo("Texture", (ak_i32*)&MaterialContext->DiffuseID, TextureNames.Data, TextureNames.Size);
+            ImGui::PopID();
         }
         else
         {
@@ -427,10 +406,9 @@ void UI_MaterialTool(assets* Assets, material_context* MaterialContext)
                 if((MaterialContext->SpecularID == INVALID_TEXTURE_ID) || (MaterialContext->SpecularID > TEXTURE_ASSET_COUNT))
                     MaterialContext->SpecularID = (texture_asset_id)0;
                 
-                ImGui::AlignTextToFramePadding();
-                ImGui::Text("Texture");
-                ImGui::SameLine();
-                UI_Combo(AK_HashFunction("Specular Texture"), "", (int*)&MaterialContext->SpecularID, TextureNames.Data, TextureNames.Size);
+                ImGui::PushID(AK_HashFunction("Specular Texture"));
+                UI_Combo("Texture", (ak_i32*)&MaterialContext->SpecularID, TextureNames.Data, TextureNames.Size);
+                ImGui::PopID();
             }
             else
             {                
@@ -461,10 +439,9 @@ void UI_MaterialTool(assets* Assets, material_context* MaterialContext)
                 MaterialContext->NormalID = (texture_asset_id)0;
             
             ImGui::SameLine();
-            ImGui::AlignTextToFramePadding();
-            ImGui::Text("Texture");
-            ImGui::SameLine();
-            UI_Combo(AK_HashFunction("Normal Texture"), "", (int*)&MaterialContext->NormalID, TextureNames.Data, TextureNames.Size);
+            ImGui::PushID(AK_HashFunction("Normal Texture"));
+            UI_Combo("Texture", (int*)&MaterialContext->NormalID, TextureNames.Data, TextureNames.Size);
+            ImGui::PopID();
         }
     }    
 }
@@ -542,10 +519,11 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
     entity_type PrevType = Spawner->EntityType;
     
     ak_i32 SpawnType = Spawner->EntityType-1;            
-    UI_Combo(AK_HashFunction("Entity Type"), "", (int*)&SpawnType, EntityTypes.Data, EntityTypes.Size);            
+    ImGui::PushID(AK_HashFunction("Entity Type"));
+    UI_Combo("Entity Type", (int*)&SpawnType, EntityTypes.Data, EntityTypes.Size);
+    ImGui::PopID();
+    
     entity_type Type = (entity_type)(SpawnType+1);
-    
-    
     
     if(PrevType != Type)
     {
@@ -566,9 +544,12 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             ImGui::Separator();
             UI_ScaleTool(AK_HashFunction("Scale Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Scale);
             ImGui::Separator();
+            
             const ak_char* WorldIndexList[] = {"World A", "World B", "Both"};
-            UI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex, 
-                              WorldIndexList, AK_Count(WorldIndexList));
+            ImGui::PushID(AK_HashFunction("Entity World Index"));
+            UI_Combo("World Index", (ak_i32*)&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+            ImGui::PopID();
+            
             ImGui::Separator();
             Spawner->MeshID = MESH_ASSET_ID_BUTTON;
             UI_MaterialTool(Assets, &Spawner->MaterialContext);
@@ -583,9 +564,13 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             ImGui::Separator();
             UI_ScaleTool(AK_HashFunction("Scale Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Scale);
             ImGui::Separator();
+            
+            
             const ak_char* WorldIndexList[] = {"World A", "World B", "Both", "Linked"};
-            UI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex,
-                              WorldIndexList, AK_Count(WorldIndexList));
+            ImGui::PushID(AK_HashFunction("Entity World Index"));
+            UI_Combo("World Index", (ak_i32*)&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+            ImGui::PopID();
+            
             ImGui::Separator();
             Spawner->MeshID = MESH_ASSET_ID_BOX;
             UI_MaterialTool(Assets, &Spawner->MaterialContext);
@@ -601,10 +586,20 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             ImGui::Separator();
             UI_AngleAxisTool(AK_HashFunction("Rotation Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Axis, &Spawner->Angle);
             ImGui::Separator();
-            const ak_char* WorldIndexList[] = {"World A", "World B", "Both"};
-            UI_WorldIndexTool(AK_HashFunction("Entity World Index"), &Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+            
+            
+            const ak_char* WorldIndexList[] = {"World A", "World B", "Both", "Linked"};
+            ImGui::PushID(AK_HashFunction("Entity World Index"));
+            UI_Combo("World Index", (ak_i32*)&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+            ImGui::PopID();
+            
             ImGui::Separator();
-            UI_MeshTool(Assets, &Spawner->MeshID);
+            
+            ak_fixed_array<const ak_char*> MeshList = UI_GetAllMeshInfoNames(Assets);
+            ImGui::PushID(AK_HashFunction("Entity Meshes"));
+            UI_Combo("Meshes", (ak_i32*)&Spawner->MeshID, &MeshList[0], MeshList.Size);
+            ImGui::PopID();
+            
             ImGui::Separator();
             UI_MaterialTool(Assets, &Spawner->MaterialContext);
             ImGui::Separator();
@@ -703,8 +698,12 @@ void UI_LightSpawner(editor* Editor, light_spawner* Spawner)
     ImGui::Separator();
     UI_TranslationTool(AK_HashFunction("Translation Light Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Translation);
     ImGui::Separator();
+    
+    ImGui::PushID(AK_HashFunction("Light World Index"));
     const ak_char* WorldIndexList[] = {"World A", "World B", "Both"};
-    UI_WorldIndexTool(AK_HashFunction("Light World Index"), &Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+    UI_Combo("World Index", (ak_i32*)&Spawner->WorldIndex, WorldIndexList, AK_Count(WorldIndexList));
+    ImGui::PopID();
+    
     ImGui::Separator();
     UI_RadiusTool(AK_HashFunction("Light Radius"), EDITOR_ITEM_WIDTH, &Spawner->Radius);
     ImGui::Separator();
@@ -802,7 +801,7 @@ ak_v2f UI_ListerWindow(editor* Editor)
             ak_u32 WorldIndex = CurrentWorldIndex;
             for(ak_u32 World = 0; World < 2; World++)
             {
-                if(ImGui::BeginTabItem(AK_FormatString(Editor->Scratch, "World %d", WorldIndex).Data))
+                if(ImGui::BeginTabItem(AK_FormatString(Editor->Scratch, "World %c", WorldIndex == 0 ? 'A' : 'B').Data))
                 {
                     if(ImGui::TreeNode("Entities"))
                     {
