@@ -363,6 +363,34 @@ DEV_PLATFORM_UPDATE(Win32_DevUpdate)
                 IO->MouseDown[button] = true;                    
             } break;
             
+            case WM_INPUT:
+            {
+                ak_temp_arena TempArena = Global_Platform.Arena->BeginTemp();
+                
+                UINT Size;
+                GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, NULL, &Size, sizeof(RAWINPUTHEADER));
+                
+                void* InputData = Global_Platform.Arena->Push(Size, 8);
+                UINT Result = GetRawInputData((HRAWINPUT)Message.lParam, RID_INPUT, InputData, &Size, sizeof(RAWINPUTHEADER));
+                AK_Assert(Result != (UINT)-1, "Failure to read raw input data");
+                
+                RAWINPUT* RawInput = (RAWINPUT*)InputData;
+                RAWINPUTHEADER* RawInputHeader = &RawInput->header;
+                
+                switch(RawInputHeader->dwType)
+                {
+                    case RIM_TYPEMOUSE:
+                    {
+                        RAWMOUSE* RawMouse = &RawInput->data.mouse;
+                        DevInput->MouseDelta = AK_V2((ak_i32)RawMouse->lLastX, (ak_i32)-RawMouse->lLastY);
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
+                }
+                
+                Global_Platform.Arena->EndTemp(&TempArena);
+            } break;
+            
             case WM_LBUTTONUP:
             case WM_RBUTTONUP:
             case WM_MBUTTONUP:
@@ -576,11 +604,20 @@ DEV_HANDLE_HOT_RELOAD(Win32_HandleHotReload)
     }
 }
 
+#define MOUSE_USAGE 2
+#define USAGE_PAGE 1
 int Win32_EditorMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CmdLineArgs, int CmdLineOpts)
 {
-    if(!Win32_InitPlatform())
+    
+    RAWINPUTDEVICE RawInputDevice = {};
+    RawInputDevice.usUsagePage = USAGE_PAGE;
+    RawInputDevice.usUsage = MOUSE_USAGE;
+    
+    if(!RegisterRawInputDevices(&RawInputDevice, 1, sizeof(RAWINPUTDEVICE)))
         return -1;
     
+    if(!Win32_InitPlatform())
+        return -1;
     
     void* PlatformData[2] = 
     {

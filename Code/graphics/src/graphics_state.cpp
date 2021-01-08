@@ -177,12 +177,33 @@ ak_rigid_transformf GetCameraTransform(perspective_camera* Camera)
     return CameraTransform;
 }
 
-ak_rigid_transformf GetCameraTransform(ortho_camera* Camera)
+inline ak_v3f GetCameraPosition(ortho_camera* Camera)
+{
+    return Camera->Target - Camera->Z*Camera->Distance;
+}
+
+inline ak_rigid_transformf GetCameraTransform(ortho_camera* Camera)
 {
     ak_rigid_transformf CameraTransform = {};
-    CameraTransform.Position = Camera->Target - Camera->Z*Camera->Distance;
+    CameraTransform.Position = GetCameraPosition(Camera);
     CameraTransform.Orientation = AK_M3(Camera->X, Camera->Y, Camera->Z);
     return CameraTransform;
+}
+
+view_settings GetViewSettings(perspective_camera* Camera, ak_v2i Resolution)
+{
+    view_settings ViewSettings = {};
+    ViewSettings.Transform = GetCameraTransform(Camera);
+    ViewSettings.Projection = AK_Perspective(PERSPECTIVE_CAMERA_FOV, AK_SafeRatio(Resolution.w, Resolution.h), CAMERA_ZNEAR, CAMERA_ZFAR);
+    return ViewSettings;
+}
+
+view_settings GetViewSettings(ortho_camera* Camera)
+{
+    view_settings ViewSettings = {};
+    ViewSettings.Transform = GetCameraTransform(Camera);
+    ViewSettings.Projection = AK_Orthographic(Camera->Left, Camera->Right, Camera->Top, Camera->Bottom, CAMERA_ZNEAR, CAMERA_ZFAR);
+    return ViewSettings;
 }
 
 graphics_point_light ToGraphicsPointLight(point_light* PointLight)

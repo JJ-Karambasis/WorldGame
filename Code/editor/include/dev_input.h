@@ -28,8 +28,8 @@ struct dev_input
         };
     };
     
-    ak_v2i LastMouseCoordinates;
     ak_v2i MouseCoordinates;
+    ak_v2i MouseDelta;
     ak_f32 Scroll;
 };
 

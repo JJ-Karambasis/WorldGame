@@ -1,8 +1,4 @@
 #ifndef GRAPHICS_STATE_H
 #define GRAPHICS_STATE_H
 
-#define CAMERA_FIELD_OF_VIEW (AK_PI*0.3f)
-#define CAMERA_ZNEAR 0.01f
-#define CAMERA_ZFAR 50.0f
-
 #endif

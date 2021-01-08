@@ -1,13 +1,19 @@
-ak_v3f Ray_PixelToWorld(ak_v2i PixelCoords, ak_v2i PixelDim, ak_m4f Perspective, ak_m4f View)
+ak_v3f Ray_PixelToView(ak_v2i PixelCoords, ak_v2i PixelDim, ak_m4f Perspective)
 {
     ak_v3f NDC = AK_ToNormalizedDeviceCoordinates(AK_V2f(PixelCoords), AK_V2f(PixelDim));
     ak_v4f Clip = AK_V4(NDC.xy, -1.0f, 1.0f);
     
     ak_m4f InvPerspective = AK_Inverse(Perspective);
-    ak_m4f InvView = AK_InvTransformM4(View);
     ak_v4f RayView = Clip*InvPerspective;
     
-    ak_v3f RayWorld = AK_Normalize((AK_V4(RayView.xy, -1.0f, 0.0f)*InvView).xyz);
+    return RayView.xyz;
+}
+
+ak_v3f Ray_PixelToWorld(ak_v2i PixelCoords, ak_v2i PixelDim, ak_m4f Perspective, ak_m4f View)
+{
+    ak_m4f InvView = AK_InvTransformM4(View);
+    ak_v3f RayView = Ray_PixelToView(PixelCoords, PixelDim, Perspective);
+    ak_v3f RayWorld = AK_Normalize(RayView*AK_M3(InvView));
     return RayWorld;
 }
 

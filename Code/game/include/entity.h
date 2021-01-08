@@ -79,14 +79,32 @@ struct movable
     ak_v3f GravityVelocity;
 };
 
-#define ZNEAR 0.01f
-#define ZFAR 100.0f
-#define FIELD_OF_VIEW (AK_PI*0.3f)
+#define CAMERA_ZNEAR 0.01f
+#define CAMERA_ZFAR 100.0f
+#define PERSPECTIVE_CAMERA_FOV (AK_PI*0.3f)
 
 struct perspective_camera
 {
     ak_v3f Target;
     ak_v3f SphericalCoordinates;    
+};
+
+#define DEFAULT_ORTHO_CAMERA_LEFT -8.0f
+#define DEFAULT_ORTHO_CAMERA_RIGHT 8.0f
+#define DEFAULT_ORTHO_CAMERA_TOP  4.5f
+#define DEFAULT_ORTHO_CAMERA_BOTTOM -4.5f
+
+struct ortho_camera
+{
+    ak_v3f Target;
+    ak_v3f Z;
+    ak_v3f Y;
+    ak_v3f X;
+    ak_f32 Left;
+    ak_f32 Right;
+    ak_f32 Top;
+    ak_f32 Bottom;
+    ak_f32 Distance;
 };
 
 void DeleteEntity(game* Game, ak_u32 WorldIndex, ak_u64 ID, ak_bool ProcessLink=true);

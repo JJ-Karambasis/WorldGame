@@ -9,6 +9,8 @@
 #include <game_common_source.cpp>
 #include <src/graphics_state.cpp>
 
+#define GetEditorViewSettings(Editor, Resolution, WorldIndex) ((Editor->UI.ViewModeType == VIEW_MODE_TYPE_PERSPECTIVE) ? GetViewSettings(&Editor->Cameras[WorldIndex], Resolution) : GetViewSettings(&Editor->OrthoCameras[WorldIndex][Editor->UI.ViewModeType-1]))
+
 global const ak_char* Global_RenderModeStrings[] = 
 {
     "Lit", 
@@ -235,17 +237,16 @@ ak_bool object::IsAlive(world_management* WorldManagement, ak_u32 WorldIndex)
     return false;
 }
 
-ray Editor_GetRayCastFromMouse(editor* Editor, view_settings* ViewSettings, ak_v2i Resolution)
+void Editor_GetPixelOrthoUV(ak_f32* u, ak_f32* v, ak_f32 Left, ak_f32 Right, ak_f32 Top, ak_f32 Bottom, ak_v2i MouseCoordinates, ak_v2i Resolution)
 {
-    ak_m4f View = AK_InvTransformM4(ViewSettings->Transform.Position, ViewSettings->Transform.Orientation);
-    
-    dev_input* Input = &Editor->Input;
-    
-    ray RayCast;
-    RayCast.Origin = ViewSettings->Transform.Position;
-    RayCast.Direction = Ray_PixelToWorld(Editor->Input.MouseCoordinates, Resolution, ViewSettings->Projection, View);
-    
-    return RayCast;
+    MouseCoordinates.y = Resolution.y - MouseCoordinates.y;
+    *u = Left + (Right-Left)*(MouseCoordinates.x+0.5f)/Resolution.x;
+    *v = Bottom + (Top-Bottom)*(MouseCoordinates.y+0.5f)/Resolution.y;
+}
+
+void Editor_GetPixelOrthoUV(ak_f32* u, ak_f32* v, ortho_camera* Camera, ak_v2i MouseCoordinates, ak_v2i Resolution)
+{
+    Editor_GetPixelOrthoUV(u, v, Camera->Left, Camera->Right, Camera->Top, Camera->Bottom, MouseCoordinates, Resolution);
 }
 
 gizmo_intersection_result Editor_CastToGizmos(editor* Editor, gizmo_state* GizmoState, ray Ray, ak_f32 ZNear)
@@ -519,7 +520,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
     
     if(!IsDown(&Input->Alt) && !ImGui::GetIO().WantCaptureMouse && !ImGui::GetIO().WantCaptureKeyboard)
     {
-        gizmo_intersection_result GizmoHitTest = Editor_CastToGizmos(Editor, GizmoState, RayCast, ZNEAR);
+        gizmo_intersection_result GizmoHitTest = Editor_CastToGizmos(Editor, GizmoState, RayCast, CAMERA_ZNEAR);
         
         if(GizmoHitTest.Hit) GizmoHitTest.Gizmo->IsHighLighted = true;
         
@@ -528,7 +529,7 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
             if(!GizmoHitTest.Hit)
             {
                 GizmoState->GizmoHit = {};
-                GizmoState->SelectedObject = Editor_CastToAllObjects(Editor, Assets, RayCast, ZNEAR);
+                GizmoState->SelectedObject = Editor_CastToAllObjects(Editor, Assets, RayCast, CAMERA_ZNEAR);
             }
             else
             {
@@ -716,8 +717,8 @@ void Editor_DrawGridX(editor* Editor, graphics* Graphics, ak_i32 zLeftBound, ak_
     if(MinZ > MaxZ) AK_Swap(MinZ, MaxZ);
     if(MinY > MaxY) AK_Swap(MinY, MaxY);
     
-    ak_i32 ZCount = (ak_i32)(MaxZ-MinZ);
-    ak_i32 YCount = (ak_i32)(MaxY-MinY);
+    ak_i32 ZCount = AK_Ceil((MaxZ-MinZ)/GridDistance);
+    ak_i32 YCount = AK_Ceil((MaxY-MinY)/GridDistance);
     
     for(ak_i32 ZIndex = 0; ZIndex < ZCount; ZIndex++)
     {
@@ -752,8 +753,8 @@ void Editor_DrawGridY(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_
     if(MinX > MaxX) AK_Swap(MinX, MaxX);
     if(MinZ > MaxZ) AK_Swap(MinZ, MaxZ);
     
-    ak_i32 XCount = (ak_i32)(MaxX-MinX);
-    ak_i32 ZCount = (ak_i32)(MaxZ-MinZ);
+    ak_i32 XCount = AK_Ceil((MaxX-MinX)/GridDistance);
+    ak_i32 ZCount = AK_Ceil((MaxZ-MinZ)/GridDistance);
     
     for(ak_i32 XIndex = 0; XIndex < XCount; XIndex++)
     {
@@ -787,8 +788,8 @@ void Editor_DrawGridZ(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_
     if(MinX > MaxX) AK_Swap(MinX, MaxX);
     if(MinY > MaxY) AK_Swap(MinY, MaxY);
     
-    ak_i32 XCount = (ak_i32)(MaxX-MinX);
-    ak_i32 YCount = (ak_i32)(MaxY-MinY);
+    ak_i32 XCount = AK_Ceil((MaxX-MinX)/GridDistance);
+    ak_i32 YCount = AK_Ceil((MaxY-MinY)/GridDistance);
     
     for(ak_i32 XIndex = 0; XIndex < XCount; XIndex++)
     {
@@ -947,11 +948,6 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
     IO->Fonts->TexID = (ImTextureID)FontTexture;
     
     
-    Editor->Cameras[0].SphericalCoordinates.radius = Editor->Cameras[1].SphericalCoordinates.radius = 5.0f;
-    
-    Editor->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
-    Editor->Cameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
-    
     Editor->WorldSelectedIndex = (ak_u32)-1;
     
     Editor->LineCapsuleMesh = DevMesh_CreateLineCapsuleMesh(Graphics, 1.0f, 60);
@@ -1001,47 +997,78 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
     
     ortho_camera* OrthoCamera = NULL;
     
-    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_TOP-1];
+    const ak_f32 DefaultDistance = 20;
+    
+    OrthoCamera = &Editor->OrthoCameras[0][VIEW_MODE_TYPE_NEAR-1];
     OrthoCamera->Target = AK_V3<ak_f32>();
-    OrthoCamera->Distance = 20.0f;
-    OrthoCamera->Z = -AK_YAxis();
-    OrthoCamera->Y =  AK_ZAxis();
+    OrthoCamera->Distance = DefaultDistance;
+    OrthoCamera->Z = -AK_ZAxis();
+    OrthoCamera->Y = AK_YAxis();
+    OrthoCamera->X = AK_XAxis();
+    OrthoCamera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
+    OrthoCamera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
+    OrthoCamera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
+    OrthoCamera->Top = DEFAULT_ORTHO_CAMERA_TOP;
+    
+    OrthoCamera = &Editor->OrthoCameras[0][VIEW_MODE_TYPE_FAR-1];
+    OrthoCamera->Target = AK_V3<ak_f32>();
+    OrthoCamera->Distance = DefaultDistance;
+    OrthoCamera->Z = AK_ZAxis();
+    OrthoCamera->Y = AK_YAxis();
     OrthoCamera->X = -AK_XAxis();
+    OrthoCamera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
+    OrthoCamera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
+    OrthoCamera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
+    OrthoCamera->Top = DEFAULT_ORTHO_CAMERA_TOP;
     
-    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_BOTTOM-1];
+    OrthoCamera = &Editor->OrthoCameras[0][VIEW_MODE_TYPE_LEFT-1];
     OrthoCamera->Target = AK_V3<ak_f32>();
-    OrthoCamera->Distance = 20.0f;
-    OrthoCamera->Z =  AK_YAxis();
-    OrthoCamera->Y =  AK_ZAxis();
-    OrthoCamera->X =  AK_XAxis();
-    
-    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_LEFT-1];
-    OrthoCamera->Target = AK_V3<ak_f32>();
-    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Distance = DefaultDistance;
     OrthoCamera->Z = AK_XAxis();
     OrthoCamera->Y = AK_ZAxis();
     OrthoCamera->X = -AK_YAxis();
+    OrthoCamera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
+    OrthoCamera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
+    OrthoCamera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
+    OrthoCamera->Top = DEFAULT_ORTHO_CAMERA_TOP;
     
-    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_RIGHT-1];
+    OrthoCamera = &Editor->OrthoCameras[0][VIEW_MODE_TYPE_RIGHT-1];
     OrthoCamera->Target = AK_V3<ak_f32>();
-    OrthoCamera->Distance = 20.0f;
+    OrthoCamera->Distance = DefaultDistance;
     OrthoCamera->Z = -AK_XAxis();
-    OrthoCamera->Y =  AK_ZAxis();
-    OrthoCamera->X =  AK_YAxis();
+    OrthoCamera->Y = AK_ZAxis();
+    OrthoCamera->X = AK_YAxis();
+    OrthoCamera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
+    OrthoCamera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
+    OrthoCamera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
+    OrthoCamera->Top = DEFAULT_ORTHO_CAMERA_TOP;
     
-    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_NEAR-1];
+    OrthoCamera = &Editor->OrthoCameras[0][VIEW_MODE_TYPE_BOTTOM-1];
     OrthoCamera->Target = AK_V3<ak_f32>();
-    OrthoCamera->Distance = 20.0f;
-    OrthoCamera->Z = -AK_ZAxis();
-    OrthoCamera->Y =  AK_YAxis();
-    OrthoCamera->X =  AK_XAxis();
+    OrthoCamera->Distance = DefaultDistance;
+    OrthoCamera->Z = AK_YAxis();
+    OrthoCamera->Y = AK_ZAxis();
+    OrthoCamera->X = AK_XAxis();
+    OrthoCamera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
+    OrthoCamera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
+    OrthoCamera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
+    OrthoCamera->Top = DEFAULT_ORTHO_CAMERA_TOP;
     
-    OrthoCamera = &Editor->OrthoCameras[VIEW_MODE_TYPE_FAR-1];
+    OrthoCamera = &Editor->OrthoCameras[0][VIEW_MODE_TYPE_TOP-1];
     OrthoCamera->Target = AK_V3<ak_f32>();
-    OrthoCamera->Distance = 20.0f;
-    OrthoCamera->Z = AK_ZAxis();
-    OrthoCamera->Y = -AK_YAxis();
+    OrthoCamera->Distance = DefaultDistance;
+    OrthoCamera->Z = -AK_YAxis();
+    OrthoCamera->Y = AK_ZAxis();
     OrthoCamera->X = -AK_XAxis();
+    OrthoCamera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
+    OrthoCamera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
+    OrthoCamera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
+    OrthoCamera->Top = DEFAULT_ORTHO_CAMERA_TOP;
+    
+    Editor->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
+    Editor->Cameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
+    
+    AK_CopyArray(Editor->OrthoCameras[1], Editor->OrthoCameras[0], 6);
     
     Editor_LoadDefaultWorld(Editor, Assets, DevPlatform);
     
@@ -1093,7 +1120,7 @@ void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSe
         if(RayCast.Intersected)
         {
             IntersectedCount++;            
-            RayCast.t = AK_Min(RayCast.t, ZFAR);
+            RayCast.t = AK_Min(RayCast.t, CAMERA_ZFAR);
             FrustumPlaneIntersectionPoints[i] = FrustumRay.Origin + (FrustumRay.Direction * RayCast.t);
         }
         else
@@ -1246,64 +1273,125 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     
     dev_input* DevInput = &Editor->Input;
     
-    perspective_camera* DevCamera = &Editor->Cameras[Editor->CurrentWorldIndex];
-    ak_v2i MouseDelta = DevInput->MouseCoordinates - DevInput->LastMouseCoordinates;
-    
     game_context* GameContext = &Editor->GameContext;
     game* Game = GameContext->Game;
     world_management* WorldManagement = &Editor->WorldManagement;
     edit_recordings* EditRecordings = &Editor->EditRecordings;
     
+    if(IsPressed(&DevInput->S))
+        AK_DEBUG_BREAK;
+    
     if(WorldManagement->NewState == WORLD_MANAGEMENT_STATE_NONE)
     {
-        if(!Game || Editor->UI.GameUseDevCamera)
+        if(Editor->UI.ViewModeType == VIEW_MODE_TYPE_PERSPECTIVE)
         {
-            ak_v3f* SphericalCoordinates = &DevCamera->SphericalCoordinates;                
-            
-            ak_f32 Roll = 0;
-            ak_f32 Pitch = 0;        
-            
-            ak_v2f PanDelta = AK_V2<ak_f32>();
-            ak_f32 Scroll = 0;
-            
-            if(IsDown(&DevInput->Alt))
+            if(!Game || Editor->UI.GameUseDevCamera)
             {
-                if(IsDown(&DevInput->LMB))
+                perspective_camera* Camera = &Editor->Cameras[Editor->CurrentWorldIndex];
+                ak_v3f* SphericalCoordinates = &Camera->SphericalCoordinates;
+                
+                view_settings ViewSettings = GetViewSettings(Camera, Resolution);
+                ak_m4f View = AK_InvTransformM4(ViewSettings.Transform.Position, ViewSettings.Transform.Orientation);
+                ak_v2f PanDelta = AK_V2<ak_f32>();
+                
+                if(IsDown(&DevInput->Alt))
                 {
-                    SphericalCoordinates->inclination += MouseDelta.y*1e-3f;
-                    SphericalCoordinates->azimuth += MouseDelta.x*1e-3f;
-                    
-                    ak_f32 InclindationDegree = AK_ToDegree(SphericalCoordinates->inclination);
-                    if(InclindationDegree < -180.0f)
+                    if(IsDown(&DevInput->LMB))
                     {
-                        ak_f32 Diff = InclindationDegree + 180.0f;
-                        InclindationDegree = 180.0f - Diff;
-                        InclindationDegree = AK_Min(180.0f, InclindationDegree);
-                        SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                        ak_v3f StartDirection = Ray_PixelToView(DevInput->MouseCoordinates, Resolution, ViewSettings.Projection);
+                        ak_v3f EndDirection = Ray_PixelToView(DevInput->MouseCoordinates+DevInput->MouseDelta, Resolution, ViewSettings.Projection);
+                        ak_v3f MouseDiff = EndDirection-StartDirection;
+                        
+                        SphericalCoordinates->inclination += MouseDiff.y;
+                        SphericalCoordinates->azimuth += MouseDiff.x;
+                        
+                        ak_f32 InclindationDegree = AK_ToDegree(SphericalCoordinates->inclination);
+                        if(InclindationDegree < -180.0f)
+                        {
+                            ak_f32 Diff = InclindationDegree + 180.0f;
+                            InclindationDegree = 180.0f - Diff;
+                            InclindationDegree = AK_Min(180.0f, InclindationDegree);
+                            SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                        }
+                        else if(InclindationDegree > 180.0f)
+                        {
+                            ak_f32 Diff = InclindationDegree - 180.0f;
+                            InclindationDegree = -180.0f + Diff;
+                            InclindationDegree = AK_Min(-180.0f, InclindationDegree);
+                            SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
+                        }
                     }
-                    else if(InclindationDegree > 180.0f)
+                    
+                    if(IsDown(&DevInput->MMB))
                     {
-                        ak_f32 Diff = InclindationDegree - 180.0f;
-                        InclindationDegree = -180.0f + Diff;
-                        InclindationDegree = AK_Min(-180.0f, InclindationDegree);
-                        SphericalCoordinates->inclination = AK_ToRadians(InclindationDegree);
-                    }            
+                        ak_v3f StartDirection = Ray_PixelToView(DevInput->MouseCoordinates, Resolution, ViewSettings.Projection);
+                        ak_v3f EndDirection = Ray_PixelToView(DevInput->MouseCoordinates+DevInput->MouseDelta, Resolution, ViewSettings.Projection);
+                        ak_v3f MouseDiff = EndDirection-StartDirection;
+                        PanDelta += MouseDiff.xy*2.5f;
+                    }
+                    
+                    if(AK_Abs(DevInput->Scroll) > 0) SphericalCoordinates->radius -= DevInput->Scroll*0.5f;
                 }
                 
-                if(IsDown(&DevInput->MMB))        
-                    PanDelta += AK_V2f(MouseDelta)*1e-3f;        
+                if(SphericalCoordinates->radius < 1e-3f)
+                    SphericalCoordinates->radius = 1e-3f;
                 
-                if(AK_Abs(DevInput->Scroll) > 0)        
+                ak_rigid_transformf CameraTransform = GetCameraTransform(Camera);
+                Camera->Target += (CameraTransform.Orientation.XAxis*PanDelta.x - CameraTransform.Orientation.YAxis*PanDelta.y);        
+            }
+        }
+        else
+        {
+            if(!Game)
+            {
+                ortho_camera* Camera = &Editor->OrthoCameras[Editor->CurrentWorldIndex][Editor->UI.ViewModeType-1];
+                
+                ak_v2f PanDelta = AK_V2<ak_f32>();
+                
+                if(IsDown(&DevInput->Alt))
                 {
-                    SphericalCoordinates->radius -= DevInput->Scroll*0.5f;                    
+                    if(IsDown(&DevInput->MMB))
+                    {
+                        ak_f32 startU, startV;
+                        ak_f32 endU, endV;
+                        
+                        Editor_GetPixelOrthoUV(&startU, &startV, Camera, DevInput->MouseCoordinates, Resolution);
+                        Editor_GetPixelOrthoUV(&endU, &endV, Camera, DevInput->MouseCoordinates+DevInput->MouseDelta, Resolution);
+                        
+                        ak_v3f CameraPosition = GetCameraPosition(Camera);
+                        
+                        ak_v3f StartPosition = CameraPosition + startU*Camera->X + startV*Camera->Y;
+                        ak_v3f EndPosition = CameraPosition + endU*Camera->X + endV*Camera->Y;
+                        
+                        ak_v3f MouseDiff = EndPosition-StartPosition;
+                        switch(Editor->UI.ViewModeType)
+                        {
+                            case VIEW_MODE_TYPE_NEAR: { PanDelta = MouseDiff.xy; } break;
+                            case VIEW_MODE_TYPE_FAR: { PanDelta = AK_V2(-MouseDiff.x, MouseDiff.y); } break;
+                            case VIEW_MODE_TYPE_LEFT: { PanDelta = AK_V2(-MouseDiff.y, MouseDiff.z); } break;
+                            case VIEW_MODE_TYPE_RIGHT: { PanDelta = MouseDiff.yz; } break;
+                            case VIEW_MODE_TYPE_BOTTOM: { PanDelta = AK_V2(MouseDiff.x, MouseDiff.z); } break;
+                            case VIEW_MODE_TYPE_TOP: { PanDelta = AK_V2(-MouseDiff.x, MouseDiff.z); } break;
+                        }
+                    }
+                    
+                    if(AK_Abs(DevInput->Scroll) > 0) 
+                    {
+                        ak_f32 Constant = DevInput->Scroll < 0 ? 1.1f : 0.9f;
+                        ak_f32 Right = Camera->Right * Constant;
+                        if(Right > 1.0f)
+                        {
+                            Camera->Left *= Constant;
+                            Camera->Right = Right;
+                            Camera->Top *= Constant;
+                            Camera->Bottom *= Constant;
+                        }
+                    }
                 }
-            }    
-            
-            if(SphericalCoordinates->radius < 1e-3f)
-                SphericalCoordinates->radius = 1e-3f;
-            
-            ak_rigid_transformf CameraTransform = GetCameraTransform(DevCamera);
-            DevCamera->Target += (CameraTransform.Orientation.XAxis*PanDelta.x - CameraTransform.Orientation.YAxis*PanDelta.y);        
+                
+                ak_v3f Diff = Camera->X*PanDelta.x - Camera->Y*PanDelta.y;
+                Camera->Target += Diff;
+            }
         }
         
         if(!Game)
@@ -1323,11 +1411,25 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                     EditRecordings->Redo(WorldManagement);
             }
             
-            view_settings ViewSettings = {};
-            ViewSettings.Transform = GetCameraTransform(DevCamera);
-            ViewSettings.Projection = AK_Perspective(FIELD_OF_VIEW, AK_SafeRatio(Resolution.w, Resolution.h), ZNEAR, ZFAR);
             
-            ray RayCast = Editor_GetRayCastFromMouse(Editor, &ViewSettings, Resolution);
+            ray RayCast = {};
+            if(Editor->UI.ViewModeType == VIEW_MODE_TYPE_PERSPECTIVE)
+            {
+                view_settings ViewSettings = GetViewSettings(&Editor->Cameras[Editor->CurrentWorldIndex], Resolution);
+                ak_m4f View = AK_InvTransformM4(ViewSettings.Transform.Position, ViewSettings.Transform.Orientation);
+                RayCast.Origin = ViewSettings.Transform.Position;
+                RayCast.Direction = Ray_PixelToWorld(Editor->Input.MouseCoordinates, Resolution, ViewSettings.Projection, View);
+            }
+            else
+            {
+                ortho_camera* Camera = &Editor->OrthoCameras[Editor->CurrentWorldIndex][Editor->UI.ViewModeType-1];
+                
+                ak_f32 u, v;
+                Editor_GetPixelOrthoUV(&u, &v, Camera, Editor->Input.MouseCoordinates, Resolution);
+                
+                RayCast.Origin = GetCameraPosition(Camera) + u*Camera->X + v*Camera->Y;
+                RayCast.Direction = Camera->Z;
+            }
             
             Editor_SelectObjects(Editor, Assets, RayCast, Resolution);
             
@@ -1387,7 +1489,21 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 
                 if(IsPressed(&DevInput->F))
                 {
-                    DevCamera->Target = SelectedObject->GetPosition(WorldManagement, Editor->CurrentWorldIndex);
+                    if(Editor->UI.ViewModeType == VIEW_MODE_TYPE_PERSPECTIVE)
+                    {
+                        perspective_camera* Camera = &Editor->Cameras[Editor->CurrentWorldIndex];
+                        Camera->Target = SelectedObject->GetPosition(WorldManagement, Editor->CurrentWorldIndex);
+                        Camera->SphericalCoordinates.radius = 6.0f;
+                    }
+                    else
+                    {
+                        ortho_camera* Camera = &Editor->OrthoCameras[Editor->CurrentWorldIndex][Editor->UI.ViewModeType-1];
+                        Camera->Target = SelectedObject->GetPosition(WorldManagement, Editor->CurrentWorldIndex);
+                        Camera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
+                        Camera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
+                        Camera->Top = DEFAULT_ORTHO_CAMERA_TOP;
+                        Camera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
+                    }
                 }
                 
                 if(IsPressed(&DevInput->Delete))
@@ -1474,8 +1590,8 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     }
     
     
-    DevInput->LastMouseCoordinates = DevInput->MouseCoordinates;
     DevInput->MouseCoordinates = {};
+    DevInput->MouseDelta = {};
     DevInput->Scroll = 0.0f;
     
     UpdateButtons(DevInput->Buttons, AK_Count(DevInput->Buttons));
@@ -1694,32 +1810,15 @@ void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
 view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* Assets, ak_u32 WorldIndex)
 {
     graphics_render_buffer* RenderBuffer = Editor->RenderBuffers[WorldIndex];
-    view_settings ViewSettings = {};
     
     world_management* WorldManagement = &Editor->WorldManagement;
-    
-    switch(Editor->UI.ViewModeType)
-    {
-        case VIEW_MODE_TYPE_PERSPECTIVE:
-        {
-            ViewSettings.Transform = GetCameraTransform(&Editor->Cameras[WorldIndex]);
-            ViewSettings.Projection = AK_Perspective(FIELD_OF_VIEW, AK_SafeRatio(RenderBuffer->Resolution.x, RenderBuffer->Resolution.y), 
-                                                     ZNEAR, ZFAR);
-        } break;
-        
-        default:
-        {
-            ViewSettings.Transform = GetCameraTransform(&Editor->OrthoCameras[Editor->UI.ViewModeType-1]);
-            ViewSettings.Projection = AK_Orthographic(-16.0f, 16.0f, 9.0f, -9.0f, 0.01f, 50.0f);
-        } break;
-    }
+    view_settings ViewSettings = GetEditorViewSettings(Editor, RenderBuffer->Resolution, WorldIndex);
     
     PushDepth(Graphics, true);
     PushSRGBRenderBufferWrites(Graphics, true);
     PushRenderBufferViewportScissorAndView(Graphics, RenderBuffer, &ViewSettings);    
     PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
-    
     
     switch(Editor->UI.RenderModeType)
     {
@@ -1851,10 +1950,7 @@ view_settings Editor_RenderGameWorld(editor* Editor, graphics* Graphics, game* G
     if(Editor->UI.GameUseDevCamera)
         Camera = &Editor->Cameras[WorldIndex];
     
-    view_settings ViewSettings = {};
-    ViewSettings.Transform = GetCameraTransform(Camera);
-    ViewSettings.Projection = AK_Perspective(FIELD_OF_VIEW, AK_SafeRatio(RenderBuffer->Resolution.x, RenderBuffer->Resolution.y), 
-                                             ZNEAR, ZFAR);
+    view_settings ViewSettings = GetViewSettings(Camera, RenderBuffer->Resolution);
     
     
     PushDepth(Graphics, true);
@@ -2536,8 +2632,6 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                 ImGui::PopID();
                 
                 Editor->GizmoState.ScaleSnap = Global_GridSizes[Editor->UI.EditorScaleSnapIndex];
-                
-                UI_SameLineLabel("Rotate Angle Snap");
                 
                 ImGui::PushID(AK_HashFunction("Rotate Angle Snap"));
                 UI_Combo("Rotate Angle Snap", (ak_i32*)&Editor->UI.EditorRotateSnapIndex, RotateAngleSnapsText, AK_Count(RotateAngleSnapsText));
