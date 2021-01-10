@@ -83,11 +83,18 @@ struct graphics_normal_material_slot
     graphics_texture_id NormalID;
 };
 
+struct graphics_transparent_material_slot
+{
+    ak_bool InUse;
+    ak_f32 Alpha;
+};
+
 struct graphics_material
 {   
     graphics_diffuse_material_slot  Diffuse;
     graphics_specular_material_slot Specular;
     graphics_normal_material_slot   Normal;
+    graphics_transparent_material_slot Alpha;
 };
 
 inline graphics_texture_format 
@@ -324,6 +331,15 @@ CreateDiffuseMaterialSlot(graphics_texture_id DiffuseID)
     graphics_diffuse_material_slot Result = {};
     Result.IsTexture = true;
     Result.DiffuseID = DiffuseID;
+    return Result;
+}
+
+inline graphics_transparent_material_slot 
+CreateTransparentMaterialSlot(ak_f32 Alpha)
+{
+    graphics_transparent_material_slot Result = {};
+    Result.InUse = true;
+    Result.Alpha = Alpha;
     return Result;
 }
 

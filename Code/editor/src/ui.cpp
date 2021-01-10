@@ -491,7 +491,7 @@ material UI_MaterialFromContext(material_context* MaterialContext)
     if(Normal.InUse)    
         Normal.NormalID = MaterialContext->NormalID;            
     
-    material Result;
+    material Result = {};
     Result.Diffuse  = Diffuse;
     Result.Specular = Specular;
     Result.Normal   = Normal;

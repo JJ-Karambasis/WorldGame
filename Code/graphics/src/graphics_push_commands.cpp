@@ -224,21 +224,22 @@ void PushDrawSkeletonMesh(graphics* Graphics, graphics_mesh_id MeshID, ak_sqtf T
 }
 
 
-void PushDrawUnlitMesh(graphics* Graphics, graphics_mesh_id MeshID, ak_m4f Transform, graphics_diffuse_material_slot DiffuseSlot, ak_u32 IndexCount, ak_u32 IndexOffset, ak_u32 VertexOffset)
+void PushDrawUnlitMesh(graphics* Graphics, graphics_mesh_id MeshID, ak_m4f Transform, graphics_diffuse_material_slot DiffuseSlot, ak_u32 IndexCount, ak_u32 IndexOffset, ak_u32 VertexOffset, graphics_transparent_material_slot AlphaSlot = {})
 {
     push_command_draw_unlit_mesh* PushCommandDrawUnlitMesh = AllocateCommand(push_command_draw_unlit_mesh);
     PushCommandDrawUnlitMesh->Type = PUSH_COMMAND_DRAW_UNLIT_MESH;
     PushCommandDrawUnlitMesh->MeshID = MeshID;
     PushCommandDrawUnlitMesh->WorldTransform = Transform;
-    PushCommandDrawUnlitMesh->DiffuseSlot = DiffuseSlot;    
+    PushCommandDrawUnlitMesh->DiffuseSlot = DiffuseSlot; 
+    PushCommandDrawUnlitMesh->AlphaSlot = AlphaSlot;
     
     DRAW_INFO(PushCommandDrawUnlitMesh);    
     PushCommand(Graphics, PushCommandDrawUnlitMesh);
 }
 
-void PushDrawUnlitMesh(graphics* Graphics, graphics_mesh_id MeshID, ak_sqtf Transform, graphics_diffuse_material_slot DiffuseSlot, ak_u32 IndexCount, ak_u32 IndexOffset, ak_u32 VertexOffset)
+void PushDrawUnlitMesh(graphics* Graphics, graphics_mesh_id MeshID, ak_sqtf Transform, graphics_diffuse_material_slot DiffuseSlot, ak_u32 IndexCount, ak_u32 IndexOffset, ak_u32 VertexOffset, graphics_transparent_material_slot AlphaSlot = {})
 {
-    PushDrawUnlitMesh(Graphics, MeshID, AK_TransformM4(Transform), DiffuseSlot, IndexCount, IndexOffset, VertexOffset);
+    PushDrawUnlitMesh(Graphics, MeshID, AK_TransformM4(Transform), DiffuseSlot, IndexCount, IndexOffset, VertexOffset, AlphaSlot);
 }
 
 void PushDrawUnlitSkeletonMesh(graphics* Graphics, graphics_mesh_id MeshID, ak_m4f Transform, graphics_diffuse_material_slot DiffuseSlot, ak_u32 IndexCount, ak_u32 IndexOffset, ak_u32 VertexOffset, ak_m4f* Joints, ak_u32 JointCount)

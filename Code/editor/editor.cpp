@@ -644,6 +644,13 @@ void Editor_DrawOrientedBox(editor* Editor, graphics* Graphics, ak_v3f P, ak_v3f
     PushDrawUnlitMesh(Graphics, Editor->TriangleBoxMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), Editor->TriangleBoxMesh.IndexCount, 0, 0);
 }
 
+void Editor_DrawOrientedBox(editor* Editor, graphics* Graphics, ak_v3f P, ak_v3f Dim, ak_v3f XAxis, ak_v3f YAxis, ak_v3f ZAxis, ak_color3f Color, 
+                            ak_f32 Alpha)
+{
+    ak_m4f Model = AK_TransformM4(P, AK_M3(XAxis, YAxis, ZAxis), Dim);
+    PushDrawUnlitMesh(Graphics, Editor->TriangleBoxMesh.MeshID, Model, CreateDiffuseMaterialSlot(Color), Editor->TriangleBoxMesh.IndexCount, 0, 0, 
+                      CreateTransparentMaterialSlot(Alpha));
+}
 
 void Editor_DrawBox(editor* Editor, graphics* Graphics, ak_v3f P, ak_v3f Dim, ak_color3f Color)
 {
@@ -670,6 +677,22 @@ void Editor_DrawEdge(editor* Editor, graphics* Graphics, ak_v3f P0, ak_v3f P1, a
     ak_v3f XAxis, YAxis;
     AK_Basis(ZAxis, &XAxis, &YAxis);
     Editor_DrawOrientedBox(Editor, Graphics, P0, AK_V3(Thickness, Thickness, ZLength), XAxis, YAxis, ZAxis, Color);
+}
+
+void Editor_DrawEdge(editor* Editor, graphics* Graphics, ak_v3f P0, ak_v3f P1, ak_f32 ThicknessX, ak_f32 ThicknessY, ak_color3f Color, ak_f32 Alpha)
+{
+    ak_v3f ZAxis = P1-P0;
+    ak_f32 ZLength = AK_Magnitude(ZAxis);
+    ZAxis /= ZLength;
+    
+    ak_v3f XAxis, YAxis;
+    AK_Basis(ZAxis, &XAxis, &YAxis);
+    Editor_DrawOrientedBox(Editor, Graphics, P0, AK_V3(ThicknessX, ThicknessY, ZLength), XAxis, YAxis, ZAxis, Color, Alpha);
+}
+
+void Editor_DrawEdge(editor* Editor, graphics* Graphics, ak_v3f P0, ak_v3f P1, ak_f32 Thickness, ak_color3f Color, ak_f32 Alpha)
+{
+    Editor_DrawEdge(Editor, Graphics, P0, P1, Thickness, Thickness, Color, Alpha);
 }
 
 void Editor_DrawFrame(editor* Editor, graphics* Graphics, ak_v3f Position, ak_v3f XAxis = AK_XAxis(), ak_v3f YAxis = AK_YAxis(), ak_v3f ZAxis = AK_ZAxis())
@@ -704,10 +727,11 @@ void Editor_DrawFrame(editor* Editor, graphics* Graphics, ak_v3f Position, ak_v3
     Editor_DrawSphere(Editor, Graphics, Position, 0.04f, AK_White3());    
 }
 
-#define GRID_EDGE_THICKNESS 0.025f
+#define GRID_EDGE_THICKNESS_X 0.05f
+#define GRID_EDGE_THICKNESS_Y 0.01f
 
 void Editor_DrawGridX(editor* Editor, graphics* Graphics, ak_i32 zLeftBound, ak_i32 zRightBound, 
-                      ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color, ak_f32 GridDistance)
+                      ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color, ak_f32 Alpha, ak_f32 GridDistance)
 {
     ak_f32 MinZ = (ak_f32)zLeftBound;
     ak_f32 MaxZ = (ak_f32)zRightBound;
@@ -725,7 +749,7 @@ void Editor_DrawGridX(editor* Editor, graphics* Graphics, ak_i32 zLeftBound, ak_
         ak_f32 z = MinZ + ZIndex*GridDistance;
         ak_v3f P0 = AK_V3(0.0f, MinY, z);
         ak_v3f P1 = AK_V3(0.0f, MaxY, z);
-        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS_X, Color, Alpha);
     }
     
     for(ak_i32 YIndex = 0; YIndex < YCount; YIndex++)
@@ -733,17 +757,17 @@ void Editor_DrawGridX(editor* Editor, graphics* Graphics, ak_i32 zLeftBound, ak_
         ak_f32 y = MinY + YIndex*GridDistance;
         ak_v3f P0 = AK_V3(0.0f, y, MinZ);
         ak_v3f P1 = AK_V3(0.0f, y, MaxZ);
-        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS_X, Color, Alpha);
     }
     
     Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, MinY, 0.0f), AK_V3f(0.0f, MaxY, 0.0f), 
-                    GRID_EDGE_THICKNESS, AK_Green3());
+                    GRID_EDGE_THICKNESS_X, AK_Green3(), Alpha);
     Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, 0.0f, MinZ), AK_V3f(0.0f, 0.0f, MaxZ), 
-                    GRID_EDGE_THICKNESS, AK_Red3());
+                    GRID_EDGE_THICKNESS_X, AK_Red3(), Alpha);
 }
 
 void Editor_DrawGridY(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_i32 xRightBound, 
-                      ak_i32 zTopBound, ak_i32 zBottomBound, ak_color3f Color, ak_f32 GridDistance)
+                      ak_i32 zTopBound, ak_i32 zBottomBound, ak_color3f Color, ak_f32 Alpha, ak_f32 GridDistance)
 {
     ak_f32 MinX = (ak_f32)xLeftBound;
     ak_f32 MaxX = (ak_f32)xRightBound;
@@ -761,7 +785,7 @@ void Editor_DrawGridY(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_
         ak_f32 x = MinX + XIndex*GridDistance;
         ak_v3f P0 = AK_V3(x, 0.0f, MinZ);
         ak_v3f P1 = AK_V3(x, 0.0f, MaxZ);
-        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS_X, Color, Alpha);
     }
     
     for(ak_i32 ZIndex = 0; ZIndex < ZCount; ZIndex++)
@@ -769,16 +793,16 @@ void Editor_DrawGridY(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_
         ak_f32 z = MinZ + ZIndex*GridDistance;
         ak_v3f P0 = AK_V3(MinX, 0.0f, z);
         ak_v3f P1 = AK_V3(MaxX, 0.0f, z);
-        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS_X, Color, Alpha);
     }
     
     Editor_DrawEdge(Editor, Graphics, AK_V3f(MinX, 0.0f, 0.0f), AK_V3f(MaxX, 0.0f, 0.0f), 
-                    GRID_EDGE_THICKNESS, AK_Green3());
+                    GRID_EDGE_THICKNESS_X, AK_Green3(), Alpha);
     Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, 0.0f, MinZ), AK_V3f(0.0f, 0.0f, MaxZ), 
-                    GRID_EDGE_THICKNESS, AK_Red3());
+                    GRID_EDGE_THICKNESS_X, AK_Red3(), Alpha);
 }
 
-void Editor_DrawGridZ(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color, ak_f32 GridDistance)
+void Editor_DrawGridZ(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_i32 xRightBound, ak_i32 yTopBound, ak_i32 yBottomBound, ak_color3f Color, ak_f32 Alpha, ak_f32 GridDistance)
 {
     ak_f32 MinX = (ak_f32)xLeftBound;
     ak_f32 MaxX = (ak_f32)xRightBound;
@@ -794,21 +818,27 @@ void Editor_DrawGridZ(editor* Editor, graphics* Graphics, ak_i32 xLeftBound, ak_
     for(ak_i32 XIndex = 0; XIndex < XCount; XIndex++)
     {
         ak_f32 x = MinX + XIndex*GridDistance;
-        ak_v3f P0 = AK_V3(x, MinY, 0.0f);
-        ak_v3f P1 = AK_V3(x, MaxY, 0.0f);
-        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+        if(x != 0.0f)
+        {
+            ak_v3f P0 = AK_V3(x, MinY, 0.0f);
+            ak_v3f P1 = AK_V3(x, MaxY, 0.0f);
+            Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS_X, GRID_EDGE_THICKNESS_Y, Color, Alpha);
+        }
     }
     
     for(ak_i32 YIndex = 0; YIndex < YCount; YIndex++)
     {
         ak_f32 y = MinY + YIndex*GridDistance;
-        ak_v3f P0 = AK_V3(MinX, y, 0.0f);
-        ak_v3f P1 = AK_V3(MaxX, y, 0.0f);
-        Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS, Color);
+        if(y != 0.0f)
+        {
+            ak_v3f P0 = AK_V3(MinX, y, 0.0f);
+            ak_v3f P1 = AK_V3(MaxX, y, 0.0f);
+            Editor_DrawEdge(Editor, Graphics, P0, P1, GRID_EDGE_THICKNESS_Y, GRID_EDGE_THICKNESS_X, Color, Alpha);
+        }
     }
     
-    Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, MinY, 0.0f), AK_V3f(0.0f, MaxY, 0.0f), GRID_EDGE_THICKNESS, AK_Red3());
-    Editor_DrawEdge(Editor, Graphics, AK_V3f(MinX, 0.0f, 0.0f), AK_V3f(MaxX, 0.0f, 0.0f), GRID_EDGE_THICKNESS, AK_Green3());
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(0.0f, MinY, 0.001f), AK_V3f(0.0f, MaxY, 0.001f), GRID_EDGE_THICKNESS_X, GRID_EDGE_THICKNESS_Y, AK_Red3(), Alpha);
+    Editor_DrawEdge(Editor, Graphics, AK_V3f(MinX, 0.0f, 0.001f), AK_V3f(MaxX, 0.0f, 0.001f), GRID_EDGE_THICKNESS_Y, GRID_EDGE_THICKNESS_X, AK_Green3(), Alpha);
 }
 
 ak_color3f Editor_GetGizmoColor(gizmo Gizmo)
@@ -1132,6 +1162,8 @@ void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSe
     if(ViewMode != VIEW_MODE_TYPE_PERSPECTIVE)
         PushDepth(Graphics, false);
     
+    const ak_f32 Alpha = 0.15f;
+    PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);
     if(IntersectedCount != 0)
     {
         switch(ViewMode)
@@ -1173,7 +1205,8 @@ void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSe
                     }
                 }
                 
-                Editor_DrawGridZ(Editor, Graphics, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f), Editor->GizmoState.GridDistance);
+                Editor_DrawGridZ(Editor, Graphics, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinY), AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f),
+                                 Alpha, Editor->GizmoState.GridDistance);
             } break;
             
             case VIEW_MODE_TYPE_LEFT:
@@ -1214,7 +1247,7 @@ void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSe
                 }
                 
                 Editor_DrawGridX(Editor, Graphics, AK_Floor(MinZ), AK_Ceil(MaxZ), AK_Floor(MinY), 
-                                 AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f), Editor->GizmoState.GridDistance);
+                                 AK_Ceil(MaxY), AK_RGB(0.1f, 0.1f, 0.1f), Alpha, Editor->GizmoState.GridDistance);
             } break;
             
             case VIEW_MODE_TYPE_TOP:
@@ -1255,10 +1288,11 @@ void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSe
                 }
                 
                 Editor_DrawGridY(Editor, Graphics, AK_Floor(MinX), AK_Ceil(MaxX), AK_Floor(MinZ), 
-                                 AK_Ceil(MaxZ), AK_RGB(0.1f, 0.1f, 0.1f), Editor->GizmoState.GridDistance);
+                                 AK_Ceil(MaxZ), AK_RGB(0.1f, 0.1f, 0.1f), Alpha, Editor->GizmoState.GridDistance);
             } break;
         }
     }    
+    PushBlend(Graphics, false);
     
     if(ViewMode != VIEW_MODE_TYPE_PERSPECTIVE)
         PushDepth(Graphics, true);
@@ -1277,9 +1311,6 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     game* Game = GameContext->Game;
     world_management* WorldManagement = &Editor->WorldManagement;
     edit_recordings* EditRecordings = &Editor->EditRecordings;
-    
-    if(IsPressed(&DevInput->S))
-        AK_DEBUG_BREAK;
     
     if(WorldManagement->NewState == WORLD_MANAGEMENT_STATE_NONE)
     {
@@ -1807,6 +1838,11 @@ void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
     }
 }
 
+ak_bool Editor_ShouldDrawEntitySpawnerMesh(editor* Editor, ak_u32 WorldIndex)
+{
+    return Editor->UI.EntitySpawnerOpen && (Editor->CurrentWorldIndex == WorldIndex);
+}
+
 view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* Assets, ak_u32 WorldIndex)
 {
     graphics_render_buffer* RenderBuffer = Editor->RenderBuffers[WorldIndex];
@@ -1820,11 +1856,13 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
     PushClearColorAndDepth(Graphics, AK_Black4(), 1.0f);
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
+    ak_bool DrawEntitySpawnerMesh = Editor_ShouldDrawEntitySpawnerMesh(Editor, WorldIndex);
+    
+    graphics_light_buffer LightBuffer = {};
     switch(Editor->UI.RenderModeType)
     {
         case RENDER_MODE_TYPE_LIT:
         {
-            graphics_light_buffer LightBuffer = {};
             AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
             {
                 AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
@@ -1840,6 +1878,7 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
                 PushMaterial(Graphics, Material);
                 PushDrawMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
             }
+            
         } break;
         
         case RENDER_MODE_TYPE_UNLIT:
@@ -1852,6 +1891,7 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
                 PushDrawUnlitMesh(Graphics, MeshHandle, AK_TransformM4(DevEntity->Transform), Material.Diffuse, 
                                   GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
             }
+            
         } break;
         
         case RENDER_MODE_TYPE_WIREFRAME:
@@ -1868,7 +1908,6 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
         
         case RENDER_MODE_TYPE_LIT_WIREFRAME:
         {
-            graphics_light_buffer LightBuffer = {};
             AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
             {
                 AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
@@ -1896,6 +1935,60 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
         } break;
     }
     
+    
+    if(DrawEntitySpawnerMesh)
+    {
+        entity_spawner* Spawner = &Editor->UI.EntitySpawner;
+        material Material = UI_MaterialFromContext(&Spawner->MaterialContext);
+        mesh_asset_id MeshID = Spawner->MeshID;
+        
+        graphics_material GraphicsMaterial = ConvertToGraphicsMaterial(Assets, Graphics, &Material);
+        GraphicsMaterial.Alpha.InUse = true;
+        GraphicsMaterial.Alpha.Alpha = 0.75f;
+        
+        ak_m4f Transform = AK_TransformM4(AK_SQT(Spawner->Translation, AK_RotQuat(Spawner->Axis, Spawner->Angle), Spawner->Scale));
+        
+        graphics_mesh_id GraphicsMeshID = GetOrLoadGraphicsMesh(Assets, Graphics, MeshID);
+        
+        PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);
+        
+        switch(Editor->UI.RenderModeType)
+        {
+            case RENDER_MODE_TYPE_LIT:
+            {
+                PushMaterial(Graphics, GraphicsMaterial);
+                PushDrawMesh(Graphics, GraphicsMeshID, Transform, GetMeshIndexCount(Assets, MeshID), 0, 0);
+            } break;
+            
+            case RENDER_MODE_TYPE_UNLIT:
+            {
+                PushDrawUnlitMesh(Graphics, GraphicsMeshID, Transform, GraphicsMaterial.Diffuse, 
+                                  GetMeshIndexCount(Assets, MeshID), 0, 0, GraphicsMaterial.Alpha);
+            } break;
+            
+            case RENDER_MODE_TYPE_WIREFRAME:
+            {
+                PushWireframe(Graphics, true);
+                PushDrawUnlitMesh(Graphics, GraphicsMeshID, Transform, CreateDiffuseMaterialSlot(AK_Yellow3()), 
+                                  GetMeshIndexCount(Assets, MeshID), 0, 0);
+                PushWireframe(Graphics, false);
+            } break;
+            
+            case RENDER_MODE_TYPE_LIT_WIREFRAME:
+            {
+                PushLightBuffer(Graphics, &LightBuffer);
+                PushMaterial(Graphics, GraphicsMaterial);
+                PushDrawMesh(Graphics, GraphicsMeshID, Transform, GetMeshIndexCount(Assets, MeshID), 0, 0);
+                
+                PushWireframe(Graphics, true);
+                PushDrawUnlitMesh(Graphics, GraphicsMeshID, Transform, CreateDiffuseMaterialSlot(AK_Yellow3()), 
+                                  GetMeshIndexCount(Assets, MeshID), 0, 0);
+                PushWireframe(Graphics, false);
+            } break;
+        }
+        PushBlend(Graphics, false);
+    }
+    
     AK_ForEach(PointLight, &WorldManagement->DevPointLights[WorldIndex])
     {
         Editor_DrawSphere(Editor, Graphics, PointLight->Light.Position, POINT_LIGHT_RADIUS, AK_Yellow3());
@@ -1905,7 +1998,9 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
     {
         Editor_RenderSelectedObjectGizmos(Editor, Graphics);
         if(Editor->UI.EditorDrawGrid)
+        {
             Editor_RenderGrid(Editor, Graphics, &ViewSettings, RenderBuffer->Resolution, Editor->UI.ViewModeType);
+        }
     }
     
     return ViewSettings;
@@ -2530,6 +2625,7 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
         
         game_context* GameContext = &Editor->GameContext;
         world_management* WorldManagement = &Editor->WorldManagement;
+        ui* UI = &Editor->UI;
         
         ak_f32 LogHeight = 0;
         if(!GameContext->Game)
@@ -2599,19 +2695,19 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                 }
                 
                 UI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", 
-                            &Editor->UI.EditorDrawOtherWorld);
+                            &UI->EditorDrawOtherWorld);
                 
-                UI_Checkbox(AK_HashFunction("Editor Draw Colliders"), "Draw Colliders", &Editor->UI.EditorDrawColliders);
+                UI_Checkbox(AK_HashFunction("Editor Draw Colliders"), "Draw Colliders", &UI->EditorDrawColliders);
                 
                 UI_Checkbox(AK_HashFunction("Editor Draw Grid"), "Draw Grid", 
-                            &Editor->UI.EditorDrawGrid);
+                            &UI->EditorDrawGrid);
                 
                 ImGui::PushID(AK_HashFunction("Editor Render Modes"));
-                UI_Combo("Render Modes", (ak_i32*)&Editor->UI.RenderModeType, Global_RenderModeStrings, AK_Count(Global_RenderModeStrings));
+                UI_Combo("Render Modes", (ak_i32*)&UI->RenderModeType, Global_RenderModeStrings, AK_Count(Global_RenderModeStrings));
                 ImGui::PopID();
                 
                 ImGui::PushID(AK_HashFunction("Editor View Modes"));
-                UI_Combo("View Modes", (ak_i32*)&Editor->UI.ViewModeType, Global_ViewModeStrings, AK_Count(Global_ViewModeStrings));
+                UI_Combo("View Modes", (ak_i32*)&UI->ViewModeType, Global_ViewModeStrings, AK_Count(Global_ViewModeStrings));
                 ImGui::PopID();
                 
                 ImGui::Text("Snap Settings");
@@ -2619,25 +2715,25 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                 UI_Checkbox(AK_HashFunction("Snap Checkbox"),  "Snap", &Editor->GizmoState.ShouldSnap);
                 
                 ImGui::PushID(AK_HashFunction("Grid Size"));
-                UI_Combo("Grid Size", (ak_i32*)&Editor->UI.EditorGridSizeIndex, Global_GridSizesText, AK_Count(Global_GridSizesText));
+                UI_Combo("Grid Size", (ak_i32*)&UI->EditorGridSizeIndex, Global_GridSizesText, AK_Count(Global_GridSizesText));
                 ImGui::PopID();
                 
-                Editor->GizmoState.GridDistance = Global_GridSizes[Editor->UI.EditorGridSizeIndex];
+                Editor->GizmoState.GridDistance = Global_GridSizes[UI->EditorGridSizeIndex];
                 
                 if(!Editor->GizmoState.ShouldSnap)
                     UI_PushDisabledItem();
                 
                 ImGui::PushID(AK_HashFunction("Scale Snap"));
-                UI_Combo("Scale Snap", (ak_i32*)&Editor->UI.EditorScaleSnapIndex, Global_GridSizesText, AK_Count(Global_GridSizesText));
+                UI_Combo("Scale Snap", (ak_i32*)&UI->EditorScaleSnapIndex, Global_GridSizesText, AK_Count(Global_GridSizesText));
                 ImGui::PopID();
                 
-                Editor->GizmoState.ScaleSnap = Global_GridSizes[Editor->UI.EditorScaleSnapIndex];
+                Editor->GizmoState.ScaleSnap = Global_GridSizes[UI->EditorScaleSnapIndex];
                 
                 ImGui::PushID(AK_HashFunction("Rotate Angle Snap"));
-                UI_Combo("Rotate Angle Snap", (ak_i32*)&Editor->UI.EditorRotateSnapIndex, RotateAngleSnapsText, AK_Count(RotateAngleSnapsText));
+                UI_Combo("Rotate Angle Snap", (ak_i32*)&UI->EditorRotateSnapIndex, RotateAngleSnapsText, AK_Count(RotateAngleSnapsText));
                 ImGui::PopID();
                 
-                Editor->GizmoState.RotationAngleSnap = RotateAngleSnaps[Editor->UI.EditorRotateSnapIndex];
+                Editor->GizmoState.RotationAngleSnap = RotateAngleSnaps[UI->EditorRotateSnapIndex];
                 
                 if(!Editor->GizmoState.ShouldSnap)
                     UI_PopDisabledItem();
@@ -2655,23 +2751,31 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
             {
                 if(ImGui::BeginTabBar("Spawner Tabs"))
                 {
-                    if(ImGui::BeginTabItem("Entity"))
+                    UI->EntitySpawnerOpen = ImGui::BeginTabItem("Entity");
+                    if(UI->EntitySpawnerOpen)
                     {
-                        UI_ResetSpawner(&Editor->UI, &Editor->UI.LightSpawner);
-                        UI_EntitySpawner(Editor, &Editor->UI.EntitySpawner, Assets);
+                        UI_ResetSpawner(UI, &UI->LightSpawner);
+                        UI_EntitySpawner(Editor, &UI->EntitySpawner, Assets);
                         ImGui::EndTabItem();
                     }
                     
-                    if(ImGui::BeginTabItem("Light"))
+                    UI->LightSpawnerOpen = ImGui::BeginTabItem("Light");
+                    if(UI->LightSpawnerOpen)
                     {
-                        UI_ResetSpawner(&Editor->UI, &Editor->UI.EntitySpawner);
-                        UI_LightSpawner(Editor, &Editor->UI.LightSpawner);
+                        UI_ResetSpawner(UI, &UI->EntitySpawner);
+                        UI_LightSpawner(Editor, &UI->LightSpawner);
                         ImGui::EndTabItem();
                     }
                 }
                 
                 ImGui::EndTabBar();
             }
+            else
+            {
+                UI->EntitySpawnerOpen = false;
+                UI->LightSpawnerOpen = false;
+            }
+            
             LogHeight = MenuHeight+OptionHeight+ImGui::GetWindowHeight();
             ImGui::End();
             
@@ -2705,16 +2809,16 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                     {
                         
                         UI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", 
-                                    &Editor->UI.EditorDrawOtherWorld);
+                                    &UI->EditorDrawOtherWorld);
                         
-                        UI_Checkbox(AK_HashFunction("Game Draw Colliders"), "Draw Colliders", &Editor->UI.GameDrawColliders);
+                        UI_Checkbox(AK_HashFunction("Game Draw Colliders"), "Draw Colliders", &UI->GameDrawColliders);
                         
-                        ak_bool OldUseDevCamera = Editor->UI.GameUseDevCamera;
+                        ak_bool OldUseDevCamera = UI->GameUseDevCamera;
                         UI_Checkbox(AK_HashFunction("Use Dev Camera"), "Use Dev Camera", 
-                                    &Editor->UI.GameUseDevCamera);
-                        if(OldUseDevCamera != Editor->UI.GameUseDevCamera)
+                                    &UI->GameUseDevCamera);
+                        if(OldUseDevCamera != UI->GameUseDevCamera)
                         {
-                            if(Editor->UI.GameUseDevCamera)
+                            if(UI->GameUseDevCamera)
                             {
                                 game* Game = Editor->GameContext.Game;
                                 Editor->Cameras[0] = Game->Cameras[0];
@@ -2723,7 +2827,7 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                         }
                         
                         ImGui::PushID(AK_HashFunction("Editor Render Modes"));
-                        UI_Combo("Render Modes", (ak_i32*)&Editor->UI.RenderModeType, Global_RenderModeStrings, AK_Count(Global_RenderModeStrings));
+                        UI_Combo("Render Modes", (ak_i32*)&UI->RenderModeType, Global_RenderModeStrings, AK_Count(Global_RenderModeStrings));
                         ImGui::PopID();
                         
                         FramePlayback->Update(Editor, Graphics, Assets, Platform, DevPlatform);

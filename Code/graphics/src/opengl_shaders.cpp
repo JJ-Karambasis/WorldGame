@@ -211,8 +211,8 @@ inline ak_char* ShaderDefinesNormalMapping()
 #define SET_UNIFORM_BLOCK(index, name) \
 do \
 { \
-    GLint Index = glGetUniformBlockIndex(Program, name); \
-    glUniformBlockBinding(Program, Index, index); \
+GLint Index = glGetUniformBlockIndex(Program, name); \
+glUniformBlockBinding(Program, Index, index); \
 } while(0)
 
 #define MVP_UNIFORMS() \
@@ -258,6 +258,7 @@ color_shader CreateColorShader()
         
         MVP_UNIFORMS();        
         Result.ColorUniform = GET_UNIFORM_LOCATION("Color");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
     }
     
     return Result;
@@ -275,6 +276,7 @@ texture_shader CreateTextureShader()
         Result.Valid = true;
         Result.Program = Program;        
         MVP_UNIFORMS();        
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
     }
     return Result;
 }
@@ -299,6 +301,7 @@ lambertian_color_shader CreateLambertianColorShader()
         SHADOW_MAP_UNIFORMS();
         Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");                
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();        
     }
@@ -326,6 +329,7 @@ lambertian_texture_shader CreateLambertianTextureShader()
         SHADOW_MAP_UNIFORMS();
         Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");                
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();        
     }
@@ -353,6 +357,7 @@ lambertian_color_normal_map_shader CreateLambertianColorNormalMapShader()
         Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();
     }
@@ -380,6 +385,7 @@ lambertian_texture_normal_map_shader CreateLambertianTextureNormalMapShader()
         Result.ViewPositionUniform = GET_UNIFORM_LOCATION("ViewPosition");
         Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();
     }
@@ -409,6 +415,7 @@ phong_dcon_scon_shader CreatePhongDConSConShader()
         Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");
         Result.SpecularColorUniform = GET_UNIFORM_LOCATION("SpecularColor");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");        
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();        
     }    
@@ -439,6 +446,7 @@ phong_dcon_scon_normal_map_shader CreatePhongDConSConNormalMapShader()
         Result.SpecularColorUniform = GET_UNIFORM_LOCATION("SpecularColor");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");      
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();        
     }    
@@ -468,6 +476,7 @@ phong_dcon_stex_shader CreatePhongDConSTexShader()
         Result.DiffuseColorUniform = GET_UNIFORM_LOCATION("DiffuseColor");
         Result.SpecularTextureUniform = GET_UNIFORM_LOCATION("SpecularTexture");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();        
     }
@@ -498,6 +507,7 @@ phong_dcon_stex_normal_map_shader CreatePhongDConSTexNormalMapShader()
         Result.SpecularTextureUniform = GET_UNIFORM_LOCATION("SpecularTexture");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();        
     }
@@ -526,6 +536,7 @@ phong_dtex_scon_shader CreatePhongDTexSConShader()
         Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
         Result.SpecularColorUniform = GET_UNIFORM_LOCATION("SpecularColor");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();
     }
@@ -555,6 +566,7 @@ phong_dtex_scon_normal_map_shader CreatePhongDTexSConNormalMapShader()
         Result.SpecularColorUniform = GET_UNIFORM_LOCATION("SpecularColor");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();
     }
@@ -583,6 +595,7 @@ phong_dtex_stex_shader CreatePhongDTexSTexShader()
         Result.DiffuseTextureUniform = GET_UNIFORM_LOCATION("DiffuseTexture");
         Result.SpecularTextureUniform = GET_UNIFORM_LOCATION("SpecularTexture");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();
     }
@@ -612,6 +625,7 @@ phong_dtex_stex_normal_map_shader CreatePhongDTexSTexNormalMapShader()
         Result.SpecularTextureUniform = GET_UNIFORM_LOCATION("SpecularTexture");
         Result.ShininessUniform = GET_UNIFORM_LOCATION("Shininess");
         Result.NormalMapUniform = GET_UNIFORM_LOCATION("NormalMap");
+        Result.AlphaUniform = GET_UNIFORM_LOCATION("Alpha");
         
         SET_LIGHT_UNIFORM_BLOCKS();
     }

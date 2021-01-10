@@ -95,6 +95,9 @@ struct ui
     
     ak_bool RenameModalState;
     
+    ak_bool EntitySpawnerOpen;
+    ak_bool LightSpawnerOpen;
+    
     render_mode_type RenderModeType;
     view_mode_type ViewModeType;
     

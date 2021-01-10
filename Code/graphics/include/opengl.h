@@ -62,6 +62,7 @@ global PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
 global PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer;
 global PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers;
 global PFNGLDELETERENDERBUFFERSPROC glDeleteRenderbuffers;
+global PFNGLUNIFORM2FPROC glUniform2f;
 
 #include "opengl_shaders.h"
 

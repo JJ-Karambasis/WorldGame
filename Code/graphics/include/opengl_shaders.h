@@ -17,12 +17,14 @@ struct color_shader : public base_shader
     GLint ModelUniform;
     GLint ViewProjectionUniform;     
     GLint ColorUniform;       
+    GLint AlphaUniform;
 };
 
 struct texture_shader : public base_shader
 {
     GLint ModelUniform;
     GLint ViewProjectionUniform;     
+    GLint AlphaUniform;
 };
 
 struct lambertian_color_shader : public base_shader
@@ -33,6 +35,7 @@ struct lambertian_color_shader : public base_shader
     GLint DiffuseColorUniform;    
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;            
+    GLint AlphaUniform;
 };
 
 struct lambertian_texture_shader : public base_shader
@@ -43,6 +46,7 @@ struct lambertian_texture_shader : public base_shader
     GLint DiffuseTextureUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;            
+    GLint AlphaUniform;
 };
 
 struct lambertian_color_normal_map_shader : public base_shader
@@ -54,6 +58,7 @@ struct lambertian_color_normal_map_shader : public base_shader
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 struct lambertian_texture_normal_map_shader  : public base_shader
@@ -65,6 +70,7 @@ struct lambertian_texture_normal_map_shader  : public base_shader
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 struct phong_dcon_scon_shader : public base_shader
@@ -77,6 +83,7 @@ struct phong_dcon_scon_shader : public base_shader
     GLint ShininessUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;        
+    GLint AlphaUniform;
 };
 
 struct phong_dcon_scon_normal_map_shader : public base_shader
@@ -90,6 +97,7 @@ struct phong_dcon_scon_normal_map_shader : public base_shader
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;        
+    GLint AlphaUniform;
 };
 
 struct phong_dcon_stex_shader : public base_shader
@@ -102,6 +110,7 @@ struct phong_dcon_stex_shader : public base_shader
     GLint ShininessUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 struct phong_dcon_stex_normal_map_shader : public base_shader
@@ -115,6 +124,7 @@ struct phong_dcon_stex_normal_map_shader : public base_shader
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 struct phong_dtex_scon_shader : public base_shader
@@ -127,6 +137,7 @@ struct phong_dtex_scon_shader : public base_shader
     GLint ShininessUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 struct phong_dtex_scon_normal_map_shader : public base_shader
@@ -140,6 +151,7 @@ struct phong_dtex_scon_normal_map_shader : public base_shader
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 struct phong_dtex_stex_shader : public base_shader
@@ -152,6 +164,7 @@ struct phong_dtex_stex_shader : public base_shader
     GLint ShininessUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 struct phong_dtex_stex_normal_map_shader : public base_shader
@@ -165,6 +178,7 @@ struct phong_dtex_stex_normal_map_shader : public base_shader
     GLint NormalMapUniform;
     GLint ShadowMapUniform;
     GLint OmniShadowMapUniform;
+    GLint AlphaUniform;
 };
 
 //TODO(JJ): Will probably need skinning versions of these shaders

@@ -24,13 +24,15 @@ in v2f PixelUV;
 #else
 uniform c3 Color;
 #endif
+
+uniform f32 Alpha;
                                              
 void main()
 {
 #ifdef HAS_TEXTURES    
-    FragColor = c4(texture(Texture, PixelUV).rgb, 1.0f);
+    FragColor = c4(texture(Texture, PixelUV).rgb, Alpha);
 #else
-    FragColor = c4(Color, 1.0f);    
+    FragColor = c4(Color, Alpha);    
 #endif
 }
 
@@ -111,6 +113,7 @@ layout (std140) uniform LightBuffer
 
 
 uniform v3f ViewPosition;
+uniform f32 Alpha;
 
 uniform sampler2DArray ShadowMap;
 uniform sampler2DArray OmniShadowMap;
@@ -376,7 +379,7 @@ void main()
 
     c3 Ambient = 0.03*SurfaceColor.xyz;
     FinalColor += Ambient;
-    FragColor = c4(FinalColor.xyz, 1.0f);    
+    FragColor = c4(FinalColor.xyz, Alpha);    
 }
 
 )";

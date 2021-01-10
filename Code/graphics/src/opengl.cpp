@@ -168,6 +168,30 @@ SetUniform3f(GLint Uniform, ak_v3f Value)
     glUniform3f(Uniform, Value.x, Value.y, Value.z);
 }
 
+inline void 
+SetUniform2f(GLint Uniform, ak_v2f Value)
+{
+    glUniform2f(Uniform, Value.x, Value.y);
+}
+
+inline void 
+SetUniform1f(GLint Uniform, ak_i32 Value)
+{
+    glUniform1f(Uniform, (GLfloat)Value);
+}
+
+inline void 
+SetUniform1f(GLint Uniform, ak_f32 Value)
+{
+    glUniform1f(Uniform, Value);
+}
+
+inline void 
+SetUniform1i(GLint Uniform, ak_i32 Value)
+{
+    glUniform1i(Uniform, Value);
+}
+
 ak_bool BindProgram(GLuint* BoundProgram, GLuint NewProgram)
 {
     if(*BoundProgram != NewProgram)
@@ -763,6 +787,7 @@ AK_EXPORT BIND_GRAPHICS_FUNCTIONS(BindGraphicsFunctions)
     LOAD_FUNCTION(PFNGLBLITFRAMEBUFFERPROC, glBlitFramebuffer);
     LOAD_FUNCTION(PFNGLDELETEFRAMEBUFFERSPROC, glDeleteFramebuffers);        
     LOAD_FUNCTION(PFNGLDELETERENDERBUFFERSPROC, glDeleteRenderbuffers);
+    LOAD_FUNCTION(PFNGLUNIFORM2FPROC, glUniform2f);
     
 #if DEVELOPER_BUILD
     
@@ -922,6 +947,7 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     opengl_forward_pass ForwardPass = InitForwardPass();        
     
     GLint ModelUniform = -1;
+    GLint AlphaUniform = -1;
     
     AK_ForEach(CommandAt, &Graphics->CommandList)
     {        
@@ -1036,6 +1062,7 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 SET_VIEW_UNIFORMS();
                                 
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);
+                                SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                 
                                 opengl_texture* Texture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                 BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);                                
@@ -1048,6 +1075,7 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 
                                 SetUniformM4(Shader->ViewProjectionUniform, ViewProjection);       
                                 SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);                                
+                                SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                             }
                         }
                         else if(BoundMaterial.Specular.InUse && !BoundMaterial.Normal.InUse)
@@ -1060,7 +1088,8 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                     
                                     opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                     opengl_texture* SpecularTexture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
@@ -1074,8 +1103,9 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    SetUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                     
                                     opengl_texture* Texture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                     BindTextureToUnit(Texture->Handle, Shader->DiffuseTextureUniform, 0);
@@ -1090,8 +1120,8 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_VIEW_UNIFORMS();
                                     
                                     SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
-                                    
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);                                                                                                
+                                    SetUniform1f(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);                                                                                                
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                     
                                     opengl_texture* Texture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
                                     BindTextureToUnit(Texture->Handle, Shader->SpecularTextureUniform, 0);                                    
@@ -1103,8 +1133,9 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_VIEW_UNIFORMS();
                                     
                                     SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    SetUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                 }
                             }
                         }
@@ -1119,6 +1150,8 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                 opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                 
+                                SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
+                                
                                 BindTextureToUnit(DiffuseTexture->Handle, Shader->DiffuseTextureUniform, 0);
                                 BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 1);
                             }
@@ -1128,6 +1161,7 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                 SET_ILLUMINATION_PROGRAM();
                                 SET_VIEW_UNIFORMS();                                
                                 SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
+                                SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                 
                                 opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                 BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);                                
@@ -1143,7 +1177,8 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                     
                                     opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                     opengl_texture* SpecularTexture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
@@ -1159,8 +1194,9 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_ILLUMINATION_PROGRAM();
                                     SET_VIEW_UNIFORMS();
                                     
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    SetUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                     
                                     opengl_texture* DiffuseTexture = TexturePool->Get(BoundMaterial.Diffuse.DiffuseID);
                                     opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
@@ -1178,7 +1214,8 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_VIEW_UNIFORMS();
                                     
                                     SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
+                                    SetUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
                                     
                                     opengl_texture* SpecularTexture = TexturePool->Get(BoundMaterial.Specular.SpecularID);
                                     opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
@@ -1193,8 +1230,9 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                                     SET_VIEW_UNIFORMS();
                                     
                                     SetUniform3f(Shader->DiffuseColorUniform, BoundMaterial.Diffuse.Diffuse);
-                                    glUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
-                                    glUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->SpecularColorUniform, BoundMaterial.Specular.Specular);
+                                    SetUniform1i(Shader->ShininessUniform, BoundMaterial.Specular.Shininess);
+                                    SetUniform1f(Shader->AlphaUniform, BoundMaterial.Alpha.InUse ? BoundMaterial.Alpha.Alpha : 1.0f);
                                     
                                     opengl_texture* NormalMapTexture = TexturePool->Get(BoundMaterial.Normal.NormalID);
                                     BindTextureToUnit(NormalMapTexture->Handle, Shader->NormalMapUniform, 0);
@@ -1286,6 +1324,7 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     if(BindProgram(&BoundProgram, OpenGL->TextureShader.Program))
                     {
                         ModelUniform = OpenGL->TextureShader.ModelUniform;
+                        AlphaUniform = OpenGL->TextureShader.AlphaUniform;
                         SetUniformM4(OpenGL->TextureShader.ViewProjectionUniform, ViewProjection);
                     }
                     
@@ -1298,12 +1337,14 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
                     if(BindProgram(&BoundProgram, OpenGL->ColorShader.Program))
                     {
                         ModelUniform = OpenGL->ColorShader.ModelUniform;
+                        AlphaUniform = OpenGL->ColorShader.AlphaUniform;
                         SetUniformM4(OpenGL->ColorShader.ViewProjectionUniform, ViewProjection);
                     }
                     
                     SetUniform3f(OpenGL->ColorShader.ColorUniform, DrawUnlitMesh->DiffuseSlot.Diffuse);
                 }
                 
+                SetUniform1f(AlphaUniform, DrawUnlitMesh->AlphaSlot.InUse ? DrawUnlitMesh->AlphaSlot.Alpha : 1.0f);
                 SetUniformM4(ModelUniform, DrawUnlitMesh->WorldTransform);
                 BindVAO(&BoundVAO, Mesh->VAO);                
                 DrawTriangles(Mesh, &DrawUnlitMesh->DrawInfo);                                

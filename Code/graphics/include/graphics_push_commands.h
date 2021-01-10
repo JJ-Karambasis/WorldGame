@@ -139,6 +139,7 @@ struct push_command_draw_unlit_mesh : public push_command
     graphics_mesh_id MeshID;
     ak_m4f WorldTransform;
     graphics_diffuse_material_slot DiffuseSlot;
+    graphics_transparent_material_slot AlphaSlot;
     graphics_draw_info DrawInfo;
 };
 
