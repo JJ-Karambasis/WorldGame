@@ -47,6 +47,22 @@ EDITOR_DEBUG_LOG(Editor_DebugLog)
     va_end(Args);
 }
 
+dev_entity* Editor_GetEntity(editor* Editor, ak_u32 WorldIndex, ak_string Name)
+{
+    ak_u64* ID = Editor->WorldManagement.EntityTables[WorldIndex].Find(Name);
+    if(!ID)
+        return NULL;
+    return Editor->WorldManagement.DevEntities[WorldIndex].Get(*ID);
+}
+
+dev_point_light* Editor_GetPointLight(editor* Editor, ak_u32 WorldIndex, ak_string Name)
+{
+    ak_u64* ID = Editor->WorldManagement.PointLightTables[WorldIndex].Find(Name);
+    if(!ID)
+        return NULL;
+    return Editor->WorldManagement.DevPointLights[WorldIndex].Get(*ID);
+}
+
 void Editor_AddEntity(editor* Editor, ak_u32 WorldIndex, ak_u64 ID, ak_string Name)
 {
     game_context* GameContext = &Editor->GameContext;
@@ -164,11 +180,6 @@ ak_quatf Editor_GetOrientationDiff(ak_m3f OriginalRotation, ak_v3f SelectorDiff)
     ak_quatf ZOrientation = AK_RotQuat(OriginalRotation.ZAxis, -SelectorDiff.z);
     
     return AK_Normalize(XOrientation*YOrientation*ZOrientation);
-}
-
-ak_quatf Editor_GetOrientationDiff(editor* Editor, ak_v3f SelectorDiff)
-{
-    return Editor_GetOrientationDiff(Editor->GizmoState.OriginalRotation, SelectorDiff);
 }
 
 #include "src/ui.cpp"
@@ -598,41 +609,61 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
             {
                 AK_Assert(GizmoState->SelectedObject.IsSelected, "Cannot be selecting a gizmo without selecting an object");
                 GizmoState->GizmoHit = GizmoHitTest;
-                GizmoState->OriginalRotation = AK_IdentityM3<ak_f32>();
+                GizmoState->OriginalRotation[0] = GizmoState->OriginalRotation[1] = AK_IdentityM3<ak_f32>();
                 object* SelectedObject = &GizmoState->SelectedObject.SelectedObject;
                 
                 switch(SelectedObject->Type)
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
-                        GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Entity->Transform.Orientation));
+                        dev_entity* EntityA = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
+                        GizmoState->OriginalRotation[0] = AK_Transpose(AK_QuatToMatrix(EntityA->Transform.Orientation));
+                        GizmoState->Transform[0] = EntityA->Transform;
                         
-                        GizmoState->Transform = Entity->Transform;
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_entity* EntityB = Editor_GetEntity(Editor, !Editor->CurrentWorldIndex, EntityA->Name);
+                            if(EntityB)
+                            {
+                                GizmoState->OriginalRotation[1] = AK_Transpose(AK_QuatToMatrix(EntityB->Transform.Orientation));
+                                GizmoState->Transform[1] = EntityB->Transform;
+                            }
+                        }
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
-                        dev_point_light* PointLight = 
+                        dev_point_light* PointLightA = 
                             SelectedObject->GetPointLight(Editor, 
                                                           Editor->CurrentWorldIndex);
-                        GizmoState->Transform.Translation = PointLight->Light.Position;
-                        GizmoState->Transform.Scale = AK_V3(PointLight->Light.Radius, PointLight->Light.Radius, PointLight->Light.Radius);
+                        GizmoState->Transform[0].Translation = PointLightA->Light.Position;
+                        GizmoState->Transform[0].Scale = AK_V3(PointLightA->Light.Radius, PointLightA->Light.Radius, PointLightA->Light.Radius);
+                        
+                        
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_point_light* PointLightB = Editor_GetPointLight(Editor, !Editor->CurrentWorldIndex, PointLightA->Name);
+                            if(PointLightB)
+                            {
+                                GizmoState->Transform[1].Translation = PointLightB->Light.Position;
+                                GizmoState->Transform[1].Scale = AK_V3(PointLightB->Light.Radius, PointLightB->Light.Radius, PointLightB->Light.Radius);
+                            }
+                        }
                     } break;
                     
                     case OBJECT_TYPE_ENTITY_SPAWNER:
                     {
                         entity_spawner* Spawner = &Editor->UI.EntitySpawner;
-                        GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Spawner->Orientation));
-                        GizmoState->Transform = AK_SQT(Spawner->Translation, Spawner->Orientation, 
-                                                       Spawner->Scale);
+                        GizmoState->OriginalRotation[0] = AK_Transpose(AK_QuatToMatrix(Spawner->Orientation));
+                        GizmoState->Transform[0] = AK_SQT(Spawner->Translation, Spawner->Orientation, 
+                                                          Spawner->Scale);
                     } break;
                     
                     case OBJECT_TYPE_LIGHT_SPAWNER:
                     {
                         light_spawner* Spawner = &Editor->UI.LightSpawner;
-                        GizmoState->Transform.Translation = Spawner->Translation;
-                        GizmoState->Transform.Scale = AK_V3(Spawner->Radius, Spawner->Radius, Spawner->Radius);
+                        GizmoState->Transform[0].Translation = Spawner->Translation;
+                        GizmoState->Transform[0].Scale = AK_V3(Spawner->Radius, Spawner->Radius, Spawner->Radius);
                     } break;
                     
                     AK_INVALID_DEFAULT_CASE;
@@ -649,36 +680,59 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
+                        dev_entity* EntityA = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                         
-                        ak_v3f TranslationDiff = Entity->Transform.Translation-GizmoState->Transform.Translation;
-                        ak_v3f ScaleDiff = Entity->Transform.Scale-GizmoState->Transform.Scale;
-                        ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->Transform.Orientation, 
-                                                               Entity->Transform.Orientation);
-                        
-                        object Object = {OBJECT_TYPE_ENTITY, SelectedObject->ID};
-                        
-                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, OrientationDiff);
+                        ak_v3f TranslationDiffA = EntityA->Transform.Translation-GizmoState->Transform[0].Translation;
+                        ak_v3f ScaleDiffA = EntityA->Transform.Scale-GizmoState->Transform[0].Scale;
+                        ak_quatf OrientationDiffA = AK_QuatDiff(GizmoState->Transform[0].Orientation, 
+                                                                EntityA->Transform.Orientation);
+                        object ObjectA = {OBJECT_TYPE_ENTITY, SelectedObject->ID};
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_entity* EntityB = Editor_GetEntity(Editor, !Editor->CurrentWorldIndex, EntityA->Name); 
+                            ak_v3f TranslationDiffB = EntityB->Transform.Translation-GizmoState->Transform[1].Translation;
+                            ak_v3f ScaleDiffB = EntityB->Transform.Scale-GizmoState->Transform[1].Scale;
+                            ak_quatf OrientationDiffB = AK_QuatDiff(GizmoState->Transform[1].Orientation, 
+                                                                    EntityB->Transform.Orientation);
+                            EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, ObjectA, TranslationDiffA, ScaleDiffA, OrientationDiffA, 
+                                                               TranslationDiffB, ScaleDiffB, OrientationDiffB);
+                        }
+                        else
+                        {
+                            EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, ObjectA, TranslationDiffA, ScaleDiffA, OrientationDiffA);
+                        }
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
-                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
+                        dev_point_light* DevPointLightA = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
                         
-                        ak_v3f TranslationDiff = DevPointLight->Light.Position-GizmoState->Transform.Translation;
-                        ak_v3f ScaleDiff = DevPointLight->Light.Radius-GizmoState->Transform.Scale;
-                        
-                        object Object = {OBJECT_TYPE_LIGHT, SelectedObject->ID};
-                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, 
-                                                           TranslationDiff, ScaleDiff, AK_IdentityQuat<ak_f32>());
+                        ak_v3f TranslationDiffA = DevPointLightA->Light.Position-GizmoState->Transform[0].Translation;
+                        ak_v3f ScaleDiffA = DevPointLightA->Light.Radius-GizmoState->Transform[0].Scale;
+                        object ObjectA = {OBJECT_TYPE_LIGHT, SelectedObject->ID};
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_point_light* DevPointLightB = Editor_GetPointLight(Editor, !Editor->CurrentWorldIndex, DevPointLightA->Name);
+                            ak_v3f TranslationDiffB = DevPointLightB->Light.Position-GizmoState->Transform[1].Translation;
+                            ak_v3f ScaleDiffB = DevPointLightB->Light.Radius-GizmoState->Transform[1].Scale;
+                            
+                            EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, ObjectA, 
+                                                               TranslationDiffA, ScaleDiffA, AK_IdentityQuat<ak_f32>(), 
+                                                               TranslationDiffB, ScaleDiffB, AK_IdentityQuat<ak_f32>());
+                        }
+                        else
+                        {
+                            EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, ObjectA, 
+                                                               TranslationDiffA, ScaleDiffA, AK_IdentityQuat<ak_f32>());
+                        }
                     } break;
                     
                     case OBJECT_TYPE_ENTITY_SPAWNER:
                     {
                         entity_spawner* Spawner = &Editor->UI.EntitySpawner;
-                        ak_v3f TranslationDiff = Spawner->Translation-GizmoState->Transform.Translation;
-                        ak_v3f ScaleDiff = Spawner->Scale-GizmoState->Transform.Scale;
-                        ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->Transform.Orientation, 
+                        ak_v3f TranslationDiff = Spawner->Translation-GizmoState->Transform[0].Translation;
+                        ak_v3f ScaleDiff = Spawner->Scale-GizmoState->Transform[0].Scale;
+                        ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->Transform[0].Orientation, 
                                                                Spawner->Orientation);
                         
                         object Object = {OBJECT_TYPE_ENTITY_SPAWNER};
@@ -690,8 +744,8 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                     {
                         light_spawner* Spawner = &Editor->UI.LightSpawner;
                         
-                        ak_v3f TranslationDiff = Spawner->Translation-GizmoState->Transform.Translation;
-                        ak_v3f ScaleDiff = Spawner->Radius-GizmoState->Transform.Scale;
+                        ak_v3f TranslationDiff = Spawner->Translation-GizmoState->Transform[0].Translation;
+                        ak_v3f ScaleDiff = Spawner->Radius-GizmoState->Transform[0].Scale;
                         
                         object Object = {OBJECT_TYPE_LIGHT_SPAWNER};
                         EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, 
@@ -1601,26 +1655,49 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
-                        
+                        dev_entity* EntityA = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                         switch(Editor->GizmoState.TransformMode)
                         {
                             case SELECTOR_TRANSFORM_MODE_TRANSLATE:
                             {
-                                Entity->Transform.Translation -= SelectorDiff;
+                                EntityA->Transform.Translation -= SelectorDiff;
                             } break;
                             
                             case SELECTOR_TRANSFORM_MODE_SCALE:
                             {
-                                Entity->Transform.Scale -= SelectorDiff;
+                                EntityA->Transform.Scale -= SelectorDiff;
                             } break;
                             
                             case SELECTOR_TRANSFORM_MODE_ROTATE:
                             {
-                                Entity->Transform.Orientation *= Editor_GetOrientationDiff(Editor, SelectorDiff);
+                                EntityA->Transform.Orientation *= Editor_GetOrientationDiff(Editor->GizmoState.OriginalRotation[0], SelectorDiff);
                             } break;
                         }
                         
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_entity* EntityB = Editor_GetEntity(Editor, !Editor->CurrentWorldIndex, EntityA->Name);
+                            if(EntityB)
+                            {
+                                switch(Editor->GizmoState.TransformMode)
+                                {
+                                    case SELECTOR_TRANSFORM_MODE_TRANSLATE:
+                                    {
+                                        EntityB->Transform.Translation -= SelectorDiff;
+                                    } break;
+                                    
+                                    case SELECTOR_TRANSFORM_MODE_SCALE:
+                                    {
+                                        EntityB->Transform.Scale -= SelectorDiff;
+                                    } break;
+                                    
+                                    case SELECTOR_TRANSFORM_MODE_ROTATE:
+                                    {
+                                        EntityB->Transform.Orientation *= Editor_GetOrientationDiff(Editor->GizmoState.OriginalRotation[1], SelectorDiff);
+                                    } break;
+                                }
+                            }
+                        }
                     } break;
                     
                     case OBJECT_TYPE_ENTITY_SPAWNER:
@@ -1641,26 +1718,47 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                             
                             case SELECTOR_TRANSFORM_MODE_ROTATE:
                             {
-                                Spawner->Orientation *= Editor_GetOrientationDiff(Editor, SelectorDiff);
+                                Spawner->Orientation *= Editor_GetOrientationDiff(Editor->GizmoState.OriginalRotation[0], SelectorDiff);
                             } break;
                         }
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
-                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
+                        dev_point_light* DevPointLightA = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
                         switch(Editor->GizmoState.TransformMode)
                         {
                             case SELECTOR_TRANSFORM_MODE_TRANSLATE:
                             {
-                                DevPointLight->Light.Position -= SelectorDiff;
+                                DevPointLightA->Light.Position -= SelectorDiff;
                             } break;
                             
                             case SELECTOR_TRANSFORM_MODE_SCALE:
                             {
-                                DevPointLight->Light.Radius -= SelectorDiff[SelectorDiff.LargestComp()];
+                                DevPointLightA->Light.Radius -= SelectorDiff[SelectorDiff.LargestComp()];
                             } break;
                         }
+                        
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_point_light* DevPointLightB = Editor_GetPointLight(Editor, !Editor->CurrentWorldIndex, DevPointLightA->Name);                            
+                            if(DevPointLightB)
+                            {
+                                switch(Editor->GizmoState.TransformMode)
+                                {
+                                    case SELECTOR_TRANSFORM_MODE_TRANSLATE:
+                                    {
+                                        DevPointLightB->Light.Position -= SelectorDiff;
+                                    } break;
+                                    
+                                    case SELECTOR_TRANSFORM_MODE_SCALE:
+                                    {
+                                        DevPointLightB->Light.Radius -= SelectorDiff[SelectorDiff.LargestComp()];
+                                    } break;
+                                }
+                            }
+                        }
+                        
                     } break;
                     
                     case OBJECT_TYPE_LIGHT_SPAWNER:
@@ -3014,6 +3112,9 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                 
                 UI_Checkbox(AK_HashFunction("Editor Draw Grid"), "Draw Grid", 
                             &UI->EditorDrawGrid);
+                
+                UI_Checkbox(AK_HashFunction("Editor Edit Other Object"), "Edit Object With Identical Names", 
+                            &UI->EditorEditOtherWorldObjectWithSameName);
                 
                 ImGui::PushID(AK_HashFunction("Editor Render Modes"));
                 UI_Combo("Render Modes", (ak_i32*)&UI->RenderModeType, Global_RenderModeStrings, AK_Count(Global_RenderModeStrings));

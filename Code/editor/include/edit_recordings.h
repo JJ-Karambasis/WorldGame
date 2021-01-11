@@ -39,9 +39,12 @@ struct transform_edit_entry
 {
     object Object;
     ak_u32 WorldIndex;
-    ak_v3f Translation;
-    ak_v3f Scale;
-    ak_quatf Orientation;
+    ak_v3f TranslationA;
+    ak_v3f ScaleA;
+    ak_quatf OrientationA;
+    ak_v3f TranslationB;
+    ak_v3f ScaleB;
+    ak_quatf OrientationB;
 };
 
 struct property_edit_entry
@@ -95,7 +98,8 @@ struct edit_recordings
     void PushDeleteEntry(ak_u32 WorldIndex, dev_point_light* PointLight);
     void PushDeleteEntry(ak_u32 WorldIndex, dev_point_light* PointLightA, dev_point_light* PointLightB);
     
-    void PushTransformEntry(ak_u32 WorldIndex, object Object, ak_v3f Translation, ak_v3f Scale, ak_quatf Orientation);
+    void PushTransformEntry(ak_u32 WorldIndex, object Object, ak_v3f TranslationA, ak_v3f ScaleA, ak_quatf OrientationA, 
+                            ak_v3f TranslationB = AK_V3<ak_f32>(), ak_v3f ScaleB = AK_V3<ak_f32>(), ak_quatf OrientationB = AK_IdentityQuat<ak_f32>());
     
     void PushPropertyEntry(ak_u32 WorldIndex, dev_entity* OldState, dev_entity* NewState);
     void PushPropertyEntry(ak_u32 WorldIndex, dev_point_light* OldState, dev_point_light* NewState);

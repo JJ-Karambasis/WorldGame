@@ -149,10 +149,9 @@ struct gizmo_state
     ak_f32 ScaleSnap;
     ak_f32 RotationAngleSnap;
     ak_bool ShouldSnap;
-    ak_m3f OriginalRotation;
+    ak_m3f OriginalRotation[2];
+    ak_sqtf Transform[2];
     ak_bool UseLocalTransforms;
-    
-    ak_sqtf Transform;
     gizmo_selected_object SelectedObject;
 };
 

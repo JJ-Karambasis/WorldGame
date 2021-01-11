@@ -121,15 +121,19 @@ void edit_recordings::PushDeleteEntry(ak_u32 WorldIndex, dev_point_light* PointL
     Internal__PushToUndo(this, Entry);
 }
 
-void edit_recordings::PushTransformEntry(ak_u32 WorldIndex, object Object, ak_v3f Translation, ak_v3f Scale, ak_quatf Orientation)
+void edit_recordings::PushTransformEntry(ak_u32 WorldIndex, object Object, ak_v3f TranslationA, ak_v3f ScaleA, ak_quatf OrientationA, 
+                                         ak_v3f TranslationB, ak_v3f ScaleB, ak_quatf OrientationB)
 {
     edit_entry Entry = {};
     Entry.Type = EDIT_ENTRY_TYPE_TRANSFORM;
     Entry.Transform.Object = Object;
     Entry.Transform.WorldIndex = WorldIndex;
-    Entry.Transform.Translation = Translation;
-    Entry.Transform.Scale = Scale;
-    Entry.Transform.Orientation = Orientation;
+    Entry.Transform.TranslationA = TranslationA;
+    Entry.Transform.ScaleA = ScaleA;
+    Entry.Transform.OrientationA = OrientationA;
+    Entry.Transform.TranslationB = TranslationB;
+    Entry.Transform.ScaleB = ScaleB;
+    Entry.Transform.OrientationB = OrientationB;
     Internal__PushToUndo(this, Entry);
 }
 
@@ -243,33 +247,54 @@ void edit_recordings::Undo(editor* Editor)
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* DevEntity = Object->GetEntity(Editor, TransformEntry->WorldIndex);
-                        DevEntity->Transform.Translation -= TransformEntry->Translation;
-                        DevEntity->Transform.Scale -= TransformEntry->Scale;
-                        DevEntity->Transform.Orientation *= AK_Conjugate(TransformEntry->Orientation);
+                        dev_entity* DevEntityA = Object->GetEntity(Editor, TransformEntry->WorldIndex);
+                        DevEntityA->Transform.Translation -= TransformEntry->TranslationA;
+                        DevEntityA->Transform.Scale -= TransformEntry->ScaleA;
+                        DevEntityA->Transform.Orientation *= AK_Conjugate(TransformEntry->OrientationA);
+                        
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_entity* DevEntityB = Editor_GetEntity(Editor, !TransformEntry->WorldIndex, DevEntityA->Name);
+                            if(DevEntityB)
+                            {
+                                DevEntityB->Transform.Translation -= TransformEntry->TranslationB;
+                                DevEntityB->Transform.Scale -= TransformEntry->ScaleB;
+                                DevEntityB->Transform.Orientation *= AK_Conjugate(TransformEntry->OrientationB);
+                            }
+                        }
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
-                        dev_point_light* DevPointLight = 
+                        dev_point_light* DevPointLightA = 
                             Object->GetPointLight(Editor, TransformEntry->WorldIndex);
-                        DevPointLight->Light.Position -= TransformEntry->Translation;
-                        DevPointLight->Light.Radius -= TransformEntry->Scale.x;
+                        DevPointLightA->Light.Position -= TransformEntry->TranslationA;
+                        DevPointLightA->Light.Radius -= TransformEntry->ScaleA.x;
+                        
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_point_light* DevPointLightB = Editor_GetPointLight(Editor, !TransformEntry->WorldIndex, DevPointLightA->Name);
+                            if(DevPointLightB)
+                            {
+                                DevPointLightB->Light.Position -= TransformEntry->TranslationB;
+                                DevPointLightB->Light.Radius -= TransformEntry->ScaleB.x;
+                            }
+                        }
                     } break;
                     
                     case OBJECT_TYPE_ENTITY_SPAWNER:
                     {
                         entity_spawner* Spawner = &Editor->UI.EntitySpawner;
-                        Spawner->Translation -= TransformEntry->Translation;
-                        Spawner->Scale -= TransformEntry->Scale;
-                        Spawner->Orientation *= AK_Conjugate(TransformEntry->Orientation);
+                        Spawner->Translation -= TransformEntry->TranslationA;
+                        Spawner->Scale -= TransformEntry->ScaleA;
+                        Spawner->Orientation *= AK_Conjugate(TransformEntry->OrientationA);
                     } break;
                     
                     case OBJECT_TYPE_LIGHT_SPAWNER:
                     {
                         light_spawner* Spawner = &Editor->UI.LightSpawner;
-                        Spawner->Translation -= TransformEntry->Translation;
-                        Spawner->Radius -= TransformEntry->Scale.x;
+                        Spawner->Translation -= TransformEntry->TranslationA;
+                        Spawner->Radius -= TransformEntry->ScaleA.x;;
                     } break;
                     
                     AK_INVALID_DEFAULT_CASE;
@@ -423,34 +448,55 @@ void edit_recordings::Redo(editor* Editor)
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* DevEntity = Object->GetEntity(Editor, TransformEntry->WorldIndex);
-                        DevEntity->Transform.Translation += TransformEntry->Translation;
-                        DevEntity->Transform.Scale += TransformEntry->Scale;
-                        DevEntity->Transform.Orientation *= TransformEntry->Orientation;
+                        dev_entity* DevEntityA = Object->GetEntity(Editor, TransformEntry->WorldIndex);
+                        DevEntityA->Transform.Translation += TransformEntry->TranslationA;
+                        DevEntityA->Transform.Scale += TransformEntry->ScaleA;
+                        DevEntityA->Transform.Orientation *= TransformEntry->OrientationA;
+                        
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_entity* DevEntityB = Editor_GetEntity(Editor, !TransformEntry->WorldIndex, DevEntityA->Name);
+                            if(DevEntityB)
+                            {
+                                DevEntityB->Transform.Translation += TransformEntry->TranslationB;
+                                DevEntityB->Transform.Scale += TransformEntry->ScaleB;
+                                DevEntityB->Transform.Orientation *= TransformEntry->OrientationB;
+                            }
+                        }
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
-                        dev_point_light* DevPointLight = 
+                        dev_point_light* DevPointLightA = 
                             Object->GetPointLight(Editor, TransformEntry->WorldIndex);
-                        DevPointLight->Light.Position += TransformEntry->Translation;
-                        DevPointLight->Light.Radius += TransformEntry->Scale.x;
+                        DevPointLightA->Light.Position += TransformEntry->TranslationA;
+                        DevPointLightA->Light.Radius += TransformEntry->ScaleA.x;
+                        
+                        if(Editor->UI.EditorEditOtherWorldObjectWithSameName)
+                        {
+                            dev_point_light* DevPointLightB = Editor_GetPointLight(Editor, !TransformEntry->WorldIndex, DevPointLightA->Name);
+                            if(DevPointLightB)
+                            {
+                                DevPointLightB->Light.Position += TransformEntry->TranslationB;
+                                DevPointLightB->Light.Radius += TransformEntry->ScaleB.x;
+                            }
+                        }
                     } break;
                     
                     case OBJECT_TYPE_ENTITY_SPAWNER:
                     {
                         entity_spawner* Spawner = &Editor->UI.EntitySpawner;
-                        Spawner->Translation += TransformEntry->Translation;
-                        Spawner->Scale += TransformEntry->Scale;
-                        Spawner->Orientation *= TransformEntry->Orientation;
+                        Spawner->Translation += TransformEntry->TranslationA;
+                        Spawner->Scale += TransformEntry->ScaleA;
+                        Spawner->Orientation *= TransformEntry->OrientationA;
                     } break;
                     
                     
                     case OBJECT_TYPE_LIGHT_SPAWNER:
                     {
                         light_spawner* Spawner = &Editor->UI.LightSpawner;
-                        Spawner->Translation += TransformEntry->Translation;
-                        Spawner->Radius += TransformEntry->Scale.x;
+                        Spawner->Translation += TransformEntry->TranslationA;
+                        Spawner->Radius += TransformEntry->ScaleA.x;
                     } break;
                 }
             } break;
