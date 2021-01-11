@@ -214,3 +214,9 @@ graphics_point_light ToGraphicsPointLight(point_light* PointLight)
     
     return Result;
 }
+
+void AddPointLight(graphics_light_buffer* LightBuffer, graphics_point_light Light)
+{
+    AK_Assert(LightBuffer->PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
+    LightBuffer->PointLights[LightBuffer->PointLightCount++] = Light;
+}

@@ -111,7 +111,6 @@ ak_u64 Internal__CreateDevEntity(ak_arena* StringArena, ak_pool<dev_entity>* Dev
     Entity->Transform = AK_SQT(Position, Orientation, Scale);
     Entity->Material = Material;
     Entity->MeshID = MeshID;
-    Entity->Euler = AK_QuatToEuler(Entity->Transform.Orientation);
     
     return ID;
 }
@@ -471,20 +470,20 @@ void world_management::DeleteAll()
 }
 
 dev_entity* world_management::CreateDevEntity(ak_u32 WorldIndex, ak_char* Name, entity_type Type, ak_v3f Position, 
-                                              ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID)
+                                              ak_quatf Orientation, ak_v3f Scale, material Material, mesh_asset_id MeshID)
 {
-    ak_u64 ID = Internal__CreateDevEntity(StringArena, &DevEntities[WorldIndex], Name, Type, Position, Axis, Angle, Scale, Material, MeshID);
+    ak_u64 ID = Internal__CreateDevEntity(StringArena, &DevEntities[WorldIndex], Name, Type, Position, Orientation, Scale, Material, MeshID);
     dev_entity* Entity = DevEntities[WorldIndex].Get(ID);
     EntityTables[WorldIndex].Insert(Entity->Name, ID);
     return Entity;
 }
 
 dual_dev_entity world_management::CreateDevEntityInBothWorlds(ak_char* Name, entity_type Type, ak_v3f Position, 
-                                                              ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID)
+                                                              ak_quatf Orientation, ak_v3f Scale, material Material, mesh_asset_id MeshID)
 {
     dual_dev_entity Result;
-    Result.EntityA = CreateDevEntity(0, Name, Type, Position, Axis, Angle, Scale, Material, MeshID);
-    Result.EntityB = CreateDevEntity(1, Name, Type, Position, Axis, Angle, Scale, Material, MeshID);
+    Result.EntityA = CreateDevEntity(0, Name, Type, Position, Orientation, Scale, Material, MeshID);
+    Result.EntityB = CreateDevEntity(1, Name, Type, Position, Orientation, Scale, Material, MeshID);
     return Result;
 }
 
@@ -551,7 +550,15 @@ type* Internal__CopyObject(world_management* WorldManagement, ak_arena* Scratch,
     ak_string Name = AK_CreateEmptyString();
     for(;;)
     {
-        Name = AK_FormatString(Scratch, "%.*s_copy_%d", DuplicateObject->Name.Length, DuplicateObject->Name.Data, Index++);
+        ak_string CopyString = AK_StringFind(DuplicateObject->Name, "_copy_");
+        
+        ak_string ObjectName = AK_CreateEmptyString();
+        if(!AK_StringIsNullOrEmpty(CopyString))
+            ObjectName = AK_CreateString(DuplicateObject->Name.Data, DuplicateObject->Name.Length-CopyString.Length);
+        else
+            ObjectName = DuplicateObject->Name;
+        
+        Name = AK_FormatString(Scratch, "%.*s_copy_%d", ObjectName.Length, ObjectName.Data, Index++);
         if(!Tables[WorldIndex].Find(Name))
             break;
     }
@@ -931,10 +938,10 @@ ak_bool world_management::CreateWorld(ak_string WorldName, editor* Editor, dev_p
     StringArena = AK_CreateArena();
     
     material PlayerMaterial = {CreateDiffuse(AK_Blue3()), InvalidNormal(), CreateSpecular(0.5f, 8)};
-    dual_dev_entity DualPlayerEntity = CreateDevEntityInBothWorlds("Player", ENTITY_TYPE_PLAYER, AK_V3(0.0f, 0.0f, 0.0f), AK_XAxis(), 0.0f, AK_V3(1.0f, 1.0f, 1.0f), PlayerMaterial, MESH_ASSET_ID_PLAYER);
+    dual_dev_entity DualPlayerEntity = CreateDevEntityInBothWorlds("Player", ENTITY_TYPE_PLAYER, AK_V3(0.0f, 0.0f, 0.0f), AK_IdentityQuat<ak_f32>(), AK_V3(1.0f, 1.0f, 1.0f), PlayerMaterial, MESH_ASSET_ID_PLAYER);
     
     material FloorMaterial = { CreateDiffuse(AK_White3()) };
-    dual_dev_entity DualStaticEntity = CreateDevEntityInBothWorlds("Default_Floor", ENTITY_TYPE_STATIC, AK_V3(0.0f, 0.0f, -1.0f), AK_XAxis(), 0.0f, AK_V3(10.0f, 10.0f, 1.0f), FloorMaterial, MESH_ASSET_ID_BOX);
+    dual_dev_entity DualStaticEntity = CreateDevEntityInBothWorlds("Default_Floor", ENTITY_TYPE_STATIC, AK_V3(0.0f, 0.0f, -1.0f), AK_IdentityQuat<ak_f32>(), AK_V3(10.0f, 10.0f, 1.0f), FloorMaterial, MESH_ASSET_ID_BOX);
     
     dual_dev_point_light DualPointLights = CreateDevPointLightInBothWorlds("Default_Light", AK_V3(0.0f, 0.0f, 10.0f), 20.0f, AK_White3(), 1.0f);
     

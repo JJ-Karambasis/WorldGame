@@ -22,10 +22,8 @@ struct entity_spawner
     entity_type EntityType;
     ak_v3f Translation;
     ak_v3f Scale;
+    ak_quatf Orientation;
     ak_f32 Radius;
-    ak_f32 Restitution;
-    ak_v3f Axis;
-    ak_f32 Angle;
     ak_u32 WorldIndex;    
     mesh_asset_id MeshID;
     material_context MaterialContext;

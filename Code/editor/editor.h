@@ -76,7 +76,9 @@ struct dev_platform
 enum object_type
 {
     OBJECT_TYPE_ENTITY,
-    OBJECT_TYPE_LIGHT
+    OBJECT_TYPE_LIGHT,
+    OBJECT_TYPE_ENTITY_SPAWNER, 
+    OBJECT_TYPE_LIGHT_SPAWNER
 };
 
 struct object
@@ -84,11 +86,11 @@ struct object
     object_type Type;
     ak_u64      ID;
     
-    dev_entity* GetEntity(world_management* WorldManagement, ak_u32 WorldIndex);
-    dev_point_light* GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex);
-    ak_v3f GetPosition(world_management* WorldManagement, ak_u32 WorldIndex);
+    dev_entity* GetEntity(editor* Editor, ak_u32 WorldIndex);
+    dev_point_light* GetPointLight(editor* Editor, ak_u32 WorldIndex);
+    ak_v3f GetPosition(editor* Editor, ak_u32 WorldIndex);
     
-    ak_bool IsAlive(world_management* WorldManagement, ak_u32 WorldIndex);
+    ak_bool IsAlive(editor* Editor, ak_u32 WorldIndex);
 };
 
 #include "include/dev_input.h"
@@ -138,12 +140,6 @@ struct gizmo_intersection_result
     ak_v3f HitMousePosition;
 };
 
-struct euler_transform
-{
-    ak_sqtf Transform;
-    ak_v3f Euler;
-};
-
 struct gizmo_state
 {
     selector_transform_mode TransformMode;
@@ -156,7 +152,7 @@ struct gizmo_state
     ak_m3f OriginalRotation;
     ak_bool UseLocalTransforms;
     
-    euler_transform OriginalTransform;
+    ak_sqtf Transform;
     gizmo_selected_object SelectedObject;
 };
 

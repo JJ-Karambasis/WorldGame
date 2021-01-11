@@ -189,9 +189,7 @@ void UI_ClearSpawner(entity_spawner* Spawner)
     Spawner->Translation = {};
     Spawner->Scale = AK_V3(1.0f, 1.0f, 1.0f);
     Spawner->Radius = 1.0f;
-    Spawner->Restitution = 0.0f;
-    Spawner->Axis = {};
-    Spawner->Angle = 0;
+    Spawner->Orientation = AK_IdentityQuat<ak_f32>();
     Spawner->WorldIndex = 0;
     Spawner->MeshID = (mesh_asset_id)0;
     Spawner->MaterialContext = {};
@@ -294,6 +292,22 @@ void UI_ScaleTool(const ak_char* Label, ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* S
 void UI_ScaleTool(ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Scale)
 {
     UI_ScaleTool("Scale", Hash, ItemWidth, Scale);
+}
+
+void UI_RotationTool(const ak_char* Label, ak_u32 Hash, ak_f32 ItemWidth, ak_quatf* Orientation)
+{
+    ImGui::Text(Label);
+    
+    ImGui::PushItemWidth(ItemWidth);
+    
+    UI_DragFloat(Hash+0, "X", &Orientation->x, 0.01f, -1, 1); ImGui::SameLine();
+    UI_DragFloat(Hash+1, "Y", &Orientation->y, 0.01f, -1, 1); ImGui::SameLine();
+    UI_DragFloat(Hash+2, "Z", &Orientation->z, 0.01f, -1, 1); ImGui::SameLine();
+    UI_DragFloat(Hash+3, "W", &Orientation->w, 0.01f, -1, 1);
+    
+    *Orientation = AK_Normalize(*Orientation);
+    
+    ImGui::PopItemWidth();
 }
 
 void UI_AngleAxisTool(const ak_char* Label, ak_u32 Hash, ak_f32 ItemWidth, ak_v3f* Axis, ak_f32* Angle)
@@ -581,7 +595,7 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             ImGui::Separator();
             UI_ScaleTool(AK_HashFunction("Scale Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Scale);
             ImGui::Separator();
-            UI_AngleAxisTool(AK_HashFunction("Rotation Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Axis, &Spawner->Angle);
+            UI_RotationTool("Rotation", AK_HashFunction("Rotation Spawner"), EDITOR_ITEM_WIDTH, &Spawner->Orientation);
             ImGui::Separator();
             
             
@@ -619,7 +633,7 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                     UI->ShowEntityNameErrorText = false;
                     dev_entity* Entity = WorldManagement->CreateDevEntity(Spawner->WorldIndex, Name.Data, 
                                                                           Spawner->EntityType, Spawner->Translation, 
-                                                                          Spawner->Axis, Spawner->Angle, Spawner->Scale, 
+                                                                          Spawner->Orientation, Spawner->Scale, 
                                                                           Material, Spawner->MeshID);
                     
                     EditRecordings->PushCreateEntry(Spawner->WorldIndex, Entity);
@@ -640,12 +654,12 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
                     
                     dev_entity* Entity0 = WorldManagement->CreateDevEntity(0, Name.Data, 
                                                                            Spawner->EntityType, Spawner->Translation, 
-                                                                           Spawner->Axis, Spawner->Angle, 
+                                                                           Spawner->Orientation, 
                                                                            Spawner->Scale, Material, Spawner->MeshID);
                     
                     dev_entity* Entity1 = WorldManagement->CreateDevEntity(1, Name.Data, 
                                                                            Spawner->EntityType, Spawner->Translation, 
-                                                                           Spawner->Axis, Spawner->Angle, 
+                                                                           Spawner->Orientation, 
                                                                            Spawner->Scale, Material,
                                                                            Spawner->MeshID);
                     
@@ -807,7 +821,7 @@ ak_v2f UI_ListerWindow(editor* Editor)
                             ak_bool Selected = false;
                             if((WorldIndex == CurrentWorldIndex) && SelectedObject && SelectedObject->Type == OBJECT_TYPE_ENTITY)
                             {
-                                dev_entity* SelectedEntity = SelectedObject->GetEntity(WorldManagement, WorldIndex);
+                                dev_entity* SelectedEntity = SelectedObject->GetEntity(Editor, WorldIndex);
                                 Selected = AK_StringEquals(SelectedEntity->Name, DevEntity->Name);
                             }
                             
@@ -832,7 +846,7 @@ ak_v2f UI_ListerWindow(editor* Editor)
                                SelectedObject->Type == OBJECT_TYPE_LIGHT)
                             {
                                 dev_point_light* SelectedPointLight = 
-                                    SelectedObject->GetPointLight(WorldManagement, WorldIndex);
+                                    SelectedObject->GetPointLight(Editor, WorldIndex);
                                 Selected = AK_StringEquals(SelectedPointLight->Name, DevLight->Name);
                             }
                             
@@ -869,13 +883,13 @@ void Details_SetTempObject(editor* Editor, object* Object)
     {
         case OBJECT_TYPE_ENTITY:
         {
-            Editor->UI.TempObject.Entity = *Object->GetEntity(&Editor->WorldManagement, 
+            Editor->UI.TempObject.Entity = *Object->GetEntity(Editor, 
                                                               Editor->CurrentWorldIndex);
         } break;
         
         case OBJECT_TYPE_LIGHT:
         {
-            Editor->UI.TempObject.PointLight = *Object->GetPointLight(&Editor->WorldManagement, 
+            Editor->UI.TempObject.PointLight = *Object->GetPointLight(Editor, 
                                                                       Editor->CurrentWorldIndex);
         } break;
         
@@ -890,7 +904,7 @@ void Details_CheckObjectChange(editor* Editor, object* Object)
     {
         case OBJECT_TYPE_ENTITY:
         {
-            dev_entity* Entity = Object->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+            dev_entity* Entity = Object->GetEntity(Editor, Editor->CurrentWorldIndex);
             
             material NewMaterial = UI_MaterialFromContext(&Editor->UI.TempContext);
             if(!Editor_AreEntitiesEqual(Entity, &Editor->UI.TempObject.Entity) ||
@@ -904,7 +918,7 @@ void Details_CheckObjectChange(editor* Editor, object* Object)
         
         case OBJECT_TYPE_LIGHT:
         {
-            dev_point_light* PointLight = Object->GetPointLight(&Editor->WorldManagement, 
+            dev_point_light* PointLight = Object->GetPointLight(Editor, 
                                                                 Editor->CurrentWorldIndex);
             if(!Editor_ArePointLightsEqual(PointLight, &Editor->UI.TempObject.PointLight))
             {
@@ -999,23 +1013,30 @@ void Details_ScaleTool(editor* Editor, object* Object, ak_v3f* Scale)
     ImGui::PopID();
 }
 
-void Details_RotationTool(editor* Editor, object* Object, ak_v3f* Rotation)
+void Details_RotationTool(editor* Editor, object* Object, ak_quatf* Orientation)
 {
     UI_SameLineLabel("Rotation");
     
     ImGui::PushID(AK_HashFunction("Rotation X"));
-    Details_DragAngleTool(Editor, Object, "X", &Rotation->x, 0.1f, -180.0f, 180.0f);
+    Details_DragFloatTool(Editor, Object, "X", &Orientation->x, 0.01f, -1, 1);
     ImGui::PopID();
     ImGui::SameLine();
     
     ImGui::PushID(AK_HashFunction("Rotation Y"));
-    Details_DragAngleTool(Editor, Object, "Y", &Rotation->y, 0.1f, -180.0f, 180.0f);
+    Details_DragFloatTool(Editor, Object, "Y", &Orientation->y, 0.01f, -1, 1);
     ImGui::PopID();
     ImGui::SameLine();
     
     ImGui::PushID(AK_HashFunction("Rotation Z"));
-    Details_DragAngleTool(Editor, Object, "Z", &Rotation->z, 0.1f, -180.0f, 180.0f);
+    Details_DragFloatTool(Editor, Object, "Z", &Orientation->z, 0.01f, -1, 1);
     ImGui::PopID();
+    ImGui::SameLine();
+    
+    ImGui::PushID(AK_HashFunction("Rotation W"));
+    Details_DragFloatTool(Editor, Object, "W", &Orientation->w, 0.01f, -1, 1);
+    ImGui::PopID();
+    
+    *Orientation = AK_Normalize(*Orientation);
 }
 
 void Details_Checkbox(editor* Editor, object* Object, const ak_char* Label, ak_bool* Flag)
@@ -1219,13 +1240,16 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
     
     if(SelectedObject)
     {
+        if(SelectedObject->Type == OBJECT_TYPE_ENTITY_SPAWNER || SelectedObject->Type == OBJECT_TYPE_LIGHT_SPAWNER)
+            return Result;
+        
         if(ImGui::Begin("Details", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
             switch(SelectedObject->Type)
             {
                 case OBJECT_TYPE_ENTITY:
                 {
-                    dev_entity* Entity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                    dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                     
                     Editor->UI.TempContext = UI_ContextFromMaterial(&Entity->Material);
                     
@@ -1253,8 +1277,7 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                                                Entity->Type == ENTITY_TYPE_MOVABLE);
                     
                     if(DisableRotation) UI_PushDisabledItem();
-                    ak_v3f Rotation = Entity->Euler;
-                    Details_RotationTool(Editor, SelectedObject, &Rotation);
+                    Details_RotationTool(Editor, SelectedObject, &Entity->Transform.Orientation);
                     if(DisableRotation) UI_PopDisabledItem();
                     
                     ImGui::Text("Type: %s", UI_GetEntityType(Entity->Type));
@@ -1276,18 +1299,6 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                     
                     if(DisableMeshEdit) UI_PopDisabledItem();
                     
-                    ak_v3f PointDiff = Rotation-Entity->Euler;
-                    
-                    ak_m3f OriginalRotation = AK_Transpose(AK_QuatToMatrix(Entity->Transform.Orientation));
-                    
-                    ak_quatf XOrientation = AK_RotQuat(OriginalRotation.XAxis, PointDiff.x);
-                    ak_quatf YOrientation = AK_RotQuat(OriginalRotation.YAxis, PointDiff.y);
-                    ak_quatf ZOrientation = AK_RotQuat(OriginalRotation.ZAxis, PointDiff.z);
-                    
-                    Entity->Transform.Orientation *= AK_Normalize(XOrientation*YOrientation*ZOrientation);
-                    
-                    Entity->Euler = Rotation;
-                    
                     if(Entity->Type == ENTITY_TYPE_BUTTON)
                     {
                         ImGui::PushID(AK_HashFunction("Button IsToggled"));
@@ -1298,7 +1309,7 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                 
                 case OBJECT_TYPE_LIGHT:
                 {
-                    dev_point_light* PointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                    dev_point_light* PointLight = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
                     
                     Details_ObjectName(Editor, SelectedObject->Type, WorldManagement->PointLightTables, PointLight);
                     

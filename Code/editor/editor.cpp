@@ -122,7 +122,6 @@ ak_bool Editor_AreEntitiesEqual(dev_entity* EntityA, dev_entity* EntityB)
     ak_bool Result = (AK_StringEquals(EntityA->Name, EntityB->Name) &&
                       AK_StringEquals(EntityA->LinkName, EntityB->LinkName) &&
                       (EntityA->Type == EntityB->Type) &&
-                      (EntityA->Euler == EntityB->Euler) &&
                       (EntityA->Transform == EntityB->Transform) &&
                       AreMaterialsEqual(EntityA->Material, EntityB->Material) &&
                       (EntityA->MeshID == EntityB->MeshID) &&
@@ -153,7 +152,7 @@ object* Editor_GetSelectedObject(editor* Editor)
     gizmo_selected_object* SelectedObject = &Editor->GizmoState.SelectedObject;
     if(SelectedObject->IsSelected)
     {
-        SelectedObject->IsSelected = SelectedObject->SelectedObject.IsAlive(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+        SelectedObject->IsSelected = SelectedObject->SelectedObject.IsAlive(Editor, Editor->CurrentWorldIndex);
     }
     return SelectedObject->IsSelected ? &SelectedObject->SelectedObject : NULL;
 }
@@ -179,35 +178,45 @@ ak_quatf Editor_GetOrientationDiff(editor* Editor, ak_v3f SelectorDiff)
 #include "src/generated_string_templates.cpp"
 #include "src/edit_recordings.cpp"
 
-dev_entity* object::GetEntity(world_management* WorldManagement, ak_u32 WorldIndex)
+dev_entity* object::GetEntity(editor* Editor, ak_u32 WorldIndex)
 {
     AK_Assert(Type == OBJECT_TYPE_ENTITY, "Cannot get entity of a selected object that is not an entity");
-    dev_entity* Entity = WorldManagement->DevEntities[WorldIndex].Get(ID);
+    dev_entity* Entity = Editor->WorldManagement.DevEntities[WorldIndex].Get(ID);
     return Entity;
 }
 
-dev_point_light* object::GetPointLight(world_management* WorldManagement, ak_u32 WorldIndex)
+dev_point_light* object::GetPointLight(editor* Editor, ak_u32 WorldIndex)
 {
     AK_Assert(Type == OBJECT_TYPE_LIGHT, "Cannot get point light of a selected object that is not a point light");
-    dev_point_light* PointLight = WorldManagement->DevPointLights[WorldIndex].Get(ID);
+    dev_point_light* PointLight = Editor->WorldManagement.DevPointLights[WorldIndex].Get(ID);
     return PointLight;
 }
 
-ak_v3f object::GetPosition(world_management* WorldManagement, ak_u32 WorldIndex)
+ak_v3f object::GetPosition(editor* Editor, ak_u32 WorldIndex)
 {
     ak_v3f Result = {};
     switch(Type)
     {
         case OBJECT_TYPE_ENTITY:
         {
-            dev_entity* Entity = GetEntity(WorldManagement, WorldIndex);
+            dev_entity* Entity = GetEntity(Editor, WorldIndex);
             Result = Entity->Transform.Translation;
         } break;
         
         case OBJECT_TYPE_LIGHT:
         {
-            dev_point_light* PointLight = GetPointLight(WorldManagement, WorldIndex);
+            dev_point_light* PointLight = GetPointLight(Editor, WorldIndex);
             Result = PointLight->Light.Position;
+        } break;
+        
+        case OBJECT_TYPE_ENTITY_SPAWNER:
+        {
+            Result = Editor->UI.EntitySpawner.Translation;
+        } break;
+        
+        case OBJECT_TYPE_LIGHT_SPAWNER:
+        {
+            Result = Editor->UI.LightSpawner.Translation;
         } break;
         
         AK_INVALID_DEFAULT_CASE;
@@ -215,18 +224,24 @@ ak_v3f object::GetPosition(world_management* WorldManagement, ak_u32 WorldIndex)
     return Result;
 }
 
-ak_bool object::IsAlive(world_management* WorldManagement, ak_u32 WorldIndex)
+ak_bool object::IsAlive(editor* Editor, ak_u32 WorldIndex)
 {
     switch(Type)
     {
         case OBJECT_TYPE_ENTITY:
         {
-            return GetEntity(WorldManagement, WorldIndex) != NULL;
+            return GetEntity(Editor, WorldIndex) != NULL;
         } break;
         
         case OBJECT_TYPE_LIGHT:
         {
-            return GetPointLight(WorldManagement, WorldIndex) != NULL;
+            return GetPointLight(Editor, WorldIndex) != NULL;
+        } break;
+        
+        case OBJECT_TYPE_ENTITY_SPAWNER:
+        case OBJECT_TYPE_LIGHT_SPAWNER:
+        {
+            return true;
         } break;
         
         AK_INVALID_DEFAULT_CASE;
@@ -299,6 +314,20 @@ Result.SelectedObject.ID = ID; \
 } \
 } while(0)
 
+#define UPDATE_BEST_HIT_SPAWNER(type) \
+do \
+{ \
+if(RayCast.Intersected) \
+{ \
+if((tBest > RayCast.t) && (RayCast.t > ZNear)) \
+{ \
+tBest = RayCast.t; \
+Result.IsSelected = true; \
+Result.SelectedObject.Type = type; \
+} \
+} \
+} while(0)
+
 gizmo_selected_object Editor_CastToAllObjects(editor* Editor, assets* Assets, ray Ray, ak_f32 ZNear)
 {
     gizmo_selected_object Result = {};
@@ -340,11 +369,47 @@ gizmo_selected_object Editor_CastToAllObjects(editor* Editor, assets* Assets, ra
         UPDATE_BEST_HIT(OBJECT_TYPE_LIGHT, DevPointLight->Name, WorldManagement->PointLightTables);
     }
     
+    if(Editor->UI.EntitySpawnerOpen)
+    {
+        entity_spawner* Spawner = &Editor->UI.EntitySpawner;
+        mesh_info* MeshInfo = GetMeshInfo(Assets, Spawner->MeshID);
+        mesh* Mesh = GetMesh(Assets, Spawner->MeshID);
+        if(!Mesh)
+            Mesh = LoadMesh(Assets, Spawner->MeshID);
+        
+        ak_m4f Transform = AK_TransformM4(AK_SQT(Spawner->Translation, Spawner->Orientation, Spawner->Scale));
+        
+        ray_cast RayCast = {};
+        if(MeshInfo->Header.IsIndexFormat32)
+        {
+            ak_u32* Indices = (ak_u32*)Mesh->Indices;
+            RayCast = Ray_TriangleMeshCast(Ray.Origin, Ray.Direction, Mesh->Positions, Indices, 
+                                           MeshInfo->Header.IndexCount, Transform);
+        }
+        else
+        {
+            ak_u16* Indices = (ak_u16*)Mesh->Indices;
+            RayCast = Ray_TriangleMeshCast(Ray.Origin, Ray.Direction, Mesh->Positions, Indices, 
+                                           MeshInfo->Header.IndexCount, 
+                                           Transform);
+        }
+        
+        UPDATE_BEST_HIT_SPAWNER(OBJECT_TYPE_ENTITY_SPAWNER);
+    }
+    
+    if(Editor->UI.LightSpawnerOpen)
+    {
+        light_spawner* LightSpawner = &Editor->UI.LightSpawner;
+        ray_cast RayCast = Ray_SphereCast(Ray.Origin, Ray.Direction, LightSpawner->Translation, 
+                                          POINT_LIGHT_RADIUS);
+        UPDATE_BEST_HIT_SPAWNER(OBJECT_TYPE_LIGHT_SPAWNER);
+    }
     
     return Result;
 }
 
 #undef UPDATE_BEST_HIT
+#undef UPDATE_BEST_HIT_SPAWNER
 
 ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
 {
@@ -356,7 +421,7 @@ ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
     {
         object* SelectedObject = &GizmoState->SelectedObject.SelectedObject;
         
-        ak_v3f SelectedObjectPosition = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+        ak_v3f SelectedObjectPosition = SelectedObject->GetPosition(Editor, Editor->CurrentWorldIndex);
         
         
         gizmo_intersection_result* GizmoHit = &GizmoState->GizmoHit;
@@ -374,7 +439,7 @@ ak_v3f Editor_GetSelectorDiff(editor* Editor, ray RayCast)
             
             if(SelectedObject->Type == OBJECT_TYPE_ENTITY)
             {
-                dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                 
                 if(GizmoState->UseLocalTransforms && GizmoState->TransformMode == SELECTOR_TRANSFORM_MODE_TRANSLATE)
                 {
@@ -540,22 +605,38 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+                        dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                         GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Entity->Transform.Orientation));
                         
-                        GizmoState->OriginalTransform.Transform = Entity->Transform;
-                        GizmoState->OriginalTransform.Euler = Entity->Euler;
+                        GizmoState->Transform = Entity->Transform;
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
                         dev_point_light* PointLight = 
-                            SelectedObject->GetPointLight(&Editor->WorldManagement, 
+                            SelectedObject->GetPointLight(Editor, 
                                                           Editor->CurrentWorldIndex);
-                        GizmoState->OriginalTransform.Transform.Translation = PointLight->Light.Position;
+                        GizmoState->Transform.Translation = PointLight->Light.Position;
+                        GizmoState->Transform.Scale = AK_V3(PointLight->Light.Radius, PointLight->Light.Radius, PointLight->Light.Radius);
                     } break;
+                    
+                    case OBJECT_TYPE_ENTITY_SPAWNER:
+                    {
+                        entity_spawner* Spawner = &Editor->UI.EntitySpawner;
+                        GizmoState->OriginalRotation = AK_Transpose(AK_QuatToMatrix(Spawner->Orientation));
+                        GizmoState->Transform = AK_SQT(Spawner->Translation, Spawner->Orientation, 
+                                                       Spawner->Scale);
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT_SPAWNER:
+                    {
+                        light_spawner* Spawner = &Editor->UI.LightSpawner;
+                        GizmoState->Transform.Translation = Spawner->Translation;
+                        GizmoState->Transform.Scale = AK_V3(Spawner->Radius, Spawner->Radius, Spawner->Radius);
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
                 }
-                
             }
         }
         
@@ -568,31 +649,56 @@ void Editor_SelectObjects(editor* Editor, assets* Assets, ray RayCast, ak_v2i Re
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* Entity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                        dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                         
-                        ak_v3f TranslationDiff = Entity->Transform.Translation-GizmoState->OriginalTransform.Transform.Translation;
-                        ak_v3f ScaleDiff = Entity->Transform.Scale-GizmoState->OriginalTransform.Transform.Scale;
-                        ak_v3f EulerDiff = 
-                            Entity->Euler-GizmoState->OriginalTransform.Euler;
-                        ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->OriginalTransform.Transform.Orientation, 
+                        ak_v3f TranslationDiff = Entity->Transform.Translation-GizmoState->Transform.Translation;
+                        ak_v3f ScaleDiff = Entity->Transform.Scale-GizmoState->Transform.Scale;
+                        ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->Transform.Orientation, 
                                                                Entity->Transform.Orientation);
                         
                         object Object = {OBJECT_TYPE_ENTITY, SelectedObject->ID};
                         
-                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, OrientationDiff, EulerDiff);
+                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, OrientationDiff);
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
-                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
                         
-                        ak_v3f TranslationDiff = DevPointLight->Light.Position-GizmoState->OriginalTransform.Transform.Translation;
+                        ak_v3f TranslationDiff = DevPointLight->Light.Position-GizmoState->Transform.Translation;
+                        ak_v3f ScaleDiff = DevPointLight->Light.Radius-GizmoState->Transform.Scale;
                         
-                        object Object = {OBJECT_TYPE_ENTITY, SelectedObject->ID};
+                        object Object = {OBJECT_TYPE_LIGHT, SelectedObject->ID};
                         EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, 
-                                                           TranslationDiff, {}, AK_IdentityQuat<ak_f32>(), 
-                                                           {});
+                                                           TranslationDiff, ScaleDiff, AK_IdentityQuat<ak_f32>());
                     } break;
+                    
+                    case OBJECT_TYPE_ENTITY_SPAWNER:
+                    {
+                        entity_spawner* Spawner = &Editor->UI.EntitySpawner;
+                        ak_v3f TranslationDiff = Spawner->Translation-GizmoState->Transform.Translation;
+                        ak_v3f ScaleDiff = Spawner->Scale-GizmoState->Transform.Scale;
+                        ak_quatf OrientationDiff = AK_QuatDiff(GizmoState->Transform.Orientation, 
+                                                               Spawner->Orientation);
+                        
+                        object Object = {OBJECT_TYPE_ENTITY_SPAWNER};
+                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, 
+                                                           OrientationDiff);
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT_SPAWNER:
+                    {
+                        light_spawner* Spawner = &Editor->UI.LightSpawner;
+                        
+                        ak_v3f TranslationDiff = Spawner->Translation-GizmoState->Transform.Translation;
+                        ak_v3f ScaleDiff = Spawner->Radius-GizmoState->Transform.Scale;
+                        
+                        object Object = {OBJECT_TYPE_LIGHT_SPAWNER};
+                        EditRecordings->PushTransformEntry(Editor->CurrentWorldIndex, Object, TranslationDiff, ScaleDiff, 
+                                                           AK_IdentityQuat<ak_f32>());
+                    } break;
+                    
+                    AK_INVALID_DEFAULT_CASE;
                 }
             }
             
@@ -1435,10 +1541,10 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
             if(IsDown(&DevInput->Ctrl))
             {
                 if(IsPressed(&DevInput->Z))
-                    EditRecordings->Undo(WorldManagement);
+                    EditRecordings->Undo(Editor);
                 
                 if(IsPressed(&DevInput->Y))
-                    EditRecordings->Redo(WorldManagement);
+                    EditRecordings->Redo(Editor);
             }
             
             
@@ -1466,16 +1572,27 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
             object* SelectedObject = Editor_GetSelectedObject(Editor);
             if(SelectedObject)
             {
-                if(SelectedObject->Type != OBJECT_TYPE_ENTITY)
-                    Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
-                else
+                switch(SelectedObject->Type)
                 {
-                    if(IsPressed(&DevInput->W)) 
-                        Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
-                    if(IsPressed(&DevInput->E)) 
-                        Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_SCALE;
-                    if(IsPressed(&DevInput->R)) 
-                        Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_ROTATE;
+                    case OBJECT_TYPE_ENTITY:
+                    case OBJECT_TYPE_ENTITY_SPAWNER:
+                    {
+                        if(IsPressed(&DevInput->W)) 
+                            Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
+                        if(IsPressed(&DevInput->E)) 
+                            Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_SCALE;
+                        if(IsPressed(&DevInput->R)) 
+                            Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_ROTATE;
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT:
+                    case OBJECT_TYPE_LIGHT_SPAWNER:
+                    {
+                        if(IsPressed(&DevInput->W)) 
+                            Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_TRANSLATE;
+                        if(IsPressed(&DevInput->E)) 
+                            Editor->GizmoState.TransformMode = SELECTOR_TRANSFORM_MODE_SCALE;
+                    } break;
                 }
                 
                 ak_v3f SelectorDiff = Editor_GetSelectorDiff(Editor, RayCast);
@@ -1484,7 +1601,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* Entity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                        dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                         
                         switch(Editor->GizmoState.TransformMode)
                         {
@@ -1500,18 +1617,67 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                             
                             case SELECTOR_TRANSFORM_MODE_ROTATE:
                             {
-                                Entity->Euler -= SelectorDiff;
                                 Entity->Transform.Orientation *= Editor_GetOrientationDiff(Editor, SelectorDiff);
                             } break;
                         }
                         
                     } break;
                     
+                    case OBJECT_TYPE_ENTITY_SPAWNER:
+                    {
+                        entity_spawner* Spawner = &Editor->UI.EntitySpawner;
+                        
+                        switch(Editor->GizmoState.TransformMode)
+                        {
+                            case SELECTOR_TRANSFORM_MODE_TRANSLATE:
+                            {
+                                Spawner->Translation -= SelectorDiff;
+                            } break;
+                            
+                            case SELECTOR_TRANSFORM_MODE_SCALE:
+                            {
+                                Spawner->Scale -= SelectorDiff;
+                            } break;
+                            
+                            case SELECTOR_TRANSFORM_MODE_ROTATE:
+                            {
+                                Spawner->Orientation *= Editor_GetOrientationDiff(Editor, SelectorDiff);
+                            } break;
+                        }
+                    } break;
+                    
                     case OBJECT_TYPE_LIGHT:
                     {
-                        AK_Assert(Editor->GizmoState.TransformMode == SELECTOR_TRANSFORM_MODE_TRANSLATE, "Cannot be in a transform mode that is not translation when selecting lights");
-                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
-                        DevPointLight->Light.Position -= SelectorDiff;
+                        dev_point_light* DevPointLight = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
+                        switch(Editor->GizmoState.TransformMode)
+                        {
+                            case SELECTOR_TRANSFORM_MODE_TRANSLATE:
+                            {
+                                DevPointLight->Light.Position -= SelectorDiff;
+                            } break;
+                            
+                            case SELECTOR_TRANSFORM_MODE_SCALE:
+                            {
+                                DevPointLight->Light.Radius -= SelectorDiff[SelectorDiff.LargestComp()];
+                            } break;
+                        }
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT_SPAWNER:
+                    {
+                        light_spawner* Spawner = &Editor->UI.LightSpawner;
+                        switch(Editor->GizmoState.TransformMode)
+                        {
+                            case SELECTOR_TRANSFORM_MODE_TRANSLATE:
+                            {
+                                Spawner->Translation -= SelectorDiff;
+                            } break;
+                            
+                            case SELECTOR_TRANSFORM_MODE_SCALE:
+                            {
+                                Spawner->Radius -= SelectorDiff[SelectorDiff.LargestComp()];
+                            } break;
+                        }
                     } break;
                     
                     AK_INVALID_DEFAULT_CASE;
@@ -1522,13 +1688,13 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                     if(Editor->UI.ViewModeType == VIEW_MODE_TYPE_PERSPECTIVE)
                     {
                         perspective_camera* Camera = &Editor->Cameras[Editor->CurrentWorldIndex];
-                        Camera->Target = SelectedObject->GetPosition(WorldManagement, Editor->CurrentWorldIndex);
+                        Camera->Target = SelectedObject->GetPosition(Editor, Editor->CurrentWorldIndex);
                         Camera->SphericalCoordinates.radius = 6.0f;
                     }
                     else
                     {
                         ortho_camera* Camera = &Editor->OrthoCameras[Editor->CurrentWorldIndex][Editor->UI.ViewModeType-1];
-                        Camera->Target = SelectedObject->GetPosition(WorldManagement, Editor->CurrentWorldIndex);
+                        Camera->Target = SelectedObject->GetPosition(Editor, Editor->CurrentWorldIndex);
                         Camera->Left = DEFAULT_ORTHO_CAMERA_LEFT;
                         Camera->Right = DEFAULT_ORTHO_CAMERA_RIGHT;
                         Camera->Top = DEFAULT_ORTHO_CAMERA_TOP;
@@ -1542,18 +1708,24 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                     {
                         case OBJECT_TYPE_ENTITY:
                         {
-                            dev_entity* DevEntity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                            dev_entity* DevEntity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                             EditRecordings->PushDeleteEntry(Editor->CurrentWorldIndex, DevEntity);
                             WorldManagement->DeleteDevEntity(Editor->CurrentWorldIndex, DevEntity->Name);
                         } break;
                         
                         case OBJECT_TYPE_LIGHT:
                         {
-                            dev_point_light* DevPointLight = SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                            dev_point_light* DevPointLight = SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
                             EditRecordings->PushDeleteEntry(Editor->CurrentWorldIndex, 
                                                             DevPointLight);
                             WorldManagement->DeleteDevPointLight(Editor->CurrentWorldIndex, 
                                                                  DevPointLight->Name);
+                        } break;
+                        
+                        case OBJECT_TYPE_ENTITY_SPAWNER:
+                        case OBJECT_TYPE_LIGHT_SPAWNER:
+                        {
+                            //Do nothing
                         } break;
                         
                         AK_INVALID_DEFAULT_CASE;
@@ -1570,7 +1742,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                         {
                             case OBJECT_TYPE_ENTITY:
                             {
-                                dev_entity* DevEntity = SelectedObject->GetEntity(WorldManagement, Editor->CurrentWorldIndex);
+                                dev_entity* DevEntity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
                                 
                                 dev_entity* DuplicateEntity = 
                                     WorldManagement->DuplicateEntity(Editor->Scratch, DevEntity, 
@@ -1599,7 +1771,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                             case OBJECT_TYPE_LIGHT:
                             {
                                 dev_point_light* DevPointLight = 
-                                    SelectedObject->GetPointLight(WorldManagement, Editor->CurrentWorldIndex);
+                                    SelectedObject->GetPointLight(Editor, Editor->CurrentWorldIndex);
                                 dev_point_light* DuplicatePointLight = WorldManagement->DuplicatePointLight(Editor->Scratch, 
                                                                                                             DevPointLight, 
                                                                                                             Editor->CurrentWorldIndex);
@@ -1645,7 +1817,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
     {
         if(GizmoState->UseLocalTransforms || GizmoState->TransformMode == SELECTOR_TRANSFORM_MODE_SCALE)
         {
-            dev_entity* Entity = SelectedObject->GetEntity(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+            dev_entity* Entity = SelectedObject->GetEntity(Editor, Editor->CurrentWorldIndex);
             ak_m3f Orientation = AK_QuatToMatrix(Entity->Transform.Orientation); 
             XAxis = Orientation.XAxis;
             YAxis = Orientation.YAxis;
@@ -1812,7 +1984,7 @@ void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
         PushDepth(Graphics, false);
         
         gizmo_state* GizmoState = &Editor->GizmoState;
-        ak_v3f Position = SelectedObject->GetPosition(&Editor->WorldManagement, Editor->CurrentWorldIndex);
+        ak_v3f Position = SelectedObject->GetPosition(Editor, Editor->CurrentWorldIndex);
         
         switch(GizmoState->TransformMode)
         {
@@ -1840,6 +2012,11 @@ void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
 ak_bool Editor_ShouldDrawEntitySpawnerMesh(editor* Editor, ak_u32 WorldIndex)
 {
     return Editor->UI.EntitySpawnerOpen && (Editor->CurrentWorldIndex == WorldIndex);
+}
+
+ak_bool Editor_ShouldDrawLightSpawner(editor* Editor, ak_u32 WorldIndex)
+{
+    return Editor->UI.LightSpawnerOpen && (Editor->CurrentWorldIndex == WorldIndex);
 }
 
 ak_fixed_array<ak_u64> 
@@ -1939,18 +2116,23 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
     PushCull(Graphics, GRAPHICS_CULL_MODE_BACK);
     
     ak_bool DrawEntitySpawnerMesh = Editor_ShouldDrawEntitySpawnerMesh(Editor, WorldIndex);
+    ak_bool DrawLightSpawner = Editor_ShouldDrawLightSpawner(Editor, WorldIndex);
     
     graphics_light_buffer LightBuffer = {};
+    AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
+        AddPointLight(&LightBuffer, DevLight->Light);
+    
+    if(DrawLightSpawner)
+    {
+        light_spawner* Spawner = &Editor->UI.LightSpawner;
+        graphics_point_light Light = CreatePointLight(Spawner->Color, Spawner->Intensity, Spawner->Translation, Spawner->Radius);
+        AddPointLight(&LightBuffer, Light);
+    }
+    
     switch(Editor->UI.RenderModeType)
     {
         case RENDER_MODE_TYPE_LIT:
         {
-            AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
-            {
-                AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
-                LightBuffer.PointLights[LightBuffer.PointLightCount++] = DevLight->Light;
-            }
-            
             PushLightBuffer(Graphics, &LightBuffer);
             AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
             {
@@ -1990,12 +2172,6 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
         
         case RENDER_MODE_TYPE_LIT_WIREFRAME:
         {
-            AK_ForEach(DevLight, &WorldManagement->DevPointLights[WorldIndex])
-            {
-                AK_Assert(LightBuffer.PointLightCount < MAX_POINT_LIGHT_COUNT, "Point light overflow. Too many point lights being rendered");
-                LightBuffer.PointLights[LightBuffer.PointLightCount++] = DevLight->Light;
-            }
-            
             PushLightBuffer(Graphics, &LightBuffer);
             AK_ForEach(DevEntity, &WorldManagement->DevEntities[WorldIndex])
             {
@@ -2071,7 +2247,7 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
         graphics_material GraphicsMaterial = ConvertToGraphicsMaterial(Assets, Graphics, &Material);
         GraphicsMaterial.Alpha = CreateTransparentMaterialSlot(0.75f);
         
-        ak_m4f Transform = AK_TransformM4(AK_SQT(Spawner->Translation, AK_RotQuat(Spawner->Axis, Spawner->Angle), Spawner->Scale));
+        ak_m4f Transform = AK_TransformM4(AK_SQT(Spawner->Translation, Spawner->Orientation, Spawner->Scale));
         
         graphics_mesh_id GraphicsMeshID = GetOrLoadGraphicsMesh(Assets, Graphics, MeshID);
         
@@ -2118,6 +2294,12 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
     AK_ForEach(PointLight, &WorldManagement->DevPointLights[WorldIndex])
     {
         Editor_DrawSphere(Editor, Graphics, PointLight->Light.Position, POINT_LIGHT_RADIUS, AK_Yellow3());
+    }
+    
+    if(DrawLightSpawner)
+    {
+        light_spawner* LightSpawner = &Editor->UI.LightSpawner;
+        Editor_DrawSphere(Editor, Graphics, LightSpawner->Translation, POINT_LIGHT_RADIUS, AK_Yellow3()*0.5f);
     }
     
     if(WorldIndex == (Editor->CurrentWorldIndex))
@@ -2752,6 +2934,8 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
         game_context* GameContext = &Editor->GameContext;
         world_management* WorldManagement = &Editor->WorldManagement;
         ui* UI = &Editor->UI;
+        
+        AK_Assert(!UI->EntitySpawnerOpen || !UI->LightSpawnerOpen, "Corrupted spawner state");
         
         ak_f32 LogHeight = 0;
         if(!GameContext->Game)

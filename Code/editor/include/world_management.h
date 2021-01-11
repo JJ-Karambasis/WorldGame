@@ -6,7 +6,6 @@ struct dev_entity
     ak_string Name;
     ak_string LinkName;
     entity_type Type;
-    ak_v3f Euler;
     ak_sqtf Transform;
     material Material;
     mesh_asset_id MeshID;
@@ -63,10 +62,10 @@ struct world_management
     dev_point_light* AllocateDevPointLight(ak_u32 WorldIndex);
     
     dev_entity* CreateDevEntity(ak_u32 WorldIndex, ak_char* Name, entity_type Type, ak_v3f Position, 
-                                ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID);
+                                ak_quatf Orientation, ak_v3f Scale, material Material, mesh_asset_id MeshID);
     
     dual_dev_entity CreateDevEntityInBothWorlds(ak_char* Name, entity_type Type, ak_v3f Position, 
-                                                ak_v3f Axis, ak_f32 Angle, ak_v3f Scale, material Material, mesh_asset_id MeshID);
+                                                ak_quatf Orientation, ak_v3f Scale, material Material, mesh_asset_id MeshID);
     
     dev_point_light* CreateDevPointLight(ak_u32 WorldIndex, ak_char* Name, ak_v3f Position, ak_f32 Radius, ak_color3f Color, ak_f32 Intensity);
     

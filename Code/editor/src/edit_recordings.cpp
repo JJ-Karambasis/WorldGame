@@ -121,8 +121,7 @@ void edit_recordings::PushDeleteEntry(ak_u32 WorldIndex, dev_point_light* PointL
     Internal__PushToUndo(this, Entry);
 }
 
-void edit_recordings::PushTransformEntry(ak_u32 WorldIndex, object Object, ak_v3f Translation, ak_v3f Scale, ak_quatf Orientation, 
-                                         ak_v3f Euler)
+void edit_recordings::PushTransformEntry(ak_u32 WorldIndex, object Object, ak_v3f Translation, ak_v3f Scale, ak_quatf Orientation)
 {
     edit_entry Entry = {};
     Entry.Type = EDIT_ENTRY_TYPE_TRANSFORM;
@@ -131,7 +130,6 @@ void edit_recordings::PushTransformEntry(ak_u32 WorldIndex, object Object, ak_v3
     Entry.Transform.Translation = Translation;
     Entry.Transform.Scale = Scale;
     Entry.Transform.Orientation = Orientation;
-    Entry.Transform.Euler = Euler;
     Internal__PushToUndo(this, Entry);
 }
 
@@ -169,8 +167,9 @@ void edit_recordings::PushRenameEntry(ak_u32 WorldIndex, object_type Type, ak_st
     Internal__PushToUndo(this, Entry);
 }
 
-void edit_recordings::Undo(world_management* WorldManagement)
+void edit_recordings::Undo(editor* Editor)
 {
+    world_management* WorldManagement = &Editor->WorldManagement;
     edit_entry* Entry = UndoStack.Pop(); 
     if(Entry)
     {
@@ -244,18 +243,33 @@ void edit_recordings::Undo(world_management* WorldManagement)
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* DevEntity = Object->GetEntity(WorldManagement, TransformEntry->WorldIndex);
+                        dev_entity* DevEntity = Object->GetEntity(Editor, TransformEntry->WorldIndex);
                         DevEntity->Transform.Translation -= TransformEntry->Translation;
                         DevEntity->Transform.Scale -= TransformEntry->Scale;
                         DevEntity->Transform.Orientation *= AK_Conjugate(TransformEntry->Orientation);
-                        DevEntity->Euler -= TransformEntry->Euler;
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
                         dev_point_light* DevPointLight = 
-                            Object->GetPointLight(WorldManagement, TransformEntry->WorldIndex);
+                            Object->GetPointLight(Editor, TransformEntry->WorldIndex);
                         DevPointLight->Light.Position -= TransformEntry->Translation;
+                        DevPointLight->Light.Radius -= TransformEntry->Scale.x;
+                    } break;
+                    
+                    case OBJECT_TYPE_ENTITY_SPAWNER:
+                    {
+                        entity_spawner* Spawner = &Editor->UI.EntitySpawner;
+                        Spawner->Translation -= TransformEntry->Translation;
+                        Spawner->Scale -= TransformEntry->Scale;
+                        Spawner->Orientation *= AK_Conjugate(TransformEntry->Orientation);
+                    } break;
+                    
+                    case OBJECT_TYPE_LIGHT_SPAWNER:
+                    {
+                        light_spawner* Spawner = &Editor->UI.LightSpawner;
+                        Spawner->Translation -= TransformEntry->Translation;
+                        Spawner->Radius -= TransformEntry->Scale.x;
                     } break;
                     
                     AK_INVALID_DEFAULT_CASE;
@@ -334,8 +348,9 @@ void edit_recordings::Undo(world_management* WorldManagement)
     }
 }
 
-void edit_recordings::Redo(world_management* WorldManagement)
+void edit_recordings::Redo(editor* Editor)
 {
+    world_management* WorldManagement = &Editor->WorldManagement;
     edit_entry* Entry = RedoStack.Pop();
     if(Entry)
     {
@@ -408,18 +423,34 @@ void edit_recordings::Redo(world_management* WorldManagement)
                 {
                     case OBJECT_TYPE_ENTITY:
                     {
-                        dev_entity* DevEntity = Object->GetEntity(WorldManagement, TransformEntry->WorldIndex);
+                        dev_entity* DevEntity = Object->GetEntity(Editor, TransformEntry->WorldIndex);
                         DevEntity->Transform.Translation += TransformEntry->Translation;
                         DevEntity->Transform.Scale += TransformEntry->Scale;
                         DevEntity->Transform.Orientation *= TransformEntry->Orientation;
-                        DevEntity->Euler += TransformEntry->Euler;
                     } break;
                     
                     case OBJECT_TYPE_LIGHT:
                     {
                         dev_point_light* DevPointLight = 
-                            Object->GetPointLight(WorldManagement, TransformEntry->WorldIndex);
+                            Object->GetPointLight(Editor, TransformEntry->WorldIndex);
                         DevPointLight->Light.Position += TransformEntry->Translation;
+                        DevPointLight->Light.Radius += TransformEntry->Scale.x;
+                    } break;
+                    
+                    case OBJECT_TYPE_ENTITY_SPAWNER:
+                    {
+                        entity_spawner* Spawner = &Editor->UI.EntitySpawner;
+                        Spawner->Translation += TransformEntry->Translation;
+                        Spawner->Scale += TransformEntry->Scale;
+                        Spawner->Orientation *= TransformEntry->Orientation;
+                    } break;
+                    
+                    
+                    case OBJECT_TYPE_LIGHT_SPAWNER:
+                    {
+                        light_spawner* Spawner = &Editor->UI.LightSpawner;
+                        Spawner->Translation += TransformEntry->Translation;
+                        Spawner->Radius += TransformEntry->Scale.x;
                     } break;
                 }
             } break;
