@@ -139,23 +139,3 @@ game_camera InterpolateCamera(game* Game, ak_u32 WorldIndex, ak_f32 t)
     
     return Result;
 }
-
-graphics_state GetGraphicsState(game* Game, ak_u32 WorldIndex, ak_f32 t)
-{
-    graphics_state Result = {};
-    graphics_object_list* GraphicsObjects = &Result.GraphicsObjects;
-    
-    ak_arena* GlobalArena = AK_GetGlobalArena();
-    
-    GraphicsObjects->Objects = GlobalArena->PushArray<graphics_object>(Game->EntityStorage[WorldIndex].MaxUsed);
-    AK_ForEach(Entity, &Game->EntityStorage[WorldIndex])
-    {
-        if(Entity->MeshID != INVALID_GRAPHICS_MESH_ID)
-        {
-            GraphicsObjects->Objects[GraphicsObjects->Count++] = InterpolateEntity(Game, Entity, t);            
-        }
-    }
-    
-    Result.Camera = InterpolateCamera(Game, WorldIndex, t);    
-    return Result;    
-}

@@ -183,7 +183,6 @@ dev_entity* object::GetEntity(world_management* WorldManagement, ak_u32 WorldInd
 {
     AK_Assert(Type == OBJECT_TYPE_ENTITY, "Cannot get entity of a selected object that is not an entity");
     dev_entity* Entity = WorldManagement->DevEntities[WorldIndex].Get(ID);
-    AK_Assert(Entity, "Entity is not alive");
     return Entity;
 }
 
@@ -191,7 +190,6 @@ dev_point_light* object::GetPointLight(world_management* WorldManagement, ak_u32
 {
     AK_Assert(Type == OBJECT_TYPE_LIGHT, "Cannot get point light of a selected object that is not a point light");
     dev_point_light* PointLight = WorldManagement->DevPointLights[WorldIndex].Get(ID);
-    AK_Assert(PointLight, "Point Light is not alive");
     return PointLight;
 }
 
@@ -1107,7 +1105,8 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
 
 void Editor_RenderGrid(editor* Editor, graphics* Graphics, view_settings* ViewSettings, ak_v2i Resolution, view_mode_type ViewMode)
 {
-    ak_v3f* FrustumCorners = GetFrustumCorners(ViewSettings, Resolution);
+    ak_v3f FrustumCorners[8];
+    GetFrustumCorners(FrustumCorners, ViewSettings, Resolution);
     
     ray FrustumRays[4] = 
     {
@@ -1843,6 +1842,89 @@ ak_bool Editor_ShouldDrawEntitySpawnerMesh(editor* Editor, ak_u32 WorldIndex)
     return Editor->UI.EntitySpawnerOpen && (Editor->CurrentWorldIndex == WorldIndex);
 }
 
+ak_fixed_array<ak_u64> 
+Editor_MergeEntities(ak_arena* Scratch, ak_pool<dev_entity>* DevEntities,
+                     ak_v3f CameraPosition, ak_fixed_array<ak_u64> Left, ak_fixed_array<ak_u64> Right)
+{
+    
+    ak_u32 ResultIndex = 0;
+    ak_u32 LeftIndex = 0;
+    ak_u32 RightIndex = 0;
+    
+    ak_fixed_array<ak_u64> Result = AK_CreateArray<ak_u64>(Scratch, Left.Size+Right.Size);
+    
+    while((LeftIndex != Left.Size) && (RightIndex != Right.Size))
+    {
+        ak_v3f LeftPosition = DevEntities->Get(Left[LeftIndex])->Transform.Translation;
+        ak_v3f RightPosition = 
+            DevEntities->Get(Right[RightIndex])->Transform.Translation;
+        
+        if(AK_SqrMagnitude(CameraPosition-RightPosition) >
+           AK_SqrMagnitude(CameraPosition-LeftPosition))
+        {
+            Result[ResultIndex++] = Right[RightIndex++];
+        }
+        else
+        {
+            Result[ResultIndex++] = Left[LeftIndex++];
+        }
+    }
+    
+    while(LeftIndex != Left.Size)
+        Result[ResultIndex++] = Left[LeftIndex++];
+    
+    while(RightIndex != Right.Size)
+        Result[ResultIndex++] = Right[RightIndex++];
+    
+    return Result;
+}
+
+ak_fixed_array<ak_u64> Editor_MergeSortEntities(ak_arena* Scratch, ak_pool<dev_entity>* DevEntities, 
+                                                ak_v3f CameraPosition, ak_fixed_array<ak_u64> IDList)
+{
+    if(IDList.Size <= 1)
+        return IDList;
+    
+    ak_u32 HalfSize = (IDList.Size)/2;
+    
+    ak_fixed_array<ak_u64> Left = AK_CreateArray<ak_u64>(Scratch, HalfSize);
+    ak_fixed_array<ak_u64> Right = AK_CreateArray<ak_u64>(Scratch, IDList.Size-HalfSize);
+    
+    ak_u32 LeftCount = 0;
+    ak_u32 RightCount = 0;
+    for(ak_u32 Index = 0; Index < IDList.Size; Index++)
+    {
+        if(Index < HalfSize)
+            Left[LeftCount++] = IDList[Index];
+        else
+            Right[RightCount++] = IDList[Index];
+    }
+    
+    Left = Editor_MergeSortEntities(Scratch, DevEntities, CameraPosition, Left);
+    Right = Editor_MergeSortEntities(Scratch, DevEntities, CameraPosition, Right);
+    
+    return Editor_MergeEntities(Scratch, DevEntities, CameraPosition, Left, Right);
+}
+
+ak_fixed_array<ak_u64> Editor_SortDevEntities(editor* Editor, ak_u32 WorldIndex, 
+                                              ak_v3f CameraPosition)
+{
+    ak_pool<dev_entity>* DevEntities = &Editor->WorldManagement.DevEntities[WorldIndex];
+    
+    ak_u32 Count = 0;
+    ak_fixed_array<ak_u64> Array = AK_CreateArray<ak_u64>(Editor->Scratch, DevEntities->Size);
+    for(ak_u32 EntityIndex = 0; EntityIndex < DevEntities->MaxUsed; EntityIndex++)
+    {
+        ak_u64 ID = DevEntities->IDs[EntityIndex];
+        if(AK_PoolIsAllocatedID(ID))
+        {
+            Array[Count++] = ID;
+        }
+    }
+    
+    return Editor_MergeSortEntities(Editor->Scratch, DevEntities, CameraPosition, Array);
+}
+
 view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* Assets, ak_u32 WorldIndex)
 {
     graphics_render_buffer* RenderBuffer = Editor->RenderBuffers[WorldIndex];
@@ -1935,6 +2017,50 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
         } break;
     }
     
+    if(Editor->UI.EditorOverlayOtherWorld)
+    {
+        ak_fixed_array<ak_u64> EntityIDs =  Editor_SortDevEntities(Editor, !WorldIndex, ViewSettings.Transform.Position);
+        
+        
+        PushBlend(Graphics, true, GRAPHICS_BLEND_SRC_ALPHA, GRAPHICS_BLEND_ONE_MINUS_SRC_ALPHA);
+        AK_ForEach(EntityID, &EntityIDs)
+        {
+            dev_entity* DevEntity = Editor->WorldManagement.DevEntities[!WorldIndex].Get(*EntityID);
+            
+            graphics_material GraphicsMaterial = ConvertToGraphicsMaterial(Assets, Graphics, &DevEntity->Material);
+            
+            graphics_mesh_id MeshID = GetOrLoadGraphicsMesh(Assets, Graphics, DevEntity->MeshID);
+            
+            switch(Editor->UI.RenderModeType)
+            {
+                case RENDER_MODE_TYPE_LIT:
+                case RENDER_MODE_TYPE_UNLIT:
+                {
+                    PushDrawUnlitMesh(Graphics, MeshID, DevEntity->Transform, GraphicsMaterial.Diffuse, 
+                                      GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0, CreateTransparentMaterialSlot(0.25f));
+                } break;
+                
+                case RENDER_MODE_TYPE_WIREFRAME:
+                {
+                    PushWireframe(Graphics, true);
+                    PushDrawUnlitMesh(Graphics, MeshID, DevEntity->Transform, CreateDiffuseMaterialSlot(AK_Red3()), 
+                                      GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+                    PushWireframe(Graphics, false);
+                } break;
+                
+                case RENDER_MODE_TYPE_LIT_WIREFRAME:
+                {
+                    PushDrawUnlitMesh(Graphics, MeshID, DevEntity->Transform, GraphicsMaterial.Diffuse, 
+                                      GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0, CreateTransparentMaterialSlot(0.25f));
+                    PushWireframe(Graphics, true);
+                    PushDrawUnlitMesh(Graphics, MeshID, DevEntity->Transform, CreateDiffuseMaterialSlot(AK_Red3()), 
+                                      GetMeshIndexCount(Assets, DevEntity->MeshID), 0, 0);
+                    PushWireframe(Graphics, false);
+                } break;
+            }
+        }
+        PushBlend(Graphics, false);
+    }
     
     if(DrawEntitySpawnerMesh)
     {
@@ -1943,8 +2069,7 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
         mesh_asset_id MeshID = Spawner->MeshID;
         
         graphics_material GraphicsMaterial = ConvertToGraphicsMaterial(Assets, Graphics, &Material);
-        GraphicsMaterial.Alpha.InUse = true;
-        GraphicsMaterial.Alpha.Alpha = 0.75f;
+        GraphicsMaterial.Alpha = CreateTransparentMaterialSlot(0.75f);
         
         ak_m4f Transform = AK_TransformM4(AK_SQT(Spawner->Translation, AK_RotQuat(Spawner->Axis, Spawner->Angle), Spawner->Scale));
         
@@ -1956,6 +2081,7 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
         {
             case RENDER_MODE_TYPE_LIT:
             {
+                PushLightBuffer(Graphics, &LightBuffer);
                 PushMaterial(Graphics, GraphicsMaterial);
                 PushDrawMesh(Graphics, GraphicsMeshID, Transform, GetMeshIndexCount(Assets, MeshID), 0, 0);
             } break;
@@ -2696,6 +2822,9 @@ AK_EXPORT EDITOR_RUN(Editor_Run)
                 
                 UI_Checkbox(AK_HashFunction("Draw Other World"), "Draw Other World", 
                             &UI->EditorDrawOtherWorld);
+                
+                UI_Checkbox(AK_HashFunction("Overlay Other World"), "Overlay Other World", 
+                            &UI->EditorOverlayOtherWorld);
                 
                 UI_Checkbox(AK_HashFunction("Editor Draw Colliders"), "Draw Colliders", &UI->EditorDrawColliders);
                 

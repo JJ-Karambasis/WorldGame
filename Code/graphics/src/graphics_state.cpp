@@ -1,13 +1,10 @@
 #include "graphics_push_commands.cpp"
 
-inline ak_v3f* 
-GetFrustumCorners(view_settings* ViewSettings, ak_v2i RenderDim)
+inline void
+GetFrustumCorners(ak_v3f* Result, view_settings* ViewSettings, ak_v2i RenderDim)
 {
-    ak_arena* GlobalArena = AK_GetGlobalArena();
-    ak_v3f* Result = GlobalArena->PushArray<ak_v3f>(8);
     AK_GetFrustumCorners(Result, ViewSettings->Projection);
     AK_TransformPoints(Result, 8, AK_TransformM4(ViewSettings->Transform.Position, ViewSettings->Transform.Orientation));    
-    return Result;
 }
 
 void UpdateRenderBuffer(graphics* Graphics, graphics_render_buffer** RenderBuffer, ak_v2i RenderDim)

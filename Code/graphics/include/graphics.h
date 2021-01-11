@@ -217,6 +217,7 @@ typedef INVALIDATE_SHADERS(invalidate_shaders);
 
 struct graphics
 {           
+    ak_arena* CommandArena;
     ak_array<push_command*> CommandList;    
     void** PlatformData;                                        
     

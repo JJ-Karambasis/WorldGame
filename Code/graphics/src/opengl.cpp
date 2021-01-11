@@ -812,6 +812,7 @@ AK_EXPORT INIT_GRAPHICS(InitGraphics)
     ak_arena* GraphicsStorage = AK_CreateArena(AK_Kilobyte(128));    
     opengl_context* OpenGL = GraphicsStorage->Push<opengl_context>();    
     
+    OpenGL->Graphics.CommandArena = AK_CreateArena(AK_Kilobyte(128));
     OpenGL->Storage = GraphicsStorage;
     OpenGL->MeshPool = AK_CreatePool<opengl_mesh>();
     OpenGL->TexturePool = AK_CreatePool<opengl_texture>();
@@ -1541,6 +1542,7 @@ AK_EXPORT EXECUTE_RENDER_COMMANDS(ExecuteRenderCommands)
     glBindTexture(GL_TEXTURE_2D, 0);
     
     Graphics->CommandList.Clear();
+    Graphics->CommandArena->Clear();
     
     Platform_SwapBuffers(Graphics->PlatformData[0]);    
 }

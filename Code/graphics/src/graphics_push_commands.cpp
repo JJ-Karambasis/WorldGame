@@ -1,4 +1,4 @@
-#define AllocateCommand(type) AK_GetGlobalArena()->Push<type>(AK_ARENA_CLEAR_FLAGS_NOCLEAR)
+#define AllocateCommand(type) Graphics->CommandArena->Push<type>(AK_ARENA_CLEAR_FLAGS_NOCLEAR)
 
 void PushCommand(graphics* Graphics, push_command* Command)
 {    

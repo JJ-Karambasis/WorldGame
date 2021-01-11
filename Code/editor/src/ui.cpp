@@ -88,11 +88,10 @@ const ak_char* UI_GetEntityType(entity_type Type)
     return NULL;
 }
 
-ak_fixed_array<const ak_char*> UI_GetAllEntityTypesNotPlayer()
+ak_fixed_array<const ak_char*> UI_GetAllEntityTypesNotPlayer(ak_arena* Scratch)
 {
-    ak_arena* GlobalArena = AK_GetGlobalArena();
     ak_u32 Size = ENTITY_TYPE_COUNT-1;
-    ak_fixed_array<const ak_char*> Result = AK_CreateArray(GlobalArena->PushArray<const ak_char*>(Size), Size);    
+    ak_fixed_array<const ak_char*> Result = AK_CreateArray<const ak_char*>(Scratch, Size);    
     ak_u32 Counter = 0;
     
     for(ak_u32 TypeIndex = 0; TypeIndex < ENTITY_TYPE_COUNT; TypeIndex++)
@@ -104,19 +103,17 @@ ak_fixed_array<const ak_char*> UI_GetAllEntityTypesNotPlayer()
     return Result;
 }
 
-ak_fixed_array<const ak_char*> UI_GetAllMeshInfoNames(assets* Assets)
+ak_fixed_array<const ak_char*> UI_GetAllMeshInfoNames(ak_arena* Scratch, assets* Assets)
 {
-    ak_arena* GlobalArena = AK_GetGlobalArena();
-    ak_fixed_array<const ak_char*> Result = AK_CreateArray(GlobalArena->PushArray<const ak_char*>(MESH_ASSET_COUNT), MESH_ASSET_COUNT);
+    ak_fixed_array<const ak_char*> Result = AK_CreateArray<const ak_char*>(Scratch, MESH_ASSET_COUNT);
     for(ak_u32 MeshIndex = 0; MeshIndex < MESH_ASSET_COUNT; MeshIndex++)    
         Result[MeshIndex] = Assets->MeshInfos[MeshIndex].Name;          
     return Result;
 }
 
-ak_fixed_array<const ak_char*> UI_GetAllTextureInfoNames(assets* Assets)
+ak_fixed_array<const ak_char*> UI_GetAllTextureInfoNames(ak_arena* Scratch, assets* Assets)
 {
-    ak_arena* GlobalArena = AK_GetGlobalArena();
-    ak_fixed_array<const ak_char*> Result = AK_CreateArray(GlobalArena->PushArray<const ak_char*>(TEXTURE_ASSET_COUNT), TEXTURE_ASSET_COUNT);
+    ak_fixed_array<const ak_char*> Result = AK_CreateArray<const ak_char*>(Scratch, TEXTURE_ASSET_COUNT);
     for(ak_u32 TextureIndex = 0; TextureIndex < TEXTURE_ASSET_COUNT; TextureIndex++)    
         Result[TextureIndex] = Assets->TextureInfos[TextureIndex].Name;          
     return Result;
@@ -364,9 +361,9 @@ void UI_IntensityTool(ak_u32 Hash, ak_f32 ItemWidth, ak_f32* Intensity)
     UI_DragFloatTool(Hash, "Intensity", ItemWidth, Intensity, 0.01f, 1.0f, 100.0f);
 }
 
-void UI_MaterialTool(assets* Assets, material_context* MaterialContext)
+void UI_MaterialTool(ak_arena* Scratch, assets* Assets, material_context* MaterialContext)
 {    
-    ak_fixed_array<const ak_char*> TextureNames = UI_GetAllTextureInfoNames(Assets);
+    ak_fixed_array<const ak_char*> TextureNames = UI_GetAllTextureInfoNames(Scratch, Assets);
     
     ImGui::AlignTextToFramePadding();
     ImGui::Text("Material");        
@@ -511,7 +508,7 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
     edit_recordings* EditRecordings = &Editor->EditRecordings;
     ui* UI = &Editor->UI;
     
-    ak_fixed_array<const ak_char*> EntityTypes = UI_GetAllEntityTypesNotPlayer();
+    ak_fixed_array<const ak_char*> EntityTypes = UI_GetAllEntityTypesNotPlayer(Editor->Scratch);
     ImGui::AlignTextToFramePadding();
     ImGui::Text("Entity Type");            
     ImGui::SameLine();            
@@ -552,7 +549,7 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             
             ImGui::Separator();
             Spawner->MeshID = MESH_ASSET_ID_BUTTON;
-            UI_MaterialTool(Assets, &Spawner->MaterialContext);
+            UI_MaterialTool(Editor->Scratch, Assets, &Spawner->MaterialContext);
             ImGui::Separator();
             
         } break;
@@ -573,7 +570,7 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             
             ImGui::Separator();
             Spawner->MeshID = MESH_ASSET_ID_BOX;
-            UI_MaterialTool(Assets, &Spawner->MaterialContext);
+            UI_MaterialTool(Editor->Scratch, Assets, &Spawner->MaterialContext);
             ImGui::Separator();
             
         } break;
@@ -595,13 +592,13 @@ void UI_EntitySpawner(editor* Editor, entity_spawner* Spawner, assets* Assets)
             
             ImGui::Separator();
             
-            ak_fixed_array<const ak_char*> MeshList = UI_GetAllMeshInfoNames(Assets);
+            ak_fixed_array<const ak_char*> MeshList = UI_GetAllMeshInfoNames(Editor->Scratch, Assets);
             ImGui::PushID(AK_HashFunction("Entity Meshes"));
             UI_Combo("Meshes", (ak_i32*)&Spawner->MeshID, &MeshList[0], MeshList.Size);
             ImGui::PopID();
             
             ImGui::Separator();
-            UI_MaterialTool(Assets, &Spawner->MaterialContext);
+            UI_MaterialTool(Editor->Scratch, Assets, &Spawner->MaterialContext);
             ImGui::Separator();
         } break;
         
@@ -1045,7 +1042,7 @@ void Details_Color3EditTool(editor* Editor, object* Object, const ak_char* Label
 
 void Details_MaterialTool(editor* Editor, object* Object, assets* Assets, material_context* MaterialContext)
 {    
-    ak_fixed_array<const ak_char*> TextureNames = UI_GetAllTextureInfoNames(Assets);
+    ak_fixed_array<const ak_char*> TextureNames = UI_GetAllTextureInfoNames(Editor->Scratch, Assets);
     
     ImGui::AlignTextToFramePadding();
     ImGui::Text("Material");        
@@ -1271,7 +1268,7 @@ ak_v2f UI_DetailsWindow(editor* Editor, assets* Assets)
                     
                     if(DisableMeshEdit) UI_PushDisabledItem();
                     
-                    ak_fixed_array<const ak_char*> MeshNames = UI_GetAllMeshInfoNames(Assets);
+                    ak_fixed_array<const ak_char*> MeshNames = UI_GetAllMeshInfoNames(Editor->Scratch, Assets);
                     ImGui::PushID(AK_HashFunction("Mesh Edit"));
                     Details_Combo(Editor, SelectedObject, "Mesh", (int*)&Entity->MeshID, MeshNames.Data, 
                                   MeshNames.Size);

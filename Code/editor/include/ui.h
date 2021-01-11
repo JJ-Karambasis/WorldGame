@@ -92,6 +92,7 @@ struct ui
     
     ak_bool EditorDrawGrid;
     ak_bool EditorDrawOtherWorld;
+    ak_bool EditorOverlayOtherWorld;
     
     ak_bool RenameModalState;
     
