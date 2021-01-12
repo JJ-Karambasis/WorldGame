@@ -82,6 +82,7 @@ struct movable
 #define CAMERA_ZNEAR 0.01f
 #define CAMERA_ZFAR 100.0f
 #define PERSPECTIVE_CAMERA_FOV (AK_PI*0.3f)
+#define DEFAULT_PERSPECTIVE_DISTANCE 6.0f
 
 struct perspective_camera
 {

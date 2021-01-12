@@ -1043,7 +1043,7 @@ ak_color3f Editor_GetGizmoColor(gizmo Gizmo)
     return GizmoColor;
 }
 
-void Editor_RenderGizmoState(editor* Editor, graphics* Graphics, gizmo_state* GizmoState, ak_v3f Position)
+void Editor_RenderGizmoState(editor* Editor, graphics* Graphics, gizmo_state* GizmoState, ak_v3f Position, ak_v3f CameraPosition)
 {
     if(GizmoState->TransformMode != SELECTOR_TRANSFORM_MODE_ROTATE)
     {   
@@ -1075,7 +1075,8 @@ void Editor_RenderGizmoState(editor* Editor, graphics* Graphics, gizmo_state* Gi
         PushCull(Graphics, GRAPHICS_CULL_MODE_FRONT);
     }
     
-    Editor_DrawSphere(Editor, Graphics, Position, 0.04f, AK_White3());    
+    ak_f32 Scale = AK_Magnitude(CameraPosition-Position)/DEFAULT_PERSPECTIVE_DISTANCE;
+    Editor_DrawSphere(Editor, Graphics, Position, 0.04f*Scale, AK_White3());    
 }
 
 void Editor_SetDefaultWorld(editor* Editor)
@@ -1253,8 +1254,8 @@ editor* Editor_Initialize(graphics* Graphics, ImGuiContext* Context, platform* P
     OrthoCamera->Bottom = DEFAULT_ORTHO_CAMERA_BOTTOM;
     OrthoCamera->Top = DEFAULT_ORTHO_CAMERA_TOP;
     
-    Editor->Cameras[0].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
-    Editor->Cameras[1].SphericalCoordinates = AK_V3(6.0f, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
+    Editor->Cameras[0].SphericalCoordinates = AK_V3(DEFAULT_PERSPECTIVE_DISTANCE, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));    
+    Editor->Cameras[1].SphericalCoordinates = AK_V3(DEFAULT_PERSPECTIVE_DISTANCE, AK_ToRadians(90.0f), AK_ToRadians(-35.0f));
     
     AK_CopyArray(Editor->OrthoCameras[1], Editor->OrthoCameras[0], 6);
     
@@ -1787,7 +1788,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
                     {
                         perspective_camera* Camera = &Editor->Cameras[Editor->CurrentWorldIndex];
                         Camera->Target = SelectedObject->GetPosition(Editor, Editor->CurrentWorldIndex);
-                        Camera->SphericalCoordinates.radius = 6.0f;
+                        Camera->SphericalCoordinates.radius = DEFAULT_PERSPECTIVE_DISTANCE;
                     }
                     else
                     {
@@ -1899,7 +1900,7 @@ ak_bool Editor_Update(editor* Editor, assets* Assets, platform* Platform, dev_pl
     return true;
 }
 
-void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, dev_mesh* GizmoMesh, dev_mesh* TrianglePlaneMesh, ak_v3f Position)
+void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, dev_mesh* GizmoMesh, dev_mesh* TrianglePlaneMesh, ak_v3f Position, ak_v3f CameraPosition)
 {   
     ak_v3f XAxis = AK_XAxis();
     ak_v3f YAxis = AK_YAxis();
@@ -1921,7 +1922,6 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
             YAxis = Orientation.YAxis;
             ZAxis = Orientation.ZAxis;
         }
-        
     }
     
     Gizmo1 = Gizmo1 + GIZMO_PLANE_DISTANCE*XAxis;
@@ -1931,12 +1931,14 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
     Gizmo3 = Gizmo3 + GIZMO_PLANE_DISTANCE*YAxis;
     Gizmo3 = Gizmo3 + GIZMO_PLANE_DISTANCE*ZAxis;
     
+    ak_f32 Scale = AK_Magnitude(CameraPosition-Position)/DEFAULT_PERSPECTIVE_DISTANCE;
+    
     {
         ak_v3f X, Y, Z;
         Z = XAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = GizmoMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -1951,7 +1953,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
         Z = YAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = GizmoMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -1966,7 +1968,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
         Z = ZAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = GizmoMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -1981,7 +1983,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
         Z = ZAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position + Gizmo1, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + (Gizmo1*Scale), AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = TrianglePlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -1996,7 +1998,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
         Z = YAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position + Gizmo2, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + (Gizmo2*Scale), AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = TrianglePlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -2011,7 +2013,7 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
         Z = XAxis;
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position + Gizmo3, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position + (Gizmo3*Scale), AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = TrianglePlaneMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -2022,14 +2024,16 @@ void Editor_PopulateNonRotationGizmos(editor* Editor, gizmo_state* GizmoState, d
     }    
 }
 
-void Editor_PopulateRotationGizmos(gizmo_state* GizmoState, dev_mesh* TriangleTorusMesh, ak_v3f Position)
+void Editor_PopulateRotationGizmos(gizmo_state* GizmoState, dev_mesh* TriangleTorusMesh, ak_v3f Position, ak_v3f CameraPosition)
 {
+    ak_f32 Scale = AK_Magnitude(CameraPosition-Position)/DEFAULT_PERSPECTIVE_DISTANCE;
+    
     {
         ak_v3f X, Y, Z;
         Z = AK_XAxis();
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = TriangleTorusMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -2044,7 +2048,7 @@ void Editor_PopulateRotationGizmos(gizmo_state* GizmoState, dev_mesh* TriangleTo
         Z = AK_YAxis();
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = TriangleTorusMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -2059,7 +2063,7 @@ void Editor_PopulateRotationGizmos(gizmo_state* GizmoState, dev_mesh* TriangleTo
         Z = AK_ZAxis();
         AK_Basis(Z, &X, &Y);
         
-        ak_m4f Transform = AK_TransformM4(Position, X, Y, Z);
+        ak_m4f Transform = AK_TransformM4(Position, AK_M3(X, Y, Z), Scale);
         gizmo Gizmo;
         Gizmo.Mesh = TriangleTorusMesh;
         Gizmo.Transform = AK_SQT(Transform);
@@ -2074,7 +2078,7 @@ void Editor_PopulateRotationGizmos(gizmo_state* GizmoState, dev_mesh* TriangleTo
     GizmoState->Gizmos[5] = {};                
 }
 
-void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
+void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics, ak_v3f CameraPosition)
 {
     object* SelectedObject = Editor_GetSelectedObject(Editor);
     if(SelectedObject)
@@ -2092,16 +2096,16 @@ void Editor_RenderSelectedObjectGizmos(editor* Editor, graphics* Graphics)
                 dev_mesh* GizmoMesh = (GizmoState->TransformMode == SELECTOR_TRANSFORM_MODE_SCALE) ? 
                     &Editor->TriangleScaleMesh : &Editor->TriangleArrowMesh;
                 
-                Editor_PopulateNonRotationGizmos(Editor, GizmoState, GizmoMesh, &Editor->TrianglePlaneMesh, Position);
+                Editor_PopulateNonRotationGizmos(Editor, GizmoState, GizmoMesh, &Editor->TrianglePlaneMesh, Position, CameraPosition);
             } break;
             
             case SELECTOR_TRANSFORM_MODE_ROTATE:
             {
-                Editor_PopulateRotationGizmos(GizmoState, &Editor->TriangleTorusMesh, Position);
+                Editor_PopulateRotationGizmos(GizmoState, &Editor->TriangleTorusMesh, Position, CameraPosition);
             } break;
         }
         
-        Editor_RenderGizmoState(Editor, Graphics, GizmoState, Position);
+        Editor_RenderGizmoState(Editor, Graphics, GizmoState, Position, CameraPosition);
         
         PushDepth(Graphics, true);
     }
@@ -2402,7 +2406,7 @@ view_settings Editor_RenderDevWorld(editor* Editor, graphics* Graphics, assets* 
     
     if(WorldIndex == (Editor->CurrentWorldIndex))
     {
-        Editor_RenderSelectedObjectGizmos(Editor, Graphics);
+        Editor_RenderSelectedObjectGizmos(Editor, Graphics, ViewSettings.Transform.Position);
         if(Editor->UI.EditorDrawGrid)
         {
             Editor_RenderGrid(Editor, Graphics, &ViewSettings, RenderBuffer->Resolution, Editor->UI.ViewModeType);
